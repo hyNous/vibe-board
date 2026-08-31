@@ -241,6 +241,7 @@ export interface UsageProviderStatus {
   authStatus: 'authorized' | 'missing' | 'unknown'
   authPath: string | null
   canAuthorize: boolean
+  updatedAt?: number | null
 }
 
 export interface CodexQuotaState {

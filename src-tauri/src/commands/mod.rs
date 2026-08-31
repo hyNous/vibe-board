@@ -614,6 +614,7 @@ pub struct UsageProviderStatus {
     auth_status: String,
     auth_path: Option<String>,
     can_authorize: bool,
+    updated_at: Option<i64>,
 }
 
 #[tauri::command]
@@ -736,14 +737,17 @@ async fn codex_usage_provider_status(enabled: bool, allow_live: bool) -> UsagePr
         auth_status: if has_auth { "authorized" } else { "missing" }.to_string(),
         auth_path: auth_path.map(|path| path.display().to_string()),
         can_authorize: find_binary("codex").is_some(),
+        updated_at: snapshot
+            .as_ref()
+            .and_then(|item| item.captured_at)
+            .map(|date| date.timestamp_millis()),
     }
 }
 
 fn claude_usage_provider_status(enabled: bool) -> UsageProviderStatus {
     let auth_path = dirs::home_dir().map(|home| home.join(".claude").join(".credentials.json"));
     let has_auth = auth_path.as_ref().is_some_and(|path| path.exists());
-    let temp_path = Path::new("/tmp/island-rate-limits.json");
-    let has_temp = temp_path.exists();
+    let has_temp = claude_rate_limit_paths().iter().any(|path| path.exists());
     let snapshot = load_claude_usage_rate_limits();
     let source = snapshot
         .as_ref()
@@ -768,6 +772,10 @@ fn claude_usage_provider_status(enabled: bool) -> UsageProviderStatus {
         auth_status: if has_auth { "authorized" } else { "missing" }.to_string(),
         auth_path: auth_path.map(|path| path.display().to_string()),
         can_authorize: find_binary("claude").is_some(),
+        updated_at: snapshot
+            .as_ref()
+            .and_then(|item| item.captured_at)
+            .map(|date| date.timestamp_millis()),
     }
 }
 
@@ -838,6 +846,7 @@ fn opencode_usage_provider_status(enabled: bool) -> UsageProviderStatus {
         auth_status: if has_auth { "unknown" } else { "missing" }.to_string(),
         auth_path: display_path.map(|path| path.display().to_string()),
         can_authorize: !has_auth && find_binary("opencode").is_some(),
+        updated_at: None,
     }
 }
 
@@ -848,10 +857,10 @@ fn catalog_unsupported_agent_usage_providers(enabled: bool) -> Vec<UsageProvider
         ("codebuddy", "CodeBuddy"),
         ("codebuddycn", "CodeBuddy CN"),
         ("qwen", "Qwen"),
-        ("deepseek", "DeepSeek"),
         ("workbuddy", "WorkBuddy"),
         ("hermes", "Hermes"),
         ("pi", "Pi"),
+        ("other", "Other"),
     ]
     .into_iter()
     .map(|(provider, label)| {
@@ -899,6 +908,7 @@ fn known_provider_status(
         auth_status: auth_status.to_string(),
         auth_path,
         can_authorize,
+        updated_at: None,
     }
 }
 
@@ -914,6 +924,13 @@ fn expand_home_path(path: &str) -> Option<PathBuf> {
         return dirs::home_dir().map(|home| home.join(rest));
     }
     Some(PathBuf::from(path))
+}
+
+fn claude_rate_limit_paths() -> [PathBuf; 2] {
+    [
+        std::env::temp_dir().join("island-rate-limits.json"),
+        PathBuf::from("/tmp/island-rate-limits.json"),
+    ]
 }
 
 async fn load_latest_usage_rate_limits() -> Option<RateLimitInfo> {
@@ -941,10 +958,12 @@ async fn load_latest_usage_rate_limits() -> Option<RateLimitInfo> {
 }
 
 fn load_claude_usage_rate_limits() -> Option<UsageRateLimitSnapshot> {
-    let path = Path::new("/tmp/island-rate-limits.json");
-    let content = fs::read_to_string(path).ok()?;
+    let path = claude_rate_limit_paths()
+        .into_iter()
+        .find(|path| path.is_file())?;
+    let content = fs::read_to_string(&path).ok()?;
     let payload: serde_json::Value = serde_json::from_str(&content).ok()?;
-    let metadata_time = fs::metadata(path)
+    let metadata_time = fs::metadata(&path)
         .ok()
         .and_then(|metadata| metadata.modified().ok())
         .map(chrono::DateTime::<chrono::Utc>::from);

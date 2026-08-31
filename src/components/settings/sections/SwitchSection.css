@@ -719,6 +719,12 @@
   color: var(--settings-text-secondary);
 }
 
+.switch-usage-panel__freshness {
+  margin: -10px 0 16px;
+  color: var(--settings-text-tertiary);
+  font-size: 11px;
+}
+
 /* ── Bar chart ───────────────────────────────── */
 
 .switch-usage-chart {

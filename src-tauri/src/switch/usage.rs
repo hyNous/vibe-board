@@ -21,6 +21,7 @@ pub struct UsageSummary {
     pub total_input_tokens: u64,
     pub total_output_tokens: u64,
     pub total_cost_usd: f64,
+    pub last_recorded_at: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -75,7 +76,7 @@ pub fn get_usage_summary(
     let since = chrono::Utc::now().timestamp() - (days as i64 * 86400);
     db.with_conn(|conn| {
         let mut stmt = conn.prepare(
-            "SELECT COUNT(*), COALESCE(SUM(input_tokens),0), COALESCE(SUM(output_tokens),0), COALESCE(SUM(cost_usd),0)
+            "SELECT COUNT(*), COALESCE(SUM(input_tokens),0), COALESCE(SUM(output_tokens),0), COALESCE(SUM(cost_usd),0), MAX(timestamp)
              FROM usage_logs WHERE app_type = ?1 AND timestamp >= ?2",
         )?;
         let row = stmt.query_row(params![app_type, since], |row| {
@@ -84,6 +85,7 @@ pub fn get_usage_summary(
                 total_input_tokens: row.get::<_, u64>(1)?,
                 total_output_tokens: row.get::<_, u64>(2)?,
                 total_cost_usd: row.get::<_, f64>(3)?,
+                last_recorded_at: row.get::<_, Option<i64>>(4)?,
             })
         })?;
         Ok(row)

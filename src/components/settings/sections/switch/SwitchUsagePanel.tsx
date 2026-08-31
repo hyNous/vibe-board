@@ -19,6 +19,13 @@ function formatTokens(n: number): string {
   return String(n)
 }
 
+function formatRecordedAt(timestamp?: number | null): string {
+  if (!timestamp) return ''
+  const date = new Date(timestamp * 1000)
+  if (Number.isNaN(date.getTime())) return ''
+  return date.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+
 export function SwitchUsagePanel() {
   const { activeAppType } = useSwitchStore()
   const [days, setDays] = useState(30)
@@ -100,6 +107,11 @@ export function SwitchUsagePanel() {
               <span className="switch-usage-stat__label">Output Tokens</span>
             </div>
           </div>
+          {summary.last_recorded_at && (
+            <div className="switch-usage-panel__freshness">
+              Last recorded: {formatRecordedAt(summary.last_recorded_at)} · local usage_logs
+            </div>
+          )}
 
           {daily.length > 0 && (
             <div className="switch-usage-chart">

@@ -69,6 +69,10 @@ function requireEqual(label, actual, expected) {
   if (actual !== expected) errors.push(`${label} is ${actual || '<missing>'}, expected ${expected}`)
 }
 
+function requireContains(label, content, needle) {
+  if (!content.includes(needle)) errors.push(`${label} is missing required marker: ${needle}`)
+}
+
 function requireEnv(name) {
   if (!process.env[name]?.trim()) errors.push(`${name} is required for stable releases`)
 }
@@ -120,6 +124,11 @@ const cargoName = packageTomlField(cargoToml, 'name')
 const cargoVersion = packageTomlField(cargoToml, 'version')
 const cargoDefaultRun = packageTomlField(cargoToml, 'default-run')
 const cargoLockVersion = cargoLockPackageVersion(cargoLock, 'agentbro')
+const windowsBuildScript = read('scripts/build-windows.mjs')
+const runtimeSource = read('src-tauri/src/lib.rs')
+const commandSource = read('src-tauri/src/commands/mod.rs')
+const notificationSource = read('src-tauri/src/platform/notifications.rs')
+const schemaSource = read('src-tauri/src/switch/schema.rs')
 
 requireEqual('package.json name', pkg.name, 'agentbro')
 requireEqual('Tauri productName', tauri.productName, 'AgentBro')
@@ -132,6 +141,23 @@ requireEqual('Cargo license', packageTomlField(cargoToml, 'license'), 'Apache-2.
 requireEqual('Tauri version', tauriVersion, packageVersion)
 requireEqual('Cargo version', cargoVersion, packageVersion)
 requireEqual('Cargo.lock agentbro version', cargoLockVersion, packageVersion)
+
+const bundleTargets = tauri.bundle?.targets
+const explicitBundleTargets = Array.isArray(bundleTargets)
+  ? bundleTargets.map((target) => String(target).toLowerCase())
+  : []
+if (bundleTargets !== 'all' && (!explicitBundleTargets.includes('nsis') || !explicitBundleTargets.includes('msi'))) {
+  errors.push('Tauri bundle targets must include both nsis and msi for Windows installers')
+}
+requireContains('Windows build script', windowsBuildScript, "'nsis,msi'")
+requireContains('System tray runtime', runtimeSource, 'TrayIconBuilder')
+requireContains('Always-on-top window support', runtimeSource, '.always_on_top(true)')
+requireContains('Launch-at-login command', commandSource, 'set_launch_at_login')
+requireContains('Restart command', runtimeSource, 'request_restart')
+requireContains('Native notification plugin', runtimeSource, 'tauri_plugin_notification::init()')
+requireContains('Log directory target', runtimeSource, 'TargetKind::LogDir')
+requireContains('SQLite schema bootstrap', schemaSource, 'CREATE TABLE IF NOT EXISTS')
+requireContains('Notification deduplication', notificationSource, 'NOTIFICATION_COOLDOWN')
 
 const refName = process.env.GITHUB_REF_NAME || ''
 const tagVersion = refName.startsWith('v') ? refName.slice(1) : ''
