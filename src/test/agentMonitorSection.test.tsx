@@ -16,6 +16,9 @@ const monitorMocks = vi.hoisted(() => ({
   setNetworkMonitorEnabled: vi.fn(),
   getNetworkMonitorRequests: vi.fn(),
   getNetworkMonitorRequestDetail: vi.fn(),
+  createDemoTaskTrace: vi.fn(),
+  getTaskTraces: vi.fn(),
+  getTaskTraceDetail: vi.fn(),
 }))
 
 const tauriMocks = vi.hoisted(() => ({
@@ -35,6 +38,9 @@ vi.mock('../services/monitorApi', () => ({
   setNetworkMonitorEnabled: monitorMocks.setNetworkMonitorEnabled,
   getNetworkMonitorRequests: monitorMocks.getNetworkMonitorRequests,
   getNetworkMonitorRequestDetail: monitorMocks.getNetworkMonitorRequestDetail,
+  createDemoTaskTrace: monitorMocks.createDemoTaskTrace,
+  getTaskTraces: monitorMocks.getTaskTraces,
+  getTaskTraceDetail: monitorMocks.getTaskTraceDetail,
 }))
 
 vi.mock('../services/tauriApi', async (importOriginal) => {
@@ -200,6 +206,7 @@ describe('AgentMonitorSection', () => {
     })
     monitorMocks.getNetworkMonitorRequests.mockResolvedValue([])
     monitorMocks.getNetworkMonitorRequestDetail.mockResolvedValue(null)
+    monitorMocks.getTaskTraces.mockResolvedValue([])
     tauriMocks.getChatHistoryTail.mockResolvedValue({
       messages: [
         {
@@ -374,5 +381,174 @@ describe('AgentMonitorSection', () => {
     expect(screen.queryByText('settings.agents')).not.toBeInTheDocument()
     expect(screen.queryByText('settings.agentMonitor')).not.toBeInTheDocument()
     expect(screen.queryByText('settings.switch')).not.toBeInTheDocument()
+  })
+
+  it('creates demo task trace and displays Codex root run with nested Dummy Child and ordered events', async () => {
+    const demoTask = {
+      id: 'task-demo-control-tower',
+      traceId: 'trace-codex-orchestration-001',
+      project: 'control-tower',
+      title: 'Demo: Codex Orchestration',
+      status: 'done',
+      runs: [
+        {
+          id: 'run-demo-codex-root',
+          taskId: 'task-demo-control-tower',
+          sessionId: 'session-codex-root',
+          parentRunId: null,
+          agent: 'codex',
+          role: 'orchestrator',
+          dispatchedTask: 'Coordinate workspace changes',
+          title: 'Codex Root Run',
+          status: 'done',
+          children: [
+            {
+              id: 'run-demo-dummy-child',
+              taskId: 'task-demo-control-tower',
+              sessionId: 'session-dummy-child',
+              parentRunId: 'run-demo-codex-root',
+              agent: 'dummy',
+              role: 'worker',
+              dispatchedTask: 'Execute component AST inspection',
+              title: 'Dummy Child',
+              status: 'done',
+              children: [],
+              events: [
+                {
+                  id: 'evt-3',
+                  taskId: 'task-demo-control-tower',
+                  runId: 'run-demo-dummy-child',
+                  timestampMs: 1_700_000_001_500,
+                  kind: 'session',
+                  eventType: 'session.init',
+                  title: 'Dummy Child Initialized',
+                  detail: 'Child worker started under Codex root',
+                  status: 'ready',
+                  payloadJson: '{"agent":"dummy"}',
+                  createdAt: '2026-05-17T00:00:01Z',
+                },
+                {
+                  id: 'evt-4',
+                  taskId: 'task-demo-control-tower',
+                  runId: 'run-demo-dummy-child',
+                  timestampMs: 1_700_000_002_500,
+                  kind: 'tool',
+                  eventType: 'tool.exec',
+                  title: 'InspectAST: component graph',
+                  detail: 'Analyzed component hierarchy',
+                  status: 'done',
+                  payloadJson: '{"tool":"InspectAST"}',
+                  createdAt: '2026-05-17T00:00:02Z',
+                },
+                {
+                  id: 'evt-5',
+                  taskId: 'task-demo-control-tower',
+                  runId: 'run-demo-dummy-child',
+                  timestampMs: 1_700_000_003_500,
+                  kind: 'session',
+                  eventType: 'session.complete',
+                  title: 'Dummy Child Complete',
+                  detail: 'Finished sub-routine analysis',
+                  status: 'done',
+                  payloadJson: '{"result":"success"}',
+                  createdAt: '2026-05-17T00:00:03Z',
+                },
+              ],
+              createdAt: '2026-05-17T00:00:00Z',
+            },
+          ],
+          events: [
+            {
+              id: 'evt-1',
+              taskId: 'task-demo-control-tower',
+              runId: 'run-demo-codex-root',
+              timestampMs: 1_700_000_000_000,
+              kind: 'session',
+              eventType: 'session.init',
+              title: 'Codex Session Initialized',
+              detail: 'Root orchestration run started',
+              status: 'ready',
+              payloadJson: '{"role":"orchestrator"}',
+              createdAt: '2026-05-17T00:00:00Z',
+            },
+            {
+              id: 'evt-2',
+              taskId: 'task-demo-control-tower',
+              runId: 'run-demo-codex-root',
+              timestampMs: 1_700_000_001_000,
+              kind: 'subagent',
+              eventType: 'subagent.dispatch',
+              title: 'Dispatch Dummy Child',
+              detail: 'Dispatched nested Dummy Child worker',
+              status: 'processing',
+              payloadJson: '{"target":"run-demo-dummy-child"}',
+              createdAt: '2026-05-17T00:00:01Z',
+            },
+            {
+              id: 'evt-6',
+              taskId: 'task-demo-control-tower',
+              runId: 'run-demo-codex-root',
+              timestampMs: 1_700_000_004_000,
+              kind: 'subagent',
+              eventType: 'subagent.complete',
+              title: 'Dummy Child Completed',
+              detail: 'Dummy Child returned verification result',
+              status: 'done',
+              payloadJson: '{"status":"success"}',
+              createdAt: '2026-05-17T00:00:04Z',
+            },
+            {
+              id: 'evt-7',
+              taskId: 'task-demo-control-tower',
+              runId: 'run-demo-codex-root',
+              timestampMs: 1_700_000_005_000,
+              kind: 'session',
+              eventType: 'session.complete',
+              title: 'Codex Root Run Complete',
+              detail: 'Finished orchestrating all workspace tasks',
+              status: 'done',
+              payloadJson: '{"status":"success"}',
+              createdAt: '2026-05-17T00:00:05Z',
+            },
+          ],
+          createdAt: '2026-05-17T00:00:00Z',
+        },
+      ],
+      createdAt: '2026-05-17T00:00:00Z',
+    }
+
+    monitorMocks.getTaskTraces.mockResolvedValue([demoTask])
+    monitorMocks.createDemoTaskTrace.mockImplementation(async () => {
+      monitorMocks.getTaskTraces.mockResolvedValue([demoTask])
+      return demoTask
+    })
+
+    render(<AgentMonitorSection activeView="tasks" />)
+
+    const createBtn = screen.getByTestId('create-demo-task-trace-btn')
+    expect(createBtn).toBeInTheDocument()
+
+    fireEvent.click(createBtn)
+
+    await waitFor(() => expect(monitorMocks.createDemoTaskTrace).toHaveBeenCalled())
+    await waitFor(() => expect(screen.getAllByText('Codex Root Run').length).toBeGreaterThan(0))
+    expect(screen.getByText('Demo Task Trace 已创建：包含 Codex 根任务与嵌套的 Dummy Child 子任务。')).toBeInTheDocument()
+    expect(screen.getByText('Dummy Child')).toBeInTheDocument()
+    expect(screen.getByText(/control-tower/)).toBeInTheDocument()
+    expect(screen.getByText(/trace-codex-orchestration-001/)).toBeInTheDocument()
+    expect(screen.getByText('session-codex-root')).toBeInTheDocument()
+
+    // Verify root run ordered events rendered in timeline
+    await waitFor(() => expect(screen.getByText('Codex Session Initialized')).toBeInTheDocument())
+    expect(screen.getByText('Dispatch Dummy Child')).toBeInTheDocument()
+    expect(screen.getByText('Dummy Child Completed')).toBeInTheDocument()
+    expect(screen.getByText('Codex Root Run Complete')).toBeInTheDocument()
+
+    // Click nested Dummy Child and verify its ordered events
+    fireEvent.click(screen.getByText('Dummy Child'))
+    await waitFor(() => expect(screen.getByText('Dummy Child Initialized')).toBeInTheDocument())
+    expect(screen.getByText('InspectAST: component graph')).toBeInTheDocument()
+    expect(screen.getByText('Dummy Child Complete')).toBeInTheDocument()
+    expect(screen.getByText('session-dummy-child')).toBeInTheDocument()
   })
 })

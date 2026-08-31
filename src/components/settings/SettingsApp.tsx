@@ -133,7 +133,7 @@ export function SettingsApp({ onClose }: SettingsAppProps) {
             transition={{ duration: 0.15 }}
           >
             {activeSection === 'tasks' ? (
-              <AgentMonitorSection activeView="sessions" />
+              <AgentMonitorSection activeView="tasks" />
             ) : activeSection === 'usage' ? (
               <CodexUsageSection />
             ) : activeSection === 'island' ? (

@@ -6,6 +6,8 @@ import {
   getClaudeWrapperStatus,
   getMonitorSessionDetail,
   getMonitorSessions,
+  createDemoTaskTrace,
+  getTaskTraces,
   installClaudeWrapper,
   removeClaudeWrapper,
   setNetworkMonitorEnabled,
@@ -16,6 +18,9 @@ import {
   type NetworkMonitorStatus,
   type NetworkRequestDetail,
   type NetworkRequestSummary,
+  type TaskRecord,
+  type AgentRunRecord,
+  type TaskEventRecord,
 } from '../../../services/monitorApi'
 import { getChatHistoryTail, jumpToTerminal, openSystemPath } from '../../../services/tauriApi'
 import { mapParsedMessages } from '../../../hooks/useTauri'
@@ -76,7 +81,8 @@ function phaseLabel(phase?: string) {
     case 'waiting_approval': return '等审批'
     case 'waiting_input': return '等输入'
     case 'compacting': return '压缩上下文'
-    case 'done': return '完成'
+    case 'done':
+    case 'completed': return '完成'
     case 'error': return '错误'
     case 'interrupted': return '已中断'
     case 'idle':
@@ -338,6 +344,67 @@ export function AgentMonitorSection({ activeView = 'sessions' }: AgentMonitorSec
     quietMs: 12000,
   })
 
+  const [tasks, setTasks] = useState<TaskRecord[]>([])
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null)
+  const [creatingDemo, setCreatingDemo] = useState(false)
+  const [demoNotice, setDemoNotice] = useState<string | null>(null)
+  const [tasksLoading, setTasksLoading] = useState(false)
+  const [tasksError, setTasksError] = useState('')
+
+  const allTaskRuns = useMemo(() => {
+    const runs: { run: AgentRunRecord; task: TaskRecord }[] = []
+    for (const task of tasks) {
+      for (const run of task.runs ?? []) {
+        runs.push({ run, task })
+        for (const child of run.children ?? []) {
+          runs.push({ run: child, task })
+        }
+      }
+    }
+    return runs
+  }, [tasks])
+
+  const selectedRunItem = allTaskRuns.find((item) => item.run.id === selectedRunId)
+  const selectedRun = selectedRunItem?.run ?? null
+
+  const loadTasks = useCallback(async (showSpinner = false) => {
+    if (showSpinner) setTasksLoading(true)
+    setTasksError('')
+    try {
+      const records = await getTaskTraces()
+      setTasks(records)
+      const allRuns = records.flatMap((t) => [
+        ...(t.runs ?? []),
+        ...(t.runs ?? []).flatMap((r) => r.children ?? []),
+      ])
+      setSelectedRunId((current) => {
+        if (current && allRuns.some((r) => r.id === current)) return current
+        return records[0]?.runs?.[0]?.id ?? null
+      })
+    } catch (err) {
+      setTasksError(String(err))
+    } finally {
+      setTasksLoading(false)
+    }
+  }, [])
+
+  const handleCreateDemoTrace = useCallback(async () => {
+    setCreatingDemo(true)
+    setTasksError('')
+    setDemoNotice(null)
+    try {
+      const createdTask = await createDemoTaskTrace()
+      await loadTasks(true)
+      const rootRunId = createdTask.runs?.[0]?.id ?? 'run-demo-codex-root'
+      setSelectedRunId(rootRunId)
+      setDemoNotice('Demo Task Trace 已创建：包含 Codex 根任务与嵌套的 Dummy Child 子任务。')
+    } catch (err) {
+      setTasksError(`创建 Demo Task Trace 失败: ${String(err)}`)
+    } finally {
+      setCreatingDemo(false)
+    }
+  }, [loadTasks])
+
   const loadSessions = useCallback(async (showSpinner = false) => {
     if (showSpinner) setLoading(true)
     setError('')
@@ -396,8 +463,12 @@ export function AgentMonitorSection({ activeView = 'sessions' }: AgentMonitorSec
   }, [])
 
   useEffect(() => {
-    loadSessions(true)
-  }, [loadSessions])
+    if (activeView === 'tasks') {
+      loadTasks(true)
+    } else {
+      loadSessions(true)
+    }
+  }, [activeView, loadSessions, loadTasks])
 
   useEffect(() => {
     loadNetworkStatus().then((status) => {
@@ -407,9 +478,10 @@ export function AgentMonitorSection({ activeView = 'sessions' }: AgentMonitorSec
   }, [loadNetworkRequests, loadNetworkStatus, loadWrapperStatus])
 
   useEffect(() => {
+    if (activeView === 'tasks') return
     const timer = window.setInterval(() => loadSessions(false), sessionRefreshIntervalMs)
     return () => window.clearInterval(timer)
-  }, [loadSessions, sessionRefreshIntervalMs])
+  }, [activeView, loadSessions, sessionRefreshIntervalMs])
 
   useEffect(() => {
     if (!networkStatus.enabled) return
@@ -421,7 +493,7 @@ export function AgentMonitorSection({ activeView = 'sessions' }: AgentMonitorSec
   }, [loadNetworkRequests, loadNetworkStatus, networkRefreshIntervalMs, networkStatus.enabled])
 
   useEffect(() => {
-    if (!selectedId) {
+    if (!selectedId || activeView === 'tasks') {
       setDetail(null)
       return
     }
@@ -446,7 +518,7 @@ export function AgentMonitorSection({ activeView = 'sessions' }: AgentMonitorSec
     return () => {
       cancelled = true
     }
-  }, [selectedId, sessions])
+  }, [activeView, selectedId])
 
   useEffect(() => {
     if (!selectedId || activeTab !== 'conversation') return
@@ -524,7 +596,7 @@ export function AgentMonitorSection({ activeView = 'sessions' }: AgentMonitorSec
   const detailSession: DetailSession | undefined = detail?.session ?? liveSelected
   const plan = sessionPlan(detailSession)
   const timeline = detail?.timeline ?? []
-  const toolTimeline = timeline.filter((item) => ['tool', 'hook_tool', 'approval', 'question', 'plan', 'subagent'].includes(item.kind))
+  const toolTimeline = timeline.filter((item) => ['session', 'tool', 'hook_tool', 'approval', 'question', 'plan', 'subagent'].includes(item.kind))
   const rawEvents = detail?.rawEvents ?? []
   const pendingPermission = detailSession?.pendingPermission
   const pendingQuestion = detailSession?.pendingQuestion
@@ -811,12 +883,144 @@ export function AgentMonitorSection({ activeView = 'sessions' }: AgentMonitorSec
     )
   }
 
+  if (activeView === 'tasks') {
+    return (
+      <section className="agent-monitor">
+        <header className="agent-monitor__header">
+          <div>
+            <h2>Tasks</h2>
+            <p>持久化任务链路，查看 Codex 与嵌套子 Agent 的执行层级与事件追踪。</p>
+          </div>
+          <div className="agent-monitor__header-actions">
+            <button
+              type="button"
+              className="agent-monitor__demo-btn"
+              data-testid="create-demo-task-trace-btn"
+              disabled={creatingDemo}
+              onClick={handleCreateDemoTrace}
+            >
+              {creatingDemo ? '创建中...' : '+ 创建演示 Task Trace'}
+            </button>
+            <button
+              type="button"
+              className="agent-monitor__refresh"
+              onClick={() => loadTasks(true)}
+            >
+              重新加载
+            </button>
+          </div>
+        </header>
+
+        {demoNotice && <div className="agent-monitor__notice agent-monitor__notice--success">{demoNotice}</div>}
+        {tasksError && <div className="agent-monitor__notice">{tasksError}</div>}
+
+        <div className="agent-monitor__layout">
+          <div className="agent-monitor__sessions" aria-label="Task list">
+            {tasksLoading && tasks.length === 0 ? (
+              <div className="agent-monitor__empty">正在读取任务链路...</div>
+            ) : tasks.length === 0 ? (
+              <div className="agent-monitor__empty">暂无持久化任务，点击上方按钮创建演示任务链路。</div>
+            ) : (
+              <div className="agent-monitor__session-list">
+                {tasks.map((task) => (
+                  <div key={task.id} className="agent-monitor__task-card">
+                    <div className="agent-monitor__task-card-header">
+                      <div>
+                        <strong>{task.title}</strong>
+                        <span className="agent-monitor__task-meta"> · {task.project} · {task.traceId}</span>
+                      </div>
+                      <span className="agent-monitor__tag">
+                        {phaseLabel(task.status)}
+                      </span>
+                    </div>
+                    {(task.runs ?? []).map((run: AgentRunRecord) => (
+                      <div key={run.id} className="agent-monitor__session-group">
+                        <button
+                          type="button"
+                          className={run.id === selectedRunId ? 'agent-monitor__session-row agent-monitor__session-row--active' : 'agent-monitor__session-row'}
+                          onClick={() => setSelectedRunId(run.id)}
+                        >
+                          <span className="agent-monitor__session-agent">
+                            <strong>{agentLabel(run.agent)}</strong>
+                            <em>{run.role}</em>
+                          </span>
+                          <span className="agent-monitor__session-main">
+                            <strong>{run.title}</strong>
+                            {run.dispatchedTask && <em title={run.dispatchedTask}>{run.dispatchedTask}</em>}
+                          </span>
+                          <span className="agent-monitor__session-state">
+                            <i className={`agent-monitor__dot agent-monitor__dot--${run.status}`} />
+                            {phaseLabel(run.status)}
+                          </span>
+                        </button>
+                        {run.children && run.children.length > 0 && (
+                          <div className="agent-monitor__subagent-nested-list">
+                            {run.children.map((child: AgentRunRecord) => (
+                              <button
+                                key={child.id}
+                                type="button"
+                                className={selectedRunId === child.id ? 'agent-monitor__subagent-nested-row agent-monitor__subagent-nested-row--active' : 'agent-monitor__subagent-nested-row'}
+                                onClick={() => setSelectedRunId(child.id)}
+                              >
+                                <span className="agent-monitor__subagent-tree-branch">└─</span>
+                                <span className="agent-monitor__subagent-nested-agent">{agentLabel(child.agent)}</span>
+                                <span className="agent-monitor__subagent-nested-title">{child.title}</span>
+                                <span className="agent-monitor__subagent-nested-state">
+                                  <i className={`agent-monitor__dot agent-monitor__dot--${child.status}`} />
+                                  {phaseLabel(child.status)}
+                                </span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <aside className="agent-monitor__detail">
+            {!selectedRun ? (
+              <div className="agent-monitor__empty agent-monitor__empty--detail">选择一个任务或 Run 查看详情。</div>
+            ) : (
+              <>
+                <div className="agent-monitor__detail-header">
+                  <div>
+                    <span>{agentLabel(selectedRun.agent)} · {selectedRun.role}</span>
+                    <h3>{selectedRun.title}</h3>
+                    <code>{selectedRun.sessionId}</code>
+                  </div>
+                </div>
+
+                <div className="agent-monitor__timeline">
+                  {(selectedRun.events ?? []).map((evt: TaskEventRecord) => (
+                    <div key={evt.id} className="agent-monitor__timeline-item">
+                      <time>{new Date(evt.timestampMs).toTimeString().slice(0, 8)}</time>
+                      <span>{evt.eventType || evt.kind}</span>
+                      <div>
+                        <strong>{evt.title}</strong>
+                        {evt.detail && <p>{evt.detail}</p>}
+                      </div>
+                      {evt.status && <em>{phaseLabel(evt.status)}</em>}
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </aside>
+        </div>
+      </section>
+    )
+  }
+
   return (
     <section className="agent-monitor">
       <header className="agent-monitor__header">
         <div>
           <h2>Agent监控</h2>
-          <p>查看 Agent 会话状态，并在手动开启后捕获 Claude Code 原生网络请求。</p>
+          <p>查看 Agent 会话状态与工具调用，并在手动开启后捕获 Claude Code 原生网络请求。</p>
         </div>
         <button type="button" className="agent-monitor__refresh" onClick={() => loadSessions(true)}>
           重新加载
@@ -861,39 +1065,68 @@ export function AgentMonitorSection({ activeView = 'sessions' }: AgentMonitorSec
             <div className="agent-monitor__empty">暂无匹配的 Agent 会话。</div>
           ) : (
             <div className="agent-monitor__session-list">
-              {filteredSessions.map((session) => (
-                <button
-                  key={session.id}
-                  type="button"
-                  className={session.id === selectedId ? 'agent-monitor__session-row agent-monitor__session-row--active' : 'agent-monitor__session-row'}
-                  onClick={() => {
-                    setSelectedId(session.id)
-                    setActiveTab('overview')
-                  }}
-                >
-                  <span className="agent-monitor__session-agent">
-                    <strong>{agentLabel(session.agentType, session.engineLabel)}</strong>
-                    <em>{session.id.slice(0, 8)}</em>
-                  </span>
-                  <span className="agent-monitor__session-main">
-                    <strong>{session.title || session.project || 'Unknown'}</strong>
-                    <em title={session.cwd}>{shortPath(session.cwd)}</em>
-                  </span>
-                  <span className="agent-monitor__session-state">
-                    <i className={`agent-monitor__dot agent-monitor__dot--${session.phase}`} />
-                    {phaseLabel(session.phase)}
-                  </span>
-                  <span className="agent-monitor__session-metrics">
-                    <em>{formatDurationShort(session.duration)}</em>
-                    <em>{formatTokens(session.tokenTotal)} tok</em>
-                    <em>{session.subagentCount} sub</em>
-                  </span>
-                  <span className="agent-monitor__session-foot">
-                    <em>{session.lastToolName || '无工具'}</em>
-                    <em>{session.waitingUser ? pendingLabel(session.pendingKind) : '无等待'}</em>
-                  </span>
-                </button>
-              ))}
+              {filteredSessions.map((session) => {
+                const sessionData = liveSessions.find((s) => s.id === session.id)
+                const subagents = sessionData?.subagents ?? (detailSession?.id === session.id ? detailSession?.subagents : undefined)
+                return (
+                  <div key={session.id} className="agent-monitor__session-group">
+                    <button
+                      type="button"
+                      className={session.id === selectedId ? 'agent-monitor__session-row agent-monitor__session-row--active' : 'agent-monitor__session-row'}
+                      onClick={() => {
+                        setSelectedId(session.id)
+                        setActiveTab('overview')
+                      }}
+                    >
+                      <span className="agent-monitor__session-agent">
+                        <strong>{agentLabel(session.agentType, session.engineLabel)}</strong>
+                        <em>{session.id.slice(0, 8)}</em>
+                      </span>
+                      <span className="agent-monitor__session-main">
+                        <strong>{session.title || session.project || 'Unknown'}</strong>
+                        <em title={session.cwd}>{shortPath(session.cwd)}</em>
+                      </span>
+                      <span className="agent-monitor__session-state">
+                        <i className={`agent-monitor__dot agent-monitor__dot--${session.phase}`} />
+                        {phaseLabel(session.phase)}
+                      </span>
+                      <span className="agent-monitor__session-metrics">
+                        <em>{formatDurationShort(session.duration)}</em>
+                        <em>{formatTokens(session.tokenTotal)} tok</em>
+                        <em>{session.subagentCount} sub</em>
+                      </span>
+                      <span className="agent-monitor__session-foot">
+                        <em>{session.lastToolName || '无工具'}</em>
+                        <em>{session.waitingUser ? pendingLabel(session.pendingKind) : '无等待'}</em>
+                      </span>
+                    </button>
+                    {subagents && subagents.length > 0 && (
+                      <div className="agent-monitor__subagent-nested-list">
+                        {subagents.map((sub) => (
+                          <button
+                            key={sub.agentId}
+                            type="button"
+                            className={selectedId === sub.agentId ? 'agent-monitor__subagent-nested-row agent-monitor__subagent-nested-row--active' : 'agent-monitor__subagent-nested-row'}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setSelectedId(sub.agentId)
+                              setActiveTab('overview')
+                            }}
+                          >
+                            <span className="agent-monitor__subagent-tree-branch">└─</span>
+                            <span className="agent-monitor__subagent-nested-agent">{agentLabel(sub.agentType || 'dummy')}</span>
+                            <span className="agent-monitor__subagent-nested-title">{sub.name || 'Dummy Child'}</span>
+                            <span className="agent-monitor__subagent-nested-state">
+                              <i className={`agent-monitor__dot agent-monitor__dot--${sub.status === 'completed' ? 'done' : sub.status}`} />
+                              {phaseLabel(sub.status === 'completed' ? 'done' : sub.status)}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           )}
         </div>

@@ -555,6 +555,20 @@ export async function removeClaudeWrapper(): Promise<ClaudeWrapperStatus> {
   return invoke<ClaudeWrapperStatus>('remove_claude_wrapper')
 }
 
+export type { TaskRecord, AgentRunRecord, TaskEventRecord } from '../types/taskTrace'
+
+export async function createDemoTaskTrace(): Promise<import('../types/taskTrace').TaskRecord> {
+  if (!isTauri()) {
+    throw new Error('Task trace persistence requires Tauri runtime')
+  }
+  return invoke<import('../types/taskTrace').TaskRecord>('create_demo_task_trace')
+}
+
+export async function getTaskTraces(): Promise<import('../types/taskTrace').TaskRecord[]> {
+  if (!isTauri()) return []
+  return invoke<import('../types/taskTrace').TaskRecord[]>('get_task_traces')
+}
+
 export async function respondPermission(sessionId: string, allowed: boolean, always?: boolean): Promise<void> {
   if (!isTauri()) {
     console.log(`[mock] respondPermission(${sessionId}, ${allowed}, always=${always})`)

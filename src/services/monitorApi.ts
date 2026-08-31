@@ -6,6 +6,8 @@ export {
   getMonitorSessionDetail,
   getMonitorSessions,
   getMonitorTimeline,
+  createDemoTaskTrace,
+  getTaskTraces,
   installClaudeWrapper,
   removeClaudeWrapper,
   setNetworkMonitorEnabled,
@@ -20,4 +22,7 @@ export type {
   NetworkRequestDetail,
   NetworkRequestSummary,
   ClaudeWrapperStatus,
+  TaskRecord,
+  AgentRunRecord,
+  TaskEventRecord,
 } from './tauriApi'

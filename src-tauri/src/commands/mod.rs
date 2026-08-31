@@ -64,6 +64,7 @@ pub struct AppState {
     pub diagnostic_buffer: Arc<DiagnosticRingBuffer>,
     pub network_monitor: Arc<NetworkMonitor>,
     pub switch_db: Arc<SwitchDatabase>,
+    pub task_db: Arc<crate::control_tower::ControlTowerDatabase>,
     pub telemetry: Arc<TelemetryService>,
     #[allow(dead_code)]
     pub tray_icon: tauri::tray::TrayIcon,

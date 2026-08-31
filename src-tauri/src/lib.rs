@@ -2,6 +2,7 @@
 pub mod agents;
 pub mod commands;
 pub mod config;
+pub mod control_tower;
 pub mod data_dir;
 pub mod energy;
 pub mod hook_endpoint;
@@ -5986,6 +5987,13 @@ pub fn run() {
                     std::process::exit(1);
                 })
             }));
+            let task_db = Arc::new(control_tower::ControlTowerDatabase::open().unwrap_or_else(|err| {
+                log::error!("Failed to open control tower database: {err}");
+                control_tower::ControlTowerDatabase::open_in_memory().unwrap_or_else(|fallback_err| {
+                    log::error!("Failed to open in-memory control tower database: {fallback_err}");
+                    std::process::exit(1);
+                })
+            }));
             let telemetry = Arc::new(TelemetryService::new());
 
             let app_state = AppState {
@@ -6001,6 +6009,7 @@ pub fn run() {
                 diagnostic_buffer,
                 network_monitor,
                 switch_db,
+                task_db,
                 telemetry,
                 tray_icon,
             };
@@ -6088,6 +6097,8 @@ pub fn run() {
             commands::monitor::get_claude_wrapper_status,
             commands::monitor::install_claude_wrapper,
             commands::monitor::remove_claude_wrapper,
+            control_tower::commands::create_demo_task_trace,
+            control_tower::commands::get_task_traces,
             commands::export_diagnostics,
             commands::add_engine_instance,
             commands::remove_engine_instance,
