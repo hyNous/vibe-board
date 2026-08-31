@@ -8,7 +8,7 @@ import { UpdateDialog } from './UpdateDialog'
 import { FirstRunWelcome } from './FirstRunWelcome'
 import { GeneralSection } from './sections/GeneralSection'
 import { IslandSection } from './sections/IslandSection'
-import { CodexUsageSection } from './sections/CodexUsageSection'
+import { UnifiedUsageSection } from './sections/UnifiedUsageSection'
 import { AgentMonitorSection } from './sections/AgentMonitorSection'
 import { AboutSection } from './sections/AboutSection'
 import { SwitchSection } from './sections/SwitchSection'
@@ -135,7 +135,7 @@ export function SettingsApp({ onClose }: SettingsAppProps) {
             {activeSection === 'tasks' ? (
               <AgentMonitorSection activeView="tasks" />
             ) : activeSection === 'usage' ? (
-              <CodexUsageSection />
+              <UnifiedUsageSection />
             ) : activeSection === 'island' ? (
               <IslandSection activeView={activeIslandView} />
             ) : activeSection === 'monitor' ? (

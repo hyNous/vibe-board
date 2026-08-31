@@ -2213,6 +2213,14 @@ impl HookServer {
                     s.description = Some(message.clone());
                     s.last_response = None;
                 });
+                let is_suppressed = Self::check_suppression(store, session_id);
+                if is_suppressed || Self::is_remote_hook_event(_raw) {
+                    if let Ok(guard) = app.lock() {
+                        if let Some(ref handle) = *guard {
+                            crate::platform::notifications::send_error_notification(handle, message);
+                        }
+                    }
+                }
                 Self::play_sound_for_session(sound, store, session_id, SoundEvent::TaskError);
                 Self::dispatch_webhook_event(
                     config_store,
@@ -2292,6 +2300,7 @@ impl HookServer {
                     message,
                     status,
                     sound,
+                    app,
                     _raw,
                     done_cleanup_secs,
                 );
@@ -2579,6 +2588,7 @@ impl HookServer {
         message: &str,
         status: &Option<String>,
         sound: &Arc<std::sync::Mutex<Option<Arc<SoundEngine>>>>,
+        app: &Arc<std::sync::Mutex<Option<tauri::AppHandle>>>,
         raw: &serde_json::Value,
         done_cleanup_secs: u64,
     ) {
@@ -2621,6 +2631,14 @@ impl HookServer {
                 s.description = Some(text.clone());
                 s.last_response = None;
             });
+            let is_suppressed = Self::check_suppression(store, session_id);
+            if is_suppressed || Self::is_remote_hook_event(raw) {
+                if let Ok(guard) = app.lock() {
+                    if let Some(ref handle) = *guard {
+                        crate::platform::notifications::send_error_notification(handle, &text);
+                    }
+                }
+            }
             Self::play_sound_for_session(sound, store, session_id, SoundEvent::TaskError);
             return;
         }

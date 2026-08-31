@@ -4,9 +4,9 @@ import type { UsageSummary, ProviderUsage, ModelUsage, DailyCost } from '../../.
 import { switchApi } from '../../../../services/switchApi'
 
 const PERIOD_OPTIONS = [
+  { label: 'Today', days: 1 },
   { label: '7 天', days: 7 },
   { label: '30 天', days: 30 },
-  { label: '90 天', days: 90 },
 ]
 
 function formatCost(usd: number): string {
@@ -27,9 +27,11 @@ export function SwitchUsagePanel() {
   const [byModel, setByModel] = useState<ModelUsage[]>([])
   const [daily, setDaily] = useState<DailyCost[]>([])
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
 
   const loadData = useCallback(async () => {
     setLoading(true)
+    setError('')
     try {
       const [s, p, m, d] = await Promise.all([
         switchApi.getUsageSummary(activeAppType, days),
@@ -41,8 +43,8 @@ export function SwitchUsagePanel() {
       setByProvider(p)
       setByModel(m)
       setDaily(d)
-    } catch {
-      // silent
+    } catch (err) {
+      setError(String(err))
     }
     setLoading(false)
   }, [activeAppType, days])
@@ -55,6 +57,7 @@ export function SwitchUsagePanel() {
   }, [loadData])
 
   const maxDailyCost = Math.max(...daily.map((d) => d.cost_usd), 0.01)
+  const hasUsage = summary != null && summary.total_requests > 0
 
   return (
     <div>
@@ -75,25 +78,26 @@ export function SwitchUsagePanel() {
       </div>
 
       {loading && <div className="switch-loading">加载中...</div>}
+      {error && <div className="switch-error">用量读取失败：{error}</div>}
 
       {!loading && summary && (
         <>
           <div className="switch-usage-summary">
             <div className="switch-usage-stat">
-              <span className="switch-usage-stat__value">{formatCost(summary.total_cost_usd)}</span>
-              <span className="switch-usage-stat__label">总费用</span>
+              <span className="switch-usage-stat__value">{hasUsage ? formatCost(summary.total_cost_usd) : '—'}</span>
+              <span className="switch-usage-stat__label">Recorded API Cost</span>
             </div>
             <div className="switch-usage-stat">
               <span className="switch-usage-stat__value">{summary.total_requests.toLocaleString()}</span>
-              <span className="switch-usage-stat__label">请求数</span>
+              <span className="switch-usage-stat__label">Requests</span>
             </div>
             <div className="switch-usage-stat">
-              <span className="switch-usage-stat__value">{formatTokens(summary.total_input_tokens)}</span>
-              <span className="switch-usage-stat__label">输入 Token</span>
+              <span className="switch-usage-stat__value">{hasUsage ? formatTokens(summary.total_input_tokens) : '—'}</span>
+              <span className="switch-usage-stat__label">Input Tokens</span>
             </div>
             <div className="switch-usage-stat">
-              <span className="switch-usage-stat__value">{formatTokens(summary.total_output_tokens)}</span>
-              <span className="switch-usage-stat__label">输出 Token</span>
+              <span className="switch-usage-stat__value">{hasUsage ? formatTokens(summary.total_output_tokens) : '—'}</span>
+              <span className="switch-usage-stat__label">Output Tokens</span>
             </div>
           </div>
 

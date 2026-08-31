@@ -79,7 +79,7 @@ function TokenBucketRow({ label, bucket }: { label: string; bucket: CodexTokenBu
   )
 }
 
-export function CodexUsageSection() {
+export function CodexUsageSection({ showHeader = true }: { showHeader?: boolean } = {}) {
   const { t } = useTranslation()
   const [summary, setSummary] = useState<CodexUsageSummary | null>(null)
   const [loading, setLoading] = useState(false)
@@ -126,7 +126,7 @@ export function CodexUsageSection() {
 
   return (
     <section className="setting-section">
-      <h2>{t('settings.usage', { defaultValue: 'Usage' })}</h2>
+      {showHeader && <h2>{t('settings.usage', { defaultValue: 'Usage' })}</h2>}
 
       {!isTauri() && (
         <div className="hook-empty">{t('codexUsage.desktopOnly', { defaultValue: 'Codex usage is available in the desktop app' })}</div>
