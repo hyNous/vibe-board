@@ -81,7 +81,9 @@ function phaseLabel(phase?: string) {
     case 'running':
     case 'processing': return '运行中'
     case 'waiting_approval': return '等审批'
+    case 'waiting_permission': return '等审批'
     case 'waiting_input': return '等输入'
+    case 'blocked': return '已阻塞'
     case 'compacting': return '压缩上下文'
     case 'done':
     case 'completed': return '完成'

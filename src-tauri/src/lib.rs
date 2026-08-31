@@ -5814,8 +5814,26 @@ pub fn run() {
                 }
             });
 
+            let task_db = Arc::new(
+                control_tower::ControlTowerDatabase::open().unwrap_or_else(|err| {
+                    log::error!("Failed to open control tower database: {err}");
+                    control_tower::ControlTowerDatabase::open_in_memory().unwrap_or_else(
+                        |fallback_err| {
+                            log::error!(
+                                "Failed to open in-memory control tower database: {fallback_err}"
+                            );
+                            std::process::exit(1);
+                        },
+                    )
+                }),
+            );
+
             // Initialize and start hook server
-            let hook_server = HookServer::new(session_store.clone(), adapters.clone());
+            let hook_server = HookServer::new(
+                session_store.clone(),
+                adapters.clone(),
+                task_db.clone(),
+            );
             let hook_server = Arc::new(hook_server);
             hook_server.set_app_handle(app.handle().clone());
             hook_server.set_config_store(config_store.clone());
@@ -5984,13 +6002,6 @@ pub fn run() {
                 log::error!("Failed to open switch database: {err}");
                 switch::db::SwitchDatabase::open_in_memory().unwrap_or_else(|fallback_err| {
                     log::error!("Failed to open in-memory switch database: {fallback_err}");
-                    std::process::exit(1);
-                })
-            }));
-            let task_db = Arc::new(control_tower::ControlTowerDatabase::open().unwrap_or_else(|err| {
-                log::error!("Failed to open control tower database: {err}");
-                control_tower::ControlTowerDatabase::open_in_memory().unwrap_or_else(|fallback_err| {
-                    log::error!("Failed to open in-memory control tower database: {fallback_err}");
                     std::process::exit(1);
                 })
             }));

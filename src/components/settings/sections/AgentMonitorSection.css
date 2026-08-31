@@ -583,7 +583,8 @@
 }
 
 .agent-monitor__dot--waiting_approval,
-.agent-monitor__dot--waiting_input {
+.agent-monitor__dot--waiting_input,
+.agent-monitor__dot--blocked {
   background: var(--settings-status-waiting);
 }
 

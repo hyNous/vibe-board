@@ -647,6 +647,23 @@ fn copy_optional_field(
     }
 }
 
+fn copy_agent_trace_context(obj: &mut serde_json::Map<String, serde_json::Value>) {
+    for (env_key, json_key) in [
+        ("AGENT_TRACE_ID", "agent_trace_id"),
+        ("AGENT_TASK_ID", "agent_task_id"),
+        ("AGENT_PARENT_RUN_ID", "agent_parent_run_id"),
+        ("AGENT_RUN_ID", "agent_run_id"),
+        ("AGENT_ROLE", "agent_role"),
+        ("AGENT_PROJECT", "agent_project"),
+    ] {
+        if let Ok(value) = std::env::var(env_key) {
+            if !value.trim().is_empty() {
+                obj.insert(json_key.into(), value.into());
+            }
+        }
+    }
+}
+
 fn tool_response_error(response: &serde_json::Value) -> Option<String> {
     let failed = response
         .get("exit_code")
@@ -887,6 +904,7 @@ fn main() {
     });
 
     let obj = state.as_object_mut().unwrap();
+    copy_agent_trace_context(obj);
     if let Some(label) = engine_label {
         obj.insert("engine_label".into(), label.into());
     }

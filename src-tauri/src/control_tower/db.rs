@@ -353,22 +353,43 @@ impl ControlTowerDatabase {
             params![run_id],
             |row| row.get(0),
         )?;
+        let current_status: String = tx.query_row(
+            "SELECT status FROM agent_runs WHERE id = ?1",
+            params![run_id],
+            |row| row.get(0),
+        )?;
+        let latest_native_status: Option<String> = tx
+            .query_row(
+                "SELECT status FROM task_events WHERE run_id = ?1 AND kind = 'native' AND status IS NOT NULL ORDER BY timestamp_ms DESC, id DESC LIMIT 1",
+                params![run_id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        let final_status = if current_status == "error"
+            || status == "error"
+            || matches!(latest_native_status.as_deref(), Some("error"))
+        {
+            "error"
+        } else if status == "completed"
+            && matches!(
+                latest_native_status.as_deref(),
+                Some("waiting_approval" | "waiting_input" | "blocked")
+            )
+        {
+            latest_native_status.as_deref().unwrap_or(status)
+        } else {
+            status
+        };
         tx.execute(
             "UPDATE agent_runs SET status = ?1, exit_code = ?2, completed_at = ?3, updated_at = ?4 WHERE id = ?5",
-            params![status, exit_code, completed_at, event.created_at, run_id],
+            params![final_status, exit_code, completed_at, event.created_at, run_id],
         )?;
         let active_children: i64 = tx.query_row(
             "SELECT COUNT(*) FROM agent_runs WHERE task_id = ?1 AND status IN ('starting', 'running')",
             params![task_id],
             |row| row.get(0),
         )?;
-        let task_status = if status == "error" {
-            "error"
-        } else if active_children > 0 {
-            "running"
-        } else {
-            "completed"
-        };
+        let task_status = Self::task_status_for_run(final_status, active_children);
         tx.execute(
             "UPDATE tasks SET status = ?1, updated_at = ?2 WHERE id = ?3",
             params![task_status, event.created_at, task_id],
@@ -376,6 +397,57 @@ impl ControlTowerDatabase {
         Self::insert_event_tx(&tx, event)?;
         tx.commit()?;
         Ok(())
+    }
+
+    pub(crate) fn record_native_event(
+        &self,
+        event: &TaskEventRecord,
+        native_status: &str,
+    ) -> anyhow::Result<bool> {
+        let mut conn = self.conn.lock().map_err(|e| anyhow::anyhow!("{e}"))?;
+        let tx = conn.transaction()?;
+        let run_context: Option<(String, String)> = tx
+            .query_row(
+                "SELECT task_id, status FROM agent_runs WHERE id = ?1",
+                params![event.run_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()?;
+        let Some((task_id, current_status)) = run_context else {
+            return Ok(false);
+        };
+        if task_id != event.task_id {
+            return Ok(false);
+        }
+
+        let effective_status = if current_status == "error" && native_status != "error" {
+            "error"
+        } else {
+            native_status
+        };
+        tx.execute(
+            "UPDATE agent_runs SET status = ?1, updated_at = ?2 WHERE id = ?3",
+            params![effective_status, event.created_at, event.run_id],
+        )?;
+        let task_status = Self::task_status_for_run(effective_status, 0);
+        tx.execute(
+            "UPDATE tasks SET status = ?1, updated_at = ?2 WHERE id = ?3",
+            params![task_status, event.created_at, task_id],
+        )?;
+        Self::insert_event_tx(&tx, event)?;
+        tx.commit()?;
+        Ok(true)
+    }
+
+    fn task_status_for_run(run_status: &str, active_children: i64) -> &str {
+        match run_status {
+            "error" => "error",
+            "waiting_approval" | "waiting_input" | "blocked" => run_status,
+            "interrupted" => "interrupted",
+            "starting" | "running" | "processing" | "compacting" => "running",
+            _ if active_children > 0 => "running",
+            _ => "completed",
+        }
     }
 
     fn insert_event_tx(
@@ -584,5 +656,60 @@ mod tests {
         let all_tasks = db.get_all_tasks().expect("get all tasks");
         assert_eq!(all_tasks.len(), 1);
         assert_eq!(all_tasks[0], created);
+    }
+
+    #[test]
+    fn native_blocking_state_wins_process_completion_race() {
+        let db = ControlTowerDatabase::open_in_memory().expect("in memory db");
+        db.create_demo_task_trace().expect("create demo trace");
+        let now = Utc::now();
+        let native_event = TaskEventRecord {
+            id: "evt-native-waiting".to_string(),
+            task_id: "task-demo-control-tower".to_string(),
+            run_id: "run-demo-dummy-child".to_string(),
+            timestamp_ms: now.timestamp_millis() as u64,
+            kind: "native".to_string(),
+            event_type: "native.PermissionRequest".to_string(),
+            title: "Waiting for permission: Bash".to_string(),
+            detail: None,
+            status: Some("waiting_approval".to_string()),
+            payload_json: None,
+            created_at: now.to_rfc3339(),
+        };
+
+        assert!(db
+            .record_native_event(&native_event, "waiting_approval")
+            .expect("record native event"));
+
+        let process_event = TaskEventRecord {
+            id: "evt-process-completed".to_string(),
+            task_id: native_event.task_id.clone(),
+            run_id: native_event.run_id.clone(),
+            timestamp_ms: native_event.timestamp_ms + 1,
+            kind: "process".to_string(),
+            event_type: "process.completed".to_string(),
+            title: "Child Run Completed".to_string(),
+            detail: None,
+            status: Some("completed".to_string()),
+            payload_json: None,
+            created_at: (now + chrono::Duration::milliseconds(1)).to_rfc3339(),
+        };
+        db.mark_run_finished(
+            &native_event.run_id,
+            "completed",
+            Some(0),
+            now.timestamp(),
+            &process_event,
+        )
+        .expect("record process completion");
+
+        let task = db
+            .get_all_tasks()
+            .expect("get tasks")
+            .into_iter()
+            .find(|task| task.id == native_event.task_id)
+            .expect("task");
+        assert_eq!(task.status, "waiting_approval");
+        assert_eq!(task.runs[0].children[0].status, "waiting_approval");
     }
 }

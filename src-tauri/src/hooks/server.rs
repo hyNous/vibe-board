@@ -21,6 +21,7 @@ use super::session_store::{
 };
 use crate::agents::{AgentAdapter, AgentEvent};
 use crate::config::{AppConfig, ConfigStore};
+use crate::control_tower::{ControlTowerDatabase, TaskEventRecord};
 use crate::hook_endpoint;
 use crate::hooks::conversation_parser::{
     discover_codex_session_file, discover_session_file, extract_cache_ttl_info,
@@ -30,6 +31,7 @@ use crate::hooks::conversation_parser::{
 use crate::sound::{SoundEngine, SoundEvent};
 use crate::terminal::suppression;
 use crate::webhook::{self, templates::NotificationEvent};
+use uuid::Uuid;
 
 const RAW_EVENT_BUFFER_PER_SESSION: usize = 200;
 const SESSION_END_CLEANUP_SECS: u64 = 5;
@@ -219,6 +221,8 @@ pub struct HookServer {
     /// IPC endpoint owned by this server instance.
     endpoint: hook_endpoint::HookEndpoint,
     socket_owned: Arc<AtomicBool>,
+    /// Persistent task trace database used for child-agent native events.
+    task_db: Arc<ControlTowerDatabase>,
     /// Recent PreToolUse cache for PermissionRequest correlation when Codex omits tool_use_id.
     recent_tools: Arc<Mutex<VecDeque<RecentToolInvocation>>>,
 }
@@ -235,6 +239,7 @@ struct HookConnectionContext {
     raw_events: Arc<std::sync::Mutex<RawHookEventStore>>,
     config_store: Arc<std::sync::Mutex<Option<ConfigStore>>>,
     recent_tools: Arc<Mutex<VecDeque<RecentToolInvocation>>>,
+    task_db: Arc<ControlTowerDatabase>,
 }
 
 #[derive(Clone)]
@@ -256,6 +261,7 @@ impl HookServer {
     pub fn new(
         session_store: Arc<SessionStore>,
         adapters: Arc<Vec<Arc<dyn AgentAdapter>>>,
+        task_db: Arc<ControlTowerDatabase>,
     ) -> Self {
         Self {
             pending_permissions: Arc::new(Mutex::new(HashMap::new())),
@@ -270,6 +276,7 @@ impl HookServer {
             endpoint: hook_endpoint::current(),
             socket_owned: Arc::new(AtomicBool::new(false)),
             recent_tools: Arc::new(Mutex::new(VecDeque::new())),
+            task_db,
         }
     }
 
@@ -876,6 +883,7 @@ impl HookServer {
             raw_events: self.raw_events.clone(),
             config_store: self.config_store.clone(),
             recent_tools: self.recent_tools.clone(),
+            task_db: self.task_db.clone(),
         };
 
         #[cfg(unix)]
@@ -978,6 +986,7 @@ impl HookServer {
         let raw_events = context.raw_events;
         let config_store = context.config_store;
         let recent_tools = context.recent_tools;
+        let task_db = context.task_db;
         let (reader, mut writer) = tokio::io::split(stream);
         let mut buf_reader = BufReader::new(reader);
         let mut line = String::new();
@@ -999,6 +1008,7 @@ impl HookServer {
 
         // Try to find a matching adapter and parse the event
         let event = Self::parse_with_adapters(&adapters, &raw);
+        Self::record_native_task_event(&task_db, &raw, event.as_ref());
         if Self::should_silence_event(&config_store, &raw, event.as_ref()) {
             log::debug!(
                 "Silenced hook event {} for cwd {}",
@@ -1411,6 +1421,206 @@ impl HookServer {
         if let Ok(mut events) = raw_events.lock() {
             events.push(hook_event);
         }
+    }
+
+    fn record_native_task_event(
+        task_db: &Arc<ControlTowerDatabase>,
+        raw: &serde_json::Value,
+        event: Option<&AgentEvent>,
+    ) {
+        let Some(run_id) = Self::trace_field(raw, &["agent_run_id", "AGENT_RUN_ID"]) else {
+            return;
+        };
+        let Some(task_id) = Self::trace_field(raw, &["agent_task_id", "AGENT_TASK_ID"]) else {
+            return;
+        };
+        let status = Self::native_event_status(event, raw);
+        let now = chrono::Utc::now();
+        let task_event = TaskEventRecord {
+            id: format!("event-native-{}", Uuid::new_v4().simple()),
+            task_id,
+            run_id,
+            timestamp_ms: now.timestamp_millis().max(0) as u64,
+            kind: "native".to_string(),
+            event_type: format!("native.{}", Self::raw_event_name(raw)),
+            title: Self::native_event_title(event, raw, status),
+            detail: Self::native_event_detail(event, raw),
+            status: Some(status.to_string()),
+            payload_json: Some(raw.to_string()),
+            created_at: now.to_rfc3339(),
+        };
+
+        match task_db.record_native_event(&task_event, status) {
+            Ok(false) => log::debug!(
+                "Ignored native event for unknown or mismatched child run {}",
+                task_event.run_id
+            ),
+            Ok(true) => {}
+            Err(error) => log::warn!(
+                "Failed to persist native event for child run {}: {}",
+                task_event.run_id,
+                error
+            ),
+        }
+    }
+
+    fn trace_field(raw: &serde_json::Value, keys: &[&str]) -> Option<String> {
+        keys.iter()
+            .find_map(|key| raw.get(*key).and_then(|value| value.as_str()))
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToString::to_string)
+    }
+
+    fn native_event_status(event: Option<&AgentEvent>, raw: &serde_json::Value) -> &'static str {
+        match event {
+            Some(AgentEvent::SessionStart { .. }) => "starting",
+            Some(AgentEvent::SessionEnd { .. }) => "completed",
+            Some(AgentEvent::PermissionRequest { .. } | AgentEvent::PlanApproval { .. }) => {
+                "waiting_approval"
+            }
+            Some(AgentEvent::AskQuestion { .. }) => "waiting_input",
+            Some(AgentEvent::Error { .. }) => "error",
+            Some(AgentEvent::Interrupt { .. }) => "interrupted",
+            Some(AgentEvent::ToolUse { status, .. }) => {
+                if matches!(status.as_str(), "error" | "failure" | "failed") {
+                    "error"
+                } else {
+                    Self::native_status_from_raw(raw).unwrap_or("processing")
+                }
+            }
+            Some(AgentEvent::ShellExecutionEnd { exit_code, .. }) => {
+                if exit_code.is_some_and(|code| code != 0) {
+                    "error"
+                } else {
+                    "processing"
+                }
+            }
+            Some(AgentEvent::MCPExecutionEnd { error, .. }) => {
+                if error.as_deref().is_some_and(|value| !value.trim().is_empty()) {
+                    "error"
+                } else {
+                    "processing"
+                }
+            }
+            Some(AgentEvent::TaskComplete { .. } | AgentEvent::AssistantResponseComplete { .. }) => {
+                Self::native_status_from_raw(raw).unwrap_or("waiting_input")
+            }
+            Some(AgentEvent::Processing { .. } | AgentEvent::Notification { .. }) => {
+                Self::native_status_from_raw(raw).unwrap_or("processing")
+            }
+            Some(
+                AgentEvent::TokenUsage { .. }
+                | AgentEvent::RateLimitUpdate { .. }
+                | AgentEvent::SubagentStart { .. }
+                | AgentEvent::SubagentStop { .. }
+                | AgentEvent::ShellExecutionStart { .. }
+                | AgentEvent::MCPExecutionStart { .. }
+                | AgentEvent::AgentResponse { .. }
+                | AgentEvent::AgentThought { .. },
+            ) => "processing",
+            None => Self::native_status_from_raw(raw).unwrap_or("processing"),
+        }
+    }
+
+    fn native_status_from_raw(raw: &serde_json::Value) -> Option<&'static str> {
+        let status = raw.get("status").and_then(|value| value.as_str())?;
+        match status.trim().to_ascii_lowercase().as_str() {
+            "starting" => Some("starting"),
+            "processing" | "running" | "running_tool" | "shell_starting"
+            | "shell_completed" | "mcp_starting" | "mcp_completed" | "response_received"
+            | "thought_processed" | "notification" => Some("processing"),
+            "compacting" => Some("compacting"),
+            "waiting_for_approval" | "waiting_approval" | "waiting_permission"
+            | "permission_request" | "plan_approval" => Some("waiting_approval"),
+            "waiting_for_input" | "waiting_input" | "ask_question" | "question" => {
+                Some("waiting_input")
+            }
+            "blocked" => Some("blocked"),
+            "error" | "failed" | "failure" | "tool_error" => Some("error"),
+            "interrupted" | "cancelled" | "canceled" => Some("interrupted"),
+            "completed" | "complete" | "done" | "ended" => Some("completed"),
+            _ => None,
+        }
+    }
+
+    fn native_event_title(
+        event: Option<&AgentEvent>,
+        raw: &serde_json::Value,
+        status: &str,
+    ) -> String {
+        let title = match event {
+            Some(AgentEvent::PermissionRequest { tool_name, .. }) => {
+                format!("Waiting for permission: {tool_name}")
+            }
+            Some(AgentEvent::AskQuestion { .. }) => "Waiting for input".to_string(),
+            Some(AgentEvent::PlanApproval { title, .. }) => {
+                format!("Waiting for plan approval: {title}")
+            }
+            Some(AgentEvent::Error { .. }) => "Native hook error".to_string(),
+            Some(AgentEvent::Interrupt { .. }) => "Native hook interrupted".to_string(),
+            Some(AgentEvent::SessionStart { .. }) => "Native session started".to_string(),
+            Some(AgentEvent::SessionEnd { .. }) => "Native session ended".to_string(),
+            Some(AgentEvent::Processing { description, .. }) => description.clone(),
+            Some(AgentEvent::ToolUse { tool_name, .. }) => format!("Tool: {tool_name}"),
+            Some(AgentEvent::ShellExecutionStart { command, .. }) => {
+                format!("Running shell: {command}")
+            }
+            Some(AgentEvent::MCPExecutionStart {
+                server_name,
+                tool_name,
+                ..
+            }) => format!("Running MCP: {server_name}/{tool_name}"),
+            Some(AgentEvent::TaskComplete { .. } | AgentEvent::AssistantResponseComplete { .. }) => {
+                "Waiting for input".to_string()
+            }
+            Some(AgentEvent::Notification { message, .. }) => message.clone(),
+            Some(AgentEvent::SubagentStart { .. } | AgentEvent::SubagentStop { .. }) => {
+                "Subagent activity".to_string()
+            }
+            Some(AgentEvent::TokenUsage { .. } | AgentEvent::RateLimitUpdate { .. }) => {
+                "Usage updated".to_string()
+            }
+            Some(AgentEvent::ShellExecutionEnd { command, .. }) => {
+                format!("Shell completed: {command}")
+            }
+            Some(AgentEvent::MCPExecutionEnd {
+                server_name,
+                tool_name,
+                ..
+            }) => format!("MCP completed: {server_name}/{tool_name}"),
+            Some(AgentEvent::AgentResponse { .. }) => "Agent response received".to_string(),
+            Some(AgentEvent::AgentThought { .. }) => "Agent thought received".to_string(),
+            None => format!("Native event: {}", Self::raw_event_name(raw)),
+        };
+        let title = title.trim();
+        if title.is_empty() {
+            status.to_string()
+        } else {
+            Self::truncate_preview(title, 240)
+        }
+    }
+
+    fn native_event_detail(event: Option<&AgentEvent>, raw: &serde_json::Value) -> Option<String> {
+        let detail = match event {
+            Some(AgentEvent::AskQuestion { question, .. }) => Some(question.clone()),
+            Some(AgentEvent::PlanApproval { content, .. }) => Some(content.clone()),
+            Some(AgentEvent::Error { message, .. }) => Some(message.clone()),
+            Some(AgentEvent::Processing { description, .. }) => Some(description.clone()),
+            Some(AgentEvent::ToolUse { tool_input, .. }) => Some(tool_input.clone()),
+            Some(AgentEvent::ShellExecutionStart { command, .. }) => Some(command.clone()),
+            Some(AgentEvent::MCPExecutionStart { arguments, .. }) => Some(arguments.clone()),
+            Some(AgentEvent::Notification { message, .. }) => Some(message.clone()),
+            Some(AgentEvent::AgentResponse { content, .. }) => Some(content.clone()),
+            Some(AgentEvent::AgentThought { thought, .. }) => Some(thought.clone()),
+            _ => raw
+                .get("message")
+                .or_else(|| raw.get("description"))
+                .and_then(|value| value.as_str())
+                .map(ToString::to_string),
+        }?;
+        let detail = detail.trim();
+        (!detail.is_empty()).then(|| Self::truncate_preview(detail, 2_000))
     }
 
     fn should_silence_event(
@@ -3511,6 +3721,7 @@ mod tests {
             raw_events: Arc::new(std::sync::Mutex::new(RawHookEventStore::new())),
             config_store: Arc::new(std::sync::Mutex::new(None)),
             recent_tools: Arc::new(Mutex::new(VecDeque::new())),
+            task_db: Arc::new(ControlTowerDatabase::open_in_memory().expect("task db")),
         };
         let (mut client, server) = tokio::io::duplex(4096);
         let task = tokio::spawn(async move {
@@ -3569,6 +3780,7 @@ mod tests {
             raw_events: Arc::new(std::sync::Mutex::new(RawHookEventStore::new())),
             config_store: Arc::new(std::sync::Mutex::new(None)),
             recent_tools: Arc::new(Mutex::new(VecDeque::new())),
+            task_db: Arc::new(ControlTowerDatabase::open_in_memory().expect("task db")),
         };
         let (mut client, server) = tokio::io::duplex(4096);
         let task = tokio::spawn(async move {
