@@ -77,6 +77,8 @@ function agentLabel(agentType: string, engineLabel?: string | null) {
 
 function phaseLabel(phase?: string) {
   switch (phase) {
+    case 'starting':
+    case 'running':
     case 'processing': return '运行中'
     case 'waiting_approval': return '等审批'
     case 'waiting_input': return '等输入'
@@ -990,7 +992,11 @@ export function AgentMonitorSection({ activeView = 'sessions' }: AgentMonitorSec
                   <div>
                     <span>{agentLabel(selectedRun.agent)} · {selectedRun.role}</span>
                     <h3>{selectedRun.title}</h3>
-                    <code>{selectedRun.sessionId}</code>
+                    <code>
+                      {selectedRun.sessionId}
+                      {selectedRun.pid != null && ` · PID ${selectedRun.pid}`}
+                      {selectedRun.exitCode != null && ` · exit ${selectedRun.exitCode}`}
+                    </code>
                   </div>
                 </div>
 

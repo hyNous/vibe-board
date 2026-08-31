@@ -575,6 +575,8 @@
   background: var(--settings-status-idle);
 }
 
+.agent-monitor__dot--starting,
+.agent-monitor__dot--running,
 .agent-monitor__dot--processing,
 .agent-monitor__dot--compacting {
   background: var(--settings-status-active);

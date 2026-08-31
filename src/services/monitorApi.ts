@@ -7,6 +7,7 @@ export {
   getMonitorSessions,
   getMonitorTimeline,
   createDemoTaskTrace,
+  dispatchAgent,
   getTaskTraces,
   installClaudeWrapper,
   removeClaudeWrapper,
@@ -25,4 +26,6 @@ export type {
   TaskRecord,
   AgentRunRecord,
   TaskEventRecord,
+  DispatchRequest,
+  DispatchResult,
 } from './tauriApi'

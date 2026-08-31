@@ -28,6 +28,8 @@ export interface AgentRunRecord {
   status: TaskRunStatus
   startedAt: number
   completedAt?: number | null
+  pid?: number | null
+  exitCode?: number | null
   children?: AgentRunRecord[]
   events?: TaskEventRecord[]
   createdAt: string

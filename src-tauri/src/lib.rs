@@ -6099,6 +6099,7 @@ pub fn run() {
             commands::monitor::remove_claude_wrapper,
             control_tower::commands::create_demo_task_trace,
             control_tower::commands::get_task_traces,
+            control_tower::commands::dispatch_agent,
             commands::export_diagnostics,
             commands::add_engine_instance,
             commands::remove_engine_instance,

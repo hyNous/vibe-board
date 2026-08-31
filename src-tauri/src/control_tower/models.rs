@@ -30,6 +30,8 @@ pub struct AgentRunRecord {
     pub status: String,
     pub started_at: i64,
     pub completed_at: Option<i64>,
+    pub pid: Option<u32>,
+    pub exit_code: Option<i32>,
     #[serde(default)]
     pub children: Vec<AgentRunRecord>,
     #[serde(default)]

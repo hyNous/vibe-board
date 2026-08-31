@@ -557,6 +557,24 @@ export async function removeClaudeWrapper(): Promise<ClaudeWrapperStatus> {
 
 export type { TaskRecord, AgentRunRecord, TaskEventRecord } from '../types/taskTrace'
 
+export interface DispatchRequest {
+  agent: 'claude' | 'opencode' | 'antigravity'
+  role?: string
+  task: string
+  taskId?: string
+  parentRunId?: string
+  cwd?: string
+}
+
+export interface DispatchResult {
+  runId: string
+  sessionId: string
+  agent: string
+  pid?: number | null
+  status: string
+  exitCode?: number | null
+}
+
 export async function createDemoTaskTrace(): Promise<import('../types/taskTrace').TaskRecord> {
   if (!isTauri()) {
     throw new Error('Task trace persistence requires Tauri runtime')
@@ -567,6 +585,13 @@ export async function createDemoTaskTrace(): Promise<import('../types/taskTrace'
 export async function getTaskTraces(): Promise<import('../types/taskTrace').TaskRecord[]> {
   if (!isTauri()) return []
   return invoke<import('../types/taskTrace').TaskRecord[]>('get_task_traces')
+}
+
+export async function dispatchAgent(request: DispatchRequest): Promise<DispatchResult> {
+  if (!isTauri()) {
+    throw new Error('Agent dispatch requires Tauri runtime')
+  }
+  return invoke<DispatchResult>('dispatch_agent', { request })
 }
 
 export async function respondPermission(sessionId: string, allowed: boolean, always?: boolean): Promise<void> {
