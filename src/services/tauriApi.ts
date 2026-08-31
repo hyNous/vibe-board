@@ -337,7 +337,6 @@ export interface NetworkRequestSummary {
     cacheReadInputTokens: number
     totalTokens: number
     cacheHitRate: number | null
-    estimatedCostUsd?: number | null
   } | null
   error: string | null
   inProgress: boolean

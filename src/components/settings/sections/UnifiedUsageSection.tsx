@@ -3,27 +3,28 @@ import { CodexUsageSection } from './CodexUsageSection'
 import { SwitchAppTabs } from './switch/SwitchAppTabs'
 import { SwitchUsagePanel } from './switch/SwitchUsagePanel'
 import { getNetworkMonitorRequests, type NetworkRequestSummary } from '../../../services/monitorApi'
-import { isTauri, listUsageProviders, type UsageProviderStatus } from '../../../services/tauriApi'
+import { getUsageSnapshots, isTauri, listUsageProviders, type UsageProviderStatus } from '../../../services/tauriApi'
 import { switchApi, type SwitchAppType } from '../../../services/switchApi'
-import { formatCost, formatTokens } from '../../../utils/tokens'
+import type { RateLimitInfo } from '../../../types/agent'
+import { formatTokens } from '../../../utils/tokens'
 import './SwitchSection.css'
 import './UnifiedUsageSection.css'
 
-type UsageView = 'overview' | 'quota' | 'token-trend' | 'cost' | 'breakdown'
+type UsageView = 'overview' | 'quota' | 'token-trend' | 'breakdown'
 
 const USAGE_VIEWS: Array<{ id: UsageView; label: string }> = [
   { id: 'overview', label: 'Overview' },
   { id: 'quota', label: 'Quota' },
-  { id: 'token-trend', label: 'Token Trend' },
-  { id: 'cost', label: 'Cost' },
+  { id: 'token-trend', label: 'Token Usage' },
   { id: 'breakdown', label: 'Breakdown' },
 ]
 
 const USAGE_APP_TYPES: SwitchAppType[] = ['claude', 'codex', 'gemini', 'opencode', 'hermes']
 
-type CoverageId = 'claude' | 'gemini' | 'pi' | 'opencode' | 'other'
+type CoverageId = 'codex' | 'claude' | 'gemini' | 'pi' | 'opencode' | 'other'
 
 const PROVIDER_COVERAGE: Array<{ id: CoverageId; label: string; statusProviders: string[] }> = [
+  { id: 'codex', label: 'Codex', statusProviders: ['codex'] },
   { id: 'claude', label: 'Claude', statusProviders: ['claude-code', 'claude'] },
   { id: 'gemini', label: 'Gemini', statusProviders: ['gemini-cli', 'gemini'] },
   { id: 'pi', label: 'Pi', statusProviders: ['pi'] },
@@ -33,11 +34,31 @@ const PROVIDER_COVERAGE: Array<{ id: CoverageId; label: string; statusProviders:
 
 function coverageIdForProvider(provider: string): CoverageId {
   const normalized = provider.trim().toLowerCase()
+  if (normalized.includes('codex')) return 'codex'
   if (normalized.includes('claude') || normalized.includes('anthropic')) return 'claude'
   if (normalized.includes('gemini') || normalized.includes('google')) return 'gemini'
   if (normalized.includes('opencode')) return 'opencode'
   if (normalized === 'pi' || normalized.startsWith('pi-')) return 'pi'
   return 'other'
+}
+
+function formatQuotaRemaining(snapshot: RateLimitInfo | null): string {
+  if (!snapshot) return ''
+  const windows = snapshot.windows ?? []
+  if (windows.length > 0) {
+    return windows.map((window) => {
+      const remaining = window.remainingPercent ?? (100 - window.usedPercent)
+      return `${window.title} ${Math.round(Math.max(0, Math.min(100, remaining)))}%`
+    }).join(' · ')
+  }
+  return [
+    `5h ${Math.round(Math.max(0, Math.min(100, 100 - snapshot.fiveHourUsage)))}%`,
+    `7d ${Math.round(Math.max(0, Math.min(100, 100 - snapshot.sevenDayUsage)))}%`,
+  ].join(' · ')
+}
+
+function findQuotaSnapshot(snapshots: RateLimitInfo[], id: CoverageId): RateLimitInfo | null {
+  return snapshots.find((snapshot) => coverageIdForProvider(snapshot.provider ?? snapshot.providerLabel ?? '') === id) ?? null
 }
 
 function formatFreshness(timestamp: number | null): string {
@@ -47,10 +68,6 @@ function formatFreshness(timestamp: number | null): string {
   if (age < 3_600_000) return `${Math.floor(age / 60_000)} 分钟前`
   if (age < 86_400_000) return `${Math.floor(age / 3_600_000)} 小时前`
   return `${Math.floor(age / 86_400_000)} 天前`
-}
-
-function formatEstimatedCost(requests: number, usd: number): string {
-  return requests > 0 && usd > 0 ? formatCost(usd) : requests > 0 ? 'Unknown' : '未采集'
 }
 
 function usageStatusLabel(status: UsageProviderStatus | null, requests: number): string {
@@ -67,6 +84,7 @@ type ProviderCoverageStats = {
   id: CoverageId
   label: string
   status: UsageProviderStatus | null
+  quota: RateLimitInfo | null
   requests: number
   tokens: number
   latestRequestAt: number | null
@@ -75,21 +93,25 @@ type ProviderCoverageStats = {
 function ProviderCoverage({
   requests,
   statuses,
+  snapshots,
   loading,
   error,
 }: {
   requests: NetworkRequestSummary[]
   statuses: UsageProviderStatus[]
+  snapshots: RateLimitInfo[]
   loading: boolean
   error: string
 }) {
   const rows = useMemo<ProviderCoverageStats[]>(() => PROVIDER_COVERAGE.map((provider) => {
     const status = statuses.find((item) => provider.statusProviders.includes(item.provider)) ?? null
     const providerRequests = requests.filter((request) => coverageIdForProvider(request.provider) === provider.id)
+    const quota = findQuotaSnapshot(snapshots, provider.id)
     return {
       id: provider.id,
       label: provider.label,
       status,
+      quota,
       requests: providerRequests.length,
       tokens: providerRequests.reduce((total, request) => total + requestTokens(request), 0),
       latestRequestAt: providerRequests.reduce<number | null>(
@@ -97,14 +119,14 @@ function ProviderCoverage({
         null,
       ),
     }
-  }), [requests, statuses])
+  }), [requests, snapshots, statuses])
 
   return (
     <section className="unified-usage__provider-card">
       <div className="unified-usage__provider-head">
         <div>
           <h3>Provider Coverage</h3>
-          <p>每个 Provider 独立显示采集能力；没有 reader 的项目保持“未接入”，不生成估算 quota。</p>
+          <p>每个 Provider 独立显示真实 token 或 quota；没有 reader 的项目保持“未接入”，不生成估算值。</p>
         </div>
         {loading && <span className="unified-usage__provider-loading">读取中...</span>}
       </div>
@@ -116,17 +138,18 @@ function ProviderCoverage({
           </thead>
           <tbody>
             {rows.map((row) => {
-              const updatedAt = [row.status?.updatedAt ?? null, row.latestRequestAt]
+              const updatedAt = [row.status?.updatedAt ?? null, row.quota?.updatedAt ?? null, row.latestRequestAt]
                 .filter((value): value is number => value != null)
                 .reduce<number | null>((latest, value) => latest == null || value > latest ? value : latest, null)
               const detail = row.status?.detail
-                ?? (row.id === 'other' ? '未匹配到 Claude、Gemini、Pi 或 OpenCode 的请求会归入 Other。' : '尚未发现本地用量记录。')
+                ?? (row.id === 'other' ? '未匹配到已支持 Provider 的请求会归入 Other。' : '尚未发现本地用量或 quota 数据。')
+              const quota = formatQuotaRemaining(row.quota) || usageStatusLabel(row.status, row.requests)
               return (
                 <tr key={row.id}>
                   <td><strong>{row.label}</strong></td>
                   <td>{row.requests > 0 ? `${row.requests} · ${formatTokens(row.tokens)}` : '未采集'}</td>
-                  <td>{usageStatusLabel(row.status, row.requests)}</td>
-                  <td>{row.status?.source ?? (row.requests > 0 ? 'network monitor' : '—')}</td>
+                  <td>{quota || 'Unknown'}</td>
+                  <td>{row.quota?.source ?? row.status?.source ?? (row.requests > 0 ? 'network monitor' : '—')}</td>
                   <td>{formatFreshness(updatedAt)}</td>
                   <td title={detail}>{detail}</td>
                 </tr>
@@ -220,36 +243,39 @@ export function UnifiedUsageSection() {
   const [providerStatuses, setProviderStatuses] = useState<UsageProviderStatus[]>([])
   const [providerError, setProviderError] = useState('')
   const [providerLoading, setProviderLoading] = useState(false)
-  const [todayCost, setTodayCost] = useState<{ requests: number; cost: number } | null>(null)
+  const [todayUsage, setTodayUsage] = useState<{ tokens: number } | null>(null)
+  const [quotaSnapshots, setQuotaSnapshots] = useState<RateLimitInfo[]>([])
 
   const loadRequests = useCallback(async () => {
     if (!isTauri()) {
       setRequests([])
       setProviderStatuses([])
-      setTodayCost(null)
+      setTodayUsage(null)
+      setQuotaSnapshots([])
       return
     }
     setProviderLoading(true)
     setError('')
     setProviderError('')
     try {
-      const [networkResult, providerResult, costResult] = await Promise.allSettled([
+      const [networkResult, providerResult, usageResult, quotaResult] = await Promise.allSettled([
         getNetworkMonitorRequests(),
         listUsageProviders(false),
         Promise.all(USAGE_APP_TYPES.map((appType) => switchApi.getUsageSummary(appType, 1))),
+        getUsageSnapshots(),
       ])
       if (networkResult.status === 'fulfilled') setRequests(networkResult.value)
       else setError(String(networkResult.reason))
       if (providerResult.status === 'fulfilled') setProviderStatuses(providerResult.value)
       else setProviderError(String(providerResult.reason))
-      if (costResult.status === 'fulfilled') {
-        setTodayCost({
-          requests: costResult.value.reduce((total, summary) => total + summary.total_requests, 0),
-          cost: costResult.value.reduce((total, summary) => total + summary.total_cost_usd, 0),
+      if (usageResult.status === 'fulfilled') {
+        setTodayUsage({
+          tokens: usageResult.value.reduce((total, summary) => total + summary.total_input_tokens + summary.total_output_tokens, 0),
         })
       } else {
-        setTodayCost(null)
+        setTodayUsage(null)
       }
+      setQuotaSnapshots(quotaResult.status === 'fulfilled' ? quotaResult.value : [])
     } finally {
       setProviderLoading(false)
     }
@@ -266,13 +292,24 @@ export function UnifiedUsageSection() {
     () => new Set(requests.map((request) => request.provider).filter(Boolean)),
     [requests],
   )
+  const liveTokens = todayTokens(requests)
+  const persistedTokens = todayUsage?.tokens ?? 0
+  const tokensToday = persistedTokens > 0 ? persistedTokens : liveTokens
+  const quotaSummary = quotaSnapshots
+    .map((snapshot) => {
+      const label = snapshot.providerLabel ?? snapshot.provider ?? 'Provider'
+      const remaining = formatQuotaRemaining(snapshot)
+      return remaining ? `${label} ${remaining}` : ''
+    })
+    .filter(Boolean)
+    .join(' / ')
 
   return (
     <section className="unified-usage">
       <header className="agent-monitor__header">
         <div>
           <h2>Usage</h2>
-          <p>统一查看 Codex quota、Token 趋势、API 费用和 Agent/Provider/Project/Task 分布。</p>
+          <p>统一查看 Provider token 用量与当前 quota；没有真实数据时保持 Unknown。</p>
         </div>
         <button type="button" className="agent-monitor__refresh" disabled={providerLoading} onClick={() => void loadRequests()}>刷新用量</button>
       </header>
@@ -297,31 +334,26 @@ export function UnifiedUsageSection() {
       {view === 'overview' && (
         <>
           <div className="unified-usage__summary">
-            <div><span>Tokens Today</span><strong>{todayTokens(requests) > 0 ? formatTokens(todayTokens(requests)) : '未采集'}</strong><em>网络抓包来源</em></div>
-            <div><span>Actual API Cost</span><strong>—</strong><em>官方 billing 尚未接入</em></div>
-            <div><span>Equivalent API Cost</span><strong>{formatEstimatedCost(todayCost?.requests ?? 0, todayCost?.cost ?? 0)}</strong><em>{todayCost?.requests ? (todayCost.cost > 0 ? 'local usage_logs · estimated' : 'model pricing unavailable') : '暂无本地用量记录'}</em></div>
+            <div><span>{tokensToday > 0 ? 'Tokens Today' : 'Quota Remaining'}</span><strong>{tokensToday > 0 ? formatTokens(tokensToday) : quotaSummary || 'Unknown'}</strong><em>{tokensToday > 0 ? (persistedTokens > 0 ? 'local usage_logs' : 'network monitor') : 'provider usage reader'}</em></div>
             <div><span>Active Providers</span><strong>{providers.size > 0 ? providers.size : '未采集'}</strong><em>当前请求来源</em></div>
           </div>
-          <ProviderCoverage requests={requests} statuses={providerStatuses} loading={providerLoading} error={providerError} />
+          <ProviderCoverage requests={requests} statuses={providerStatuses} snapshots={quotaSnapshots} loading={providerLoading} error={providerError} />
           <CodexUsageSection showHeader={false} />
         </>
       )}
 
-      {view === 'quota' && <CodexUsageSection showHeader={false} />}
+      {view === 'quota' && (
+        <>
+          <ProviderCoverage requests={requests} statuses={providerStatuses} snapshots={quotaSnapshots} loading={providerLoading} error={providerError} />
+          <CodexUsageSection showHeader={false} />
+        </>
+      )}
       {view === 'token-trend' && (
         <div className="unified-usage__panel">
-          <p className="unified-usage__panel-note">Codex 当前以 Today / 7d / 30d 聚合展示；没有采集到的字段保持 Unknown。</p>
-          <CodexUsageSection showHeader={false} />
-        </div>
-      )}
-      {view === 'cost' && (
-        <div className="unified-usage__panel">
-          <div className="unified-usage__cost-note">
-            <strong>Equivalent API Cost</strong>
-            <span>来自本地 usage_logs 的模型价格估算；官方实际账单与订阅等价成本仍分别显示为 Unknown。</span>
-          </div>
+          <p className="unified-usage__panel-note">能读取 token 时展示真实 token；没有 token 时只展示 Provider quota 剩余值。</p>
           <SwitchAppTabs />
           <SwitchUsagePanel />
+          <CodexUsageSection showHeader={false} />
         </div>
       )}
       {view === 'breakdown' && (

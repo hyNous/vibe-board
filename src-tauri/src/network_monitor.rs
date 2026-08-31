@@ -18,7 +18,6 @@ use tokio::net::TcpListener;
 use tokio::sync::oneshot;
 
 use crate::switch::db::SwitchDatabase;
-use crate::switch::pricing;
 use crate::switch::usage::{self, UsageRecord};
 
 const DEFAULT_UPSTREAM_BASE_URL: &str = "https://api.anthropic.com";
@@ -46,8 +45,6 @@ pub struct NetworkUsageSummary {
     pub cache_read_input_tokens: u64,
     pub total_tokens: u64,
     pub cache_hit_rate: Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub estimated_cost_usd: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -488,9 +485,7 @@ impl NetworkMonitor {
             .iter_mut()
             .find(|entry| entry.summary.id == request_id)
         {
-            let usage_summary = usage
-                .as_ref()
-                .map(|value| summarize_usage(value, entry.summary.model.as_deref()));
+            let usage_summary = usage.as_ref().map(summarize_usage);
             usage_record = usage_summary.as_ref().map(|summary| UsageRecord {
                 id: None,
                 app_type: "claude".to_string(),
@@ -498,7 +493,7 @@ impl NetworkMonitor {
                 model_id: entry.summary.model.clone().unwrap_or_default(),
                 input_tokens: summary.input_tokens,
                 output_tokens: summary.output_tokens,
-                cost_usd: summary.estimated_cost_usd.unwrap_or(0.0),
+                cost_usd: 0.0,
                 timestamp: (entry.summary.timestamp_ms / 1000) as i64,
             });
             entry.summary.status = Some(status);
@@ -1038,7 +1033,7 @@ fn extract_usage(body_text: &str) -> Option<Value> {
     latest_usage
 }
 
-fn summarize_usage(usage: &Value, model: Option<&str>) -> NetworkUsageSummary {
+fn summarize_usage(usage: &Value) -> NetworkUsageSummary {
     let input_tokens = usage_u64(usage, "input_tokens");
     let output_tokens = usage_u64(usage, "output_tokens");
     let cache_creation_input_tokens = usage_u64(usage, "cache_creation_input_tokens");
@@ -1059,8 +1054,6 @@ fn summarize_usage(usage: &Value, model: Option<&str>) -> NetworkUsageSummary {
         cache_read_input_tokens,
         total_tokens,
         cache_hit_rate,
-        estimated_cost_usd: model
-            .and_then(|model| pricing::estimate_cost(model, input_tokens, output_tokens)),
     }
 }
 
@@ -1140,7 +1133,7 @@ event: message_delta\n\
 data: {\"usage\":{\"input_tokens\":10,\"output_tokens\":7,\"cache_creation_input_tokens\":2,\"cache_read_input_tokens\":6}}\n\n";
 
         let usage = extract_usage(body).unwrap();
-        let summary = summarize_usage(&usage, Some("claude-sonnet-4-20250514"));
+        let summary = summarize_usage(&usage);
 
         assert_eq!(summary.input_tokens, 10);
         assert_eq!(summary.output_tokens, 7);
@@ -1148,7 +1141,6 @@ data: {\"usage\":{\"input_tokens\":10,\"output_tokens\":7,\"cache_creation_input
         assert_eq!(summary.cache_read_input_tokens, 6);
         assert_eq!(summary.total_tokens, 25);
         assert_eq!(summary.cache_hit_rate, Some(75.0));
-        assert!((summary.estimated_cost_usd.unwrap() - 0.000135).abs() < 1e-12);
     }
 
     #[test]
@@ -1217,7 +1209,7 @@ data: {\"usage\":{\"input_tokens\":10,\"output_tokens\":7,\"cache_creation_input
         assert_eq!(usage.total_requests, 1);
         assert_eq!(usage.total_input_tokens, 100);
         assert_eq!(usage.total_output_tokens, 20);
-        assert!(usage.total_cost_usd > 0.0);
+        assert_eq!(usage.total_cost_usd, 0.0);
         assert_eq!(usage.last_recorded_at, Some((timestamp_ms / 1000) as i64));
     }
 }

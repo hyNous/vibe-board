@@ -1,24 +1,14 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useSwitchStore } from '../../../../stores/switchStore'
-import type { UsageSummary, ProviderUsage, ModelUsage, DailyCost } from '../../../../services/switchApi'
+import type { UsageSummary, ProviderUsage, ModelUsage } from '../../../../services/switchApi'
 import { switchApi } from '../../../../services/switchApi'
-import { formatCost } from '../../../../utils/tokens'
+import { formatTokens } from '../../../../utils/tokens'
 
 const PERIOD_OPTIONS = [
   { label: 'Today', days: 1 },
   { label: '7 天', days: 7 },
   { label: '30 天', days: 30 },
 ]
-
-function formatEstimatedCost(hasUsage: boolean, usd: number): string {
-  return hasUsage && usd > 0 ? formatCost(usd) : hasUsage ? 'Unknown' : '—'
-}
-
-function formatTokens(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
-  return String(n)
-}
 
 function formatRecordedAt(timestamp?: number | null): string {
   if (!timestamp) return ''
@@ -33,7 +23,6 @@ export function SwitchUsagePanel() {
   const [summary, setSummary] = useState<UsageSummary | null>(null)
   const [byProvider, setByProvider] = useState<ProviderUsage[]>([])
   const [byModel, setByModel] = useState<ModelUsage[]>([])
-  const [daily, setDaily] = useState<DailyCost[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -41,16 +30,14 @@ export function SwitchUsagePanel() {
     setLoading(true)
     setError('')
     try {
-      const [s, p, m, d] = await Promise.all([
+      const [s, p, m] = await Promise.all([
         switchApi.getUsageSummary(activeAppType, days),
         switchApi.getUsageByProvider(activeAppType, days),
         switchApi.getUsageByModel(activeAppType, days),
-        switchApi.getDailyCost(activeAppType, days),
       ])
       setSummary(s)
       setByProvider(p)
       setByModel(m)
-      setDaily(d)
     } catch (err) {
       setError(String(err))
     }
@@ -64,7 +51,6 @@ export function SwitchUsagePanel() {
     return () => window.clearTimeout(id)
   }, [loadData])
 
-  const maxDailyCost = Math.max(...daily.map((d) => d.cost_usd), 0.01)
   const hasUsage = summary != null && summary.total_requests > 0
 
   return (
@@ -92,8 +78,8 @@ export function SwitchUsagePanel() {
         <>
           <div className="switch-usage-summary">
             <div className="switch-usage-stat">
-              <span className="switch-usage-stat__value">{formatEstimatedCost(hasUsage, summary.total_cost_usd)}</span>
-              <span className="switch-usage-stat__label">Equivalent API Cost</span>
+              <span className="switch-usage-stat__value">{hasUsage ? formatTokens(summary.total_input_tokens + summary.total_output_tokens) : '—'}</span>
+              <span className="switch-usage-stat__label">Total Tokens</span>
             </div>
             <div className="switch-usage-stat">
               <span className="switch-usage-stat__value">{summary.total_requests.toLocaleString()}</span>
@@ -110,24 +96,7 @@ export function SwitchUsagePanel() {
           </div>
           {summary.last_recorded_at && (
             <div className="switch-usage-panel__freshness">
-              Last recorded: {formatRecordedAt(summary.last_recorded_at)} · local network monitor · estimated from model pricing
-            </div>
-          )}
-
-          {daily.length > 0 && (
-            <div className="switch-usage-chart">
-              <h4>每日费用</h4>
-              <div className="switch-usage-bars">
-                {daily.map((d) => (
-                  <div key={d.date} className="switch-usage-bar" title={`${d.date}: ${formatCost(d.cost_usd)} (${d.request_count} 次请求)`}>
-                    <div
-                      className="switch-usage-bar__fill"
-                      style={{ height: `${Math.max((d.cost_usd / maxDailyCost) * 100, 2)}%` }}
-                    />
-                    <span className="switch-usage-bar__label">{d.date.slice(5)}</span>
-                  </div>
-                ))}
-              </div>
+              Last recorded: {formatRecordedAt(summary.last_recorded_at)} · local network monitor · token usage
             </div>
           )}
 
@@ -141,7 +110,6 @@ export function SwitchUsagePanel() {
                     <th>请求数</th>
                     <th>输入</th>
                     <th>输出</th>
-                    <th>费用</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -151,7 +119,6 @@ export function SwitchUsagePanel() {
                       <td>{m.request_count}</td>
                       <td>{formatTokens(m.input_tokens)}</td>
                       <td>{formatTokens(m.output_tokens)}</td>
-                      <td>{formatCost(m.cost_usd)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -169,7 +136,6 @@ export function SwitchUsagePanel() {
                     <th>请求数</th>
                     <th>输入</th>
                     <th>输出</th>
-                    <th>费用</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -179,7 +145,6 @@ export function SwitchUsagePanel() {
                       <td>{p.request_count}</td>
                       <td>{formatTokens(p.input_tokens)}</td>
                       <td>{formatTokens(p.output_tokens)}</td>
-                      <td>{formatCost(p.cost_usd)}</td>
                     </tr>
                   ))}
                 </tbody>
