@@ -149,7 +149,7 @@ fn command_timeout(command: &str) -> u64 {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
     use super::{command_timeout, render_script, REMOTE_RUNNER_COMMAND, RESPONSE_MARKER};
     use serde_json::Value;

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useSwitchStore } from '../../../../stores/switchStore'
 import type { UsageSummary, ProviderUsage, ModelUsage, DailyCost } from '../../../../services/switchApi'
 import { switchApi } from '../../../../services/switchApi'
+import { formatCost } from '../../../../utils/tokens'
 
 const PERIOD_OPTIONS = [
   { label: 'Today', days: 1 },
@@ -9,8 +10,8 @@ const PERIOD_OPTIONS = [
   { label: '30 天', days: 30 },
 ]
 
-function formatCost(usd: number): string {
-  return usd < 0.01 && usd > 0 ? '<$0.01' : `$${usd.toFixed(2)}`
+function formatEstimatedCost(hasUsage: boolean, usd: number): string {
+  return hasUsage && usd > 0 ? formatCost(usd) : hasUsage ? 'Unknown' : '—'
 }
 
 function formatTokens(n: number): string {
@@ -91,8 +92,8 @@ export function SwitchUsagePanel() {
         <>
           <div className="switch-usage-summary">
             <div className="switch-usage-stat">
-              <span className="switch-usage-stat__value">{hasUsage ? formatCost(summary.total_cost_usd) : '—'}</span>
-              <span className="switch-usage-stat__label">Recorded API Cost</span>
+              <span className="switch-usage-stat__value">{formatEstimatedCost(hasUsage, summary.total_cost_usd)}</span>
+              <span className="switch-usage-stat__label">Equivalent API Cost</span>
             </div>
             <div className="switch-usage-stat">
               <span className="switch-usage-stat__value">{summary.total_requests.toLocaleString()}</span>
@@ -109,7 +110,7 @@ export function SwitchUsagePanel() {
           </div>
           {summary.last_recorded_at && (
             <div className="switch-usage-panel__freshness">
-              Last recorded: {formatRecordedAt(summary.last_recorded_at)} · local usage_logs
+              Last recorded: {formatRecordedAt(summary.last_recorded_at)} · local network monitor · estimated from model pricing
             </div>
           )}
 

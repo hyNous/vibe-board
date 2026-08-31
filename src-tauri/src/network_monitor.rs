@@ -17,6 +17,10 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use tokio::net::TcpListener;
 use tokio::sync::oneshot;
 
+use crate::switch::db::SwitchDatabase;
+use crate::switch::pricing;
+use crate::switch::usage::{self, UsageRecord};
+
 const DEFAULT_UPSTREAM_BASE_URL: &str = "https://api.anthropic.com";
 const ROUTE_PREFIX: &str = "/__agentbro_route/";
 const MAX_REQUEST_BODY_BYTES: usize = 16 * 1024 * 1024;
@@ -42,6 +46,8 @@ pub struct NetworkUsageSummary {
     pub cache_read_input_tokens: u64,
     pub total_tokens: u64,
     pub cache_hit_rate: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub estimated_cost_usd: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -117,6 +123,7 @@ struct ResponseCapture {
 pub struct NetworkMonitor {
     inner: Mutex<NetworkMonitorInner>,
     client: reqwest::Client,
+    usage_db: Mutex<Option<Arc<SwitchDatabase>>>,
 }
 
 impl NetworkMonitor {
@@ -132,6 +139,13 @@ impl NetworkMonitor {
                 ..NetworkMonitorInner::default()
             }),
             client,
+            usage_db: Mutex::new(None),
+        }
+    }
+
+    pub fn set_usage_database(&self, db: Arc<SwitchDatabase>) {
+        if let Ok(mut usage_db) = self.usage_db.lock() {
+            *usage_db = Some(db);
         }
     }
 
@@ -464,7 +478,7 @@ impl NetworkMonitor {
     ) {
         let body_text = String::from_utf8_lossy(&capture.chunks).to_string();
         let usage = extract_usage(&body_text);
-        let usage_summary = usage.as_ref().map(summarize_usage);
+        let mut usage_record = None;
         let mut inner = self.inner.lock().expect("network monitor lock poisoned");
         if inner.active_request_count > 0 {
             inner.active_request_count -= 1;
@@ -474,6 +488,19 @@ impl NetworkMonitor {
             .iter_mut()
             .find(|entry| entry.summary.id == request_id)
         {
+            let usage_summary = usage
+                .as_ref()
+                .map(|value| summarize_usage(value, entry.summary.model.as_deref()));
+            usage_record = usage_summary.as_ref().map(|summary| UsageRecord {
+                id: None,
+                app_type: "claude".to_string(),
+                provider_id: entry.summary.provider.clone(),
+                model_id: entry.summary.model.clone().unwrap_or_default(),
+                input_tokens: summary.input_tokens,
+                output_tokens: summary.output_tokens,
+                cost_usd: summary.estimated_cost_usd.unwrap_or(0.0),
+                timestamp: (entry.summary.timestamp_ms / 1000) as i64,
+            });
             entry.summary.status = Some(status);
             entry.summary.duration_ms = Some(duration_ms);
             entry.summary.response_bytes = capture.total_bytes;
@@ -484,6 +511,24 @@ impl NetworkMonitor {
             entry.response_body = Some(body_text);
             entry.response_body_truncated = capture.truncated;
             entry.stream_event_count = capture.event_count;
+        }
+        drop(inner);
+        if let Some(record) = usage_record {
+            self.persist_usage(record);
+        }
+    }
+
+    fn persist_usage(&self, record: UsageRecord) {
+        let db = self
+            .usage_db
+            .lock()
+            .ok()
+            .and_then(|usage_db| usage_db.clone());
+        let Some(db) = db else {
+            return;
+        };
+        if let Err(error) = usage::record_usage(&db, &record) {
+            log::warn!("Failed to persist network usage: {error}");
         }
     }
 
@@ -993,7 +1038,7 @@ fn extract_usage(body_text: &str) -> Option<Value> {
     latest_usage
 }
 
-fn summarize_usage(usage: &Value) -> NetworkUsageSummary {
+fn summarize_usage(usage: &Value, model: Option<&str>) -> NetworkUsageSummary {
     let input_tokens = usage_u64(usage, "input_tokens");
     let output_tokens = usage_u64(usage, "output_tokens");
     let cache_creation_input_tokens = usage_u64(usage, "cache_creation_input_tokens");
@@ -1014,6 +1059,8 @@ fn summarize_usage(usage: &Value) -> NetworkUsageSummary {
         cache_read_input_tokens,
         total_tokens,
         cache_hit_rate,
+        estimated_cost_usd: model
+            .and_then(|model| pricing::estimate_cost(model, input_tokens, output_tokens)),
     }
 }
 
@@ -1093,7 +1140,7 @@ event: message_delta\n\
 data: {\"usage\":{\"input_tokens\":10,\"output_tokens\":7,\"cache_creation_input_tokens\":2,\"cache_read_input_tokens\":6}}\n\n";
 
         let usage = extract_usage(body).unwrap();
-        let summary = summarize_usage(&usage);
+        let summary = summarize_usage(&usage, Some("claude-sonnet-4-20250514"));
 
         assert_eq!(summary.input_tokens, 10);
         assert_eq!(summary.output_tokens, 7);
@@ -1101,5 +1148,76 @@ data: {\"usage\":{\"input_tokens\":10,\"output_tokens\":7,\"cache_creation_input
         assert_eq!(summary.cache_read_input_tokens, 6);
         assert_eq!(summary.total_tokens, 25);
         assert_eq!(summary.cache_hit_rate, Some(75.0));
+        assert!((summary.estimated_cost_usd.unwrap() - 0.000135).abs() < 1e-12);
+    }
+
+    #[test]
+    fn persists_completed_usage_to_switch_database() {
+        let monitor = NetworkMonitor::new();
+        let db = Arc::new(SwitchDatabase::open_in_memory().expect("switch db"));
+        monitor.set_usage_database(db.clone());
+
+        let timestamp_ms = now_ms();
+        let summary = NetworkRequestSummary {
+            id: "usage-request".to_string(),
+            timestamp_ms,
+            provider: "anthropic".to_string(),
+            method: "POST".to_string(),
+            url: "/v1/messages".to_string(),
+            upstream_url: "https://api.anthropic.com/v1/messages".to_string(),
+            session_id: None,
+            project: None,
+            model: Some("claude-sonnet-4-20250514".to_string()),
+            status: None,
+            duration_ms: None,
+            request_bytes: 0,
+            response_bytes: 0,
+            is_stream: false,
+            main_agent: true,
+            request_type: "MainAgent".to_string(),
+            request_sub_type: None,
+            message_count: 1,
+            tool_count: 0,
+            system_preview: None,
+            usage: None,
+            usage_summary: None,
+            error: None,
+            in_progress: true,
+        };
+        monitor
+            .inner
+            .lock()
+            .expect("monitor lock")
+            .requests
+            .push_back(NetworkRequestEntry {
+                summary,
+                request_headers: json!({}),
+                request_body: json!({}),
+                response_headers: json!({}),
+                response_body: None,
+                response_body_truncated: false,
+                stream_event_count: 0,
+            });
+
+        let body = br#"{"usage":{"input_tokens":100,"output_tokens":20}}"#;
+        monitor.record_completed(
+            "usage-request",
+            200,
+            42,
+            json!({}),
+            &ResponseCapture {
+                chunks: body.to_vec(),
+                total_bytes: body.len(),
+                truncated: false,
+                event_count: 0,
+            },
+        );
+
+        let usage = usage::get_usage_summary(&db, "claude", 1).expect("usage summary");
+        assert_eq!(usage.total_requests, 1);
+        assert_eq!(usage.total_input_tokens, 100);
+        assert_eq!(usage.total_output_tokens, 20);
+        assert!(usage.total_cost_usd > 0.0);
+        assert_eq!(usage.last_recorded_at, Some((timestamp_ms / 1000) as i64));
     }
 }

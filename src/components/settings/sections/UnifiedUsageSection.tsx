@@ -4,7 +4,8 @@ import { SwitchAppTabs } from './switch/SwitchAppTabs'
 import { SwitchUsagePanel } from './switch/SwitchUsagePanel'
 import { getNetworkMonitorRequests, type NetworkRequestSummary } from '../../../services/monitorApi'
 import { isTauri, listUsageProviders, type UsageProviderStatus } from '../../../services/tauriApi'
-import { formatTokens } from '../../../utils/tokens'
+import { switchApi, type SwitchAppType } from '../../../services/switchApi'
+import { formatCost, formatTokens } from '../../../utils/tokens'
 import './SwitchSection.css'
 import './UnifiedUsageSection.css'
 
@@ -17,6 +18,8 @@ const USAGE_VIEWS: Array<{ id: UsageView; label: string }> = [
   { id: 'cost', label: 'Cost' },
   { id: 'breakdown', label: 'Breakdown' },
 ]
+
+const USAGE_APP_TYPES: SwitchAppType[] = ['claude', 'codex', 'gemini', 'opencode', 'hermes']
 
 type CoverageId = 'claude' | 'gemini' | 'pi' | 'opencode' | 'other'
 
@@ -44,6 +47,10 @@ function formatFreshness(timestamp: number | null): string {
   if (age < 3_600_000) return `${Math.floor(age / 60_000)} 分钟前`
   if (age < 86_400_000) return `${Math.floor(age / 3_600_000)} 小时前`
   return `${Math.floor(age / 86_400_000)} 天前`
+}
+
+function formatEstimatedCost(requests: number, usd: number): string {
+  return requests > 0 && usd > 0 ? formatCost(usd) : requests > 0 ? 'Unknown' : '未采集'
 }
 
 function usageStatusLabel(status: UsageProviderStatus | null, requests: number): string {
@@ -213,25 +220,36 @@ export function UnifiedUsageSection() {
   const [providerStatuses, setProviderStatuses] = useState<UsageProviderStatus[]>([])
   const [providerError, setProviderError] = useState('')
   const [providerLoading, setProviderLoading] = useState(false)
+  const [todayCost, setTodayCost] = useState<{ requests: number; cost: number } | null>(null)
 
   const loadRequests = useCallback(async () => {
     if (!isTauri()) {
       setRequests([])
       setProviderStatuses([])
+      setTodayCost(null)
       return
     }
     setProviderLoading(true)
     setError('')
     setProviderError('')
     try {
-      const [networkResult, providerResult] = await Promise.allSettled([
+      const [networkResult, providerResult, costResult] = await Promise.allSettled([
         getNetworkMonitorRequests(),
         listUsageProviders(false),
+        Promise.all(USAGE_APP_TYPES.map((appType) => switchApi.getUsageSummary(appType, 1))),
       ])
       if (networkResult.status === 'fulfilled') setRequests(networkResult.value)
       else setError(String(networkResult.reason))
       if (providerResult.status === 'fulfilled') setProviderStatuses(providerResult.value)
       else setProviderError(String(providerResult.reason))
+      if (costResult.status === 'fulfilled') {
+        setTodayCost({
+          requests: costResult.value.reduce((total, summary) => total + summary.total_requests, 0),
+          cost: costResult.value.reduce((total, summary) => total + summary.total_cost_usd, 0),
+        })
+      } else {
+        setTodayCost(null)
+      }
     } finally {
       setProviderLoading(false)
     }
@@ -281,7 +299,7 @@ export function UnifiedUsageSection() {
           <div className="unified-usage__summary">
             <div><span>Tokens Today</span><strong>{todayTokens(requests) > 0 ? formatTokens(todayTokens(requests)) : '未采集'}</strong><em>网络抓包来源</em></div>
             <div><span>Actual API Cost</span><strong>—</strong><em>官方 billing 尚未接入</em></div>
-            <div><span>Equivalent API Cost</span><strong>—</strong><em>订阅等价估算尚未接入</em></div>
+            <div><span>Equivalent API Cost</span><strong>{formatEstimatedCost(todayCost?.requests ?? 0, todayCost?.cost ?? 0)}</strong><em>{todayCost?.requests ? (todayCost.cost > 0 ? 'local usage_logs · estimated' : 'model pricing unavailable') : '暂无本地用量记录'}</em></div>
             <div><span>Active Providers</span><strong>{providers.size > 0 ? providers.size : '未采集'}</strong><em>当前请求来源</em></div>
           </div>
           <ProviderCoverage requests={requests} statuses={providerStatuses} loading={providerLoading} error={providerError} />
@@ -299,8 +317,8 @@ export function UnifiedUsageSection() {
       {view === 'cost' && (
         <div className="unified-usage__panel">
           <div className="unified-usage__cost-note">
-            <strong>Recorded API Cost</strong>
-            <span>来自本地 usage_logs；官方实际账单与订阅等价成本仍分别显示为 Unknown。</span>
+            <strong>Equivalent API Cost</strong>
+            <span>来自本地 usage_logs 的模型价格估算；官方实际账单与订阅等价成本仍分别显示为 Unknown。</span>
           </div>
           <SwitchAppTabs />
           <SwitchUsagePanel />

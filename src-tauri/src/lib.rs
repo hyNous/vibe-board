@@ -6005,6 +6005,7 @@ pub fn run() {
                     std::process::exit(1);
                 })
             }));
+            network_monitor.set_usage_database(switch_db.clone());
             let telemetry = Arc::new(TelemetryService::new());
 
             let app_state = AppState {
