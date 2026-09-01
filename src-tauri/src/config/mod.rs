@@ -99,6 +99,9 @@ pub struct AppConfig {
     pub codex_app_server_sync_enabled: bool,
     #[serde(default = "default_codex_app_server_sync_interval_seconds")]
     pub codex_app_server_sync_interval_seconds: u32,
+    /// Frontend fallback poll interval for session state, in seconds.
+    #[serde(default = "default_session_refresh_interval_seconds")]
+    pub session_refresh_interval_seconds: u32,
     pub theme: String,
     #[serde(default = "default_language")]
     pub language: String,
@@ -316,6 +319,10 @@ fn default_codex_app_server_sync_interval_seconds() -> u32 {
     DEFAULT_CODEX_APP_SERVER_SYNC_INTERVAL_SECONDS
 }
 
+fn default_session_refresh_interval_seconds() -> u32 {
+    3
+}
+
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
@@ -329,6 +336,7 @@ impl Default for AppConfig {
             usage_query_enabled: true,
             codex_app_server_sync_enabled: default_codex_app_server_sync_enabled(),
             codex_app_server_sync_interval_seconds: DEFAULT_CODEX_APP_SERVER_SYNC_INTERVAL_SECONDS,
+            session_refresh_interval_seconds: default_session_refresh_interval_seconds(),
             theme: "midnight".to_string(),
             language: default_language(),
             display_id: "primary".to_string(),
@@ -574,7 +582,9 @@ impl Default for ConfigStore {
 
 #[cfg(test)]
 mod tests {
-    use super::{default_codex_app_server_sync_enabled, AppConfig};
+    use super::{
+        default_codex_app_server_sync_enabled, default_session_refresh_interval_seconds, AppConfig,
+    };
 
     #[test]
     fn defaults_match_agentbro_island_behavior() {
@@ -584,6 +594,7 @@ mod tests {
         assert_eq!(config.idle_timeout_minutes, 5);
         assert_eq!(config.sound_volume, 0.7);
         assert_eq!(config.volume, 70);
+        assert_eq!(config.session_refresh_interval_seconds, 3);
         assert!(!config.shortcut_approve_enabled);
         assert!(!config.shortcut_deny_enabled);
         assert!(config.permission_shortcut_defaults_migrated);
@@ -664,6 +675,22 @@ mod tests {
         let config: AppConfig = serde_json::from_value(value).expect("deserialize stored config");
 
         assert!(!config.codex_app_server_sync_enabled);
+    }
+
+    #[test]
+    fn session_refresh_interval_defaults_when_field_is_missing() {
+        let mut value = serde_json::to_value(AppConfig::default()).expect("serialize config");
+        value
+            .as_object_mut()
+            .unwrap()
+            .remove("sessionRefreshIntervalSeconds");
+
+        let config: AppConfig = serde_json::from_value(value).expect("deserialize legacy config");
+
+        assert_eq!(
+            config.session_refresh_interval_seconds,
+            default_session_refresh_interval_seconds()
+        );
     }
 
     #[test]

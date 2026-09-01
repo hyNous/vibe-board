@@ -371,6 +371,7 @@ function applyBackendConfig(config: BackendConfig) {
     usageQueryEnabled: config.usageQueryEnabled ?? true,
     codexAppServerSyncEnabled: config.codexAppServerSyncEnabled ?? false,
     codexAppServerSyncIntervalSeconds: config.codexAppServerSyncIntervalSeconds ?? 30,
+    sessionRefreshIntervalSeconds: Math.max(1, Math.min(30, config.sessionRefreshIntervalSeconds ?? 3)),
     language: config.language || store.language,
     autoHideNoSessions: config.autoHideNoSessions,
     displayMonitor: config.displayId,
@@ -497,7 +498,6 @@ function refreshUsageRateLimits(force = false) {
 }
 
 const APP_SERVER_LIVE_POLL_MS = 10_000
-const SESSION_REFRESH_FALLBACK_MS = 10_000
 type SessionSyncMode = 'full' | 'events' | 'off'
 
 function refreshAppServerLiveFlag() {
@@ -510,6 +510,8 @@ function refreshAppServerLiveFlag() {
 
 /** Listen for session-update events from the backend and sync sessionStore. */
 export function useSessionEvents(mode: SessionSyncMode = 'full') {
+  const sessionRefreshIntervalSeconds = useConfigStore((state) => state.sessionRefreshIntervalSeconds)
+
   useEffect(() => {
     if (!isTauri() || mode === 'off') return
 
@@ -565,7 +567,7 @@ export function useSessionEvents(mode: SessionSyncMode = 'full') {
             if (!cancelled) applyBackendSessions(sessions)
           })
           .catch(e => console.error('[tauri] poll getSessions:', e))
-      }, SESSION_REFRESH_FALLBACK_MS)
+      }, Math.max(1, Math.min(30, sessionRefreshIntervalSeconds)) * 1000)
       : undefined
 
     listenForTauriEvent<{ sessions: BackendSession[]; suppressed?: boolean }>(
@@ -584,7 +586,7 @@ export function useSessionEvents(mode: SessionSyncMode = 'full') {
       if (sessionRefreshTimer !== undefined) window.clearInterval(sessionRefreshTimer)
       unlisten?.()
     }
-  }, [mode])
+  }, [mode, sessionRefreshIntervalSeconds])
 }
 
 /** Listen for config-changed events from the backend and sync configStore. */

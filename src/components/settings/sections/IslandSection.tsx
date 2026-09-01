@@ -160,6 +160,13 @@ function persistIdleInteractionRouting(next: Partial<{ enabled: boolean; minutes
     .catch((err) => console.error('Failed to persist idle interaction routing:', err))
 }
 
+function persistSessionRefreshInterval(seconds: number) {
+  const value = Math.max(1, Math.min(30, Math.round(seconds)))
+  getConfig()
+    .then((backendConfig) => updateBackendConfig({ ...backendConfig, sessionRefreshIntervalSeconds: value }))
+    .catch((err) => console.error('Failed to persist session refresh interval:', err))
+}
+
 function SurfaceModeSegmentedControl({
   onChange,
   value,
@@ -866,6 +873,10 @@ function DisplayTab() {
     { value: '10', label: '10' },
     { value: '0', label: t('settings.maxVisibleSessionsUnlimited') },
   ]
+  const sessionRefreshIntervalOptions = [1, 2, 3, 5, 10, 30].map((seconds) => ({
+    value: String(seconds),
+    label: `${seconds}s`,
+  }))
   const monitorOptions = [
     {
       value: 'primary',
@@ -1078,6 +1089,21 @@ function DisplayTab() {
         <SettingRow label={t('settings.hoverSpeed')} description={t('settings.hoverSpeedDesc')}>
           <Dropdown value={config.hoverSpeed} options={hoverSpeedOptions}
             onChange={(v) => config.updateConfig('hoverSpeed', v as 'instant' | 'normal' | 'slow')} minWidth={160} />
+        </SettingRow>
+        <SettingRow
+          label={t('settings.refreshRate', { defaultValue: '刷新频率' })}
+          description={t('settings.refreshRateDesc', { defaultValue: '没有实时事件时，后台轮询会按此间隔补读会话状态。事件通知仍会立即更新。' })}
+        >
+          <Dropdown
+            value={String(config.sessionRefreshIntervalSeconds)}
+            options={sessionRefreshIntervalOptions}
+            onChange={(v) => {
+              const seconds = Number(v)
+              config.updateConfig('sessionRefreshIntervalSeconds', seconds)
+              persistSessionRefreshInterval(seconds)
+            }}
+            minWidth={120}
+          />
         </SettingRow>
         <SettingRow label={t('settings.contentFontSize')}>
           <Dropdown value={config.contentFontSize} options={fontSizeOptions}

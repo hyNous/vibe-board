@@ -221,6 +221,8 @@
     "detailedDesc": "プロジェクト名とステータスを表示",
     "hoverSpeed": "ホバー速度",
     "hoverSpeedDesc": "セッションカードのアニメーション速度",
+    "refreshRate": "更新間隔",
+    "refreshRateDesc": "ライブイベントがない場合のフォールバックポーリング間隔。イベント通知はすぐに反映されます。",
     "hoverSpeedInstant": "瞬時 (50ms)",
     "hoverSpeedNormal": "通常 (200ms)",
     "hoverSpeedSlow": "ゆっくり (400ms)",

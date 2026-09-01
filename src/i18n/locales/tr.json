@@ -212,6 +212,8 @@
     "panelSize": "Panel Boyutu",
     "hoverSpeed": "Üzerine Gelme Hızı",
     "hoverSpeedDesc": "Oturum kartları animasyon hızı",
+    "refreshRate": "Yenileme aralığı",
+    "refreshRateDesc": "Canlı etkinlik olmadığında kullanılan yedek yoklama aralığı. Etkinlik bildirimleri yine hemen güncellenir.",
     "hoverSpeedInstant": "Anında (50ms)",
     "hoverSpeedNormal": "Normal (200ms)",
     "hoverSpeedSlow": "Yavaş (400ms)",

@@ -201,6 +201,7 @@ interface ConfigState {
   usageQueryEnabled: boolean
   codexAppServerSyncEnabled: boolean
   codexAppServerSyncIntervalSeconds: number
+  sessionRefreshIntervalSeconds: number
 
   // Language
   language: 'en' | 'zh' | 'ja' | 'ko' | 'tr'
@@ -594,6 +595,7 @@ export const useConfigStore = create<ConfigStore>()(
   usageQueryEnabled: true,
   codexAppServerSyncEnabled: false,
   codexAppServerSyncIntervalSeconds: 30,
+  sessionRefreshIntervalSeconds: 3,
 
   // Language
   language: (() => {

@@ -25,6 +25,7 @@ import {
 import { getChatHistoryTail, jumpToTerminal, openSystemPath } from '../../../services/tauriApi'
 import { mapParsedMessages } from '../../../hooks/useTauri'
 import { selectSessionList, useSessionStore } from '../../../stores/sessionStore'
+import { useConfigStore } from '../../../stores/configStore'
 import type { BackendSession } from '../../../services/tauriApi'
 import type { ChatMessage, SessionState, TokenUsage } from '../../../types/agent'
 import { formatDurationShort } from '../../../utils/time'
@@ -513,6 +514,7 @@ function cacheHitRate(stats: RequestStats) {
 
 export function AgentMonitorSection({ activeView = 'sessions' }: AgentMonitorSectionProps) {
   const liveSessions = useSessionStore(selectSessionList)
+  const sessionRefreshIntervalSeconds = useConfigStore((state) => state.sessionRefreshIntervalSeconds)
   const [sessions, setSessions] = useState<MonitorSessionSummary[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [agentFilter, setAgentFilter] = useState('all')
@@ -538,10 +540,11 @@ export function AgentMonitorSection({ activeView = 'sessions' }: AgentMonitorSec
   const [wrapperStatus, setWrapperStatus] = useState<ClaudeWrapperStatus>(DEFAULT_WRAPPER_STATUS)
   const [wrapperBusy, setWrapperBusy] = useState(false)
   const energyMode = useMemo(() => getAppEnergyMode(liveSessions), [liveSessions])
+  const configuredRefreshMs = Math.max(1, Math.min(30, sessionRefreshIntervalSeconds)) * 1000
   const sessionRefreshIntervalMs = energyIntervalMs(energyMode, {
-    activeMs: 3000,
-    idleVisibleMs: 7000,
-    quietMs: 15000,
+    activeMs: configuredRefreshMs,
+    idleVisibleMs: configuredRefreshMs * 2,
+    quietMs: configuredRefreshMs * 5,
   })
   const networkRefreshIntervalMs = energyIntervalMs(energyMode, {
     activeMs: 2000,

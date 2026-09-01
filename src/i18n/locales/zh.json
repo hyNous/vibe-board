@@ -255,6 +255,8 @@
     "panelSize": "尺寸",
     "hoverSpeed": "悬停速度",
     "hoverSpeedDesc": "会话卡片动画速度",
+    "refreshRate": "刷新频率",
+    "refreshRateDesc": "没有实时事件时，后台轮询会按此间隔补读会话状态。事件通知仍会立即更新。",
     "hoverSpeedInstant": "即时 (50ms)",
     "hoverSpeedNormal": "正常 (200ms)",
     "hoverSpeedSlow": "缓慢 (400ms)",

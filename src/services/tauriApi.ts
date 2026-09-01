@@ -363,6 +363,7 @@ export interface BackendConfig {
   usageQueryEnabled: boolean
   codexAppServerSyncEnabled: boolean
   codexAppServerSyncIntervalSeconds: number
+  sessionRefreshIntervalSeconds: number
   theme: string
   language: 'en' | 'zh' | 'ja' | 'ko' | 'tr'
   displayId: string
@@ -669,6 +670,7 @@ export async function getConfig(): Promise<BackendConfig> {
       usageQueryEnabled: true,
       codexAppServerSyncEnabled: false,
       codexAppServerSyncIntervalSeconds: 30,
+      sessionRefreshIntervalSeconds: 3,
       theme: 'midnight',
       language: 'en',
       displayId: 'primary',

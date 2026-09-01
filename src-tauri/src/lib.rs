@@ -23,7 +23,7 @@ pub mod webhook;
 
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
-use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri::tray::{TrayIconBuilder, TrayIconEvent};
 use tauri::{Emitter, Manager};
 
 use agents::claude_code::ClaudeCodeAdapter;
@@ -2572,6 +2572,7 @@ fn build_settings_window(app: &tauri::AppHandle) -> Result<tauri::WebviewWindow,
     .min_inner_size(SETTINGS_MIN_WIDTH, SETTINGS_MIN_HEIGHT)
     .center()
     .background_color(tauri::webview::Color(0, 0, 0, 0))
+    .skip_taskbar(true)
     .visible(false)
     .build()
     .map_err(|e| format!("settings window: {e}"))?;
@@ -5897,25 +5898,14 @@ pub fn run() {
 
             let tray_icon = TrayIconBuilder::with_id(menu_bar::TRAY_ID)
                 .menu(&tray_menu)
-                .show_menu_on_left_click(false)
+                .show_menu_on_left_click(true)
                 .tooltip("AgentBro")
                 .icon(menu_bar_icon())
                 .icon_as_template(false)
-                .on_tray_icon_event(|tray, event| {
-                    if let TrayIconEvent::Click {
-                        button,
-                        button_state,
-                        rect,
-                        ..
-                    } = event
-                    {
+                .on_tray_icon_event(|_tray, event| {
+                    if let TrayIconEvent::Click { rect, .. } = event {
                         if let Ok(mut anchor) = tray_icon_rect().lock() {
                             *anchor = Some(rect);
-                        }
-                        if button == MouseButton::Left && button_state == MouseButtonState::Up {
-                            if let Err(error) = show_skill_pack_picker(tray.app_handle()) {
-                                log::warn!("Failed to show skill pack picker: {error}");
-                            }
                         }
                     }
                 })

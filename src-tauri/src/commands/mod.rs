@@ -5694,7 +5694,12 @@ pub async fn get_config(state: State<'_, AppState>) -> Result<AppConfig, String>
 }
 
 #[tauri::command]
-pub async fn update_config(state: State<'_, AppState>, config: AppConfig) -> Result<(), String> {
+pub async fn update_config(
+    state: State<'_, AppState>,
+    mut config: AppConfig,
+) -> Result<(), String> {
+    // Keep a bad/old value from turning the fallback poll into a busy loop.
+    config.session_refresh_interval_seconds = config.session_refresh_interval_seconds.clamp(1, 30);
     let previous = state.config_store.get();
     state.config_store.update(config.clone())?;
     if previous.analytics_enabled != config.analytics_enabled {

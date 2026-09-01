@@ -266,6 +266,8 @@
     "panelSize": "Size",
     "hoverSpeed": "Hover Speed",
     "hoverSpeedDesc": "Animation speed for session cards",
+    "refreshRate": "Refresh Interval",
+    "refreshRateDesc": "Fallback polling interval when no live event is available. Event notifications still update immediately.",
     "hoverSpeedInstant": "Instant (50ms)",
     "hoverSpeedNormal": "Normal (200ms)",
     "hoverSpeedSlow": "Slow (400ms)",
