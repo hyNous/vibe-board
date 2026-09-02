@@ -1,4 +1,4 @@
-/* AgentBro — Configuration State Management (Zustand) */
+/* Agent Island — Configuration State Management (Zustand) */
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { AgentType } from '../types/agent'
@@ -202,6 +202,7 @@ interface ConfigState {
   codexAppServerSyncEnabled: boolean
   codexAppServerSyncIntervalSeconds: number
   sessionRefreshIntervalSeconds: number
+  windowCloseBehavior: 'tray' | 'exit'
 
   // Language
   language: 'en' | 'zh' | 'ja' | 'ko' | 'tr'
@@ -259,7 +260,7 @@ interface ConfigState {
   // Display
   aiMessageLines: number
 
-  // AgentBro parity — interaction timing
+  // Agent Island parity — interaction timing
   clickToDetail: boolean
   jumpBeforeSend: boolean
   showCacheTTL: boolean
@@ -593,9 +594,10 @@ export const useConfigStore = create<ConfigStore>()(
   // General — UI
   showUsageQuota: true,
   usageQueryEnabled: true,
-  codexAppServerSyncEnabled: false,
+  codexAppServerSyncEnabled: true,
   codexAppServerSyncIntervalSeconds: 30,
   sessionRefreshIntervalSeconds: 3,
+  windowCloseBehavior: 'tray',
 
   // Language
   language: (() => {
@@ -659,7 +661,7 @@ export const useConfigStore = create<ConfigStore>()(
   // Display
   aiMessageLines: 1,
 
-  // AgentBro parity — interaction timing
+  // Agent Island parity — interaction timing
   clickToDetail: true,
   jumpBeforeSend: true,
   showCacheTTL: true,

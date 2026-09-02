@@ -1,11 +1,11 @@
 #!/bin/bash
 set -euo pipefail
 
-APP_NAME="${APP_NAME:-AgentBro}"
+APP_NAME="${APP_NAME:-Agent Island}"
 BUNDLE_ID="${BUNDLE_ID:-com.agentbro.desktop}"
 BUILD_DIR="src-tauri/target"
 DIST_DIR="dist"
-DMG_NAME="${DMG_NAME:-AgentBro.dmg}"
+DMG_NAME="${DMG_NAME:-Agent Island.dmg}"
 APP_VERSION="${APP_VERSION:-$(node -e "console.log(JSON.parse(require('fs').readFileSync('src-tauri/tauri.conf.json', 'utf8')).version)" 2>/dev/null || echo "0.0.0")}"
 UPDATE_ARCHIVE_NAME="${UPDATE_ARCHIVE_NAME:-$APP_NAME.app.tar.gz}"
 UPDATE_MANIFEST_NAME="${UPDATE_MANIFEST_NAME:-latest.json}"
@@ -66,20 +66,20 @@ check_deps() {
 build_app_bundle() {
     echo "==> Building Tauri universal app bundle..."
     local tauri_app="$BUILD_DIR/universal-apple-darwin/release/bundle/macos/$APP_NAME.app"
-    local bridge_out="$BUILD_DIR/universal-apple-darwin/release/agentbro-bridge"
+    local bridge_out="$BUILD_DIR/universal-apple-darwin/release/agent-island-bridge"
 
     echo "==> Building universal bridge helper..."
-    mkdir -p "$BUILD_DIR/agentbro-bridge-resource"
-    touch "$BUILD_DIR/agentbro-bridge-resource/agentbro-bridge"
-    cargo build --release --target aarch64-apple-darwin --bin agentbro-bridge --manifest-path src-tauri/Cargo.toml
-    cargo build --release --target x86_64-apple-darwin --bin agentbro-bridge --manifest-path src-tauri/Cargo.toml
+    mkdir -p "$BUILD_DIR/agent-island-bridge-resource"
+    touch "$BUILD_DIR/agent-island-bridge-resource/agent-island-bridge"
+    cargo build --release --target aarch64-apple-darwin --bin agent-island-bridge --manifest-path src-tauri/Cargo.toml
+    cargo build --release --target x86_64-apple-darwin --bin agent-island-bridge --manifest-path src-tauri/Cargo.toml
     mkdir -p "$(dirname "$bridge_out")"
     lipo -create \
-        "$BUILD_DIR/aarch64-apple-darwin/release/agentbro-bridge" \
-        "$BUILD_DIR/x86_64-apple-darwin/release/agentbro-bridge" \
+        "$BUILD_DIR/aarch64-apple-darwin/release/agent-island-bridge" \
+        "$BUILD_DIR/x86_64-apple-darwin/release/agent-island-bridge" \
         -output "$bridge_out"
-    cp "$bridge_out" "$BUILD_DIR/agentbro-bridge-resource/agentbro-bridge"
-    chmod +x "$BUILD_DIR/agentbro-bridge-resource/agentbro-bridge"
+    cp "$bridge_out" "$BUILD_DIR/agent-island-bridge-resource/agent-island-bridge"
+    chmod +x "$BUILD_DIR/agent-island-bridge-resource/agent-island-bridge"
 
     cargo tauri build \
         --target universal-apple-darwin \
@@ -113,7 +113,7 @@ sign_app() {
     echo "==> Signing app bundle..."
     local entitlements="src-tauri/Entitlements.plist"
     local app_path="$DIST_DIR/$APP_NAME.app"
-    local resource_bridge="$app_path/Contents/Resources/agentbro-bridge"
+    local resource_bridge="$app_path/Contents/Resources/agent-island-bridge"
 
     while IFS= read -r binary; do
         if [ ! -x "$binary" ]; then

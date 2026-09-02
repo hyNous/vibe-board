@@ -91,7 +91,7 @@ export function UpdateDialog({
       <div className="update-dialog" onClick={e => e.stopPropagation()}>
         <div className="update-dialog__header">
           <div>
-            <div className="update-dialog__eyebrow">AgentBro</div>
+            <div className="update-dialog__eyebrow">Agent Island</div>
             <div className="update-dialog__title">
               {isReady ? t('update.readyTitle') : t('update.availableTitle')}
             </div>
@@ -146,9 +146,9 @@ export function UpdateDialog({
             {isReady && (
               <div className="update-dialog__ready">
                 {restartBlockedByActivity
-                  ? t('update.restartWhenIdleHint', { count: blockingSessionCount, defaultValue: 'The update is ready. AgentBro will restart automatically after active sessions become idle.' })
+                  ? t('update.restartWhenIdleHint', { count: blockingSessionCount, defaultValue: 'The update is ready. Agent Island will restart automatically after active sessions become idle.' })
                   : restartPending
-                    ? t('update.restartSoonHint', { defaultValue: 'The update is ready. AgentBro will restart automatically after a short idle window.' })
+                    ? t('update.restartSoonHint', { defaultValue: 'The update is ready. Agent Island will restart automatically after a short idle window.' })
                     : t('update.restartHint')}
               </div>
             )}

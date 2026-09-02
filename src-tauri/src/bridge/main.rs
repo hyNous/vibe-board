@@ -544,7 +544,7 @@ fn parent_process_id() -> u32 {
 
 /// Connect to AgentBro: try Unix socket first, fall back to TCP
 fn connect() -> Option<Stream> {
-    let endpoint = agentbro_lib::hook_endpoint::current();
+    let endpoint = agent_island_lib::hook_endpoint::current();
     #[cfg(unix)]
     {
         if let Ok(s) = UnixStream::connect(&endpoint.socket_path) {

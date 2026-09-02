@@ -1,7 +1,7 @@
-/* AgentBro — Notch Panel (Layered Dynamic Island) */
+/* Agent Island — Notch Panel (Layered Dynamic Island) */
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useMemo, type CSSProperties, type PointerEvent } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { useSessionStore, selectSessionList, selectPanelState, selectRateLimits, selectUsageSnapshots, selectActiveOverlay } from '../../stores/sessionStore'
+import { useSessionStore, selectSessionList, selectPanelState, selectRateLimits, selectUsageSnapshots, selectAgentStatuses, selectActiveOverlay } from '../../stores/sessionStore'
 import { useConfigStore } from '../../stores/configStore'
 import { useUpdateStore } from '../../stores/updateStore'
 import { respondPermission, respondQuestion, respondPlan, respondAutoApprove, sendMessage, jumpToTerminal, resizeNotch, setNotchOpacity, getChatHistoryTail, performHaptic, setNotchFocusable, setNotchIgnoreCursorEvents, openSettingsWindow, startNotchDrag, endNotchDrag, isCursorOverNotch, isTerminalFocused, isTauri } from '../../services/tauriApi'
@@ -19,6 +19,7 @@ import { filterCodexSessions } from '../../utils/agentRunState'
 import { CollapsedBar } from './CollapsedBar'
 import { UpdateBanner } from './UpdateBanner'
 import { HoverList } from './HoverList'
+import { AgentPresenceStrip } from './AgentPresenceStrip'
 import { ChatView } from './ChatView'
 import { PermissionCard } from '../overlay/PermissionCard'
 import { PlanApprovalCard } from '../overlay/PlanApprovalCard'
@@ -274,6 +275,7 @@ export function NotchPanel() {
   const sessions = useSessionStore(selectSessionList)
   const rateLimits = useSessionStore(selectRateLimits)
   const usageSnapshots = useSessionStore(selectUsageSnapshots)
+  const agentStatuses = useSessionStore(selectAgentStatuses)
   const activeOverlay = useSessionStore(selectActiveOverlay)
   const dismissOverlay = useSessionStore((s) => s.dismissOverlay)
   const updateAvailableVersion = useUpdateStore((s) => s.availableVersion)
@@ -487,7 +489,7 @@ export function NotchPanel() {
     }
   }, [])
 
-  // Settings-window layout preview parity with AgentBro controls: temporarily morph the
+  // Settings-window layout preview parity with Agent Island controls: temporarily morph the
   // island while size and mode controls are adjusted.
   useEffect(() => {
     if (!isTauri()) return
@@ -1931,7 +1933,7 @@ export function NotchPanel() {
           data-island-state={renderedVisualState}
           data-dragging={isDragging ? 'true' : 'false'}
           role="region"
-          aria-label="AgentBro"
+          aria-label="Agent Island"
           aria-expanded={effectivePanelState !== 'collapsed'}
           initial={false}
           animate={{
@@ -2053,6 +2055,7 @@ export function NotchPanel() {
                     exit={{ opacity: 0 }}
                     transition={scaledContentTransition}
                   >
+                    <AgentPresenceStrip statuses={agentStatuses} usageSnapshots={usageSnapshots} />
                     <HoverList
                       sessions={displayedSessions}
                       onSessionClick={handleSessionClick}

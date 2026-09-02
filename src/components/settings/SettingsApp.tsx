@@ -44,9 +44,10 @@ export function SettingsApp({ onClose }: SettingsAppProps) {
   const isMarketSection = activeSection === 'island' && activeIslandView === 'market'
   const isSkillManager = activeSection === 'skill-manager-v2'
   const contentClassName = `settings-content settings-scroll${isMarketSection ? ' settings-content--market' : ''}${isSkillManager ? ' settings-content--skill-manager' : ''}`
-  // Closing the settings window destroys it, which kills an in-flight update
-  // download. Guard both the in-app close button and the macOS traffic-light.
+  // Guard both the in-app close button and the native close event while an
+  // update is downloading. The native handler applies tray/exit behavior.
   const downloadingRef = useRef(false)
+  const closingRef = useRef(false)
   useEffect(() => {
     downloadingRef.current = updater.status === 'downloading'
   }, [updater.status])
@@ -62,7 +63,10 @@ export function SettingsApp({ onClose }: SettingsAppProps) {
   }
 
   const handleCloseRequest = async () => {
-    if (await confirmCloseWhileDownloading()) onClose()
+    if (await confirmCloseWhileDownloading()) {
+      closingRef.current = true
+      onClose()
+    }
   }
 
   useEffect(() => {
@@ -70,9 +74,13 @@ export function SettingsApp({ onClose }: SettingsAppProps) {
     const unlistenPromise = (async () => {
       const { getCurrentWindow } = await import('@tauri-apps/api/window')
       return getCurrentWindow().onCloseRequested(async (event) => {
+        if (closingRef.current) return
         if (!downloadingRef.current) return
         event.preventDefault()
-        if (await confirmCloseWhileDownloading()) onClose()
+        if (await confirmCloseWhileDownloading()) {
+          closingRef.current = true
+          onClose()
+        }
       })
     })()
     return () => {
@@ -80,6 +88,16 @@ export function SettingsApp({ onClose }: SettingsAppProps) {
     }
     // onClose is stable for the window's lifetime; t is read at call time.
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    if (!isTauri()) return
+    let unlisten: (() => void) | undefined
+    import('@tauri-apps/api/event')
+      .then(({ listen }) => listen('settings-window-opened', () => { closingRef.current = false }))
+      .then((cleanup) => { unlisten = cleanup })
+      .catch(() => {})
+    return () => unlisten?.()
   }, [])
 
   return (
@@ -98,10 +116,10 @@ export function SettingsApp({ onClose }: SettingsAppProps) {
         {activeSection !== 'skill-manager-v2' && (
           <div className="settings-window-brand" aria-hidden="true">
             <span className="settings-window-brand__mark">
-              <img src="/agentbro-app-icon.png" alt="" />
+              <img src="/agent-island-app-icon.png" alt="" />
             </span>
             <span className="settings-window-brand__copy">
-              <span className="settings-window-brand__name">AgentBro</span>
+              <span className="settings-window-brand__name">Agent Island</span>
               <span className="settings-window-brand__slogan">{t('notch.slogan')}</span>
             </span>
           </div>

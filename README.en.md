@@ -1,7 +1,7 @@
 <div align="center">
-  <img src="public/agentbro-logo.png" alt="AgentBro Logo" width="148" />
+  <img src="public/agent-island-logo.png" alt="Agent Island Logo" width="148" />
 
-  <h1>AgentBro</h1>
+  <h1>Agent Island</h1>
 
   <p><strong>Your desktop control center for AI coding agents</strong></p>
 
@@ -32,22 +32,22 @@
   </p>
 </div>
 
-<img src="docs/assets/screenshots/island-expanded.png" alt="AgentBro expanded Dynamic Island" width="100%" />
+<img src="docs/assets/screenshots/island-expanded.png" alt="Agent Island expanded Dynamic Island" width="100%" />
 
 ## Download and get started
 
 | Platform | Recommended install | Other package |
 | --- | --- | --- |
-| macOS | `brew tap shirenchuang/tap && brew install --cask agentbro` | [Universal DMG](https://github.com/shirenchuang/agentbro/releases/latest/download/AgentBro_latest_universal.dmg) · [China mirror](https://agentbro.oss-cn-hangzhou.aliyuncs.com/AgentBro_latest_universal.dmg) |
-| Windows x64 | [Download the EXE installer](https://github.com/shirenchuang/agentbro/releases/latest/download/AgentBro_latest_x64-setup.exe) | [MSI](https://github.com/shirenchuang/agentbro/releases/latest/download/AgentBro_latest_x64.msi) |
+| macOS | `brew tap shirenchuang/tap && brew install --cask agentbro` | [Universal DMG](https://github.com/shirenchuang/agentbro/releases/latest/download/Agent Island_latest_universal.dmg) · [China mirror](https://agentbro.oss-cn-hangzhou.aliyuncs.com/Agent Island_latest_universal.dmg) |
+| Windows x64 | [Download the EXE installer](https://github.com/shirenchuang/agentbro/releases/latest/download/Agent Island_latest_x64-setup.exe) | [MSI](https://github.com/shirenchuang/agentbro/releases/latest/download/Agent Island_latest_x64.msi) |
 
 After installing, open **Island -> Integration**, run **Hook Doctor**, and install the hook for the agent you use. The Windows build is an early MVP: the floating workspace, hook transport, path detection, and Agent Management work, but unsigned installers may trigger a SmartScreen warning.
 
-## What does AgentBro solve?
+## What does Agent Island solve?
 
-AI coding agents can work for long stretches, but people still end up watching the terminal: waiting for permissions, answering questions, checking whether a task is stuck, and maintaining separate hooks, skills, MCP servers, and plugins for every tool. AgentBro puts those jobs behind one desktop entry point.
+AI coding agents can work for long stretches, but people still end up watching the terminal: waiting for permissions, answering questions, checking whether a task is stuck, and maintaining separate hooks, skills, MCP servers, and plugins for every tool. Agent Island puts those jobs behind one desktop entry point.
 
-| When you are... | AgentBro can... |
+| When you are... | Agent Island can... |
 | --- | --- |
 | Running several agent sessions | Collect status, tool calls, subagents, token usage, and completion notices in the island. |
 | Waiting on an approval or question | Approve a permission, answer a question, confirm a plan, or send a quick reply without finding the original terminal. |
@@ -80,11 +80,11 @@ https://github.com/user-attachments/assets/374d6e53-c126-41be-a593-4e5f63485602
 <table>
   <tr>
     <td width="50%">
-      <img src="docs/assets/screenshots/island-permission.png" alt="Handle a permission request in the AgentBro island" width="100%" />
+      <img src="docs/assets/screenshots/island-permission.png" alt="Handle a permission request in the Agent Island island" width="100%" />
       <sub>Handle approvals, questions, and plan confirmations without returning to the terminal.</sub>
     </td>
     <td width="50%">
-      <img src="docs/assets/screenshots/island-detail.png" alt="AgentBro island session details" width="100%" />
+      <img src="docs/assets/screenshots/island-detail.png" alt="Agent Island island session details" width="100%" />
       <sub>Inspect tasks, tool calls, tokens, and session details.</sub>
     </td>
   </tr>
@@ -96,19 +96,19 @@ Agent Monitor collects active and historical sessions. Inspect phases, tool time
 
 ## Pet market
 
-Beyond the island, AgentBro can switch the floating window into a **pet status panel**: a desktop pet follows your active agent, and its vitals react in real time to context pressure and token usage — so you can tell at a glance whether a session is relaxed or under strain.
+Beyond the island, Agent Island can switch the floating window into a **pet status panel**: a desktop pet follows your active agent, and its vitals react in real time to context pressure and token usage — so you can tell at a glance whether a session is relaxed or under strain.
 
 The **Pet Market** lets you browse community-contributed pets and install them with one click, all driven by the [`abpets`](https://www.npmjs.com/package/abpets) CLI (Node.js v18+). Open it from **Island -> Pet Market** in settings, or preview every pet on the web:
 
 👉 **[www.agentbro.net/pets](https://www.agentbro.net/pets)**
 
-Want to author your own pet? Use the [`shirenchuang/agentbro-pet`](https://github.com/shirenchuang/agentbro-pet) skill to turn a character concept, brand cue, or reference image into an AgentBro-ready `pet.json` + `spritesheet.webp` package with pluggable image-generation backends. Install it with `npx skills add https://github.com/shirenchuang/agentbro-pet.git` or clone it directly; Codex, Claude Code, Cursor, Gemini CLI, and any other agent that can run scripts and generate images can use the workflow.
+Want to author your own pet? Use the [`shirenchuang/agentbro-pet`](https://github.com/shirenchuang/agentbro-pet) skill to turn a character concept, brand cue, or reference image into an Agent Island-ready `pet.json` + `spritesheet.webp` package with pluggable image-generation backends. Install it with `npx skills add https://github.com/shirenchuang/agentbro-pet.git` or clone it directly; Codex, Claude Code, Cursor, Gemini CLI, and any other agent that can run scripts and generate images can use the workflow.
 
-<img src="https://github.com/user-attachments/assets/53a17db6-54c4-40f1-95b6-89a7f1977f00" alt="AgentBro pet mode" width="100%" />
+<img src="https://github.com/user-attachments/assets/53a17db6-54c4-40f1-95b6-89a7f1977f00" alt="Agent Island pet mode" width="100%" />
 
-<img src="https://github.com/user-attachments/assets/efd1acc8-67bb-460f-b7c9-3faa490611f5" alt="AgentBro Pet Market" width="100%" />
+<img src="https://github.com/user-attachments/assets/efd1acc8-67bb-460f-b7c9-3faa490611f5" alt="Agent Island Pet Market" width="100%" />
 
-The island includes Midnight, AgentBro Classic, Frosted Glass, Apple, Smoke, Ocean Mist, Warm Paper, and Soft Lavender themes. It can also follow the system light or dark appearance.
+The island includes Midnight, Agent Island Classic, Frosted Glass, Apple, Smoke, Ocean Mist, Warm Paper, and Soft Lavender themes. It can also follow the system light or dark appearance.
 
 ## Agent Management puts every agent capability in one place
 
@@ -125,21 +125,21 @@ If you use Claude Code, Codex, Gemini CLI, Cursor, Kimi, Doubao, Qoder, OpenCode
 <table>
   <tr>
     <td width="50%">
-      <img src="docs/assets/screenshots/agent-management-skill-library.png" alt="AgentBro Skill Library" width="100%" />
+      <img src="docs/assets/screenshots/agent-management-skill-library.png" alt="Agent Island Skill Library" width="100%" />
       <sub>Skill Library: review center-library skills, distribution state, and diagnostics.</sub>
     </td>
     <td width="50%">
-      <img src="docs/assets/screenshots/agent-management-install-skills.png" alt="AgentBro Install Skills" width="100%" />
+      <img src="docs/assets/screenshots/agent-management-install-skills.png" alt="Agent Island Install Skills" width="100%" />
       <sub>Install Skills: import from the market, another agent, a local folder, or Git.</sub>
     </td>
   </tr>
   <tr>
     <td width="50%">
-      <img src="docs/assets/screenshots/agent-management-skill-packs.png" alt="AgentBro Skill Packs" width="100%" />
+      <img src="docs/assets/screenshots/agent-management-skill-packs.png" alt="Agent Island Skill Packs" width="100%" />
       <sub>Skill Packs: apply grouped skills to agents while keeping revocable claims.</sub>
     </td>
     <td width="50%">
-      <img src="docs/assets/screenshots/agent-management-agent-detail.png" alt="AgentBro Agent Management Detail" width="100%" />
+      <img src="docs/assets/screenshots/agent-management-agent-detail.png" alt="Agent Island Agent Management Detail" width="100%" />
       <sub>Agent Management: inspect skills, MCP servers, plugins, hooks, and paths per agent.</sub>
     </td>
   </tr>
@@ -151,11 +151,11 @@ Agent Switch manages API provider configuration for Claude, Codex, Gemini, OpenC
 
 ## SSH Remote
 
-Remote development does not need a separate monitoring setup. AgentBro can import hosts from `~/.ssh/config`, receive remote hook events through an SSH tunnel, show remote sessions locally, install or repair hooks, and run connection diagnostics. Sessions keep their host identity, so local work and tasks from several servers remain easy to distinguish.
+Remote development does not need a separate monitoring setup. Agent Island can import hosts from `~/.ssh/config`, receive remote hook events through an SSH tunnel, show remote sessions locally, install or repair hooks, and run connection diagnostics. Sessions keep their host identity, so local work and tasks from several servers remain easy to distinguish.
 
 ## Supported agents
 
-AgentBro supports agents at two levels. Runtime hook adapters send session events into the island, while Agent Management scans a wider set of CLIs, desktop apps, skills, MCP servers, plugins, and paths. Event coverage and interaction depth vary because each agent exposes different hooks.
+Agent Island supports agents at two levels. Runtime hook adapters send session events into the island, while Agent Management scans a wider set of CLIs, desktop apps, skills, MCP servers, plugins, and paths. Event coverage and interaction depth vary because each agent exposes different hooks.
 
 | Scope | Agents |
 | --- | --- |
@@ -167,7 +167,7 @@ Doubao support on macOS detects `/Applications/Doubao.app`, manages `~/Doubao/sk
 
 ## Roadmap
 
-AgentBro will remain local-first. The next priorities include:
+Agent Island will remain local-first. The next priorities include:
 
 - Remote sync: sync settings, hooks, themes, prompts, skills, and remote host configuration across devices.
 - Skills community: discover, install, share, and update Skill Packs for different agents.
@@ -177,18 +177,18 @@ AgentBro will remain local-first. The next priorities include:
 
 ## Join the community
 
-If you use AgentBro or want to discuss the Windows experience, deeper agent integrations, Agent Monitor, Agent Switch, or the skills community, scan the QR code to add the maintainer on WeChat (mention **AgentBro community**), or join the **AgentBro Open Source Community** group chat directly.
+If you use Agent Island or want to discuss the Windows experience, deeper agent integrations, Agent Monitor, Agent Switch, or the skills community, scan the QR code to add the maintainer on WeChat (mention **Agent Island community**), or join the **Agent Island Open Source Community** group chat directly.
 
 <div align="center">
   <table>
     <tr>
       <td align="center">
-        <img src="public/agentbro-wechat-qr.jpg" alt="AgentBro WeChat community QR code" width="260" /><br />
-        <sub>Add on WeChat — mention <b>AgentBro community</b></sub>
+        <img src="public/agent-island-wechat-qr.jpg" alt="Agent Island WeChat community QR code" width="260" /><br />
+        <sub>Add on WeChat — mention <b>Agent Island community</b></sub>
       </td>
       <td align="center">
-        <img src="public/agentbro-group-qr.png" alt="AgentBro Open Source Community group QR code" width="260" /><br />
-        <sub>Group chat: <b>AgentBro Open Source Community</b> (QR refreshed every 7 days)</sub>
+        <img src="public/agent-island-group-qr.png" alt="Agent Island Open Source Community group QR code" width="260" /><br />
+        <sub>Group chat: <b>Agent Island Open Source Community</b> (QR refreshed every 7 days)</sub>
       </td>
     </tr>
   </table>
@@ -225,7 +225,7 @@ pnpm install
 pnpm tauri:dev
 ```
 
-`pnpm tauri:dev` starts the Vite dev server on `http://localhost:1423` and opens the native AgentBro windows.
+`pnpm tauri:dev` starts the Vite dev server on `http://localhost:1423` and opens the native Agent Island windows.
 
 ### Browser-only UI development
 
@@ -255,14 +255,14 @@ pnpm tauri:build:windows                           # Build Windows NSIS / MSI in
 
 ## Use with an agent
 
-1. Open AgentBro settings.
+1. Open Agent Island settings.
 2. If you only want the island integration, go to **Island -> Integration** and run **Hook Doctor**.
 3. Click **Install All Hooks**, or install the hook for the agent you use.
 4. If you want unified agent, skills, MCP, and plugin management, open **Agent Management**, then choose the **Agent Management** page.
 5. Select an agent to install or update it, then use the **Hooks**, **Skills**, **MCP**, or **Plugins** pages as needed.
 6. Restart the corresponding CLI session, then start Claude Code, Codex, Gemini CLI, or another supported agent.
 
-AgentBro will then show session state, tool activity, approvals, questions, plans, and completions in the island.
+Agent Island will then show session state, tool activity, approvals, questions, plans, and completions in the island.
 
 ## Contributing
 
@@ -282,11 +282,11 @@ Please target the `dev` branch. Run `pnpm lint && pnpm test:run && pnpm build &&
 Release notes and signing requirements live in [`docs/release.md`](docs/release.md).
 
 - Website: [www.agentbro.net](https://www.agentbro.net)
-- China mirror: `https://agentbro.oss-cn-hangzhou.aliyuncs.com/AgentBro_latest_universal.dmg`
+- China mirror: `https://agentbro.oss-cn-hangzhou.aliyuncs.com/Agent Island_latest_universal.dmg`
 - GitHub releases: `https://github.com/shirenchuang/agentbro/releases`
 
 ## License
 
-AgentBro source code is licensed under the [Apache License 2.0](LICENSE).
+Agent Island source code is licensed under the [Apache License 2.0](LICENSE).
 
-The AgentBro name, logo, app icon, website design, and other brand assets are not licensed with the source code. Modified builds and redistributions should use a different name to avoid confusion with the official project and follow [NOTICE](NOTICE) and [TRADEMARKS.md](TRADEMARKS.md).
+The Agent Island name, logo, app icon, website design, and other brand assets are not licensed with the source code. Modified builds and redistributions should use a different name to avoid confusion with the official project and follow [NOTICE](NOTICE) and [TRADEMARKS.md](TRADEMARKS.md).

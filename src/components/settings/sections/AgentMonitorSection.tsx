@@ -29,6 +29,7 @@ import { useConfigStore } from '../../../stores/configStore'
 import type { BackendSession } from '../../../services/tauriApi'
 import type { ChatMessage, SessionState, TokenUsage } from '../../../types/agent'
 import { formatDurationShort } from '../../../utils/time'
+import { getSessionTaskDurationSeconds } from '../../../utils/sessionDisplay'
 import { formatTokens } from '../../../utils/tokens'
 import { energyIntervalMs, getAppEnergyMode } from '../../../utils/energyPolicy'
 import type { MonitorSettingsView } from '../../../types/capability'
@@ -325,7 +326,7 @@ function summaryFromSession(session: SessionState): MonitorSessionSummary {
     terminal: session.terminal,
     phase: session.phase,
     startedAt: session.startedAt,
-    duration: session.duration,
+    duration: getSessionTaskDurationSeconds(session),
     tokenTotal: totalTokens(session.tokens),
     lastToolName: session.lastToolName ?? null,
     lastToolTarget: session.lastToolTarget ?? null,
@@ -897,7 +898,7 @@ export function AgentMonitorSection({ activeView = 'sessions' }: AgentMonitorSec
         <div>
           <strong>Claude 命令无感接入</strong>
           <span>
-            安装一次后，新开的 iTerm、Terminal、Cursor/VS Code 终端里继续输入 claude，会先进入 AgentBro inspector，再启动真实 Claude。只注入进程级环境变量，不覆盖 Claude settings 或 hooks。
+            安装一次后，新开的 iTerm、Terminal、Cursor/VS Code 终端里继续输入 claude，会先进入 Agent Island inspector，再启动真实 Claude。只注入进程级环境变量，不覆盖 Claude settings 或 hooks。
           </span>
           <code>{wrapperStatus.shimPath}</code>
           <em>{wrapperStatus.pathHintInstalled ? `PATH 已写入 ${wrapperStatus.shellConfigPath} · hooks preserved` : `PATH 尚未写入 ${wrapperStatus.shellConfigPath}`}</em>

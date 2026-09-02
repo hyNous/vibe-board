@@ -77,13 +77,13 @@ describe('HoverList interactions', () => {
       <HoverList
         sessions={[session({
           sessionTitle: '<environment_context>\n  <cwd>/tmp/agentbro</cwd>\n</environment_context>',
-          lastUserMessage: 'Build AgentBro landing page',
+          lastUserMessage: 'Build Agent Island landing page',
         })]}
         onSessionClick={vi.fn()}
       />,
     )
 
-    expect(screen.getByText('agentbro · Build AgentBro landing page')).toBeInTheDocument()
+    expect(screen.getByText('agentbro · Build Agent Island landing page')).toBeInTheDocument()
     expect(screen.queryByText(/environment_context/)).not.toBeInTheDocument()
   })
 

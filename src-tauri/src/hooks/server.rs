@@ -17,7 +17,7 @@ use tokio::sync::{oneshot, Mutex};
 use super::session_store::{
     AgentRunStatus, ContextWindowInfo, PendingPermission, PendingPlan, PendingQuestion,
     QuestionItem as PendingQuestionItem, QuestionOption as PendingQuestionOption, RateLimitInfo,
-    SessionPhase, SessionStore, SubagentInfo, SubagentStopUpdate,
+    SessionPhase, SessionStore, SubagentInfo, SubagentStopUpdate, UsageRateWindow,
 };
 use crate::agents::{AgentAdapter, AgentEvent};
 use crate::config::{AppConfig, ConfigStore};
@@ -1022,7 +1022,11 @@ impl HookServer {
         Self::record_raw_event(&raw_events, &raw, event.as_ref());
         if let Some(ref agent_event) = event {
             Self::ensure_session_for_event(&store, agent_event, &raw);
+            // Record presence immediately so blocking interactions also mark
+            // the CLI online even when their branch returns early below.
+            store.record_agent_event(agent_event);
         }
+        let event_for_status = event.clone();
         Self::record_recent_tool_invocation(&recent_tools, event.as_ref(), &raw).await;
 
         match event {
@@ -1363,6 +1367,12 @@ impl HookServer {
                 // No adapter matched — try generic processing (with sound)
                 Self::process_raw_event(&store, &raw, &sound);
             }
+        }
+
+        if let Some(ref agent_event) = event_for_status {
+            // The post-processing snapshot includes tokens/rate limits written
+            // by this event, not just the values from the previous hook.
+            store.record_agent_event(agent_event);
         }
 
         Ok(())
@@ -1799,6 +1809,73 @@ impl HookServer {
             }
         }
         None
+    }
+
+    fn enrich_rate_limits_from_raw(
+        store: &SessionStore,
+        session_id: &str,
+        raw: &serde_json::Value,
+        mut rate_limits: RateLimitInfo,
+    ) -> RateLimitInfo {
+        let Some(values) = raw
+            .get("rateLimits")
+            .or_else(|| raw.get("rate_limits"))
+        else {
+            return rate_limits;
+        };
+
+        let windows = [
+            ("fiveHour", "five_hour", "5h", 300_i64),
+            ("sevenDay", "seven_day", "7d", 10_080_i64),
+        ]
+        .into_iter()
+        .filter_map(|(camel, snake, title, minutes)| {
+            let value = values.get(camel).or_else(|| values.get(snake))?;
+            let used_percent = value
+                .get("usedPercentage")
+                .or_else(|| value.get("used_percentage"))
+                .or_else(|| value.get("usage"))
+                .and_then(raw_number)
+                .unwrap_or(0.0);
+            let remaining_label = value
+                .get("remaining")
+                .or_else(|| value.get("remainingLabel"))
+                .or_else(|| value.get("remaining_label"))
+                .and_then(|value| value.as_str())
+                .map(str::to_string);
+            Some(UsageRateWindow {
+                id: snake.to_string(),
+                title: title.to_string(),
+                used_percent,
+                remaining_percent: Some((100.0 - used_percent).clamp(0.0, 100.0)),
+                remaining_label: remaining_label.or_else(|| {
+                    value
+                        .get("resetsAt")
+                        .or_else(|| value.get("resets_at"))
+                        .and_then(format_reset_remaining)
+                }),
+                resets_at: value
+                    .get("resetsAt")
+                    .or_else(|| value.get("resets_at"))
+                    .and_then(raw_reset_iso),
+                window_minutes: Some(minutes),
+            })
+        })
+        .collect::<Vec<_>>();
+        if !windows.is_empty() {
+            rate_limits.windows = windows;
+            rate_limits.updated_at = Some(current_time_ms() as i64);
+            if let Some(session) = store.get_session(session_id) {
+                rate_limits.provider = Some(session.agent_type);
+                rate_limits.provider_label = Some(
+                    session
+                        .engine_label
+                        .unwrap_or_else(|| "Agent".to_string()),
+                );
+            }
+            rate_limits.source = Some("agent-hook".to_string());
+        }
+        rate_limits
     }
 
     /// Process a parsed agent event and update session store
@@ -2261,16 +2338,18 @@ impl HookServer {
                 last_main_agent_at,
                 cache_ttl_ms,
             } => {
-                store.set_rate_limits(
+                let rate_limits = Self::enrich_rate_limits_from_raw(
+                    store,
                     session_id,
+                    _raw,
                     RateLimitInfo::legacy(
                         *five_hour_usage,
                         five_hour_remaining.clone(),
                         *seven_day_usage,
                         seven_day_remaining.clone(),
                     ),
-                    status_line_text.clone(),
                 );
+                store.set_rate_limits(session_id, rate_limits, status_line_text.clone());
                 let context_window =
                     match (total_input_tokens, total_output_tokens, context_window_size) {
                         (Some(input), Some(output), Some(size)) => Some(ContextWindowInfo {
@@ -3471,6 +3550,50 @@ fn current_time_ms() -> u64 {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_millis() as u64
+}
+
+fn raw_number(value: &serde_json::Value) -> Option<f64> {
+    value
+        .as_f64()
+        .or_else(|| value.as_str().and_then(|text| text.parse::<f64>().ok()))
+}
+
+fn raw_reset_iso(value: &serde_json::Value) -> Option<String> {
+    if let Some(number) = raw_number(value) {
+        let millis = if number < 10_000_000_000.0 {
+            (number * 1000.0) as i64
+        } else {
+            number as i64
+        };
+        return chrono::DateTime::<chrono::Utc>::from_timestamp_millis(millis)
+            .map(|date| date.to_rfc3339());
+    }
+    value
+        .as_str()
+        .and_then(|text| chrono::DateTime::parse_from_rfc3339(text).ok())
+        .map(|date| date.with_timezone(&chrono::Utc).to_rfc3339())
+}
+
+fn format_reset_remaining(value: &serde_json::Value) -> Option<String> {
+    let reset = raw_reset_iso(value)?;
+    let reset = chrono::DateTime::parse_from_rfc3339(&reset)
+        .ok()?
+        .with_timezone(&chrono::Utc);
+    let seconds = reset
+        .signed_duration_since(chrono::Utc::now())
+        .num_seconds();
+    if seconds <= 0 {
+        return None;
+    }
+    let minutes = (seconds / 60).max(1);
+    let hours = minutes / 60;
+    if hours >= 24 {
+        Some(format!("{}d{}h", hours / 24, hours % 24))
+    } else if hours > 0 {
+        Some(format!("{}h{}m", hours, minutes % 60))
+    } else {
+        Some(format!("{}m", minutes))
+    }
 }
 
 impl Drop for HookServer {

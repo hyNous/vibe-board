@@ -70,7 +70,7 @@ export function SwitchImportPanel() {
 
       {ccSwitchDetected && !importResult && (
         <>
-          <p>检测到 CC Switch，可将已有配置导入 AgentBro。</p>
+          <p>检测到 CC Switch，可将已有配置导入 Agent Island。</p>
 
           {importPreview && (
             <div className="switch-import-panel__preview">

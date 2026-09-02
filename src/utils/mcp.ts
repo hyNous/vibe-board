@@ -1,4 +1,4 @@
-/* AgentBro — MCP tool name parsing and display utilities */
+/* Agent Island — MCP tool name parsing and display utilities */
 
 export interface McpToolParsed {
   isMcp: boolean

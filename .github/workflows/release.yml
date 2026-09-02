@@ -130,7 +130,7 @@ jobs:
           NOTARY_POLL_SECONDS: '60'
         run: |
           export APP_VERSION="$VERSION"
-          export DMG_NAME="AgentBro_${VERSION}_universal.dmg"
+          export DMG_NAME="Agent Island_${VERSION}_universal.dmg"
           export UPDATE_BASE_URL="https://github.com/${{ github.repository }}/releases/download/v${VERSION}"
           mkdir -p dist
           sed "s/{{VERSION}}/${VERSION}/g" .github/release-notes.md > dist/release-notes.md
@@ -152,16 +152,16 @@ jobs:
       - name: Create latest DMG alias
         if: ${{ !contains(github.ref_name, '-') }}
         run: |
-          cp "dist/${DMG_NAME}" "dist/AgentBro_latest_universal.dmg"
-          shasum -a 256 "dist/AgentBro_latest_universal.dmg" >> dist/checksums.txt
+          cp "dist/${DMG_NAME}" "dist/Agent Island_latest_universal.dmg"
+          shasum -a 256 "dist/Agent Island_latest_universal.dmg" >> dist/checksums.txt
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            dist/AgentBro_*_universal.dmg
-            dist/AgentBro.app.tar.gz
-            dist/AgentBro.app.tar.gz.sig
+            dist/Agent Island_*_universal.dmg
+            dist/Agent Island.app.tar.gz
+            dist/Agent Island.app.tar.gz.sig
             dist/latest.json
             dist/checksums.txt
           body: ${{ env.RELEASE_NOTES }}
@@ -187,9 +187,9 @@ jobs:
           }
           base="oss://${OSS_BUCKET}"
           oss_cp "dist/${DMG_NAME}"                      "${base}/releases/v${VERSION}/${DMG_NAME}"
-          oss_cp "dist/AgentBro_latest_universal.dmg"    "${base}/AgentBro_latest_universal.dmg"
-          oss_cp "dist/AgentBro.app.tar.gz"              "${base}/AgentBro.app.tar.gz"
-          oss_cp "dist/AgentBro.app.tar.gz.sig"          "${base}/AgentBro.app.tar.gz.sig"
+          oss_cp "dist/Agent Island_latest_universal.dmg"    "${base}/Agent Island_latest_universal.dmg"
+          oss_cp "dist/Agent Island.app.tar.gz"              "${base}/Agent Island.app.tar.gz"
+          oss_cp "dist/Agent Island.app.tar.gz.sig"          "${base}/Agent Island.app.tar.gz.sig"
           oss_cp "dist/latest.oss.json"                  "${base}/latest.json"
 
   build-windows:
@@ -260,12 +260,12 @@ jobs:
           if ("${{ github.ref_name }}" -notlike "*-*") {
             $latestExe = $nsisFiles | Sort-Object Name | Select-Object -First 1
             if ($latestExe) {
-              Copy-Item -LiteralPath $latestExe.FullName -Destination "$windowsDist/AgentBro_latest_x64-setup.exe"
+              Copy-Item -LiteralPath $latestExe.FullName -Destination "$windowsDist/Agent Island_latest_x64-setup.exe"
             }
 
             $latestMsi = $msiFiles | Sort-Object Name | Select-Object -First 1
             if ($latestMsi) {
-              Copy-Item -LiteralPath $latestMsi.FullName -Destination "$windowsDist/AgentBro_latest_x64.msi"
+              Copy-Item -LiteralPath $latestMsi.FullName -Destination "$windowsDist/Agent Island_latest_x64.msi"
             }
           }
 
@@ -309,7 +309,7 @@ jobs:
       - name: Download DMG from release
         if: env.HAS_HOMEBREW_TAP_TOKEN == '1'
         run: |
-          DMG_NAME="AgentBro_${VERSION}_universal.dmg"
+          DMG_NAME="Agent Island_${VERSION}_universal.dmg"
           curl -L \
             "https://github.com/${{ github.repository }}/releases/download/v${VERSION}/${DMG_NAME}" \
             -o "${DMG_NAME}"
@@ -331,9 +331,9 @@ jobs:
         run: |
           mkdir -p homebrew-tap/Casks
           if [ "$HAS_OSS_SECRETS" = "1" ]; then
-            CASK_URL="https://${OSS_BUCKET}.${OSS_ENDPOINT}/releases/v#{version}/AgentBro_#{version}_universal.dmg"
+            CASK_URL="https://${OSS_BUCKET}.${OSS_ENDPOINT}/releases/v#{version}/Agent Island_#{version}_universal.dmg"
           else
-            CASK_URL="https://github.com/${{ github.repository }}/releases/download/v#{version}/AgentBro_#{version}_universal.dmg"
+            CASK_URL="https://github.com/${{ github.repository }}/releases/download/v#{version}/Agent Island_#{version}_universal.dmg"
           fi
           cat > homebrew-tap/Casks/agentbro.rb <<CASK_EOF
           cask "agentbro" do
@@ -341,7 +341,7 @@ jobs:
             sha256 "${SHA256}"
 
             url "${CASK_URL}"
-            name "AgentBro"
+            name "Agent Island"
             desc "Menu bar companion for Claude Code, Codex, Gemini CLI and more"
             homepage "https://www.agentbro.net"
 
@@ -352,7 +352,7 @@ jobs:
 
             depends_on macos: ">= :sonoma"
 
-            app "AgentBro.app"
+            app "Agent Island.app"
 
             zap trash: [
               "~/.agentbro",
@@ -372,6 +372,6 @@ jobs:
           if git diff --cached --quiet; then
             echo "Homebrew cask already up to date"
           else
-            git commit -m "Update agentbro to ${VERSION}"
+            git commit -m "Update Agent Island to ${VERSION}"
             git push
           fi

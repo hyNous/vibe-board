@@ -4,6 +4,7 @@
 use chrono::Utc;
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter};
 
@@ -195,6 +196,22 @@ impl RateLimitInfo {
             windows: Vec::new(),
         }
     }
+}
+
+/// Last known state for an agent. This is deliberately separate from live
+/// sessions so a completed/offline CLI can still show its previous quota and
+/// token counters after AgentBro restarts.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentStatusSnapshot {
+    pub agent: String,
+    pub label: String,
+    pub online: bool,
+    pub last_seen_at: i64,
+    pub last_completed_at: Option<i64>,
+    pub tokens: TokenUsage,
+    pub rate_limits: Option<RateLimitInfo>,
+    pub detail: Option<String>,
 }
 
 /// Context-window usage reported by an agent statusline.
@@ -541,13 +558,24 @@ pub struct SessionUpdatePayload {
 #[derive(Clone)]
 pub struct SessionStore {
     sessions: Arc<DashMap<String, SessionState>>,
+    agent_statuses: Arc<DashMap<String, AgentStatusSnapshot>>,
+    agent_status_path: PathBuf,
     app_handle: Option<AppHandle>,
 }
 
 impl SessionStore {
     pub fn new() -> Self {
+        let agent_status_path = agent_status_file_path();
+        let agent_statuses = load_agent_statuses(&agent_status_path);
         Self {
             sessions: Arc::new(DashMap::new()),
+            agent_statuses: Arc::new(
+                agent_statuses
+                    .into_iter()
+                    .map(|snapshot| (snapshot.agent.clone(), snapshot))
+                    .collect(),
+            ),
+            agent_status_path,
             app_handle: None,
         }
     }
@@ -714,6 +742,228 @@ impl SessionStore {
     pub fn remove_session(&self, session_id: &str) {
         self.sessions.remove(session_id);
         self.emit_update();
+    }
+
+    /// Record the latest lifecycle, token, and quota data for an agent.
+    /// Persistence is limited to lifecycle boundaries and quota updates so a
+    /// noisy tool stream does not turn every hook event into a disk write.
+    pub fn record_agent_event(&self, event: &crate::agents::AgentEvent) {
+        let (session_id, explicit_agent, online, completed, detail, persist) = match event {
+            crate::agents::AgentEvent::SessionStart {
+                session_id,
+                agent_type,
+                ..
+            } => (
+                session_id.as_str(),
+                Some(agent_type.as_str()),
+                true,
+                false,
+                Some("Session started".to_string()),
+                true,
+            ),
+            crate::agents::AgentEvent::SessionEnd { session_id } => (
+                session_id.as_str(),
+                None,
+                false,
+                true,
+                Some("Session ended".to_string()),
+                true,
+            ),
+            crate::agents::AgentEvent::TaskComplete { session_id, summary } => (
+                session_id.as_str(),
+                None,
+                true,
+                true,
+                Some(summary.clone()),
+                true,
+            ),
+            crate::agents::AgentEvent::AssistantResponseComplete { session_id, text } => (
+                session_id.as_str(),
+                None,
+                true,
+                true,
+                Some(text.clone()),
+                true,
+            ),
+            crate::agents::AgentEvent::Error { session_id, message } => (
+                session_id.as_str(),
+                None,
+                false,
+                true,
+                Some(message.clone()),
+                true,
+            ),
+            crate::agents::AgentEvent::Interrupt { session_id } => (
+                session_id.as_str(),
+                None,
+                false,
+                true,
+                Some("Session interrupted".to_string()),
+                true,
+            ),
+            crate::agents::AgentEvent::RateLimitUpdate { session_id, .. } => (
+                session_id.as_str(),
+                None,
+                true,
+                false,
+                Some("Quota updated".to_string()),
+                true,
+            ),
+            crate::agents::AgentEvent::TokenUsage { session_id, .. } => (
+                session_id.as_str(),
+                None,
+                true,
+                false,
+                Some("Token usage updated".to_string()),
+                false,
+            ),
+            other => {
+                let Some(session_id) = Self::event_session_id(other) else {
+                    return;
+                };
+                (session_id, None, true, false, None, false)
+            }
+        };
+
+        if session_id.trim().is_empty() || session_id == "unknown" {
+            return;
+        }
+        let session = self.get_session(session_id);
+        let agent = explicit_agent
+            .map(str::to_string)
+            .or_else(|| session.as_ref().map(|value| value.agent_type.clone()))
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or_else(|| "other".to_string());
+        let label = session
+            .as_ref()
+            .and_then(|value| value.engine_label.clone())
+            .unwrap_or_else(|| agent_display_name(&agent));
+        let now = Utc::now().timestamp_millis();
+        let mut entry = self
+            .agent_statuses
+            .entry(agent.clone())
+            .or_insert_with(|| AgentStatusSnapshot {
+                agent: agent.clone(),
+                label: label.clone(),
+                online: false,
+                last_seen_at: now,
+                last_completed_at: None,
+                tokens: TokenUsage::default(),
+                rate_limits: None,
+                detail: None,
+            });
+        entry.label = label;
+        entry.online = online;
+        entry.last_seen_at = now;
+        if completed {
+            entry.last_completed_at = Some(now);
+        }
+        if let Some(session) = session {
+            entry.tokens = session.tokens;
+            if session.rate_limits.is_some() {
+                entry.rate_limits = session.rate_limits;
+            }
+        }
+        if detail.is_some() {
+            entry.detail = detail;
+        }
+        drop(entry);
+
+        if persist {
+            self.save_agent_statuses();
+        }
+        self.emit_agent_status_update();
+    }
+
+    fn event_session_id(event: &crate::agents::AgentEvent) -> Option<&str> {
+        use crate::agents::AgentEvent::*;
+        Some(match event {
+            SessionStart { session_id, .. }
+            | SessionEnd { session_id }
+            | Processing { session_id, .. }
+            | ToolUse { session_id, .. }
+            | PermissionRequest { session_id, .. }
+            | AskQuestion { session_id, .. }
+            | PlanApproval { session_id, .. }
+            | TaskComplete { session_id, .. }
+            | AssistantResponseComplete { session_id, .. }
+            | Error { session_id, .. }
+            | Interrupt { session_id }
+            | TokenUsage { session_id, .. }
+            | RateLimitUpdate { session_id, .. }
+            | Notification { session_id, .. }
+            | SubagentStart { session_id, .. }
+            | SubagentStop { session_id, .. }
+            | ShellExecutionStart { session_id, .. }
+            | ShellExecutionEnd { session_id, .. }
+            | MCPExecutionStart { session_id, .. }
+            | MCPExecutionEnd { session_id, .. }
+            | AgentResponse { session_id, .. }
+            | AgentThought { session_id, .. } => session_id.as_str(),
+        })
+    }
+
+    /// Return persisted snapshots. The command layer overlays current process
+    /// state before sending them to the frontend.
+    pub fn get_agent_status_snapshots(&self) -> Vec<AgentStatusSnapshot> {
+        let mut snapshots = self
+            .agent_statuses
+            .iter()
+            .map(|entry| entry.value().clone())
+            .collect::<Vec<_>>();
+        snapshots.sort_by(|a, b| a.agent.cmp(&b.agent));
+        snapshots
+    }
+
+    /// Persist a command-layer snapshot (for example Codex app-server state,
+    /// which does not arrive through the hook event path) only when it changed.
+    pub fn persist_agent_status_snapshots(&self, snapshots: &[AgentStatusSnapshot]) {
+        let mut next = snapshots.to_vec();
+        next.sort_by(|a, b| a.agent.cmp(&b.agent));
+        let mut current = self.get_agent_status_snapshots();
+        current.sort_by(|a, b| a.agent.cmp(&b.agent));
+        let Ok(next_json) = serde_json::to_vec(&next) else {
+            return;
+        };
+        let Ok(current_json) = serde_json::to_vec(&current) else {
+            return;
+        };
+        if next_json == current_json {
+            return;
+        }
+
+        self.agent_statuses.clear();
+        for snapshot in next {
+            self.agent_statuses
+                .insert(snapshot.agent.clone(), snapshot);
+        }
+        self.save_agent_statuses();
+    }
+
+    fn save_agent_statuses(&self) {
+        let snapshots = self.get_agent_status_snapshots();
+        if let Some(parent) = self.agent_status_path.parent() {
+            if let Err(error) = std::fs::create_dir_all(parent) {
+                log::debug!("Failed to create agent status directory: {error}");
+                return;
+            }
+        }
+        match serde_json::to_string_pretty(&snapshots) {
+            Ok(content) => {
+                if let Err(error) = std::fs::write(&self.agent_status_path, content) {
+                    log::debug!("Failed to persist agent status snapshots: {error}");
+                }
+            }
+            Err(error) => log::debug!("Failed to serialize agent status snapshots: {error}"),
+        }
+    }
+
+    fn emit_agent_status_update(&self) {
+        if let Some(ref handle) = self.app_handle {
+            if let Err(error) = handle.emit("agent-status-update", self.get_agent_status_snapshots()) {
+                log::debug!("Failed to emit agent-status-update: {error}");
+            }
+        }
     }
 
     /// Add or update a subagent for a session
@@ -1004,6 +1254,31 @@ impl SessionStore {
                 log::error!("Failed to emit session-update: {}", e);
             }
         }
+    }
+}
+
+fn agent_status_file_path() -> PathBuf {
+    dirs::config_dir()
+        .or_else(dirs::data_local_dir)
+        .unwrap_or_else(std::env::temp_dir)
+        .join("agentbro")
+        .join("agent-status.json")
+}
+
+fn load_agent_statuses(path: &PathBuf) -> Vec<AgentStatusSnapshot> {
+    let Ok(content) = std::fs::read_to_string(path) else {
+        return Vec::new();
+    };
+    serde_json::from_str(&content).unwrap_or_default()
+}
+
+fn agent_display_name(agent: &str) -> String {
+    match agent {
+        "claude-code" => "Claude Code".to_string(),
+        "codex" => "Codex".to_string(),
+        "opencode" => "OpenCode".to_string(),
+        "antigravity" => "Antigravity".to_string(),
+        other => other.to_string(),
     }
 }
 

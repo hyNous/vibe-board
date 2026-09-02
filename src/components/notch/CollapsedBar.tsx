@@ -7,7 +7,7 @@ import { computePriority, PRIORITY } from '../../types/priority'
 import { MascotRouter } from './mascots'
 import { TipDisplay } from './TipDisplay'
 import { useTick } from '../../hooks/useTick'
-import { openSettingsWindow, quitApp, setSoundEnabled } from '../../services/tauriApi'
+import { openSettingsWindow, quitApp } from '../../services/tauriApi'
 import { useConfigStore } from '../../stores/configStore'
 import { useUpdateStore } from '../../stores/updateStore'
 import { isDarkColorTheme, useThemeStore } from '../../stores/themeStore'
@@ -270,7 +270,7 @@ export function CollapsedBar({ sessions, panelState, rateLimits, usageSnapshots,
   const tipsEnabled = useConfigStore((s) => s.tipsEnabled)
   const activeTheme = useThemeStore((s) => s.activeTheme)
   const colorTheme = useThemeStore((s) => s.colorTheme)
-  const brandLogoSrc = isDarkColorTheme(colorTheme) ? '/agentbro-logo-dark.png' : '/agentbro-logo.png'
+  const brandLogoSrc = isDarkColorTheme(colorTheme) ? '/agent-island-logo-dark.png' : '/agent-island-logo.png'
 
   const lead = getLeadSession(sessions)
   useTick(1000, Boolean(lead?.unattendedSince))
@@ -361,7 +361,7 @@ export function CollapsedBar({ sessions, panelState, rateLimits, usageSnapshots,
     if (!session || !session.agentType) {
       return (
         <span className="collapsed-bar__idle-logo-wrap" style={{ width: size, height: size }} aria-hidden="true">
-          <img className="collapsed-bar__idle-logo" src="/agentbro-app-icon.png" alt="" />
+          <img className="collapsed-bar__idle-logo" src="/agent-island-app-icon.png" alt="" />
         </span>
       )
     }
@@ -439,26 +439,6 @@ export function CollapsedBar({ sessions, panelState, rateLimits, usageSnapshots,
             <span className="collapsed-bar__esc-hint">ESC</span>
             <button
               className="collapsed-bar__icon-btn"
-              title="Toggle Sound"
-              onClick={async (e) => {
-                e.stopPropagation()
-                const config = useConfigStore.getState()
-                const newVal = !config.soundEnabled
-                config.updateConfig('soundEnabled', newVal)
-                try {
-                  setSoundEnabled(newVal)
-                } catch (error) {
-                  console.warn('[notch] setSoundEnabled failed:', error)
-                }
-              }}
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                <path d="M11 5L6 9H2v6h4l5 4V5z" fill="currentColor" opacity="0.8"/>
-                <path d="M15.54 8.46a5 5 0 010 7.07" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none"/>
-              </svg>
-            </button>
-            <button
-              className="collapsed-bar__icon-btn"
               title={t('notch.settings')}
               onClick={openSettings}
             >
@@ -532,9 +512,9 @@ export function CollapsedBar({ sessions, panelState, rateLimits, usageSnapshots,
           ) : (
             <>
               {showBrandEmpty ? (
-                <div className="collapsed-bar__brand-empty" aria-label={`AgentBro, ${t('notch.slogan')}`}>
+                <div className="collapsed-bar__brand-empty" aria-label={`Agent Island, ${t('notch.slogan')}`}>
                   <img className="collapsed-bar__brand-logo" src={brandLogoSrc} alt="" aria-hidden="true" />
-                  <span className="collapsed-bar__brand-name">AgentBro</span>
+                  <span className="collapsed-bar__brand-name">Agent Island</span>
                   <span className="collapsed-bar__brand-slogan">{t('notch.slogan')}</span>
                 </div>
               ) : (

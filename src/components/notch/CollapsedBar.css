@@ -144,7 +144,7 @@
   pointer-events: none;
 }
 
-/* Separator below status row — AgentBro dashed style */
+/* Separator below status row — Agent Island dashed style */
 .collapsed-bar--expanded .collapsed-bar__status-row {
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   padding-bottom: 8px;
@@ -440,7 +440,7 @@
   }
 }
 
-/* Alert badge — AgentBro-style: gray bg + amber dot + count */
+/* Alert badge — Agent Island-style: gray bg + amber dot + count */
 .collapsed-bar__alert-badge {
   display: inline-flex;
   align-items: center;
@@ -531,7 +531,7 @@
   100% { transform: translateX(100%); }
 }
 
-/* Tool status in collapsed bar — AgentBro accent for tool names */
+/* Tool status in collapsed bar — Agent Island accent for tool names */
 .collapsed-bar__tool-status {
   font-size: 11px;
   font-weight: 500;
@@ -542,7 +542,7 @@
   max-width: 140px;
 }
 
-/* ALL/ACT/WAIT counter pills — AgentBro expanded header */
+/* ALL/ACT/WAIT counter pills — Agent Island expanded header */
 .collapsed-bar__counter-pills {
   display: flex;
   height: 26px;

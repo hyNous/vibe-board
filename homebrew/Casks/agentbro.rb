@@ -2,8 +2,8 @@ cask "agentbro" do
   version "0.1.4"
   sha256 :no_check
 
-  url "https://github.com/shirenchuang/agentbro/releases/download/v#{version}/AgentBro_#{version}_universal.dmg"
-  name "AgentBro"
+  url "https://github.com/shirenchuang/agentbro/releases/download/v#{version}/Agent Island_#{version}_universal.dmg"
+  name "Agent Island"
   desc "Menu bar companion for Claude Code, Codex, Gemini CLI and more"
   homepage "https://www.agentbro.net"
 
@@ -14,7 +14,7 @@ cask "agentbro" do
 
   depends_on macos: ">= :sonoma"
 
-  app "AgentBro.app"
+  app "Agent Island.app"
 
   zap trash: [
     "~/.agentbro",

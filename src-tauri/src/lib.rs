@@ -40,7 +40,7 @@ use hooks::server::HookServer;
 use hooks::session_store::{SessionPhase, SessionState, SessionStore};
 use network_monitor::NetworkMonitor;
 use platform::display::{find_target_monitor, list_displays_inner, DisplayInfo};
-use sound::{SoundEngine, SoundEvent, SoundPack, SoundPackImportResult};
+use sound::{SoundEvent, SoundPack, SoundPackImportResult};
 use telemetry::TelemetryService;
 
 #[derive(Debug, Clone, Copy)]
@@ -1613,8 +1613,8 @@ async fn test_webhook(
     };
 
     let event = webhook::templates::NotificationEvent::Custom {
-        title: "AgentBro Test".to_string(),
-        body: "This is a test notification from AgentBro.".to_string(),
+        title: "Agent Island Test".to_string(),
+        body: "This is a test notification from Agent Island.".to_string(),
     };
     let language = state.config_store.get().language;
     let results =
@@ -2007,7 +2007,7 @@ fn build_skill_pack_picker_window(app: &tauri::AppHandle) -> Result<tauri::Webvi
         menu_bar::SKILL_PACK_PICKER_ID,
         tauri::WebviewUrl::App("index.html".into()),
     )
-    .title("AgentBro Skill Packs")
+    .title("Agent Island Skill Packs")
     .inner_size(SKILL_PACK_PICKER_WIDTH, SKILL_PACK_PICKER_HEIGHT)
     .transparent(true)
     .decorations(false)
@@ -2533,8 +2533,8 @@ fn show_settings_window(app: &tauri::AppHandle) -> Result<(), String> {
         // declared in tauri.conf.json with `visible: false`, which spun the
         // process up at app launch (~170 MB resident, idle forever). Building
         // it lazily here means we only pay the cost the first time the user
-        // opens settings, and `attach_settings_close_handler` rigs it to
-        // `destroy()` on close so the process exits when they leave.
+        // opens settings, and `attach_settings_close_handler` applies the
+        // configured tray-or-exit behavior when they leave.
         let window = match handle.get_webview_window("settings") {
             Some(existing) => existing,
             None => match build_settings_window(&handle) {
@@ -2547,6 +2547,9 @@ fn show_settings_window(app: &tauri::AppHandle) -> Result<(), String> {
         };
 
         normalize_settings_window_frame(&window);
+        // Keep the auxiliary settings window out of the Windows taskbar both
+        // on its first show and after Explorer refreshes window metadata.
+        let _ = window.set_skip_taskbar(true);
         apply_settings_window_for_spaces(&window);
         let _ = window.show();
         let _ = window.set_focus();
@@ -2567,7 +2570,7 @@ fn build_settings_window(app: &tauri::AppHandle) -> Result<tauri::WebviewWindow,
         "settings",
         tauri::WebviewUrl::App("index.html".into()),
     )
-    .title("AgentBro")
+    .title("Agent Island")
     .inner_size(SETTINGS_DEFAULT_WIDTH, SETTINGS_DEFAULT_HEIGHT)
     .min_inner_size(SETTINGS_MIN_WIDTH, SETTINGS_MIN_HEIGHT)
     .center()
@@ -2581,20 +2584,36 @@ fn build_settings_window(app: &tauri::AppHandle) -> Result<tauri::WebviewWindow,
     Ok(window)
 }
 
-/// Wire the settings webview's close-button to `destroy()` so the process
-/// actually exits when the user is done. Previously the handler called
-/// `prevent_close` + `hide`, which left the renderer + GPU XPC processes
-/// resident (~170 MB) for the lifetime of the app.
+/// Keep the settings window out of the taskbar after its native close button
+/// is pressed. The user can switch this to a full process exit in Settings.
 fn attach_settings_close_handler(app: &tauri::AppHandle, window: &tauri::WebviewWindow) {
     let app_handle = app.clone();
+    let settings_window = window.clone();
     window.on_window_event(move |event| {
-        if let tauri::WindowEvent::CloseRequested { .. } = event {
-            #[cfg(target_os = "macos")]
-            let _ = app_handle.set_activation_policy(tauri::ActivationPolicy::Accessory);
-            restore_island_surface_after_settings_close(&app_handle);
-            // Don't `prevent_close()`: let Tauri tear the webview down. The
-            // next `show_settings_window` call will rebuild it via
-            // `build_settings_window`.
+        if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+            let close_behavior = app_handle
+                .state::<AppState>()
+                .config_store
+                .get()
+                .window_close_behavior;
+
+            if close_behavior != "exit" {
+                api.prevent_close();
+                // Re-apply the Windows taskbar flag after a decorated window
+                // has been shown. This keeps the close-to-tray path out of
+                // the taskbar even when Explorer refreshes its window list.
+                let _ = settings_window.set_skip_taskbar(true);
+                if let Err(error) = settings_window.hide() {
+                    log::warn!("Failed to hide settings window to tray: {error}");
+                }
+
+                #[cfg(target_os = "macos")]
+                let _ = app_handle.set_activation_policy(tauri::ActivationPolicy::Accessory);
+                restore_island_surface_after_settings_close(&app_handle);
+                return;
+            }
+
+            app_handle.exit(0);
         }
     });
 }
@@ -4678,7 +4697,7 @@ pub fn sync_pet_window_visibility_inner(
 /// switches into pet mode rather than parking the process idle on the notch.
 fn build_pet_window(app: &tauri::AppHandle) -> Result<tauri::WebviewWindow, String> {
     tauri::WebviewWindowBuilder::new(app, "pet", tauri::WebviewUrl::App("index.html".into()))
-        .title("AgentBro Pet")
+        .title("Agent Island Pet")
         .inner_size(820.0, 360.0)
         .transparent(true)
         .decorations(false)
@@ -5572,14 +5591,14 @@ pub fn run() {
                 .targets([
                     tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stdout),
                     tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::LogDir {
-                        file_name: Some("agentbro".to_string()),
+                        file_name: Some("agent-island".to_string()),
                     }),
                 ])
                 .max_file_size(2_000_000)
                 .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepAll)
                 .level(log::LevelFilter::Info)
                 .level_for("agentbro", log::LevelFilter::Info)
-                .level_for("agentbro_lib", log::LevelFilter::Info)
+                .level_for("agent_island_lib", log::LevelFilter::Info)
                 .build(),
         )
         .plugin(tauri_plugin_shell::init())
@@ -5657,9 +5676,12 @@ pub fn run() {
             // monitor transitions.
             platform::monitor_tracker::start(app.handle().clone());
 
-            // Bootstrap: discover sessions that were already running before we launched
-            {
-                let config = config_store.get();
+            // Bootstrap discovery can scan a large projects tree. Keep it off
+            // the setup thread so the island can render immediately on launch.
+            let bootstrap_session_store = session_store.clone();
+            let bootstrap_config_store = config_store.clone();
+            tauri::async_runtime::spawn_blocking(move || {
+                let config = bootstrap_config_store.get();
                 let extra_roots: Vec<std::path::PathBuf> = config
                     .engine_instances
                     .iter()
@@ -5697,25 +5719,24 @@ pub fn run() {
                                 .unwrap_or_else(|_| ds.projects_dir.clone());
                             expected == actual
                         });
-                        let _session = session_store.get_or_create_session(
+                        let _session = bootstrap_session_store.get_or_create_session(
                             &ds.session_id,
                             "claude-code",
                             &ds.project,
                             &ds.cwd,
                             "", // terminal unknown at startup
                         );
-                        session_store.update_session(&ds.session_id, |s| {
+                        bootstrap_session_store.update_session(&ds.session_id, |s| {
                             s.started_at = ds.modified_at;
                             s.duration = chrono::Utc::now().timestamp() - ds.modified_at;
                         });
-                        // Set session title if we extracted one
                         if let Some(ref title) = ds.session_title {
-                            session_store.update_session(&ds.session_id, |s| {
+                            bootstrap_session_store.update_session(&ds.session_id, |s| {
                                 s.session_title = Some(title.clone());
                             });
                         }
                         if let Some(inst) = matched_instance {
-                            session_store.update_session(&ds.session_id, |s| {
+                            bootstrap_session_store.update_session(&ds.session_id, |s| {
                                 s.engine_label = Some(inst.label.clone());
                                 s.engine_config_root = Some(inst.config_root.clone());
                             });
@@ -5728,7 +5749,7 @@ pub fn run() {
                         );
                     }
                 }
-            }
+            });
 
             // Initialize themes: ensure built-in themes exist in user dir
             if let Ok(resource_path) = app.path().resource_dir() {
@@ -5856,42 +5877,10 @@ pub fn run() {
                 config_store.clone(),
             );
 
-            // Initialize sound engine and share with HookServer
-            let sound_engine: Option<Arc<SoundEngine>> = SoundEngine::new().map(Arc::new);
-            if let Some(ref engine) = sound_engine {
-                log::info!("Sound engine initialized");
-                let cfg = config_store.get();
-                engine.set_volume(cfg.sound_volume);
-                engine.set_enabled(cfg.sound_enabled);
-                if let Some(pack) = SoundPack::from_id(&cfg.sound_pack) {
-                    engine.set_sound_pack(pack);
-                }
-                engine.set_probe_filter(cfg.probe_session_filter);
-                engine.set_quiet_hours(
-                    cfg.quiet_hours_enabled,
-                    cfg.quiet_hours_start.clone(),
-                    cfg.quiet_hours_end.clone(),
-                );
-                for (event_id, enabled) in cfg.sound_events.iter() {
-                    if let Some(event) = SoundEvent::from_id(event_id) {
-                        engine.set_event_enabled(event, *enabled);
-                    }
-                }
-                for (event_id, rule) in cfg.sound_rules.iter() {
-                    if let Some(event) = SoundEvent::from_id(event_id) {
-                        engine.set_event_rule(event, rule.enabled, rule.sound.clone());
-                    }
-                }
-                engine.set_custom_sounds(
-                    cfg.custom_sounds
-                        .iter()
-                        .map(|sound| (sound.id.clone(), sound.path.clone()))
-                        .collect(),
-                );
-                hook_server.set_sound_engine(engine.clone());
-            } else {
-                log::warn!("Sound engine failed to initialize (no audio output)");
-            }
+            // Audio notifications are intentionally disabled. Keep the legacy
+            // state field so existing config files remain readable, but never
+            // initialize an audio device or attach an engine to the hook server.
+            let sound_engine = None;
 
             // Build macOS menu bar / system tray shortcut with menu.
             let tray_menu = menu_bar::build_tray_menu(app, &config_store.get().language)?;
@@ -5899,7 +5888,7 @@ pub fn run() {
             let tray_icon = TrayIconBuilder::with_id(menu_bar::TRAY_ID)
                 .menu(&tray_menu)
                 .show_menu_on_left_click(true)
-                .tooltip("AgentBro")
+                .tooltip("Agent Island")
                 .icon(menu_bar_icon())
                 .icon_as_template(false)
                 .on_tray_icon_event(|_tray, event| {
@@ -6029,10 +6018,6 @@ pub fn run() {
             );
             app.manage(app_state);
 
-            if let Err(error) = build_skill_pack_picker_window(app.handle()) {
-                log::warn!("Failed to prewarm skill pack picker: {error}");
-            }
-
             if let Err(err) = register_island_global_shortcuts(app.handle()) {
                 log::warn!("Failed to register island global shortcuts: {}", err);
             }
@@ -6053,7 +6038,7 @@ pub fn run() {
                 });
             }
 
-            log::info!("AgentBro started");
+            log::info!("Agent Island started");
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -6061,6 +6046,7 @@ pub fn run() {
             set_dock_visible,
             open_settings_window,
             commands::get_sessions,
+            commands::get_agent_statuses,
             commands::get_usage_rate_limits,
             commands::get_usage_snapshots,
             commands::get_codex_usage_summary,

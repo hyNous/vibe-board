@@ -1,8 +1,8 @@
 {
   "$schema": "https://raw.githubusercontent.com/nicedoctor/tauri-config-schema/v2/schema.json",
-  "productName": "AgentBro",
+  "productName": "Agent Island",
   "identifier": "com.agentbro.desktop",
-  "version": "3.1.0",
+  "version": "3.1.1",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:1423",
@@ -15,7 +15,7 @@
     "windows": [
       {
         "label": "notch",
-        "title": "AgentBro",
+        "title": "Agent Island",
         "transparent": true,
         "decorations": false,
         "shadow": false,
@@ -27,6 +27,7 @@
         "x": null,
         "y": 0,
         "visible": false,
+        "focus": false,
         "backgroundColor": "#00000000"
       }
     ],
@@ -62,7 +63,10 @@
     },
     "deep-link": {
       "desktop": {
-        "schemes": ["agentbro", "ccswitch"]
+        "schemes": [
+          "agentbro",
+          "ccswitch"
+        ]
       }
     }
   },
@@ -80,7 +84,7 @@
     "resources": {
       "../src/pets": "pets",
       "../src/themes": "themes",
-      "target/agentbro-bridge-resource/agentbro-bridge": "agentbro-bridge"
+      "target/agent-island-bridge-resource/agent-island-bridge": "agent-island-bridge"
     }
   }
 }

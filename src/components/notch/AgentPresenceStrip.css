@@ -1,0 +1,56 @@
+.agent-presence-strip {
+  display: grid;
+  gap: 4px;
+  padding: 10px 14px 8px;
+  border-bottom: 1px solid color-mix(in srgb, var(--island-border) 70%, transparent);
+  color: var(--island-text-secondary);
+  font-size: 11px;
+}
+
+.agent-presence-strip__row {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 6px;
+  line-height: 18px;
+}
+
+.agent-presence-strip__dot {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--island-text-secondary);
+  opacity: 0.55;
+}
+
+.agent-presence-strip__dot--online {
+  background: #4ade80;
+  opacity: 1;
+  box-shadow: 0 0 8px rgba(74, 222, 128, 0.55);
+}
+
+.agent-presence-strip__name {
+  flex: 0 0 84px;
+  overflow: hidden;
+  color: var(--island-text);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-presence-strip__state {
+  flex: 0 0 30px;
+  color: var(--island-text-secondary);
+}
+
+.agent-presence-strip__meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-presence-strip__meta--quota {
+  flex: 1 1 auto;
+  min-width: 0;
+}

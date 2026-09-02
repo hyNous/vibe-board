@@ -8,8 +8,8 @@ fn main() {
 
 fn ensure_bridge_resource_placeholder() {
     let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let resource_dir = manifest_dir.join("target").join("agentbro-bridge-resource");
-    let resource_path = resource_dir.join("agentbro-bridge");
+    let resource_dir = manifest_dir.join("target").join("agent-island-bridge-resource");
+    let resource_path = resource_dir.join("agent-island-bridge");
     if resource_path.exists() {
         return;
     }

@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next'
 import { invoke } from '@tauri-apps/api/core'
 import { open as openDialog, ask as askDialog } from '@tauri-apps/plugin-dialog'
 import { useConfigStore } from '../../../stores/configStore'
-import type { SoundChoice, SoundRule } from '../../../stores/configStore'
 import { useThemeStore, COLOR_THEMES } from '../../../stores/themeStore'
 import type { ThemeConfig } from '../../../types/theme'
 import { usePetStore } from '../../../stores/petStore'
@@ -18,9 +17,8 @@ import {
 } from '../../../utils/keyboardShortcuts'
 import {
   listDisplays, isTauri,
-  setSoundVolume, setSoundEnabled, setSoundPack, setProbeSessionFilter, setDisplayId, repositionNotch,
+  setDisplayId, repositionNotch,
   previewIslandLayout, clearIslandLayoutPreview,
-  setSoundQuietHours, setSoundEventRule, previewSound, importCustomSound as importCustomSoundFile, importSoundPack, setCustomSounds,
   registerGlobalShortcut, setGlobalActionShortcuts, setIslandFeatureFlags, setIslandSurfaceOptions,
   setActiveBackendTheme,
   runHookDoctor, uninstallAllHooks,
@@ -165,6 +163,12 @@ function persistSessionRefreshInterval(seconds: number) {
   getConfig()
     .then((backendConfig) => updateBackendConfig({ ...backendConfig, sessionRefreshIntervalSeconds: value }))
     .catch((err) => console.error('Failed to persist session refresh interval:', err))
+}
+
+function persistWindowCloseBehavior(value: 'tray' | 'exit') {
+  getConfig()
+    .then((backendConfig) => updateBackendConfig({ ...backendConfig, windowCloseBehavior: value }))
+    .catch((err) => console.error('Failed to persist window close behavior:', err))
 }
 
 function SurfaceModeSegmentedControl({
@@ -322,16 +326,16 @@ function hookInstallStatusLabel(t: (key: string, options?: Record<string, unknow
 function hookDoctorSuggestion(t: (key: string, options?: Record<string, unknown>) => string, check: HookDoctorCheck): string | null {
   if (check.status === 'ok' || check.status === 'info') return null
   if (check.id === 'bridge-binary') {
-    return t('settings.hookDoctorSuggestionBridge', { defaultValue: 'Restart AgentBro. If it still fails, reinstall the app.' })
+    return t('settings.hookDoctorSuggestionBridge', { defaultValue: 'Restart Agent Island. If it still fails, reinstall the app.' })
   }
   if (check.id === 'hook-server' || check.id === 'hook-server-tcp') {
-    return t('settings.hookDoctorSuggestionServer', { defaultValue: 'Keep AgentBro running and check again. New CLI sessions connect to the current Hook service.' })
+    return t('settings.hookDoctorSuggestionServer', { defaultValue: 'Keep Agent Island running and check again. New CLI sessions connect to the current Hook service.' })
   }
   if (check.id === 'installed-hooks') {
     return t('settings.hookDoctorSuggestionInstall', { defaultValue: 'Click Install All Hooks, then restart the corresponding CLI sessions.' })
   }
   if (check.id === 'automation-permission') {
-    return t('settings.hookDoctorSuggestionAutomation', { defaultValue: 'Allow AgentBro to control Terminal and System Events in macOS System Settings.' })
+    return t('settings.hookDoctorSuggestionAutomation', { defaultValue: 'Allow Agent Island to control Terminal and System Events in macOS System Settings.' })
   }
   if (check.id === 'codex-cli') {
     return t('settings.hookDoctorSuggestionCodexCli', { defaultValue: 'Install Codex CLI or expose the real codex executable. Codex Desktop / WindowsApps launchers cannot be used for hooks.' })
@@ -545,7 +549,6 @@ export function IslandSection({ activeView }: IslandSectionProps) {
       {activeView === 'display' && <DisplayTab />}
       {activeView === 'behavior' && <BehaviorTab />}
       {activeView === 'integration' && <IntegrationTab />}
-      {activeView === 'notify' && <SoundTab />}
       {activeView === 'keys' && <ShortcutsTab />}
       {activeView === 'advanced' && <AdvancedTab />}
     </SettingSection>
@@ -580,11 +583,6 @@ function OverviewTab() {
 
   const resetIslandDefaults = () => {
     config.resetIslandDefaults()
-    setSoundEnabled(true)
-    setSoundVolume(80)
-    setSoundPack('synth')
-    setProbeSessionFilter(false)
-    setSoundQuietHours(false, '22:00', '08:00')
     setDisplayId('auto')
       .then(() => repositionNotch('auto', 0))
       .catch((e) => console.error('Failed to reset island position:', e))
@@ -603,9 +601,9 @@ function OverviewTab() {
             <span className="overview-hero__stripe overview-hero__stripe--gold" />
           </div>
           <div className="overview-live-pill">
-            <img src="/agentbro-app-icon.png" className="overview-live-pill__icon" alt="AgentBro" />
+            <img src="/agent-island-app-icon.png" className="overview-live-pill__icon" alt="Agent Island" />
             <span className="overview-live-pill__copy">
-              <strong>AgentBro</strong>
+              <strong>Agent Island</strong>
               <span>让Agent更好用</span>
             </span>
           </div>
@@ -655,7 +653,7 @@ function OverviewTab() {
       </SettingGroup>
 
       <SettingGroup>
-        <SettingRow label={t('settings.islandEnabled', { defaultValue: 'Enable Island' })} description={t('settings.islandEnabledDesc', { defaultValue: 'Show AgentBro status, approvals, questions, and completions in the floating island.' })}>
+        <SettingRow label={t('settings.islandEnabled', { defaultValue: 'Enable Island' })} description={t('settings.islandEnabledDesc', { defaultValue: 'Show Agent Island status, approvals, questions, and completions in the floating island.' })}>
           <Toggle checked={config.islandEnabled} onChange={(v) => {
             config.updateConfig('islandEnabled', v)
             if (v) {
@@ -1105,6 +1103,24 @@ function DisplayTab() {
             minWidth={120}
           />
         </SettingRow>
+        <SettingRow
+          label={t('settings.windowCloseBehavior', { defaultValue: '关闭窗口时' })}
+          description={t('settings.windowCloseBehaviorDesc', { defaultValue: '点击桌面窗口右上角的叉时，选择隐藏到系统托盘或退出 Agent Island。' })}
+        >
+          <Dropdown
+            value={config.windowCloseBehavior}
+            options={[
+              { value: 'tray', label: t('settings.windowCloseToTray', { defaultValue: '最小化到托盘' }) },
+              { value: 'exit', label: t('settings.windowCloseExit', { defaultValue: '直接退出程序' }) },
+            ]}
+            onChange={(value) => {
+              const behavior = value === 'exit' ? 'exit' : 'tray'
+              config.updateConfig('windowCloseBehavior', behavior)
+              persistWindowCloseBehavior(behavior)
+            }}
+            minWidth={160}
+          />
+        </SettingRow>
         <SettingRow label={t('settings.contentFontSize')}>
           <Dropdown value={config.contentFontSize} options={fontSizeOptions}
             onChange={(v) => { config.updateConfig('contentFontSize', v); previewLayout('expanded', { contentFontSize: v }) }} minWidth={160} />
@@ -1175,7 +1191,7 @@ function ThemePicker({ themes, activeThemeName, onSelect, isZh }: ThemePickerPro
   const codexPetThemes = themes.filter((th) => th.isCodexPet)
 
   const themeLabel = (th: ThemeConfig) => {
-    if (th.name === 'ink-amber') return isZh ? 'AgentBro 经典' : 'AgentBro Classic'
+    if (th.name === 'ink-amber') return isZh ? 'Agent Island 经典' : 'Agent Island Classic'
     return th.displayName ?? th.name.charAt(0).toUpperCase() + th.name.slice(1).replace(/[-:]/g, ' ')
   }
 
@@ -1409,292 +1425,6 @@ function AgentDefaultPetButton({ agentName, registry, map, onChange }: AgentDefa
         </div>
       )}
     </div>
-  )
-}
-
-// ── Sound Tab ──
-function SoundTab() {
-  const { t } = useTranslation()
-  const config = useConfigStore()
-  const [soundImportNotice, setSoundImportNotice] = useState<{ tone: 'success' | 'error'; message: string } | null>(null)
-  const [soundPackImporting, setSoundPackImporting] = useState(false)
-  const sessionEvents = config.soundEvents.filter((e) => e.group === 'session')
-  const interactionEvents = config.soundEvents.filter((e) => e.group === 'interaction')
-  const systemEvents = config.soundEvents.filter((e) => e.group === 'system')
-  const resolveRule = (eventId: string): SoundRule => (
-    config.soundRules[eventId] ?? { enabled: config.soundEvents.find((e) => e.id === eventId)?.enabled ?? true, sound: 'default' }
-  )
-
-  const soundPackOptions = [
-    { value: 'eight-bit', label: t('settings.eightBitRetro') },
-    { value: 'subtle', label: t('settings.subtle') },
-    { value: 'synth', label: t('settings.soundPackSynth', { defaultValue: 'Synth' }) },
-    { value: 'system', label: t('settings.soundPackSystem', { defaultValue: 'System' }) },
-    { value: 'none', label: t('settings.soundPackNone', { defaultValue: 'None' }) },
-    { value: 'custom', label: t('settings.custom') },
-  ]
-  const soundChoiceOptions = [
-    { value: 'default', label: t('settings.soundDefault', { defaultValue: 'Default' }) },
-    { value: 'builtin:hey-bro', label: 'Hey Bro' },
-    { value: 'builtin:hero', label: 'Hero' },
-    { value: 'builtin:glass', label: 'Glass' },
-    { value: 'builtin:chime', label: 'Chime' },
-    { value: 'builtin:pop', label: 'Pop' },
-    { value: 'builtin:submarine', label: 'Submarine' },
-    { value: 'builtin:basso', label: 'Basso' },
-    { value: 'builtin:sosumi', label: 'Sosumi' },
-    { value: 'builtin:bottle', label: 'Bottle' },
-    { value: 'builtin:tink', label: 'Tink' },
-    { value: 'builtin:morse', label: 'Morse' },
-    { value: 'builtin:funk', label: 'Funk' },
-    { value: 'builtin:purr', label: 'Purr' },
-    { value: 'builtin:blow', label: 'Blow' },
-    { value: 'builtin:frog', label: 'Frog' },
-    { value: 'synth', label: t('settings.soundPackSynth', { defaultValue: 'Synth' }) },
-    { value: 'eight-bit', label: t('settings.eightBitRetro') },
-    { value: 'system', label: t('settings.soundPackSystem', { defaultValue: 'System' }) },
-    { value: 'off', label: t('settings.soundPackNone', { defaultValue: 'None' }) },
-    ...config.customSounds.map((sound) => ({ value: `custom:${sound.id}`, label: sound.name })),
-  ]
-  const toggleSoundEvent = (eventId: string, enabled: boolean) => {
-    const current = resolveRule(eventId)
-    const next = { ...current, enabled }
-    config.updateConfig('soundEvents', config.soundEvents.map((event) => (
-      event.id === eventId ? { ...event, enabled } : event
-    )))
-    config.updateConfig('soundRules', { ...config.soundRules, [eventId]: next })
-    setSoundEventRule(eventId, next.enabled, next.sound)
-      .catch((e) => console.error('Failed to set sound event rule:', e))
-  }
-  const updateSoundChoice = (eventId: string, sound: SoundChoice) => {
-    const current = resolveRule(eventId)
-    const next = { ...current, sound, enabled: sound === 'off' ? false : current.enabled }
-    config.updateConfig('soundEvents', config.soundEvents.map((event) => (
-      event.id === eventId ? { ...event, enabled: next.enabled } : event
-    )))
-    config.updateConfig('soundRules', { ...config.soundRules, [eventId]: next })
-    setSoundEventRule(eventId, next.enabled, next.sound)
-      .catch((e) => console.error('Failed to set sound event rule:', e))
-  }
-  const previewSoundEvent = (eventId: string) => {
-    const current = resolveRule(eventId)
-    previewSound(eventId, current.sound)
-      .catch((e) => console.error('Failed to preview sound:', e))
-  }
-  const importCustomSound = async () => {
-    let selected: string | null = null
-    if (isTauri()) {
-      const result = await openDialog({
-        multiple: false,
-        filters: [{
-          name: t('settings.audioFiles', { defaultValue: 'Audio Files' }),
-          extensions: ['mp3', 'wav', 'ogg', 'flac'],
-        }],
-      })
-      selected = Array.isArray(result) ? result[0] ?? null : result
-    } else {
-      selected = window.prompt('Audio file path')?.trim() || null
-    }
-    if (!selected) return
-    try {
-      const sound = await importCustomSoundFile(selected)
-      const next = [...config.customSounds, sound]
-      config.updateConfig('customSounds', next)
-      setCustomSounds(next).catch((e) => console.error('Failed to set custom sounds:', e))
-    } catch (e) {
-      console.error('Failed to import custom sound:', e)
-      setSoundImportNotice({ tone: 'error', message: readableError(e) })
-    }
-  }
-  const importOpenPeonSoundPack = async () => {
-    let selected: string | null = null
-    if (isTauri()) {
-      const result = await openDialog({
-        directory: true,
-        multiple: false,
-      })
-      selected = Array.isArray(result) ? result[0] ?? null : result
-    } else {
-      selected = window.prompt('Sound pack directory')?.trim() || null
-    }
-    if (!selected) return
-    setSoundPackImporting(true)
-    setSoundImportNotice(null)
-    try {
-      const result = await importSoundPack(selected)
-      const importedSounds = result.importedSounds.map(({ id, name, path, dataUrl }) => ({ id, name, path, dataUrl }))
-      const nextRules = { ...config.soundRules }
-      const nextEvents = config.soundEvents.map((event) => {
-        const applied = result.appliedRules.find((rule) => rule.eventId === event.id)
-        if (!applied) return event
-        const current = resolveRule(event.id)
-        nextRules[event.id] = { ...current, sound: `custom:${applied.soundId}` as SoundChoice }
-        return { ...event, enabled: nextRules[event.id].enabled }
-      })
-      config.updateConfig('customSounds', [...config.customSounds, ...importedSounds])
-      config.updateConfig('soundRules', nextRules)
-      config.updateConfig('soundEvents', nextEvents)
-      config.updateConfig('soundPack', 'custom')
-      setSoundImportNotice({
-        tone: 'success',
-        message: t('settings.soundPackImported', {
-          defaultValue: 'Imported {{count}} sounds from {{name}}',
-          count: result.importedSounds.length,
-          name: result.displayName,
-        }),
-      })
-    } catch (e) {
-      console.error('Failed to import sound pack:', e)
-      setSoundImportNotice({
-        tone: 'error',
-        message: t('settings.soundPackImportFailed', {
-          defaultValue: 'Sound pack import failed: {{message}}',
-          message: readableError(e),
-        }),
-      })
-    } finally {
-      setSoundPackImporting(false)
-    }
-  }
-  const deleteCustomSound = (soundId: string) => {
-    const nextSounds = config.customSounds.filter((sound) => sound.id !== soundId)
-    const customChoice = `custom:${soundId}`
-    const nextRules = Object.fromEntries(Object.entries(config.soundRules).map(([eventId, rule]) => [
-      eventId,
-      rule.sound === customChoice ? { ...rule, sound: 'default' as const } : rule,
-    ]))
-    config.updateConfig('customSounds', nextSounds)
-    config.updateConfig('soundRules', nextRules)
-    setCustomSounds(nextSounds).catch((e) => console.error('Failed to set custom sounds:', e))
-    Object.entries(nextRules).forEach(([eventId, rule]) => {
-      setSoundEventRule(eventId, rule.enabled, rule.sound).catch(() => {})
-    })
-  }
-
-  const renderSoundEvent = (event: typeof config.soundEvents[number]) => {
-    const rule = resolveRule(event.id)
-    const eventLabel = t(`settings.soundEvents.${event.id}`, { defaultValue: event.label })
-    const previewLabel = t('settings.previewSoundFor', { defaultValue: `${t('settings.previewSound')} ${eventLabel}` })
-    return (
-      <div key={event.id} className="sound-event-row">
-        <span className="sound-event-row__label">{eventLabel}</span>
-        <Dropdown value={rule.sound} options={soundChoiceOptions}
-          onChange={(v) => updateSoundChoice(event.id, v as SoundChoice)} minWidth={130} />
-        <button
-          aria-label={previewLabel}
-          className="sound-event-row__play"
-          onClick={() => previewSoundEvent(event.id)}
-          title={previewLabel}
-          type="button"
-        >
-          ▶
-        </button>
-        <Toggle checked={rule.enabled} onChange={() => toggleSoundEvent(event.id, !rule.enabled)} disabled={!config.soundEnabled} />
-      </div>
-    )
-  }
-
-  return (
-    <>
-      <SettingGroup>
-        <SettingRow label={t('settings.enableSounds')} description={t('settings.enableSoundsDesc')}>
-          <Toggle checked={config.soundEnabled} onChange={(v) => { config.updateConfig('soundEnabled', v); setSoundEnabled(v) }} />
-        </SettingRow>
-        <SettingRow label={t('settings.volume')}>
-          <Slider value={config.volume} min={0} max={100}
-            onCommit={(v) => { config.updateConfig('volume', v); setSoundVolume(v) }} unit="%" />
-        </SettingRow>
-        <SettingRow label={t('settings.soundPack')} description={t('settings.soundPackDesc')}>
-          <Dropdown value={config.soundPack} options={soundPackOptions}
-            onChange={(v) => {
-              config.updateConfig('soundPack', v as 'eight-bit' | 'subtle' | 'synth' | 'system' | 'none' | 'custom')
-              setSoundPack(v)
-            }} minWidth={130} />
-        </SettingRow>
-      </SettingGroup>
-
-      <SettingGroup label={t('settings.sessionEvents')}>
-        {sessionEvents.map(renderSoundEvent)}
-      </SettingGroup>
-
-      <SettingGroup label={t('settings.interactionEvents')}>
-        {interactionEvents.map(renderSoundEvent)}
-      </SettingGroup>
-
-      <SettingGroup label={t('settings.systemEvents')}>
-        {systemEvents.map(renderSoundEvent)}
-      </SettingGroup>
-
-      <SettingGroup label={t('settings.customSounds', { defaultValue: 'Custom Sounds' })}>
-        {config.customSounds.map((sound) => (
-          <div key={sound.id} className="sound-event-row sound-event-row--custom">
-            <span className="sound-event-row__label" title={sound.path}>{sound.name}</span>
-            <button className="settings-mini-button" type="button" onClick={() => deleteCustomSound(sound.id)}>
-              {t('settings.delete', { defaultValue: 'Delete' })}
-            </button>
-          </div>
-        ))}
-        {soundImportNotice && (
-          <div className={`sound-import-status sound-import-status--${soundImportNotice.tone}`} role={soundImportNotice.tone === 'error' ? 'alert' : 'status'}>
-            {soundImportNotice.message}
-          </div>
-        )}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, paddingTop: 8 }}>
-          <GlassButton variant="secondary" onClick={importOpenPeonSoundPack} disabled={soundPackImporting}>
-            {soundPackImporting
-              ? t('settings.importing', { defaultValue: 'Importing...' })
-              : t('settings.importSoundPack', { defaultValue: 'Import sound pack' })}
-          </GlassButton>
-          <GlassButton variant="secondary" onClick={importCustomSound}>
-            {t('settings.add', { defaultValue: 'Add' })}
-          </GlassButton>
-        </div>
-      </SettingGroup>
-
-      <SettingGroup label={t('settings.quietHours', { defaultValue: 'Quiet Hours' })}>
-        <SettingRow label={t('settings.quietHoursEnabled', { defaultValue: 'Enable Quiet Hours' })}
-          description={t('settings.quietHoursEnabledDesc', { defaultValue: 'Suppress sounds during specified hours' })}>
-          <Toggle checked={config.quietHours.enabled}
-            onChange={(v) => {
-              const next = { ...config.quietHours, enabled: v }
-              config.updateConfig('quietHours', next)
-              setSoundQuietHours(next.enabled, next.start, next.end)
-                .catch((e) => console.error('Failed to set quiet hours:', e))
-            }} />
-        </SettingRow>
-        {config.quietHours.enabled && (
-          <>
-            <SettingRow label={t('settings.quietHoursStart', { defaultValue: 'Start Time' })} description={config.quietHours.start}>
-              <input type="time" className="glass-input" value={config.quietHours.start}
-                onChange={(e) => {
-                  const next = { ...config.quietHours, start: e.target.value }
-                  config.updateConfig('quietHours', next)
-                  setSoundQuietHours(next.enabled, next.start, next.end)
-                    .catch((err) => console.error('Failed to set quiet hours:', err))
-                }} style={{ minWidth: 120 }} />
-            </SettingRow>
-            <SettingRow label={t('settings.quietHoursEnd', { defaultValue: 'End Time' })} description={config.quietHours.end}>
-              <input type="time" className="glass-input" value={config.quietHours.end}
-                onChange={(e) => {
-                  const next = { ...config.quietHours, end: e.target.value }
-                  config.updateConfig('quietHours', next)
-                  setSoundQuietHours(next.enabled, next.start, next.end)
-                    .catch((err) => console.error('Failed to set quiet hours:', err))
-                }} style={{ minWidth: 120 }} />
-            </SettingRow>
-          </>
-        )}
-      </SettingGroup>
-
-      <SettingGroup>
-        <SettingRow label={t('settings.probeFilter')} description={t('settings.probeFilterDesc')}>
-          <Toggle checked={config.probeSessionFilter} onChange={(v) => {
-            config.updateConfig('probeSessionFilter', v)
-            setProbeSessionFilter(v)
-          }} />
-        </SettingRow>
-      </SettingGroup>
-    </>
   )
 }
 
@@ -2079,7 +1809,7 @@ function IntegrationTab() {
     }
     const confirmed = await askDialog(
       t('settings.uninstallAllConfirmMessage', {
-        defaultValue: '将清理 AgentBro 安装到所有 CLI 工具的 Hook 配置（含自定义安装），用于排错重装。继续？',
+        defaultValue: '将清理 Agent Island 安装到所有 CLI 工具的 Hook 配置（含自定义安装），用于排错重装。继续？',
       }),
       {
         title: t('settings.uninstallAllConfirmTitle', { defaultValue: '一键卸载全部 Hook' }),
@@ -2093,7 +1823,7 @@ function IntegrationTab() {
       await fetchStatus()
       setNotice(errors.length > 0
         ? t('settings.hookUninstallAllDoneWithErrors', { defaultValue: '部分 Hook 卸载失败：{{errors}}', errors: errors.join('；') })
-        : t('settings.hookUninstallAllDone', { defaultValue: '已清理全部 AgentBro Hook，可重新安装。' }))
+        : t('settings.hookUninstallAllDone', { defaultValue: '已清理全部 Agent Island Hook，可重新安装。' }))
     } catch (e) { setError(readableError(e)) }
     setBulkUninstalling(false)
   }
@@ -2276,7 +2006,7 @@ function IntegrationTab() {
         label={t('settings.hookDoctor', { defaultValue: 'Hook Doctor' })}
       >
         <div className="hook-doctor-intro">
-          {t('settings.hookDoctorInlineDesc', { defaultValue: 'Checks the AgentBro bridge, Hook service, installed Hooks, and platform-specific terminal integration.' })}
+          {t('settings.hookDoctorInlineDesc', { defaultValue: 'Checks the Agent Island bridge, Hook service, installed Hooks, and platform-specific terminal integration.' })}
         </div>
         {hookDoctorReport && (
           <div className="hook-doctor-report">

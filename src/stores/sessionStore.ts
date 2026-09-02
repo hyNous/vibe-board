@@ -1,7 +1,7 @@
-/* AgentBro — Session State Management (Zustand) */
+/* Agent Island — Session State Management (Zustand) */
 import { create, type StoreApi, type UseBoundStore } from 'zustand'
 import { useConfigStore } from './configStore'
-import type { AgentEvent, AgentRunState, BaseLayer, ChatHistoryMeta, ChatMessage, OverlayItem, PanelState, RateLimitInfo, SessionState } from '../types/agent'
+import type { AgentEvent, AgentRunState, AgentStatusSnapshot, BaseLayer, ChatHistoryMeta, ChatMessage, OverlayItem, PanelState, RateLimitInfo, SessionState } from '../types/agent'
 import { OVERLAY_PRIORITY } from '../types/agent'
 import { isQuietHours } from '../utils/quietHours'
 import { isSessionPastDisplayTimeout, timestampToMs } from '../utils/sessionDisplay'
@@ -32,6 +32,7 @@ interface SessionStore {
   panelState: PanelState
   rateLimits?: RateLimitInfo
   usageSnapshots: Record<string, RateLimitInfo>
+  agentStatuses: Record<string, AgentStatusSnapshot>
   hookNotification: 'restored' | 'rate_limited' | null
   // Layered state machine
   baseLayer: BaseLayer
@@ -59,6 +60,7 @@ interface SessionStore {
   clearPlan: (sessionId: string) => void
   setRateLimits: (limits: RateLimitInfo) => void
   setUsageSnapshots: (limits: RateLimitInfo[]) => void
+  setAgentStatuses: (statuses: AgentStatusSnapshot[]) => void
   setHookNotification: (notification: 'restored' | 'rate_limited' | null) => void
   applyIdleTimeout: (now?: number) => void
   muteSession: (id: string, durationMs?: number) => void
@@ -374,6 +376,7 @@ export const selectPanelState = (s: SessionStore) => s.panelState
 export const selectActiveSessionId = (s: SessionStore) => s.activeSessionId
 export const selectRateLimits = (s: SessionStore) => s.rateLimits
 export const selectUsageSnapshots = (s: SessionStore) => s.usageSnapshots
+export const selectAgentStatuses = (s: SessionStore) => s.agentStatuses
 export const selectBaseLayer = (s: SessionStore) => s.baseLayer
 export const selectActiveOverlay = (s: SessionStore) => s.activeOverlay
 export const selectOverlayQueue = (s: SessionStore) => s.overlayQueue
@@ -385,6 +388,7 @@ export const useSessionStore: UseBoundStore<StoreApi<SessionStore>> = create<Ses
   panelState: 'collapsed',
   rateLimits: undefined,
   usageSnapshots: {},
+  agentStatuses: {},
   hookNotification: null,
   baseLayer: 'compact',
   overlayQueue: [],
@@ -1155,6 +1159,12 @@ export const useSessionStore: UseBoundStore<StoreApi<SessionStore>> = create<Ses
         usageSnapshots,
         rateLimits: limits[0] ?? state.rateLimits,
       }
+    })
+  },
+
+  setAgentStatuses: (statuses) => {
+    set({
+      agentStatuses: Object.fromEntries(statuses.map((status) => [status.agent, status])),
     })
   },
 

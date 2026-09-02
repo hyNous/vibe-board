@@ -15,8 +15,8 @@ export interface ColorThemeInfo {
 }
 
 export const COLOR_THEMES: ColorThemeInfo[] = [
-  { id: 'midnight', label: 'Midnight', labelZh: '午夜', tag: 'AgentBro', isDark: true, bg: '#000000', card: '#0a0a0a', accent: '#7b78ff' },
-  { id: 'ink-amber', label: 'AgentBro Classic', labelZh: 'AgentBro 经典', tag: 'Classic', isDark: false, bg: '#f4eddf', card: '#fffaf2', accent: '#9a5f12' },
+  { id: 'midnight', label: 'Midnight', labelZh: '午夜', tag: 'Agent Island', isDark: true, bg: '#000000', card: '#0a0a0a', accent: '#7b78ff' },
+  { id: 'ink-amber', label: 'Agent Island Classic', labelZh: 'Agent Island 经典', tag: 'Classic', isDark: false, bg: '#f4eddf', card: '#fffaf2', accent: '#9a5f12' },
   { id: 'frosted-glass', label: 'Liquid Glass', labelZh: '液态玻璃', tag: 'Glass', isDark: false, bg: '#eef2f8', card: '#fbfcff', accent: '#3f46ff' },
   { id: 'apple', label: 'Apple', labelZh: '苹果', tag: 'Clean', isDark: false, bg: '#f5f5f7', card: '#ffffff', accent: '#007aff' },
   { id: 'smoke', label: 'Smoke', labelZh: '烟灰', tag: 'Neutral', isDark: false, bg: '#e8e8ec', card: '#f4f4f6', accent: '#64748b' },

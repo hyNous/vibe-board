@@ -61,16 +61,16 @@ export function OverlayCard({ session, children, onDismiss, onShowSessions, sess
             }}
           >
             <span className="overlay-card__brand-logo-stack" aria-hidden="true">
-              <img className="overlay-card__brand-logo overlay-card__brand-logo--light" src="/agentbro-logo.png" alt="" />
-              <img className="overlay-card__brand-logo overlay-card__brand-logo--dark" src="/agentbro-logo-dark.png" alt="" />
+              <img className="overlay-card__brand-logo overlay-card__brand-logo--light" src="/agent-island-logo.png" alt="" />
+              <img className="overlay-card__brand-logo overlay-card__brand-logo--dark" src="/agent-island-logo-dark.png" alt="" />
             </span>
             <span>{t('notch.slogan', { defaultValue: '让 Agent 更好用' })}</span>
           </button>
         ) : (
           <div className="overlay-card__show-sessions overlay-card__show-sessions--static">
             <span className="overlay-card__brand-logo-stack" aria-hidden="true">
-              <img className="overlay-card__brand-logo overlay-card__brand-logo--light" src="/agentbro-logo.png" alt="" />
-              <img className="overlay-card__brand-logo overlay-card__brand-logo--dark" src="/agentbro-logo-dark.png" alt="" />
+              <img className="overlay-card__brand-logo overlay-card__brand-logo--light" src="/agent-island-logo.png" alt="" />
+              <img className="overlay-card__brand-logo overlay-card__brand-logo--dark" src="/agent-island-logo-dark.png" alt="" />
             </span>
             <span>{t('notch.slogan', { defaultValue: '让 Agent 更好用' })}</span>
           </div>

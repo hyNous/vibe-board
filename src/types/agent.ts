@@ -1,4 +1,4 @@
-/* AgentBro — Shared TypeScript Types */
+/* Agent Island — Shared TypeScript Types */
 
 export type AgentType =
   | 'claude-code' | 'cline' | 'codex' | 'gemini-cli'
@@ -151,6 +151,17 @@ export interface RateLimitInfo {
   source?: string
   updatedAt?: number
   windows?: UsageRateWindow[]
+}
+
+export interface AgentStatusSnapshot {
+  agent: string
+  label: string
+  online: boolean
+  lastSeenAt: number
+  lastCompletedAt?: number | null
+  tokens: TokenUsage
+  rateLimits?: RateLimitInfo | null
+  detail?: string | null
 }
 
 export interface ContextWindowInfo {

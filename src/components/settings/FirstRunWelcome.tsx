@@ -37,8 +37,8 @@ export function FirstRunWelcome() {
         aria-labelledby="first-run-title"
       >
         <div className="first-run-dialog__brand">
-          <img src="/agentbro-app-icon.png" alt="" />
-          <span>AgentBro</span>
+          <img src="/agent-island-app-icon.png" alt="" />
+          <span>Agent Island</span>
         </div>
         <div className="first-run-dialog__header">
           <div className="first-run-dialog__eyebrow">{t('settings.welcomeEyebrow')}</div>

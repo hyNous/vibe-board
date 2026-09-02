@@ -1,8 +1,8 @@
 use std::env;
 use std::sync::Arc;
 
-use agentbro_lib::control_tower::agentctl::{self, DispatchRequest};
-use agentbro_lib::control_tower::ControlTowerDatabase;
+use agent_island_lib::control_tower::agentctl::{self, DispatchRequest};
+use agent_island_lib::control_tower::ControlTowerDatabase;
 
 const USAGE: &str = r#"Usage:
   agentctl dispatch --agent <claude|opencode|antigravity> --task <text>

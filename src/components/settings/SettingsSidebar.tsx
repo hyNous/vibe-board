@@ -214,7 +214,7 @@ export function SettingsSidebar({
         onClick={() => onSelect('general')}
       >
         <span className="settings-sidebar__brand-mark" aria-hidden="true">
-          <img className="settings-sidebar__collapse-logo" src="/agentbro-logo.png" alt="" />
+          <img className="settings-sidebar__collapse-logo" src="/agent-island-logo.png" alt="" />
         </span>
         <span className="settings-sidebar__brand-copy">
           <span className="settings-sidebar__brand-title">{brandTitle}</span>
@@ -241,7 +241,6 @@ export function SettingsSidebar({
       { id: 'market', label: t('settings.island.tabs.market', { defaultValue: 'Pet Market' }), icon: '🛒', iconBg: '#34C759' },
       { id: 'behavior', label: t('settings.island.tabs.behavior', { defaultValue: 'Behavior' }), icon: '⚡', iconBg: '#FF9500' },
       { id: 'integration', label: t('settings.island.tabs.integration', { defaultValue: 'Integration' }), icon: '⚙', iconBg: '#34C759' },
-      { id: 'notify', label: t('settings.island.tabs.notify', { defaultValue: 'Notifications' }), icon: '🔔', iconBg: '#FF3B30' },
       { id: 'keys', label: t('settings.island.tabs.keys', { defaultValue: 'Shortcuts' }), icon: '⌨', iconBg: '#8E8E93' },
       { id: 'advanced', label: t('settings.island.tabs.advanced', { defaultValue: 'Advanced' }), icon: '⚒', iconBg: '#636366' },
     ]

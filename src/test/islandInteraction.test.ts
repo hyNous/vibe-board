@@ -200,7 +200,7 @@ describe('getFollowFocusVisibleSessions', () => {
     const sessions = [
       session({ id: 'focused', pid: 100, terminal: 'iTerm2' }),
       session({ id: 'unfocused', pid: 200, terminal: 'Terminal' }),
-      session({ id: 'internal', pid: undefined, terminal: 'AgentBro' }),
+      session({ id: 'internal', pid: undefined, terminal: 'Agent Island' }),
       session({ id: 'unknown-terminal', pid: 300, terminal: '' }),
     ]
 

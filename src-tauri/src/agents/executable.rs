@@ -97,13 +97,30 @@ fn find_binary_exact(binary: &str) -> Option<PathBuf> {
     if path.is_file() {
         return Some(path.to_path_buf());
     }
-    if let Some(path) = which(binary) {
-        return Some(path);
+    #[cfg(target_os = "windows")]
+    {
+        // Tauri inherits the environment that launched it, which may not
+        // include a CLI installed after the app was started. Ask Windows for
+        // the current PATH resolution first, then fall back to our augmented
+        // candidate directories.
+        if let Some(path) = which_all(binary).into_iter().next() {
+            return Some(path);
+        }
+        return candidate_dirs()
+            .into_iter()
+            .map(|dir| dir.join(binary))
+            .find(|path| path.is_file());
     }
-    candidate_dirs()
-        .into_iter()
-        .map(|dir| dir.join(binary))
-        .find(|path| path.is_file())
+    #[cfg(not(target_os = "windows"))]
+    {
+        if let Some(path) = which(binary) {
+            return Some(path);
+        }
+        candidate_dirs()
+            .into_iter()
+            .map(|dir| dir.join(binary))
+            .find(|path| path.is_file())
+    }
 }
 
 fn binary_candidates(binary: &str) -> Vec<String> {
@@ -236,6 +253,7 @@ fn is_windows_app_execution_path(path: &Path) -> bool {
     normalized.contains("\\microsoft\\windowsapps\\") || normalized.contains("\\windowsapps\\")
 }
 
+#[cfg(not(target_os = "windows"))]
 fn which(binary: &str) -> Option<PathBuf> {
     which_all(binary).into_iter().next()
 }
@@ -335,6 +353,7 @@ fn shell_var(var: &str, interactive: bool) -> Option<String> {
     }
 }
 
+#[cfg(not(target_os = "windows"))]
 fn login_shell_path() -> Option<Vec<PathBuf>> {
     let shell = user_shell();
     let cmd = if is_fish(&shell) {
@@ -365,6 +384,7 @@ fn candidate_dirs() -> Vec<PathBuf> {
         dirs.extend(std::env::split_paths(&path));
     }
 
+    #[cfg(not(target_os = "windows"))]
     if let Some(shell_paths) = login_shell_path() {
         dirs.extend(shell_paths);
     }

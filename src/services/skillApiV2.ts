@@ -1353,11 +1353,11 @@ export const skillApiV2 = {
   getPluginDetail: (agentId: string, pluginId: string) =>
     isTauriRuntime()
       ? invoke<PluginDetail>('get_plugin_detail_v2', { agentId, pluginId })
-      : Promise.reject(new Error('Plugin details are only available in the AgentBro app.')),
+      : Promise.reject(new Error('Plugin details are only available in the Agent Island app.')),
   readPluginFile: (agentId: string, pluginId: string, relativePath: string) =>
     isTauriRuntime()
       ? invoke<PluginFileContent>('read_plugin_file_v2', { agentId, pluginId, relativePath })
-      : Promise.reject(new Error('Plugin files are only available in the AgentBro app.')),
+      : Promise.reject(new Error('Plugin files are only available in the Agent Island app.')),
   setPluginEnabled: (agentId: string, pluginId: string, revision: string, enabled: boolean) =>
     isTauriRuntime()
       ? invoke<PluginInventory>('set_plugin_enabled_v2', { agentId, pluginId, revision, enabled })
@@ -1397,7 +1397,7 @@ export const skillApiV2 = {
       : Promise.resolve({
           success: false,
           category: 'unavailable',
-          message: 'Connection testing requires the AgentBro desktop app',
+          message: 'Connection testing requires the Agent Island desktop app',
           latencyMs: 0,
           protocolVersion: null,
           serverName: null,

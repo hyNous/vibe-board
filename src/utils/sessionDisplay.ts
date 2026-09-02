@@ -198,6 +198,38 @@ export function getSessionExpiryAnchor(session: SessionState): number {
     ?? Date.now()
 }
 
+/**
+ * Duration of the current trace/task shown across Agent Island task UI.
+ *
+ * Shows the elapsed time of the current trace since its latest prompt/task start,
+ * never the lifetime of a long-lived session or Codex thread.
+ */
+export function getSessionTaskDurationSeconds(session: SessionState, now = Date.now()): number {
+  const startedAt = timestampToMs(session.startedAt) ?? now
+  const lastUserMessageAt = timestampToMs(session.lastUserMessageAt)
+  const lastActivityAt = timestampToMs(session.lastActivityAt)
+  const lastMainAgentAt = timestampToMs(session.lastMainAgentAt)
+  const isActive = !isPassiveSession(session)
+  const start = lastUserMessageAt
+    ?? (isActive ? lastActivityAt : undefined)
+    // Codex app-server snapshots use startedAt for the latest turn start.
+    ?? (session.codexAppServerThreadId ? startedAt : undefined)
+    ?? lastMainAgentAt
+    // An active session without a trace timestamp has only just become
+    // observable; never show its multi-day session age as a fake trace time.
+    ?? (isActive ? now : startedAt)
+    ?? now
+  const end = isActive
+    ? now
+    : timestampToMs(session.taskCompletedAt)
+      ?? timestampToMs(session.idleSince)
+      ?? lastActivityAt
+      ?? lastMainAgentAt
+      ?? now
+
+  return Math.max(0, (end - start) / 1000)
+}
+
 export function isSessionPastDisplayTimeout(session: SessionState, timeoutMinutes: number, now = Date.now()): boolean {
   if (timeoutMinutes <= 0 || !isPassiveSession(session)) return false
   return now - getSessionExpiryAnchor(session) > timeoutMinutes * 60 * 1000

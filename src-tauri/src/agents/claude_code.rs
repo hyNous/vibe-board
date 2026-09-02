@@ -948,7 +948,10 @@ impl ClaudeCodeAdapter {
                                 hooks_arr.iter().any(|h| {
                                     h.get("command")
                                         .and_then(|c| c.as_str())
-                                        .map(|c| c.contains("agentbro-bridge"))
+                                        .map(|c| {
+                                            c.contains("agentbro-bridge")
+                                                || c.contains("agent-island-bridge")
+                                        })
                                         .unwrap_or(false)
                                 })
                             })

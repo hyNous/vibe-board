@@ -97,11 +97,18 @@ pub struct AppConfig {
     pub usage_query_enabled: bool,
     #[serde(default = "default_codex_app_server_sync_enabled")]
     pub codex_app_server_sync_enabled: bool,
+    /// One-time migration marker for the Windows Codex app-server default.
+    #[serde(default)]
+    pub codex_app_server_sync_configured: bool,
     #[serde(default = "default_codex_app_server_sync_interval_seconds")]
     pub codex_app_server_sync_interval_seconds: u32,
     /// Frontend fallback poll interval for session state, in seconds.
     #[serde(default = "default_session_refresh_interval_seconds")]
     pub session_refresh_interval_seconds: u32,
+    /// Behavior for the settings window's native close button: "tray" hides
+    /// the window while keeping AgentBro alive; "exit" quits the app.
+    #[serde(default = "default_window_close_behavior")]
+    pub window_close_behavior: String,
     pub theme: String,
     #[serde(default = "default_language")]
     pub language: String,
@@ -312,7 +319,7 @@ const DEFAULT_CODEX_APP_SERVER_SYNC_INTERVAL_SECONDS: u32 = 30;
 const LEGACY_CHIME_SOUND_CHOICE: &str = concat!("builtin:", "p", "i", "n", "g");
 
 fn default_codex_app_server_sync_enabled() -> bool {
-    !cfg!(target_os = "windows")
+    true
 }
 
 fn default_codex_app_server_sync_interval_seconds() -> u32 {
@@ -321,6 +328,10 @@ fn default_codex_app_server_sync_interval_seconds() -> u32 {
 
 fn default_session_refresh_interval_seconds() -> u32 {
     3
+}
+
+fn default_window_close_behavior() -> String {
+    "tray".to_string()
 }
 
 impl Default for AppConfig {
@@ -335,8 +346,10 @@ impl Default for AppConfig {
             show_token_usage: true,
             usage_query_enabled: true,
             codex_app_server_sync_enabled: default_codex_app_server_sync_enabled(),
+            codex_app_server_sync_configured: false,
             codex_app_server_sync_interval_seconds: DEFAULT_CODEX_APP_SERVER_SYNC_INTERVAL_SECONDS,
             session_refresh_interval_seconds: default_session_refresh_interval_seconds(),
+            window_close_behavior: default_window_close_behavior(),
             theme: "midnight".to_string(),
             language: default_language(),
             display_id: "primary".to_string(),
@@ -496,6 +509,13 @@ impl ConfigStore {
     fn load_from_disk(path: &PathBuf) -> Option<AppConfig> {
         let content = std::fs::read_to_string(path).ok()?;
         let mut config: AppConfig = serde_json::from_str(&content).ok()?;
+        // Older Windows builds defaulted this feature off and had no setting
+        // to turn it on. Treat that legacy value as an unconfigured default;
+        // an explicit value written by the current UI is preserved.
+        if !config.codex_app_server_sync_configured {
+            config.codex_app_server_sync_enabled = true;
+            config.codex_app_server_sync_configured = true;
+        }
         config.migrate_permission_shortcut_defaults();
         config.migrate_boot_sound_default();
         config.migrate_legacy_sound_choices();
@@ -583,7 +603,8 @@ impl Default for ConfigStore {
 #[cfg(test)]
 mod tests {
     use super::{
-        default_codex_app_server_sync_enabled, default_session_refresh_interval_seconds, AppConfig,
+        default_codex_app_server_sync_enabled, default_session_refresh_interval_seconds,
+        default_window_close_behavior, AppConfig,
     };
 
     #[test]
@@ -595,6 +616,7 @@ mod tests {
         assert_eq!(config.sound_volume, 0.7);
         assert_eq!(config.volume, 70);
         assert_eq!(config.session_refresh_interval_seconds, 3);
+        assert_eq!(config.window_close_behavior, "tray");
         assert!(!config.shortcut_approve_enabled);
         assert!(!config.shortcut_deny_enabled);
         assert!(config.permission_shortcut_defaults_migrated);
@@ -691,6 +713,19 @@ mod tests {
             config.session_refresh_interval_seconds,
             default_session_refresh_interval_seconds()
         );
+    }
+
+    #[test]
+    fn window_close_behavior_defaults_when_field_is_missing() {
+        let mut value = serde_json::to_value(AppConfig::default()).expect("serialize config");
+        value
+            .as_object_mut()
+            .unwrap()
+            .remove("windowCloseBehavior");
+
+        let config: AppConfig = serde_json::from_value(value).expect("deserialize legacy config");
+
+        assert_eq!(config.window_close_behavior, default_window_close_behavior());
     }
 
     #[test]

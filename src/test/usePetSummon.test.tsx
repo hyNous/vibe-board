@@ -3,12 +3,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { usePetSummon } from '../components/notch/usePetSummon'
 import type { OverlayItem, SessionState } from '../types/agent'
 
-const playSound = vi.hoisted(() => vi.fn(() => Promise.resolve()))
-vi.mock('../services/tauriApi', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../services/tauriApi')>()
-  return { ...actual, playSound }
-})
-
 function makeSession(overrides: Partial<SessionState> = {}): SessionState {
   return {
     id: 's1',
@@ -33,7 +27,6 @@ function makeOverlay(type: OverlayItem['type'], id = 'o1'): OverlayItem {
 describe('usePetSummon', () => {
   beforeEach(() => {
     vi.useFakeTimers()
-    playSound.mockClear()
   })
 
   afterEach(() => {
@@ -58,7 +51,6 @@ describe('usePetSummon', () => {
     expect(result.current.summonKind).toBe('permission')
     expect(result.current.summonEmote).toBe('❓')
     expect(result.current.summonAnimationOverride).toBe('jumping')
-    expect(playSound).toHaveBeenCalledWith('permission-request')
   })
 
   it('clears emote after 500ms and animation after 700ms', async () => {
@@ -87,14 +79,12 @@ describe('usePetSummon', () => {
       { initialProps: { overlay } },
     )
     const initialNonce = result.current.summonNonce
-    expect(playSound).toHaveBeenCalledOnce()
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(800)
     })
     rerender({ overlay })
     expect(result.current.summonNonce).toBe(initialNonce)
-    expect(playSound).toHaveBeenCalledOnce()
   })
 
   it('triggers a fresh summon when overlay id changes', async () => {
@@ -112,7 +102,6 @@ describe('usePetSummon', () => {
     rerender({ overlay: second })
 
     expect(result.current.summonNonce).toBeGreaterThan(firstNonce)
-    expect(playSound).toHaveBeenCalledTimes(2)
   })
 
   it('triggers error summon when session phase is error', () => {
@@ -122,6 +111,5 @@ describe('usePetSummon', () => {
     )
     expect(result.current.summonKind).toBe('error')
     expect(result.current.summonEmote).toBe('💥')
-    expect(playSound).toHaveBeenCalledWith('session-error')
   })
 })

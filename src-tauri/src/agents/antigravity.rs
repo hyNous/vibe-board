@@ -1,5 +1,5 @@
 use super::profiles;
-use super::{AdapterStatus, AgentAdapter, AgentEvent};
+use super::{rate_limit_event_from_raw, AdapterStatus, AgentAdapter, AgentEvent};
 use serde_json::Value;
 use std::path::PathBuf;
 
@@ -90,6 +90,9 @@ impl AgentAdapter for AntiGravityAdapter {
             .unwrap_or_else(|| serde_json::json!({}));
 
         match event {
+            "RateLimitsUpdate" | "StatusLineUpdate" => {
+                rate_limit_event_from_raw(raw, session_id)
+            }
             "PreToolUse" => Ok(AgentEvent::PermissionRequest {
                 session_id,
                 tool_name,

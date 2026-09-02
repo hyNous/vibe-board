@@ -196,6 +196,157 @@ pub enum AgentEvent {
     },
 }
 
+/// Parse the normalized status-line payload emitted by the native bridge.
+/// OpenCode and Antigravity use the same bridge shape as Claude, so keeping
+/// this small parser here makes their quota/token events behave consistently.
+pub fn rate_limit_event_from_raw(
+    raw: &serde_json::Value,
+    session_id: String,
+) -> Result<AgentEvent, Box<dyn std::error::Error>> {
+    let rate_limits = raw
+        .get("rateLimits")
+        .or_else(|| raw.get("rate_limits"))
+        .ok_or("missing rate limits")?;
+    let five_hour = rate_limits
+        .get("fiveHour")
+        .or_else(|| rate_limits.get("five_hour"))
+        .ok_or("missing five-hour rate limit")?;
+    let seven_day = rate_limits
+        .get("sevenDay")
+        .or_else(|| rate_limits.get("seven_day"))
+        .ok_or("missing seven-day rate limit")?;
+
+    let context_window = raw
+        .get("contextWindow")
+        .or_else(|| raw.get("context_window"));
+    Ok(AgentEvent::RateLimitUpdate {
+        session_id,
+        five_hour_usage: rate_limit_percentage(five_hour),
+        five_hour_remaining: rate_limit_remaining(five_hour),
+        seven_day_usage: rate_limit_percentage(seven_day),
+        seven_day_remaining: rate_limit_remaining(seven_day),
+        status_line_text: raw
+            .get("statusLineText")
+            .or_else(|| raw.get("status_line_text"))
+            .and_then(|value| value.as_str())
+            .map(str::to_string),
+        total_input_tokens: context_window.and_then(|value| {
+            value
+                .get("totalInputTokens")
+                .or_else(|| value.get("total_input_tokens"))
+                .and_then(|value| value.as_u64())
+        }),
+        total_output_tokens: context_window.and_then(|value| {
+            value
+                .get("totalOutputTokens")
+                .or_else(|| value.get("total_output_tokens"))
+                .and_then(|value| value.as_u64())
+        }),
+        context_window_size: context_window.and_then(|value| {
+            value
+                .get("contextWindowSize")
+                .or_else(|| value.get("context_window_size"))
+                .and_then(|value| value.as_u64())
+        }),
+        context_used_percentage: context_window.and_then(|value| {
+            value
+                .get("usedPercentage")
+                .or_else(|| value.get("used_percentage"))
+                .and_then(|value| value.as_f64())
+        }),
+        last_main_agent_at: raw
+            .get("lastMainAgentAt")
+            .or_else(|| raw.get("last_main_agent_at"))
+            .and_then(|value| value.as_i64()),
+        cache_ttl_ms: raw
+            .get("cacheTTLMs")
+            .or_else(|| raw.get("cache_ttl_ms"))
+            .and_then(|value| value.as_i64()),
+    })
+}
+
+fn rate_limit_percentage(value: &serde_json::Value) -> f64 {
+    value
+        .get("usedPercentage")
+        .or_else(|| value.get("used_percentage"))
+        .or_else(|| value.get("usage"))
+        .and_then(|value| value.as_f64())
+        .unwrap_or(0.0)
+}
+
+fn rate_limit_remaining(value: &serde_json::Value) -> String {
+    if let Some(label) = value
+        .get("remaining")
+        .or_else(|| value.get("remainingLabel"))
+        .or_else(|| value.get("remaining_label"))
+        .and_then(|value| value.as_str())
+    {
+        return label.to_string();
+    }
+
+    let Some(reset) = value
+        .get("resetsAt")
+        .or_else(|| value.get("resets_at"))
+        .and_then(|value| value.as_f64())
+    else {
+        return "--".to_string();
+    };
+    let reset_ms = if reset < 10_000_000_000.0 {
+        reset * 1000.0
+    } else {
+        reset
+    };
+    let remaining_secs = ((reset_ms - chrono::Utc::now().timestamp_millis() as f64) / 1000.0)
+        .max(0.0) as i64;
+    let hours = remaining_secs / 3600;
+    let minutes = (remaining_secs % 3600) / 60;
+    if hours >= 24 {
+        format!("{}d{}h", hours / 24, hours % 24)
+    } else if hours > 0 {
+        format!("{}h{}m", hours, minutes)
+    } else {
+        format!("{}m", minutes)
+    }
+}
+
+#[cfg(test)]
+mod rate_limit_tests {
+    use super::{rate_limit_event_from_raw, AgentEvent};
+
+    #[test]
+    fn parses_snake_case_status_line_for_cli_adapters() {
+        let event = rate_limit_event_from_raw(
+            &serde_json::json!({
+                "rate_limits": {
+                    "five_hour": { "used_percentage": 25.0, "remaining": "3h" },
+                    "seven_day": { "used_percentage": 40.0, "remaining": "5d" }
+                },
+                "context_window": {
+                    "total_input_tokens": 100,
+                    "total_output_tokens": 20,
+                    "context_window_size": 1000,
+                    "used_percentage": 12.0
+                }
+            }),
+            "session-1".to_string(),
+        )
+        .expect("status-line payload should parse");
+
+        assert!(matches!(
+            event,
+            AgentEvent::RateLimitUpdate {
+                session_id,
+                five_hour_usage,
+                five_hour_remaining,
+                total_input_tokens: Some(100),
+                ..
+            } if session_id == "session-1"
+                && five_hour_usage == 25.0
+                && five_hour_remaining == "3h"
+        ));
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QuestionItem {
     pub question: String,

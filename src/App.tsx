@@ -1,5 +1,5 @@
-/* AgentBro — Main App */
-import { lazy, Suspense, useEffect, useRef, useState } from 'react'
+/* Agent Island — Main App */
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { COLOR_THEMES, useThemeStore } from './stores/themeStore'
 import { useConfigStore } from './stores/configStore'
 import { usePetStore } from './stores/petStore'
@@ -22,7 +22,7 @@ const SettingsApp = lazy(() => import('./components/settings/SettingsApp').then(
 const BACKEND_MANAGED_CONFIG_KEYS = new Set<keyof ReturnType<typeof useConfigStore.getState>>([
   'soundEnabled', 'volume', 'launchAtLogin', 'autoHide', 'smartSuppression',
   'showUsageQuota', 'usageQueryEnabled', 'language', 'autoHideNoSessions', 'displayMonitor',
-  'codexAppServerSyncEnabled', 'codexAppServerSyncIntervalSeconds',
+  'codexAppServerSyncEnabled', 'codexAppServerSyncIntervalSeconds', 'sessionRefreshIntervalSeconds', 'windowCloseBehavior',
   'globalShortcut',
   'shortcutApprove', 'shortcutApproveEnabled',
   'shortcutDeny', 'shortcutDenyEnabled',
@@ -183,22 +183,6 @@ function App() {
     detectWindowLabel().then(setWindowLabel)
   }, [])
 
-  // Boot sound on startup
-  const bootSoundPlayed = useRef(false)
-  const soundEnabled = useConfigStore((s) => s.soundEnabled)
-  const soundEvents = useConfigStore((s) => s.soundEvents)
-  useEffect(() => {
-    if (bootSoundPlayed.current) return
-    if (!isTauri() || windowLabel !== 'notch') return
-    const bootEvent = soundEvents.find((e) => e.id === 'boot')
-    if (soundEnabled && bootEvent?.enabled) {
-      bootSoundPlayed.current = true
-      import('@tauri-apps/api/core').then(({ invoke }) => {
-        invoke('play_sound', { event: 'boot' }).catch(() => {})
-      }).catch(() => {})
-    }
-  }, [windowLabel, soundEnabled, soundEvents])
-
   // Browser dev mode: primary modifier + , toggles settings view in same page
   useEffect(() => {
     if (isTauri()) return
@@ -227,10 +211,10 @@ function App() {
           const { getCurrentWindow } = await import('@tauri-apps/api/window')
           const { invoke } = await import('@tauri-apps/api/core')
           await invoke('set_dock_visible', { visible: false })
-          // Destroy (not hide) so the WebView XPC processes actually exit.
-          // The backend's `open_settings_window` rebuilds the window via
-          // `build_settings_window` next time the user reopens settings.
-          getCurrentWindow().destroy()
+          // Route the in-app close action through the same native close handler
+          // as the title-bar X, so the user's tray/exit preference applies to
+          // both ways of closing Settings.
+          await getCurrentWindow().close()
         } catch {
           // fallback: do nothing
         }

@@ -31,7 +31,8 @@ fn adapter_needs_restore(adapter: &dyn AgentAdapter, enabled_agents: &[String]) 
         return adapter.hook_config_paths().iter().any(|p| {
             std::fs::read_to_string(p)
                 .map(|content| {
-                    content.contains("agentbro-bridge")
+                    (content.contains("agentbro-bridge")
+                        || content.contains("agent-island-bridge"))
                         && !content.contains(crate::hook_endpoint::HOOK_PORT_ENV)
                 })
                 .unwrap_or(false)

@@ -1,18 +1,22 @@
 [package]
-name = "agentbro"
-version = "3.1.0"
+name = "agent-island"
+version = "3.1.1"
 description = "Your AI agents' best bro — monitor, manage, and supercharge every coding agent from one native app"
-authors = ["AgentBro"]
+authors = ["Agent Island"]
 license = "Apache-2.0"
 edition = "2021"
-default-run = "agentbro"
+default-run = "agent-island"
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
 
 [lib]
-name = "agentbro_lib"
+name = "agent_island_lib"
 crate-type = ["lib", "cdylib", "staticlib"]
 
 [[bin]]
-name = "agentbro-bridge"
+name = "agent-island-bridge"
 path = "src/bridge/main.rs"
 
 [build-dependencies]

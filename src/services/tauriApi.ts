@@ -1,8 +1,8 @@
-/* AgentBro — Tauri IPC API Service
+/* Agent Island — Tauri IPC API Service
  * Typed wrappers for Tauri commands with graceful browser-dev-mode fallbacks.
  */
 
-import type { AgentRunState, RateLimitInfo, SessionNotice, SessionState } from '../types/agent'
+import type { AgentRunState, AgentStatusSnapshot, RateLimitInfo, SessionNotice, SessionState } from '../types/agent'
 import type { ThemeConfig } from '../types/theme'
 import type { PetMetadata } from '../types/pet'
 import { useConfigStore } from '../stores/configStore'
@@ -362,8 +362,10 @@ export interface BackendConfig {
   showTokenUsage: boolean
   usageQueryEnabled: boolean
   codexAppServerSyncEnabled: boolean
+  codexAppServerSyncConfigured?: boolean
   codexAppServerSyncIntervalSeconds: number
   sessionRefreshIntervalSeconds: number
+  windowCloseBehavior: 'tray' | 'exit'
   theme: string
   language: 'en' | 'zh' | 'ja' | 'ko' | 'tr'
   displayId: string
@@ -437,6 +439,11 @@ export async function getSessions(): Promise<BackendSession[]> {
 export async function getUsageRateLimits(): Promise<RateLimitInfo | null> {
   if (!isTauri()) return null
   return invoke<RateLimitInfo | null>('get_usage_rate_limits')
+}
+
+export async function getAgentStatuses(): Promise<AgentStatusSnapshot[]> {
+  if (!isTauri()) return []
+  return invoke<AgentStatusSnapshot[]>('get_agent_statuses')
 }
 
 export async function getUsageSnapshots(): Promise<RateLimitInfo[]> {
@@ -668,9 +675,11 @@ export async function getConfig(): Promise<BackendConfig> {
       completionTimeout: 5,
       showTokenUsage: true,
       usageQueryEnabled: true,
-      codexAppServerSyncEnabled: false,
+      codexAppServerSyncEnabled: true,
+      codexAppServerSyncConfigured: false,
       codexAppServerSyncIntervalSeconds: 30,
       sessionRefreshIntervalSeconds: 3,
+      windowCloseBehavior: 'tray',
       theme: 'midnight',
       language: 'en',
       displayId: 'primary',
@@ -1163,12 +1172,12 @@ function demoSubagentChatHistory(transcriptPath: string): ParsedMessage[] {
           {
             type: 'tool_result',
             toolUseId: 'demo-readme-read',
-            content: '# AgentBro\nAgentBro 是一个面向 AI 编程 Agent 的 macOS 灵动岛应用。',
+            content: '# Agent Island\nAgent Island 是一个面向 AI 编程 Agent 的 macOS 灵动岛应用。',
             isError: false,
           },
           {
             type: 'text',
-            text: 'README 总结完成：AgentBro 面向 Claude Code、Codex 等 AI 编程 Agent，在 macOS 顶部提供灵动岛式状态、审批、提问、计划和完成提醒。',
+            text: 'README 总结完成：Agent Island 面向 Claude Code、Codex 等 AI 编程 Agent，在 macOS 顶部提供灵动岛式状态、审批、提问、计划和完成提醒。',
           },
         ],
       },

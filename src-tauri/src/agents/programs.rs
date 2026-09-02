@@ -1,12 +1,12 @@
 use crate::agents::{executable, AdapterStatus, AgentAdapter};
 use crate::commands::AppState;
+use crate::platform::process::background_tokio_command;
 use crate::skills::{agent_paths, registry};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use tauri::{AppHandle, Emitter, State};
 use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio::process::Command;
 use tokio::time::{timeout, Duration};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -498,7 +498,7 @@ async fn app_installed_version(app_path: &str) -> Option<String> {
     for key in ["CFBundleShortVersionString", "CFBundleVersion"] {
         let output = timeout(
             Duration::from_secs(2),
-            Command::new("/usr/bin/plutil")
+            background_tokio_command("/usr/bin/plutil")
                 .args(["-extract", key, "raw", "-o", "-"])
                 .arg(&info_plist)
                 .output(),
@@ -523,7 +523,7 @@ async fn app_installed_version(app_path: &str) -> Option<String> {
 async fn npm_installed_version(package: &str) -> Option<String> {
     let output = timeout(
         Duration::from_secs(4),
-        Command::new(command_name("npm"))
+        background_tokio_command(command_name("npm"))
             .args(["list", "-g", package, "--depth=0", "--json"])
             .output(),
     )
@@ -542,7 +542,7 @@ async fn npm_installed_version(package: &str) -> Option<String> {
 async fn npm_latest_version(package: &str) -> Option<String> {
     let output = timeout(
         Duration::from_secs(5),
-        Command::new(command_name("npm"))
+        background_tokio_command(command_name("npm"))
             .args(["view", package, "version", "--silent"])
             .output(),
     )
@@ -780,7 +780,7 @@ async fn command_output_contains(binary: &str, args: &[&str], needle: &str) -> b
     let Some(path) = executable::find_binary(binary) else {
         return false;
     };
-    Command::new(path)
+    background_tokio_command(path)
         .args(args)
         .output()
         .await
@@ -793,7 +793,7 @@ async fn command_succeeds(binary: &str, args: &[&str]) -> bool {
     let Some(path) = executable::find_binary(binary) else {
         return false;
     };
-    Command::new(path)
+    background_tokio_command(path)
         .args(args)
         .output()
         .await
@@ -829,7 +829,7 @@ async fn trash_agent_app(
         None,
     );
 
-    let output = Command::new("osascript")
+    let output = background_tokio_command("osascript")
         .arg("-e")
         .arg("on run argv")
         .arg("-e")
@@ -889,10 +889,10 @@ fn emit_output(
     );
 }
 
-fn command_shell(command: &str) -> Command {
+fn command_shell(command: &str) -> tokio::process::Command {
     #[cfg(target_os = "windows")]
     {
-        let mut shell = Command::new(command_name("cmd"));
+        let mut shell = background_tokio_command(command_name("cmd"));
         shell.args(["/C", command]);
         if let Some(path) = executable::augmented_path_env() {
             shell.env("PATH", path);
@@ -902,7 +902,7 @@ fn command_shell(command: &str) -> Command {
 
     #[cfg(not(target_os = "windows"))]
     {
-        let mut shell = Command::new("sh");
+        let mut shell = background_tokio_command("sh");
         shell.args(["-lc", command]);
         if let Some(path) = executable::augmented_path_env() {
             shell.env("PATH", path);

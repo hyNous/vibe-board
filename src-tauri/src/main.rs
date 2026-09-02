@@ -68,5 +68,5 @@ fn main() {
         close_inherited_file_descriptors();
     }
 
-    agentbro_lib::run()
+    agent_island_lib::run()
 }

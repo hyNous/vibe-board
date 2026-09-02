@@ -1,9 +1,9 @@
-/* AgentBro — Tauri Event Hooks
+/* Agent Island — Tauri Event Hooks
  * Listens for backend events and syncs stores. No-ops in browser dev mode.
  */
 import { useEffect } from 'react'
 import i18n from 'i18next'
-import { isTauri, getSessions, getUsageRateLimits, getUsageSnapshots, getConfig, listThemes, setSoundEventRule, getActiveThemeBundle, setLanguage, getAppStateFlags } from '../services/tauriApi'
+import { isTauri, getSessions, getAgentStatuses, getUsageRateLimits, getUsageSnapshots, getConfig, listThemes, setSoundEventRule, getActiveThemeBundle, setLanguage, getAppStateFlags } from '../services/tauriApi'
 import { usePetStore } from '../stores/petStore'
 import { useMarketStore } from '../stores/marketStore'
 import type { BackendSession, BackendConfig, ParsedMessage, ParsedMessageBlock } from '../services/tauriApi'
@@ -11,7 +11,7 @@ import { useSessionStore } from '../stores/sessionStore'
 import { useConfigStore } from '../stores/configStore'
 import { useThemeStore } from '../stores/themeStore'
 import type { SoundChoice } from '../stores/configStore'
-import type { SessionState, DiffContent, AgentType, ToolStatus, ChatMessage, RateLimitInfo } from '../types/agent'
+import type { SessionState, DiffContent, AgentType, AgentStatusSnapshot, ToolStatus, ChatMessage, RateLimitInfo } from '../types/agent'
 import { energyIntervalMs, getAppEnergyMode } from '../utils/energyPolicy'
 import { agentRunStateFromSession } from '../utils/agentRunState'
 
@@ -369,9 +369,10 @@ function applyBackendConfig(config: BackendConfig) {
     smartSuppression: config.smartSuppression,
     showUsageQuota: config.showTokenUsage ?? true,
     usageQueryEnabled: config.usageQueryEnabled ?? true,
-    codexAppServerSyncEnabled: config.codexAppServerSyncEnabled ?? false,
+    codexAppServerSyncEnabled: config.codexAppServerSyncEnabled ?? true,
     codexAppServerSyncIntervalSeconds: config.codexAppServerSyncIntervalSeconds ?? 30,
     sessionRefreshIntervalSeconds: Math.max(1, Math.min(30, config.sessionRefreshIntervalSeconds ?? 3)),
+    windowCloseBehavior: config.windowCloseBehavior === 'exit' ? 'exit' : 'tray',
     language: config.language || store.language,
     autoHideNoSessions: config.autoHideNoSessions,
     displayMonitor: config.displayId,
@@ -506,6 +507,12 @@ function refreshAppServerLiveFlag() {
     .catch(e => console.error('[tauri] getAppStateFlags:', e))
 }
 
+function refreshAgentStatuses() {
+  getAgentStatuses()
+    .then((statuses) => useSessionStore.getState().setAgentStatuses(statuses))
+    .catch(e => console.error('[tauri] getAgentStatuses:', e))
+}
+
 // ── Hooks ────────────────────────────────────────────────────────
 
 /** Listen for session-update events from the backend and sync sessionStore. */
@@ -516,6 +523,7 @@ export function useSessionEvents(mode: SessionSyncMode = 'full') {
     if (!isTauri() || mode === 'off') return
 
     let unlisten: (() => void) | undefined
+    let unlistenAgentStatus: (() => void) | undefined
     let cancelled = false
     let lastSessionSnapshot = ''
     const fullSync = mode === 'full'
@@ -558,6 +566,7 @@ export function useSessionEvents(mode: SessionSyncMode = 'full') {
         if (!cancelled) applyBackendSessions(sessions, { force: true })
       })
       .catch(e => console.error('[tauri] getSessions:', e))
+    if (fullSync) refreshAgentStatuses()
 
     if (fullSync) refreshAppServerLiveFlag()
     const sessionRefreshTimer = fullSync
@@ -567,6 +576,7 @@ export function useSessionEvents(mode: SessionSyncMode = 'full') {
             if (!cancelled) applyBackendSessions(sessions)
           })
           .catch(e => console.error('[tauri] poll getSessions:', e))
+        refreshAgentStatuses()
       }, Math.max(1, Math.min(30, sessionRefreshIntervalSeconds)) * 1000)
       : undefined
 
@@ -579,12 +589,20 @@ export function useSessionEvents(mode: SessionSyncMode = 'full') {
       () => cancelled,
     )
 
+    listenForTauriEvent<AgentStatusSnapshot[]>(
+      'agent-status-update',
+      (event) => useSessionStore.getState().setAgentStatuses(event.payload),
+      (fn) => { unlistenAgentStatus = fn },
+      () => cancelled,
+    )
+
     return () => {
       cancelled = true
       if (usageRateLimitTimer !== undefined) window.clearInterval(usageRateLimitTimer)
       if (appServerLiveTimer !== undefined) window.clearInterval(appServerLiveTimer)
       if (sessionRefreshTimer !== undefined) window.clearInterval(sessionRefreshTimer)
       unlisten?.()
+      unlistenAgentStatus?.()
     }
   }, [mode, sessionRefreshIntervalSeconds])
 }

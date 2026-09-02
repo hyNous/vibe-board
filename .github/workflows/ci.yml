@@ -44,8 +44,8 @@ jobs:
           brew install pkg-config
       - name: Prepare bridge resource
         run: |
-          mkdir -p src-tauri/target/agentbro-bridge-resource
-          touch src-tauri/target/agentbro-bridge-resource/agentbro-bridge
+          mkdir -p src-tauri/target/agent-island-bridge-resource
+          touch src-tauri/target/agent-island-bridge-resource/agent-island-bridge
       - run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
       - run: cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
       - run: cargo test --manifest-path src-tauri/Cargo.toml

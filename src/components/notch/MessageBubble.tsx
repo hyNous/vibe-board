@@ -27,7 +27,7 @@ export function MessageBubble({ message, agentType = 'claude-code', agentName }:
           <div className="msg__pill">
             {message.content && (
               <div className="msg__user-content">
-                <img className="msg__sender-logo" src="/agentbro-app-icon.png" alt="AgentBro" />
+                <img className="msg__sender-logo" src="/agent-island-app-icon.png" alt="Agent Island" />
                 <span>{message.content}</span>
               </div>
             )}

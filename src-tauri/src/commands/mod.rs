@@ -17,8 +17,8 @@ use crate::hooks::diagnostics::DiagnosticRingBuffer;
 use crate::hooks::file_watcher::ConversationWatcher;
 use crate::hooks::server::{HookServer, RawHookEvent};
 use crate::hooks::session_store::{
-    PendingQuestion, RateLimitInfo, SessionPhase, SessionState, SessionStore, SubagentInfo,
-    UsageRateWindow,
+    AgentStatusSnapshot, PendingQuestion, RateLimitInfo, SessionPhase, SessionState, SessionStore,
+    SubagentInfo, TokenUsage, UsageRateWindow,
 };
 use crate::network_monitor::NetworkMonitor;
 use crate::platform::display_controller::DisplayController;
@@ -275,15 +275,54 @@ pub async fn get_usage_rate_limits(
     if !state.config_store.get().usage_query_enabled {
         return Ok(None);
     }
-    Ok(load_latest_usage_rate_limits().await)
+    let mut latest = load_latest_usage_rate_limits().await;
+    for snapshot in state.session_store.get_agent_status_snapshots() {
+        let Some(rate_limits) = snapshot.rate_limits else {
+            continue;
+        };
+        let is_newer = latest
+            .as_ref()
+            .map(|current| {
+                rate_limits.updated_at.unwrap_or_default()
+                    > current.updated_at.unwrap_or_default()
+            })
+            .unwrap_or(true);
+        if is_newer {
+            latest = Some(rate_limits);
+        }
+    }
+    Ok(latest)
 }
 
 #[tauri::command]
-pub async fn get_usage_snapshots(state: State<'_, AppState>) -> Result<Vec<RateLimitInfo>, String> {
+pub async fn get_usage_snapshots(
+    state: State<'_, AppState>,
+) -> Result<Vec<RateLimitInfo>, String> {
     if !state.config_store.get().usage_query_enabled {
         return Ok(Vec::new());
     }
-    Ok(load_usage_snapshots().await)
+    let mut snapshots = load_usage_snapshots().await;
+    for snapshot in state.session_store.get_agent_status_snapshots() {
+        let Some(rate_limits) = snapshot.rate_limits else {
+            continue;
+        };
+        let Some(provider) = rate_limits.provider.as_deref() else {
+            continue;
+        };
+        if let Some(current) = snapshots
+            .iter_mut()
+            .find(|current| current.provider.as_deref() == Some(provider))
+        {
+            if rate_limits.updated_at.unwrap_or_default()
+                > current.updated_at.unwrap_or_default()
+            {
+                *current = rate_limits;
+            }
+        } else {
+            snapshots.push(rate_limits);
+        }
+    }
+    Ok(snapshots)
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -476,13 +515,6 @@ pub fn start_codex_app_server_background_sync(
                 continue;
             }
 
-            #[cfg(target_os = "windows")]
-            if !has_codex_sessions(&session_store) {
-                bridge.detach().await;
-                tokio::time::sleep(Duration::from_secs(30)).await;
-                continue;
-            }
-
             match run_codex_app_server_monitor_once(
                 config_store.clone(),
                 session_store.clone(),
@@ -511,27 +543,12 @@ pub fn start_codex_app_server_background_sync(
     });
 }
 
-#[cfg(target_os = "windows")]
-fn has_codex_sessions(store: &SessionStore) -> bool {
-    store.get_all_sessions().iter().any(|session| {
-        session.agent_type == "codex"
-            && matches!(
-                session.phase,
-                SessionPhase::Ready
-                    | SessionPhase::Processing
-                    | SessionPhase::WaitingApproval
-                    | SessionPhase::WaitingInput
-                    | SessionPhase::Compacting
-            )
-    })
-}
-
 fn codex_app_server_refresh_interval_seconds(
     store: &SessionStore,
     configured_seconds: u32,
 ) -> (EnergyMode, u64) {
     let mode = energy::mode_for_sessions(&store.get_all_sessions());
-    let interval = energy::interval_seconds(mode, configured_seconds, 15, 60, 300);
+    let interval = energy::interval_seconds(mode, configured_seconds, 5, 60, 300);
     (mode, interval)
 }
 
@@ -617,6 +634,142 @@ pub struct UsageProviderStatus {
     updated_at: Option<i64>,
 }
 
+/// Return live presence for the main CLI integrations together with the last
+/// persisted token/quota snapshot. A hook session is the authoritative signal
+/// when available; the process tree covers an invoked CLI that has not emitted
+/// its first hook yet.
+#[tauri::command]
+pub async fn get_agent_statuses(
+    state: State<'_, AppState>,
+) -> Result<Vec<AgentStatusSnapshot>, String> {
+    const TRACKED_AGENTS: [(&str, &str); 4] = [
+        ("codex", "Codex"),
+        ("claude-code", "Claude Code"),
+        ("opencode", "OpenCode"),
+        ("antigravity", "Antigravity"),
+    ];
+
+    let opencode_rate_limits = if state.config_store.get().usage_query_enabled {
+        load_opencode_usage_rate_limits().await
+    } else {
+        None
+    };
+    let antigravity_rate_limits = if state.config_store.get().usage_query_enabled {
+        load_antigravity_usage_rate_limits().await
+    } else {
+        None
+    };
+    let mut statuses = state
+        .session_store
+        .get_agent_status_snapshots()
+        .into_iter()
+        .map(|snapshot| (snapshot.agent.clone(), snapshot))
+        .collect::<HashMap<_, _>>();
+    // `online` is runtime state, not durable history. A snapshot loaded after
+    // restart must start offline until a live session or process confirms it.
+    for snapshot in statuses.values_mut() {
+        snapshot.online = false;
+    }
+    let now = chrono::Utc::now().timestamp_millis();
+    for (agent, label) in TRACKED_AGENTS {
+        statuses
+            .entry(agent.to_string())
+            .or_insert_with(|| AgentStatusSnapshot {
+                agent: agent.to_string(),
+                label: label.to_string(),
+                online: false,
+                last_seen_at: 0,
+                last_completed_at: None,
+                tokens: TokenUsage::default(),
+                rate_limits: None,
+                detail: None,
+            });
+    }
+
+    for session in state.session_store.get_all_sessions() {
+        let Some(snapshot) = statuses.get_mut(&session.agent_type) else {
+            continue;
+        };
+        snapshot.online = !matches!(
+            session.phase,
+            SessionPhase::Done | SessionPhase::Error | SessionPhase::Interrupted
+        );
+        if snapshot.last_seen_at == 0 {
+            snapshot.last_seen_at = now;
+        }
+        snapshot.tokens = session.tokens;
+        if session.rate_limits.is_some() {
+            snapshot.rate_limits = session.rate_limits;
+        }
+        if let Some(label) = session.engine_label {
+            snapshot.label = label;
+        }
+    }
+
+    let process_tree = crate::terminal::process_tree::build_tree();
+    for (agent, snapshot) in &mut statuses {
+        if process_tree
+            .values()
+            .any(|process| process_matches_agent(&process.command, agent))
+        {
+            snapshot.online = true;
+        }
+    }
+
+    if let Some(snapshot) = opencode_rate_limits {
+        if let Some(status) = statuses.get_mut("opencode") {
+            status.rate_limits = Some(snapshot.rate_limits);
+            status.detail = Some("OpenCode Go account quota synced".to_string());
+        }
+    }
+
+    if let Some(snapshot) = antigravity_rate_limits {
+        if let Some(status) = statuses.get_mut("antigravity") {
+            status.rate_limits = Some(snapshot.rate_limits);
+            status.detail = Some("Antigravity /usage quota synced".to_string());
+        }
+    }
+
+    let mut result = statuses.into_values().collect::<Vec<_>>();
+    result.sort_by_key(|snapshot| tracked_agent_rank(&snapshot.agent));
+    state.session_store.persist_agent_status_snapshots(&result);
+    Ok(result)
+}
+
+fn tracked_agent_rank(agent: &str) -> usize {
+    match agent {
+        "codex" => 0,
+        "claude-code" => 1,
+        "opencode" => 2,
+        "antigravity" => 3,
+        _ => 99,
+    }
+}
+
+fn process_matches_agent(command: &str, agent: &str) -> bool {
+    let command = command.to_ascii_lowercase();
+    match agent {
+        "codex" => {
+            command.contains("codex.exe") || command == "codex" || command.ends_with("/codex")
+        }
+        "claude-code" => {
+            command.contains("claude.exe") || command == "claude" || command.ends_with("/claude")
+        }
+        "opencode" => {
+            command.contains("opencode.exe")
+                || command == "opencode"
+                || command.ends_with("/opencode")
+        }
+        "antigravity" => {
+            command.contains("agy.exe")
+                || command.contains("antigravity.exe")
+                || command == "agy"
+                || command.ends_with("/agy")
+        }
+        _ => false,
+    }
+}
+
 #[tauri::command]
 pub async fn list_usage_providers(
     state: State<'_, AppState>,
@@ -629,6 +782,8 @@ pub async fn list_usage_providers(
         claude_usage_provider_status(enabled),
     ];
     providers.extend(catalog_supported_agent_usage_providers(enabled));
+    providers.push(opencode_usage_provider_status(enabled).await);
+    providers.push(antigravity_usage_provider_status(enabled).await);
     providers.extend(catalog_unsupported_agent_usage_providers(enabled));
     Ok(providers)
 }
@@ -662,7 +817,7 @@ pub async fn authorize_usage_provider(provider: String) -> Result<(), String> {
         "claude-code" | "claude" => ("claude", &["login"]),
         "gemini" | "gemini-cli" => ("gemini", &["auth"]),
         "copilot" => ("gh", &["auth", "login"]),
-        "opencode" => ("opencode", &["providers"]),
+        "opencode" => ("opencode", &["auth", "login"]),
         "kiro" => ("kiro-cli", &["login"]),
         _ => return Err(format!("Unsupported usage provider: {provider}")),
     };
@@ -693,13 +848,31 @@ struct CodexUsageLiveCache {
     snapshot: Option<UsageRateLimitSnapshot>,
 }
 
+#[derive(Default)]
+struct OpenCodeUsageCache {
+    fetched_at: Option<Instant>,
+    snapshot: Option<UsageRateLimitSnapshot>,
+}
+
+#[derive(Default)]
+struct AntigravityUsageCache {
+    fetched_at: Option<Instant>,
+    snapshot: Option<UsageRateLimitSnapshot>,
+}
+
 const CODEX_USAGE_LIVE_CACHE_TTL: Duration = Duration::from_secs(300);
 const CODEX_USAGE_LIVE_FAILURE_TTL: Duration = Duration::from_secs(60);
+const OPENCODE_GO_USAGE_URL: &str = "https://opencode.ai/zen/go/v1/usage";
+const OPENCODE_USAGE_CACHE_TTL: Duration = Duration::from_secs(60);
+const ANTIGRAVITY_USAGE_CACHE_TTL: Duration = Duration::from_secs(60);
+const ANTIGRAVITY_USAGE_TIMEOUT: Duration = Duration::from_secs(15);
 
 async fn load_usage_snapshots() -> Vec<RateLimitInfo> {
     [
         load_codex_usage_rate_limits(true).await,
         load_claude_usage_rate_limits(),
+        load_opencode_usage_rate_limits().await,
+        load_antigravity_usage_rate_limits().await,
     ]
     .into_iter()
     .flatten()
@@ -780,7 +953,7 @@ fn claude_usage_provider_status(enabled: bool) -> UsageProviderStatus {
 }
 
 fn catalog_supported_agent_usage_providers(enabled: bool) -> Vec<UsageProviderStatus> {
-    let mut providers = [
+    let providers = [
         ("z-ai", "Z.ai", "Z.ai", "api/key", None, false),
         ("kimi", "Kimi Code", "Kimi Code", "web/token", Some("~/.kimi-code"), false),
         ("gemini-cli", "Gemini CLI", "Gemini", "api/oauth", Some("~/.gemini"), find_binary("gemini").is_some()),
@@ -790,7 +963,6 @@ fn catalog_supported_agent_usage_providers(enabled: bool) -> Vec<UsageProviderSt
         ("deepseek", "DeepSeek", "DeepSeek", "api/key", Some("~/.deepseek"), false),
         ("droid", "Factory / Droid", "Droid/Factory", "web/local-storage", Some("~/.factory"), false),
         ("stepfun", "StepFun", "StepFun", "web/token", None, false),
-        ("antigravity", "Antigravity", "Antigravity", "local-probe", None, false),
         ("kiro", "Kiro", "Kiro", "cli", Some("~/.kiro"), find_binary("kiro-cli").is_some()),
     ]
     .into_iter()
@@ -809,11 +981,10 @@ fn catalog_supported_agent_usage_providers(enabled: bool) -> Vec<UsageProviderSt
         )
     })
     .collect::<Vec<_>>();
-    providers.push(opencode_usage_provider_status(enabled));
     providers
 }
 
-fn opencode_usage_provider_status(enabled: bool) -> UsageProviderStatus {
+async fn opencode_usage_provider_status(enabled: bool) -> UsageProviderStatus {
     let home = dirs::home_dir();
     let config_dir = home
         .as_ref()
@@ -827,26 +998,72 @@ fn opencode_usage_provider_status(enabled: bool) -> UsageProviderStatus {
     let has_config = config_dir.as_ref().is_some_and(|path| path.exists());
     let has_auth = auth_path.as_ref().is_some_and(|path| path.exists());
     let display_path = if has_auth { auth_path } else { config_dir };
+    let snapshot = load_opencode_usage_rate_limits().await;
+    let has_api_key = snapshot.is_some() || load_opencode_api_key().is_some();
+    let source = snapshot
+        .as_ref()
+        .and_then(|item| item.rate_limits.source.clone());
     UsageProviderStatus {
         provider: "opencode".to_string(),
-        label: "OpenCode".to_string(),
+        label: "OpenCode Go".to_string(),
         enabled,
-        available: false,
+        available: snapshot.is_some(),
         catalog_supported: true,
-        implementation_status: "available".to_string(),
-        source: Some("cli/config".to_string()),
-        detail: if has_auth {
-            "OpenCode auth found; AgentBro usage reader is not wired yet.".to_string()
+        implementation_status: "active".to_string(),
+        source,
+        detail: if snapshot.is_some() {
+            "OpenCode Go account quota found.".to_string()
+        } else if has_auth || has_api_key {
+            "OpenCode auth found; no Go account quota data is available yet.".to_string()
         } else if has_config {
             "OpenCode config found; run OpenCode provider authorization if usage data is needed."
                 .to_string()
         } else {
             "OpenCode config directory was not found.".to_string()
         },
-        auth_status: if has_auth { "unknown" } else { "missing" }.to_string(),
+        auth_status: if has_auth || has_api_key {
+            "authorized"
+        } else {
+            "missing"
+        }
+        .to_string(),
         auth_path: display_path.map(|path| path.display().to_string()),
-        can_authorize: !has_auth && find_binary("opencode").is_some(),
-        updated_at: None,
+        can_authorize: !has_auth && !has_api_key && find_binary("opencode").is_some(),
+        updated_at: snapshot
+            .as_ref()
+            .and_then(|item| item.captured_at)
+            .map(|date| date.timestamp_millis()),
+    }
+}
+
+async fn antigravity_usage_provider_status(enabled: bool) -> UsageProviderStatus {
+    let binary_available = find_antigravity_binary().is_some();
+    let snapshot = load_antigravity_usage_rate_limits().await;
+    let source = snapshot
+        .as_ref()
+        .and_then(|item| item.rate_limits.source.clone());
+    UsageProviderStatus {
+        provider: "antigravity".to_string(),
+        label: "Antigravity".to_string(),
+        enabled,
+        available: snapshot.is_some(),
+        catalog_supported: true,
+        implementation_status: "active".to_string(),
+        source,
+        detail: if snapshot.is_some() {
+            "Antigravity /usage quota synced.".to_string()
+        } else if binary_available {
+            "Antigravity CLI found; /usage returned no quota data.".to_string()
+        } else {
+            "Antigravity CLI (agy) was not found.".to_string()
+        },
+        auth_status: if snapshot.is_some() { "authorized" } else { "unknown" }.to_string(),
+        auth_path: None,
+        can_authorize: false,
+        updated_at: snapshot
+            .as_ref()
+            .and_then(|item| item.captured_at)
+            .map(|date| date.timestamp_millis()),
     }
 }
 
@@ -934,27 +1151,212 @@ fn claude_rate_limit_paths() -> [PathBuf; 2] {
 }
 
 async fn load_latest_usage_rate_limits() -> Option<RateLimitInfo> {
-    let codex = load_codex_usage_rate_limits(true).await;
-    let claude = load_claude_usage_rate_limits();
+    [
+        load_codex_usage_rate_limits(true).await,
+        load_claude_usage_rate_limits(),
+        load_opencode_usage_rate_limits().await,
+        load_antigravity_usage_rate_limits().await,
+    ]
+    .into_iter()
+    .flatten()
+    .max_by_key(|snapshot| snapshot.captured_at)
+    .map(|snapshot| snapshot.rate_limits)
+}
 
-    match (codex, claude) {
-        (Some(codex), Some(claude)) => {
-            let codex_time = codex
-                .captured_at
-                .unwrap_or(chrono::DateTime::<chrono::Utc>::MIN_UTC);
-            let claude_time = claude
-                .captured_at
-                .unwrap_or(chrono::DateTime::<chrono::Utc>::MIN_UTC);
-            Some(if codex_time >= claude_time {
-                codex.rate_limits
-            } else {
-                claude.rate_limits
-            })
+async fn load_antigravity_usage_rate_limits() -> Option<UsageRateLimitSnapshot> {
+    static CACHE: OnceLock<TokioMutex<AntigravityUsageCache>> = OnceLock::new();
+    let cache = CACHE.get_or_init(|| TokioMutex::new(AntigravityUsageCache::default()));
+    {
+        let cached = cache.lock().await;
+        if cached
+            .fetched_at
+            .is_some_and(|fetched_at| fetched_at.elapsed() < ANTIGRAVITY_USAGE_CACHE_TTL)
+        {
+            return cached.snapshot.clone();
         }
-        (Some(codex), None) => Some(codex.rate_limits),
-        (None, Some(claude)) => Some(claude.rate_limits),
-        (None, None) => None,
     }
+
+    let fresh = fetch_antigravity_usage_rate_limits().await;
+    let mut cached = cache.lock().await;
+    cached.fetched_at = Some(Instant::now());
+    if fresh.is_some() {
+        cached.snapshot = fresh;
+    }
+    cached.snapshot.clone()
+}
+
+fn find_antigravity_binary() -> Option<String> {
+    if let Some(path) = crate::agents::executable::find_binary("agy") {
+        return Some(path.display().to_string());
+    }
+
+    let mut candidates = Vec::new();
+    if let Some(home) = dirs::home_dir() {
+        candidates.push(home.join(".agy").join("bin").join("agy"));
+        #[cfg(target_os = "windows")]
+        candidates.push(
+            home.join("AppData")
+                .join("Local")
+                .join("agy")
+                .join("bin")
+                .join("agy.exe"),
+        );
+    }
+    candidates
+        .into_iter()
+        .find(|path| path.is_file())
+        .map(|path| path.display().to_string())
+}
+
+async fn fetch_antigravity_usage_rate_limits() -> Option<UsageRateLimitSnapshot> {
+    let binary = find_antigravity_binary()?;
+    let mut command = crate::platform::process::background_tokio_command(binary);
+    command
+        .args(["--print", "/usage", "--output-format", "json", "--mode", "plan"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .kill_on_drop(true);
+    let output = tokio::time::timeout(ANTIGRAVITY_USAGE_TIMEOUT, command.output())
+        .await
+        .ok()?
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let payload = serde_json::from_slice::<serde_json::Value>(&output.stdout).ok()?;
+    parse_antigravity_usage_payload(&payload, chrono::Utc::now())
+}
+
+fn parse_antigravity_usage_payload(
+    payload: &serde_json::Value,
+    captured_at: chrono::DateTime<chrono::Utc>,
+) -> Option<UsageRateLimitSnapshot> {
+    let groups = payload
+        .pointer("/command/data/groups")
+        .or_else(|| payload.pointer("/data/groups"))?
+        .as_array()?;
+    let mut windows = Vec::new();
+    let mut legacy_five_hour: Option<(f64, String)> = None;
+    let mut legacy_seven_day: Option<(f64, String)> = None;
+
+    for (group_index, group) in groups.iter().enumerate() {
+        let group_name = group.get("name").and_then(|value| value.as_str()).unwrap_or("");
+        let group_label = antigravity_group_label(group_name);
+        let Some(buckets) = group.get("buckets").and_then(|value| value.as_array()) else {
+            continue;
+        };
+        for (bucket_index, bucket) in buckets.iter().enumerate() {
+            let Some(remaining_percent) = antigravity_remaining_percent(bucket) else {
+                continue;
+            };
+            let used_percent = (100.0 - remaining_percent).clamp(0.0, 100.0);
+            let window_kind = bucket
+                .get("window")
+                .and_then(|value| value.as_str())
+                .unwrap_or("window");
+            let window_title = antigravity_window_title(window_kind);
+            let remaining_label = format!("{remaining_percent:.0}%");
+            let id = bucket
+                .get("id")
+                .and_then(|value| value.as_str())
+                .filter(|value| !value.trim().is_empty())
+                .map(str::to_string)
+                .unwrap_or_else(|| format!("group-{group_index}-{window_kind}-{bucket_index}"));
+            windows.push(UsageRateWindow {
+                id,
+                title: format!("{group_label} {window_title}"),
+                used_percent,
+                remaining_percent: Some(remaining_percent),
+                remaining_label: Some(remaining_label.clone()),
+                resets_at: antigravity_reset_at(bucket),
+                window_minutes: antigravity_window_minutes(bucket, window_kind),
+            });
+
+            match window_kind.to_ascii_lowercase().as_str() {
+                "5h" | "five_hour" | "five-hour" => {
+                    legacy_five_hour.get_or_insert((used_percent, remaining_label));
+                }
+                "weekly" | "7d" | "seven_day" | "seven-day" => {
+                    legacy_seven_day.get_or_insert((used_percent, remaining_label));
+                }
+                _ => {}
+            }
+        }
+    }
+
+    if windows.is_empty() {
+        return None;
+    }
+    let (five_hour_usage, five_hour_remaining) =
+        legacy_five_hour.unwrap_or((0.0, String::new()));
+    let (seven_day_usage, seven_day_remaining) =
+        legacy_seven_day.unwrap_or((0.0, String::new()));
+    Some(UsageRateLimitSnapshot {
+        rate_limits: RateLimitInfo {
+            five_hour_usage,
+            five_hour_remaining,
+            seven_day_usage,
+            seven_day_remaining,
+            provider: Some("antigravity".to_string()),
+            provider_label: Some("Antigravity".to_string()),
+            source: Some("antigravity-cli:/usage".to_string()),
+            updated_at: Some(captured_at.timestamp_millis()),
+            windows,
+        },
+        captured_at: Some(captured_at),
+    })
+}
+
+fn antigravity_group_label(name: &str) -> String {
+    let lower = name.to_ascii_lowercase();
+    if lower.contains("gemini") {
+        "Gemini".to_string()
+    } else if lower.contains("claude") && lower.contains("gpt") {
+        "Claude/GPT".to_string()
+    } else if name.trim().is_empty() {
+        "Models".to_string()
+    } else {
+        name.trim().to_string()
+    }
+}
+
+fn antigravity_window_title(window: &str) -> String {
+    match window.to_ascii_lowercase().as_str() {
+        "5h" | "five_hour" | "five-hour" => "5h".to_string(),
+        "weekly" | "7d" | "seven_day" | "seven-day" => "7d".to_string(),
+        "monthly" | "30d" | "thirty_day" | "thirty-day" => "30d".to_string(),
+        _ => window.trim().to_string(),
+    }
+}
+
+fn antigravity_remaining_percent(bucket: &serde_json::Value) -> Option<f64> {
+    let raw = bucket
+        .get("remaining_fraction")
+        .or_else(|| bucket.get("remainingFraction"))
+        .or_else(|| bucket.get("remaining_percent"))
+        .or_else(|| bucket.get("remainingPercent"))
+        .and_then(number_from_value)?;
+    Some(if raw <= 1.0 { raw * 100.0 } else { raw }.clamp(0.0, 100.0))
+}
+
+fn antigravity_reset_at(bucket: &serde_json::Value) -> Option<String> {
+    bucket
+        .get("reset_time")
+        .or_else(|| bucket.get("resetTime"))
+        .or_else(|| bucket.get("resets_at"))
+        .or_else(|| bucket.get("resetsAt"))
+        .and_then(date_from_value)
+        .map(|date| date.to_rfc3339())
+}
+
+fn antigravity_window_minutes(bucket: &serde_json::Value, window: &str) -> Option<i64> {
+    window_minutes(bucket).or_else(|| match window.to_ascii_lowercase().as_str() {
+        "5h" | "five_hour" | "five-hour" => Some(300),
+        "weekly" | "7d" | "seven_day" | "seven-day" => Some(10_080),
+        "monthly" | "30d" | "thirty_day" | "thirty-day" => Some(43_200),
+        _ => None,
+    })
 }
 
 fn load_claude_usage_rate_limits() -> Option<UsageRateLimitSnapshot> {
@@ -986,6 +1388,120 @@ fn load_claude_usage_rate_limits() -> Option<UsageRateLimitSnapshot> {
             seven_day,
         )?,
         captured_at,
+    })
+}
+
+async fn load_opencode_usage_rate_limits() -> Option<UsageRateLimitSnapshot> {
+    static CACHE: OnceLock<TokioMutex<OpenCodeUsageCache>> = OnceLock::new();
+    let cache = CACHE.get_or_init(|| TokioMutex::new(OpenCodeUsageCache::default()));
+    {
+        let cached = cache.lock().await;
+        if cached
+            .fetched_at
+            .is_some_and(|fetched_at| fetched_at.elapsed() < OPENCODE_USAGE_CACHE_TTL)
+        {
+            return cached.snapshot.clone();
+        }
+    }
+
+    let fresh = fetch_opencode_usage_rate_limits().await;
+    let mut cached = cache.lock().await;
+    cached.fetched_at = Some(Instant::now());
+    if fresh.is_some() {
+        cached.snapshot = fresh;
+    }
+    cached.snapshot.clone()
+}
+
+async fn fetch_opencode_usage_rate_limits() -> Option<UsageRateLimitSnapshot> {
+    let api_key = load_opencode_api_key()?;
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(10))
+        .build()
+        .ok()?;
+    let response = client
+        .get(OPENCODE_GO_USAGE_URL)
+        .bearer_auth(api_key)
+        .send()
+        .await
+        .ok()?;
+    if !response.status().is_success() {
+        return None;
+    }
+    let payload = response.json::<serde_json::Value>().await.ok()?;
+    parse_opencode_usage_payload(&payload, chrono::Utc::now())
+}
+
+fn load_opencode_api_key() -> Option<String> {
+    for variable in ["OPENCODE_GO_API_KEY", "OPENCODE_API_KEY"] {
+        if let Ok(value) = std::env::var(variable) {
+            let value = value.trim();
+            if !value.is_empty() {
+                return Some(value.to_string());
+            }
+        }
+    }
+
+    let path = dirs::home_dir()?
+        .join(".local")
+        .join("share")
+        .join("opencode")
+        .join("auth.json");
+    let payload: serde_json::Value = serde_json::from_str(&fs::read_to_string(path).ok()?).ok()?;
+    ["opencode-go", "opencode"]
+        .into_iter()
+        .find_map(|provider| payload.get(provider).and_then(opencode_api_key_from_entry))
+}
+
+fn opencode_api_key_from_entry(entry: &serde_json::Value) -> Option<String> {
+    if entry
+        .get("type")
+        .and_then(|value| value.as_str())
+        .is_some_and(|kind| kind != "api")
+    {
+        return None;
+    }
+    entry
+        .as_str()
+        .or_else(|| entry.get("key").and_then(|value| value.as_str()))
+        .or_else(|| entry.get("apiKey").and_then(|value| value.as_str()))
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+}
+
+fn parse_opencode_usage_payload(
+    payload: &serde_json::Value,
+    captured_at: chrono::DateTime<chrono::Utc>,
+) -> Option<UsageRateLimitSnapshot> {
+    let usage = payload.get("usage").unwrap_or(payload);
+    let rolling = usage
+        .get("rolling")
+        .or_else(|| payload.get("rollingUsage"))?;
+    let weekly = usage.get("weekly").or_else(|| payload.get("weeklyUsage"))?;
+    let monthly = usage
+        .get("monthly")
+        .or_else(|| payload.get("monthlyUsage"))?;
+    let five_hour_usage = used_percentage(rolling)?;
+    let seven_day_usage = used_percentage(weekly)?;
+
+    Some(UsageRateLimitSnapshot {
+        rate_limits: RateLimitInfo {
+            five_hour_usage,
+            five_hour_remaining: remaining_label(rolling),
+            seven_day_usage,
+            seven_day_remaining: remaining_label(weekly),
+            provider: Some("opencode".to_string()),
+            provider_label: Some("OpenCode Go".to_string()),
+            source: Some("opencode-go-api".to_string()),
+            updated_at: Some(captured_at.timestamp_millis()),
+            windows: vec![
+                usage_window("rolling", "5h", rolling, Some(300))?,
+                usage_window("weekly", "7d", weekly, Some(10_080))?,
+                usage_window("monthly", "30d", monthly, None)?,
+            ],
+        },
+        captured_at: Some(captured_at),
     })
 }
 
@@ -1973,6 +2489,12 @@ fn sync_codex_app_server_thread_to_store(
         .filter(|value| !value.trim().is_empty())
         .unwrap_or_else(|| "Codex".to_string());
 
+    let latest_turn_started_at = codex_latest_turn_started_at(thread);
+    let trace_started_at = latest_turn_started_at
+        .or(updated_at)
+        .or(created_at)
+        .unwrap_or_else(|| chrono::Utc::now().timestamp());
+
     store.get_or_create_session(&thread_id, "codex", &project, &cwd, "Codex");
     store.update_session(&thread_id, |session| {
         session.agent_type = "codex".to_string();
@@ -1991,9 +2513,7 @@ fn sync_codex_app_server_thread_to_store(
         };
         session.session_title = name.clone().or_else(|| preview.clone());
         session.description = preview.clone();
-        if let Some(created_at) = created_at {
-            session.started_at = created_at;
-        }
+        session.started_at = trace_started_at;
         if let Some(updated_at) = updated_at {
             session.last_main_agent_at = Some(updated_at);
         }
@@ -2249,6 +2769,37 @@ fn codex_user_message_text(item: &serde_json::Value) -> Option<String> {
     } else {
         Some(text.to_string())
     }
+}
+
+fn codex_latest_turn_started_at(thread: &serde_json::Value) -> Option<i64> {
+    let turns = thread.get("turns").and_then(|value| value.as_array())?;
+    let latest_turn = turns.last()?;
+
+    if let Some(ts) = codex_timestamp(
+        latest_turn
+            .get("startedAt")
+            .or_else(|| latest_turn.get("started_at"))
+            .or_else(|| latest_turn.get("createdAt"))
+            .or_else(|| latest_turn.get("created_at")),
+    ) {
+        return Some(ts);
+    }
+
+    if let Some(items) = latest_turn.get("items").and_then(|v| v.as_array()) {
+        for item in items {
+            if let Some(ts) = codex_timestamp(
+                item.get("startedAt")
+                    .or_else(|| item.get("started_at"))
+                    .or_else(|| item.get("createdAt"))
+                    .or_else(|| item.get("created_at"))
+                    .or_else(|| item.get("timestamp")),
+            ) {
+                return Some(ts);
+            }
+        }
+    }
+
+    None
 }
 
 fn codex_string(value: &serde_json::Value, key: &str) -> Option<String> {
@@ -2787,6 +3338,8 @@ fn usage_percentage(value: &serde_json::Value) -> Option<f64> {
 
 fn used_percentage(value: &serde_json::Value) -> Option<f64> {
     usage_percentage(value)
+        .or_else(|| number_field(value, "percent"))
+        .or_else(|| number_field(value, "usagePercent"))
         .or_else(|| number_field(value, "used_percent"))
         .or_else(|| number_field(value, "usedPercent"))
 }
@@ -5700,6 +6253,10 @@ pub async fn update_config(
 ) -> Result<(), String> {
     // Keep a bad/old value from turning the fallback poll into a busy loop.
     config.session_refresh_interval_seconds = config.session_refresh_interval_seconds.clamp(1, 30);
+    if config.window_close_behavior != "exit" {
+        config.window_close_behavior = "tray".to_string();
+    }
+    config.codex_app_server_sync_configured = true;
     let previous = state.config_store.get();
     state.config_store.update(config.clone())?;
     if previous.analytics_enabled != config.analytics_enabled {
@@ -7396,12 +7953,13 @@ mod tests {
         codex_phase_from_thread, codex_request_user_input_output, codex_token_counts_from_line,
         codex_turn_steer_payload, fallback_terminal_app_name, handle_codex_app_server_request,
         is_codex_desktop_session, is_ide_terminal_session, is_uuid_like,
-        load_codex_token_usage_summary_from_root, parse_subagent_chat_history_for_session,
-        qoder_app_send_message_script, read_codex_session_meta_from_path,
-        redact_sensitive_hook_config, remote_session_chat_history, resolve_session_tty,
-        sync_codex_app_server_thread_to_store, sync_remote_codex_thread_to_store,
-        terminal_hint_for_fallback, CodexAppServerPendingKind, CodexAppServerPendingRequest,
-        CODEX_TOKEN_SOURCE_LABEL,
+        load_codex_token_usage_summary_from_root, parse_opencode_usage_payload,
+        parse_antigravity_usage_payload,
+        parse_subagent_chat_history_for_session, qoder_app_send_message_script,
+        read_codex_session_meta_from_path, redact_sensitive_hook_config,
+        remote_session_chat_history, resolve_session_tty, sync_codex_app_server_thread_to_store,
+        sync_remote_codex_thread_to_store, terminal_hint_for_fallback, CodexAppServerPendingKind,
+        CodexAppServerPendingRequest, CODEX_TOKEN_SOURCE_LABEL,
     };
     #[cfg(target_os = "windows")]
     use super::{
@@ -7430,6 +7988,66 @@ mod tests {
         );
         session.tty = tty.map(ToString::to_string);
         session
+    }
+
+    #[test]
+    fn parses_opencode_go_usage_payload() {
+        let captured_at = chrono::DateTime::parse_from_rfc3339("2026-09-02T00:00:00Z")
+            .unwrap()
+            .with_timezone(&chrono::Utc);
+        let snapshot = parse_opencode_usage_payload(
+            &serde_json::json!({
+                "usage": {
+                    "rolling": { "status": "ok", "percent": 12, "resetsAt": "2026-09-02T05:00:00Z" },
+                    "weekly": { "status": "ok", "percent": 8, "resetsAt": "2026-09-07T00:00:00Z" },
+                    "monthly": { "status": "ok", "percent": 3, "resetsAt": "2026-10-01T00:00:00Z" }
+                }
+            }),
+            captured_at,
+        )
+        .expect("valid OpenCode Go usage payload");
+
+        assert_eq!(snapshot.rate_limits.provider.as_deref(), Some("opencode"));
+        assert_eq!(snapshot.rate_limits.five_hour_usage, 12.0);
+        assert_eq!(snapshot.rate_limits.seven_day_usage, 8.0);
+        assert_eq!(snapshot.rate_limits.windows.len(), 3);
+        assert_eq!(snapshot.rate_limits.windows[2].used_percent, 3.0);
+        assert_eq!(
+            snapshot.rate_limits.windows[2].remaining_percent,
+            Some(97.0)
+        );
+    }
+
+    #[test]
+    fn parses_antigravity_usage_payload_with_all_model_windows() {
+        let captured_at = chrono::DateTime::parse_from_rfc3339("2026-09-02T00:00:00Z")
+            .unwrap()
+            .with_timezone(&chrono::Utc);
+        let snapshot = parse_antigravity_usage_payload(
+            &serde_json::json!({
+                "command": { "data": { "groups": [
+                    { "name": "Gemini Models", "buckets": [
+                        { "id": "gemini-weekly", "window": "weekly", "remaining_fraction": 0.8, "reset_time": "2026-09-05T11:03:35Z" },
+                        { "id": "gemini-5h", "window": "5h", "remaining_fraction": 0.77, "reset_time": "2026-09-02T10:15:04Z" }
+                    ] },
+                    { "name": "Claude and GPT models", "buckets": [
+                        { "id": "3p-weekly", "window": "weekly", "remaining_fraction": 0.52, "reset_time": "2026-09-08T06:20:44Z" },
+                        { "id": "3p-5h", "window": "5h", "remaining_fraction": 1.0, "reset_time": "2026-09-02T11:22:35Z" }
+                    ] }
+                ] } }
+            }),
+            captured_at,
+        )
+        .expect("valid Antigravity /usage payload");
+
+        assert_eq!(snapshot.rate_limits.provider.as_deref(), Some("antigravity"));
+        assert_eq!(snapshot.rate_limits.windows.len(), 4);
+        assert_eq!(snapshot.rate_limits.windows[0].title, "Gemini 7d");
+        assert_eq!(snapshot.rate_limits.windows[1].remaining_percent, Some(77.0));
+        assert_eq!(snapshot.rate_limits.windows[2].title, "Claude/GPT 7d");
+        assert_eq!(snapshot.rate_limits.windows[3].used_percent, 0.0);
+        assert_eq!(snapshot.rate_limits.five_hour_usage, 23.0);
+        assert_eq!(snapshot.rate_limits.seven_day_usage, 20.0);
     }
 
     #[test]

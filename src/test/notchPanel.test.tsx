@@ -173,7 +173,7 @@ describe('NotchPanel island shell', () => {
   it('renders the expanded island shell with the active session', () => {
     mountIsland()
 
-    expect(screen.getByRole('region', { name: 'AgentBro' })).toHaveAttribute('data-island-state', 'hover')
+    expect(screen.getByRole('region', { name: 'Agent Island' })).toHaveAttribute('data-island-state', 'hover')
     expect(screen.getByText('agentbro · Port dynamic island')).toBeInTheDocument()
     expect(screen.getByText('Claude')).toBeInTheDocument()
   })
@@ -212,7 +212,7 @@ describe('NotchPanel island shell', () => {
     })
 
     render(<NotchPanel />)
-    fireEvent.pointerEnter(screen.getByRole('region', { name: 'AgentBro' }).parentElement!)
+    fireEvent.pointerEnter(screen.getByRole('region', { name: 'Agent Island' }).parentElement!)
 
     expect(tauriMocks.setNotchFocusable).toHaveBeenCalledWith(true)
     await waitFor(() => expect(useSessionStore.getState().panelState).toBe('hover'))
@@ -238,7 +238,7 @@ describe('NotchPanel island shell', () => {
 
       render(<NotchPanel />)
 
-      fireEvent.pointerDown(screen.getByRole('region', { name: 'AgentBro' }).parentElement!, { button: 0 })
+      fireEvent.pointerDown(screen.getByRole('region', { name: 'Agent Island' }).parentElement!, { button: 0 })
 
       expect(tauriMocks.setNotchFocusable).toHaveBeenCalledWith(true)
       act(() => {
@@ -275,7 +275,7 @@ describe('NotchPanel island shell', () => {
       expect(hitboxWidthVar()).toBe('140px')
       expect(tauriMocks.resizeNotch).toHaveBeenCalledTimes(1)
 
-      fireEvent.pointerEnter(screen.getByRole('region', { name: 'AgentBro' }).parentElement!)
+      fireEvent.pointerEnter(screen.getByRole('region', { name: 'Agent Island' }).parentElement!)
 
       expect(hostWidthVar()).toBe('754px')
       expect(tauriMocks.resizeNotch).toHaveBeenCalledTimes(1)
@@ -316,7 +316,7 @@ describe('NotchPanel island shell', () => {
       expect(hostWidthVar()).toBe('686px')
       expect(tauriMocks.resizeNotch).toHaveBeenCalledTimes(1)
 
-      fireEvent.pointerLeave(screen.getByRole('region', { name: 'AgentBro' }).parentElement!)
+      fireEvent.pointerLeave(screen.getByRole('region', { name: 'Agent Island' }).parentElement!)
       act(() => {
         vi.advanceTimersByTime(1)
       })
@@ -522,7 +522,7 @@ describe('NotchPanel island shell', () => {
     await waitFor(() => {
       expect(tauriMocks.startNotchDrag).toHaveBeenCalledWith(0, 686, 192, 'auto')
     })
-    expect(screen.getByRole('region', { name: 'AgentBro' })).toHaveAttribute('data-dragging', 'true')
+    expect(screen.getByRole('region', { name: 'Agent Island' })).toHaveAttribute('data-dragging', 'true')
     expect(screen.getByText('agentbro · Port dynamic island')).toBeInTheDocument()
 
     fireEvent.pointerUp(dragHandle, { pointerId: 7 })
@@ -554,19 +554,19 @@ describe('NotchPanel island shell', () => {
     fireEvent.change(input, { target: { value: 'keep this draft' } })
     expect(input).toHaveAttribute('data-has-draft', 'true')
 
-    fireEvent.pointerLeave(screen.getByRole('region', { name: 'AgentBro' }).parentElement!)
+    fireEvent.pointerLeave(screen.getByRole('region', { name: 'Agent Island' }).parentElement!)
     await new Promise((resolve) => setTimeout(resolve, 20))
     expect(useSessionStore.getState().panelState).toBe('expanded')
     await new Promise((resolve) => setTimeout(resolve, 1200))
 
     fireEvent.change(input, { target: { value: '' } })
     expect(input).toHaveAttribute('data-has-draft', 'false')
-    fireEvent.pointerLeave(screen.getByRole('region', { name: 'AgentBro' }).parentElement!)
+    fireEvent.pointerLeave(screen.getByRole('region', { name: 'Agent Island' }).parentElement!)
 
     await waitFor(() => expect(useSessionStore.getState().panelState).toBe('collapsed'))
   })
 
-  it('uses AgentBro-style progressive Escape: collapse first, then hide from compact', async () => {
+  it('uses Agent Island-style progressive Escape: collapse first, then hide from compact', async () => {
     mountIsland()
 
     fireEvent.keyDown(document.body, { key: 'Escape' })
@@ -579,7 +579,7 @@ describe('NotchPanel island shell', () => {
 
     expect(useSessionStore.getState().wakeSilencedUntil).toBeGreaterThan(Date.now())
     await waitFor(() => {
-      expect(screen.getByRole('region', { name: 'AgentBro' }).parentElement).toHaveAttribute(
+      expect(screen.getByRole('region', { name: 'Agent Island' }).parentElement).toHaveAttribute(
         'data-island-hidden',
         'true',
       )
@@ -599,7 +599,7 @@ describe('NotchPanel island shell', () => {
     expect(screen.getByText('agentbro · Port dynamic island')).toBeInTheDocument()
   })
 
-  it('renders task-completion feedback as an AgentBro-style panel', () => {
+  it('renders task-completion feedback as an Agent Island-style panel', () => {
     mountIsland({
       id: 'completion-s1',
       sessionId: 's1',
@@ -608,13 +608,13 @@ describe('NotchPanel island shell', () => {
       createdAt: Date.now(),
     })
 
-    expect(screen.getByRole('region', { name: 'AgentBro' })).toHaveAttribute('data-island-state', 'feedback')
+    expect(screen.getByRole('region', { name: 'Agent Island' })).toHaveAttribute('data-island-state', 'feedback')
     expect(screen.getAllByText('All island parity checks passed').length).toBeGreaterThan(0)
     expect(screen.getByText('完成')).toBeInTheDocument()
     expect(screen.getByPlaceholderText('Send a message...')).toBeInTheDocument()
   })
 
-  it('renders assistant-response feedback as an AgentBro-style panel', () => {
+  it('renders assistant-response feedback as an Agent Island-style panel', () => {
     mountIsland({
       id: 'response-s1',
       sessionId: 's1',
@@ -626,7 +626,7 @@ describe('NotchPanel island shell', () => {
       createdAt: Date.now(),
     })
 
-    expect(screen.getByRole('region', { name: 'AgentBro' })).toHaveAttribute('data-island-state', 'feedback')
+    expect(screen.getByRole('region', { name: 'Agent Island' })).toHaveAttribute('data-island-state', 'feedback')
     expect(screen.getAllByText('Can you continue the migration?').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Ready for the next integration step').length).toBeGreaterThan(0)
     expect(screen.getByText('New reply')).toBeInTheDocument()
@@ -680,8 +680,8 @@ describe('NotchPanel island shell', () => {
 
     render(<NotchPanel />)
 
-    expect(screen.getByRole('region', { name: 'AgentBro' })).toHaveAttribute('data-island-state', 'feedback')
-    expect(screen.getByRole('region', { name: 'AgentBro' })).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('region', { name: 'Agent Island' })).toHaveAttribute('data-island-state', 'feedback')
+    expect(screen.getByRole('region', { name: 'Agent Island' })).toHaveAttribute('aria-expanded', 'true')
     expect(screen.getAllByText('Collapsed response should still pop up').length).toBeGreaterThan(0)
   })
 
@@ -792,7 +792,7 @@ describe('NotchPanel island shell', () => {
       })
 
       render(<NotchPanel />)
-      const hitbox = screen.getByRole('region', { name: 'AgentBro' }).parentElement!
+      const hitbox = screen.getByRole('region', { name: 'Agent Island' }).parentElement!
 
       act(() => {
         vi.advanceTimersByTime(2_000)
@@ -1135,7 +1135,7 @@ describe('NotchPanel island shell', () => {
       pendingPermission: { toolName: 'Bash', toolInput: '{"command":"pnpm test"}' },
     })
 
-    expect(screen.getByRole('region', { name: 'AgentBro' })).toHaveAttribute('data-island-state', 'alert_permission')
+    expect(screen.getByRole('region', { name: 'Agent Island' })).toHaveAttribute('data-island-state', 'alert_permission')
     expect(hostWidthVar()).toBe('656px')
     expect(hitboxWidthVar()).toBe('656px')
     expect(document.querySelector('.notch-panel__alert-content')).toBeInTheDocument()
@@ -1165,10 +1165,10 @@ describe('NotchPanel island shell', () => {
     fireEvent.keyDown(document.body, { key: 'Escape' })
     expect(useSessionStore.getState().panelState).toBe('collapsed')
 
-    fireEvent.pointerEnter(screen.getByRole('region', { name: 'AgentBro' }).parentElement!)
+    fireEvent.pointerEnter(screen.getByRole('region', { name: 'Agent Island' }).parentElement!)
     await waitFor(() => expect(useSessionStore.getState().panelState).toBe('hover'))
 
-    expect(screen.getByRole('region', { name: 'AgentBro' })).toHaveAttribute('data-island-state', 'hover')
+    expect(screen.getByRole('region', { name: 'Agent Island' })).toHaveAttribute('data-island-state', 'hover')
     expect(document.querySelector('.notch-panel__alert-content')).not.toBeInTheDocument()
     expect(document.querySelector('.hover-list')).toBeInTheDocument()
     expect(screen.getByText('agentbro · Port dynamic island')).toBeInTheDocument()
@@ -1204,7 +1204,7 @@ describe('NotchPanel island shell', () => {
     render(<NotchPanel />)
 
     await waitFor(() => expect(useSessionStore.getState().panelState).toBe('collapsed'))
-    expect(screen.getByRole('region', { name: 'AgentBro' })).toHaveAttribute('data-island-state', 'compact')
+    expect(screen.getByRole('region', { name: 'Agent Island' })).toHaveAttribute('data-island-state', 'compact')
     expect(document.querySelector('.notch-panel__alert-content')).not.toBeInTheDocument()
   })
 
@@ -1225,7 +1225,7 @@ describe('NotchPanel island shell', () => {
     expect(tauriMocks.respondPermission).not.toHaveBeenCalled()
     expect(useSessionStore.getState().sessions.s1.pendingPermission).toBeDefined()
     expect(useSessionStore.getState().panelState).toBe('collapsed')
-    expect(screen.getByRole('region', { name: 'AgentBro' })).toHaveAttribute('data-island-state', 'compact')
+    expect(screen.getByRole('region', { name: 'Agent Island' })).toHaveAttribute('data-island-state', 'compact')
   })
 
   it('shows the same permission request inline in the session list after the alert is collapsed', async () => {
@@ -1261,7 +1261,7 @@ describe('NotchPanel island shell', () => {
     })
 
     fireEvent.keyDown(document.body, { key: 'Escape' })
-    fireEvent.pointerEnter(screen.getByRole('region', { name: 'AgentBro' }).parentElement!)
+    fireEvent.pointerEnter(screen.getByRole('region', { name: 'Agent Island' }).parentElement!)
 
     await waitFor(() => expect(document.querySelector('.hover-list')).toBeInTheDocument())
     expect(document.querySelector('.notch-panel__alert-content')).not.toBeInTheDocument()
@@ -1290,7 +1290,7 @@ describe('NotchPanel island shell', () => {
     })
 
     fireEvent.keyDown(document.body, { key: 'Escape' })
-    fireEvent.pointerEnter(screen.getByRole('region', { name: 'AgentBro' }).parentElement!)
+    fireEvent.pointerEnter(screen.getByRole('region', { name: 'Agent Island' }).parentElement!)
 
     await waitFor(() => expect(document.querySelector('.hover-list')).toBeInTheDocument())
     expect(document.querySelector('.notch-panel__alert-content')).not.toBeInTheDocument()
@@ -1665,7 +1665,7 @@ describe('NotchPanel island shell', () => {
         createdAt: Date.now(),
       })
 
-      const hitbox = screen.getByRole('region', { name: 'AgentBro' }).parentElement!
+      const hitbox = screen.getByRole('region', { name: 'Agent Island' }).parentElement!
       const overlay = document.querySelector('.overlay-feedback')!
       fireEvent.pointerEnter(hitbox)
       fireEvent.mouseEnter(overlay)
@@ -1685,7 +1685,7 @@ describe('NotchPanel island shell', () => {
       })
 
       expect(useSessionStore.getState().activeOverlay?.id).toBe('response-s1-reply-stays-open')
-      expect(screen.getByRole('region', { name: 'AgentBro' })).toHaveAttribute('data-island-state', 'feedback')
+      expect(screen.getByRole('region', { name: 'Agent Island' })).toHaveAttribute('data-island-state', 'feedback')
 
       act(() => {
         vi.advanceTimersByTime(2_500)
@@ -1716,7 +1716,7 @@ describe('NotchPanel island shell', () => {
         createdAt: Date.now(),
       })
 
-      const hitbox = screen.getByRole('region', { name: 'AgentBro' }).parentElement!
+      const hitbox = screen.getByRole('region', { name: 'Agent Island' }).parentElement!
       const overlay = document.querySelector('.overlay-feedback')!
       const replyInput = screen.getByPlaceholderText('Send a message...')
 
@@ -1777,7 +1777,7 @@ describe('NotchPanel island shell', () => {
     const now = Date.now()
     const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(now + 2_000)
     try {
-      fireEvent.pointerLeave(screen.getByRole('region', { name: 'AgentBro' }).parentElement!)
+      fireEvent.pointerLeave(screen.getByRole('region', { name: 'Agent Island' }).parentElement!)
 
       await waitFor(() => expect(useSessionStore.getState().panelState).toBe('collapsed'))
       expect(tauriMocks.setNotchFocusable).toHaveBeenCalledWith(false)
@@ -1813,7 +1813,7 @@ describe('NotchPanel island shell', () => {
         createdAt: Date.now(),
       })
 
-      const hitbox = screen.getByRole('region', { name: 'AgentBro' }).parentElement!
+      const hitbox = screen.getByRole('region', { name: 'Agent Island' }).parentElement!
       fireEvent.pointerEnter(hitbox)
       act(() => {
         vi.advanceTimersByTime(2_000)
@@ -1905,7 +1905,7 @@ describe('NotchPanel island shell', () => {
     render(<NotchPanel />)
     tauriMocks.setNotchFocusable.mockClear()
 
-    fireEvent.pointerEnter(screen.getByRole('region', { name: 'AgentBro' }).parentElement!)
+    fireEvent.pointerEnter(screen.getByRole('region', { name: 'Agent Island' }).parentElement!)
 
     expect(tauriMocks.setNotchFocusable).toHaveBeenCalledWith(true)
     await waitFor(() => expect(useSessionStore.getState().panelState).toBe('hover'))

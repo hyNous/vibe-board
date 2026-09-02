@@ -34,6 +34,7 @@ pub fn detect_installed_tools() -> Vec<DetectedTool> {
             &["opencode"],
             &[".config/opencode", ".opencode"],
         ),
+        detect_antigravity(),
     ]
 }
 
@@ -104,6 +105,27 @@ fn detect_zcode() -> DetectedTool {
     DetectedTool {
         name: "zcode".to_string(),
         display_name: "ZCode".to_string(),
+        status,
+        binary_path: binary_path.map(|path| path.display().to_string()),
+        config_dir: config_dir.map(|path| path.display().to_string()),
+    }
+}
+
+fn detect_antigravity() -> DetectedTool {
+    let binary_path = find_binary(&["agy", "antigravity"]);
+    let config_dir = find_config_dir(&[".gemini/config", ".antigravity"]);
+    let program_status = super::programs::detected_status_for_agent_program("antigravity");
+    let status = if binary_path.is_some() || matches!(program_status, AdapterStatus::Available) {
+        AdapterStatus::Available
+    } else if config_dir.is_some() || matches!(program_status, AdapterStatus::Installed) {
+        AdapterStatus::Installed
+    } else {
+        AdapterStatus::Unavailable
+    };
+
+    DetectedTool {
+        name: "antigravity".to_string(),
+        display_name: "Antigravity".to_string(),
         status,
         binary_path: binary_path.map(|path| path.display().to_string()),
         config_dir: config_dir.map(|path| path.display().to_string()),

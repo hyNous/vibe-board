@@ -1,7 +1,7 @@
 import { useCallback, type MouseEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { OverlayItem, SessionState } from '../../types/agent'
-import { getAgentDisplayName, getSessionAppLabel, getSessionTerminalLabel, getSessionTitle } from '../../utils/sessionDisplay'
+import { getAgentDisplayName, getSessionAppLabel, getSessionTaskDurationSeconds, getSessionTerminalLabel, getSessionTitle } from '../../utils/sessionDisplay'
 import { formatDurationShort } from '../../utils/time'
 import { MascotRouter } from '../notch/mascots/MascotRouter'
 import './OverlayCompactingCard.css'
@@ -48,7 +48,7 @@ export function OverlayCompactingCard({ session, onJumpToTerminal, onDismiss, on
             {appLabel && <span className="overlay-compacting__badge overlay-compacting__badge--source">{appLabel}</span>}
             <span className="overlay-compacting__badge">{agentName}</span>
             {terminalLabel && <span className="overlay-compacting__badge">{terminalLabel}</span>}
-            <span className="overlay-compacting__duration">{formatDurationShort(session.duration)}</span>
+            <span className="overlay-compacting__duration">{formatDurationShort(getSessionTaskDurationSeconds(session))}</span>
             <button
               type="button"
               className="overlay-compacting__close"
@@ -91,16 +91,16 @@ export function OverlayCompactingCard({ session, onJumpToTerminal, onDismiss, on
             }}
           >
             <span className="overlay-card__brand-logo-stack" aria-hidden="true">
-              <img className="overlay-card__brand-logo overlay-card__brand-logo--light" src="/agentbro-logo.png" alt="" />
-              <img className="overlay-card__brand-logo overlay-card__brand-logo--dark" src="/agentbro-logo-dark.png" alt="" />
+              <img className="overlay-card__brand-logo overlay-card__brand-logo--light" src="/agent-island-logo.png" alt="" />
+              <img className="overlay-card__brand-logo overlay-card__brand-logo--dark" src="/agent-island-logo-dark.png" alt="" />
             </span>
             <span>{t('notch.slogan', { defaultValue: '让 Agent 更好用' })}</span>
           </button>
         ) : (
           <div className="overlay-card__show-sessions overlay-card__show-sessions--static">
             <span className="overlay-card__brand-logo-stack" aria-hidden="true">
-              <img className="overlay-card__brand-logo overlay-card__brand-logo--light" src="/agentbro-logo.png" alt="" />
-              <img className="overlay-card__brand-logo overlay-card__brand-logo--dark" src="/agentbro-logo-dark.png" alt="" />
+              <img className="overlay-card__brand-logo overlay-card__brand-logo--light" src="/agent-island-logo.png" alt="" />
+              <img className="overlay-card__brand-logo overlay-card__brand-logo--dark" src="/agent-island-logo-dark.png" alt="" />
             </span>
             <span>{t('notch.slogan', { defaultValue: '让 Agent 更好用' })}</span>
           </div>

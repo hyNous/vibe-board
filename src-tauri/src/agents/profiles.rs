@@ -1489,7 +1489,10 @@ fn text_hooks_health(profile: &AgentIntegrationProfile, path: &Path) -> HookInst
         Err(_) => return HookInstallHealth::SettingsCorrupted,
     };
     let marker = marker(profile);
-    if !content.contains(&marker) && !content.contains("agentbro-bridge") {
+    if !content.contains(&marker)
+        && !content.contains("agentbro-bridge")
+        && !content.contains("agent-island-bridge")
+    {
         return HookInstallHealth::NotInstalled;
     }
     if let Some(status) = bridge_health() {
@@ -2348,7 +2351,9 @@ where
 
 fn is_agentbro_command(command: &str) -> bool {
     command.contains("agentbro-bridge")
+        || command.contains("agent-island-bridge")
         || command.contains("/.agentbro/")
+        || command.contains("/.agent-island/")
         || command.contains("AGENTBRO_")
         || command.contains(MARKER_PREFIX)
 }

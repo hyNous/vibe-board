@@ -1,23 +1,21 @@
 import { useEffect, useRef, useState } from 'react'
 import type { OverlayItem, SessionState } from '../../types/agent'
 import type { EmoteKind } from './PetEmote'
-import { playSound } from '../../services/tauriApi'
 
 export type SummonKind = 'permission' | 'question' | 'plan' | 'error' | null
 
 interface SummonAction {
   kind: Exclude<SummonKind, null>
   emote: EmoteKind
-  soundEvent: string
 }
 
 const ACTION_BY_OVERLAY: Record<string, SummonAction> = {
-  permission: { kind: 'permission', emote: '❓', soundEvent: 'permission-request' },
-  question: { kind: 'question', emote: '❓', soundEvent: 'question-asked' },
-  plan: { kind: 'plan', emote: '💭', soundEvent: 'plan-approval' },
+  permission: { kind: 'permission', emote: '❓' },
+  question: { kind: 'question', emote: '❓' },
+  plan: { kind: 'plan', emote: '💭' },
 }
 
-const ERROR_ACTION: SummonAction = { kind: 'error', emote: '💥', soundEvent: 'session-error' }
+const ERROR_ACTION: SummonAction = { kind: 'error', emote: '💥' }
 
 const ANIM_OVERRIDE_MS = 700
 const EMOTE_HOLD_MS = 500
@@ -36,8 +34,8 @@ interface UsePetSummonResult {
 }
 
 /**
- * Drives the pet's "main aware me!" reaction: plays a sound, swaps animation
- * to `jumping`, and surfaces an emote glyph above the pet. Fires once per
+ * Drives the pet's "main aware me!" reaction: swaps animation to `jumping`
+ * and surfaces an emote glyph above the pet. Fires once per
  * unique overlay/error transition and clears itself after the timers expire.
  */
 export function usePetSummon({ activeOverlay, topSession }: UsePetSummonOptions): UsePetSummonResult {
@@ -80,7 +78,6 @@ export function usePetSummon({ activeOverlay, topSession }: UsePetSummonOptions)
     setAnim('jumping')
     setEmote(action.emote)
     setNonce((n) => n + 1)
-    void playSound(action.soundEvent).catch(() => {})
     timersRef.current.push(window.setTimeout(() => setAnim(null), ANIM_OVERRIDE_MS))
     timersRef.current.push(window.setTimeout(() => setEmote(null), EMOTE_HOLD_MS))
     timersRef.current.push(

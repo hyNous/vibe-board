@@ -14,7 +14,7 @@ import { isDarkColorTheme, useThemeStore } from '../../stores/themeStore'
 import { respondAutoApprove, respondPermission, respondPlan, respondQuestion, setNotchFocusable } from '../../services/tauriApi'
 import { formatDurationShort } from '../../utils/time'
 import { getToolActivityLabel } from '../../utils/toolLabels'
-import { formatModelName, getAgentDisplayName, getSessionAppLabel, getSessionTerminalLabel, isPassiveSession, isTtyLabel, shouldShowAgentBadge } from '../../utils/sessionDisplay'
+import { formatModelName, getAgentDisplayName, getSessionAppLabel, getSessionTaskDurationSeconds, getSessionTerminalLabel, isPassiveSession, isTtyLabel, shouldShowAgentBadge } from '../../utils/sessionDisplay'
 import { getSessionListSubagents } from '../../utils/subagents'
 import { getStringField, getWritePermissionPreview, parseToolInput, WRITE_PERMISSION_PREVIEW_LINES } from '../../utils/permissionPreview'
 import { formatPlanMarkdown, parsePlanPermission } from '../../utils/plan'
@@ -1349,7 +1349,12 @@ function SessionCard({
                 {session.model && (
                   <span className="hover-list__model-badge" title={formatModelName(session.model)}>{formatModelName(session.model)}</span>
                 )}
-                <span className="hover-list__duration">{formatDurationShort(session.duration)}</span>
+                <span
+                  className="hover-list__duration"
+                  title="本轮任务时长"
+                >
+                  {formatDurationShort(getSessionTaskDurationSeconds(session))}
+                </span>
                 <button
                   type="button"
                   data-no-drag
@@ -1502,7 +1507,7 @@ export function HoverList({
   const islandAnimationScaleValue = useConfigStore((s) => s.islandAnimationScale)
   const maxVisibleSessions = useConfigStore((s) => s.maxVisibleSessions)
   const colorTheme = useThemeStore((s) => s.colorTheme)
-  const emptyLogoSrc = isDarkColorTheme(colorTheme) ? '/agentbro-logo-dark.png' : '/agentbro-logo.png'
+  const emptyLogoSrc = isDarkColorTheme(colorTheme) ? '/agent-island-logo-dark.png' : '/agent-island-logo.png'
   const brandFooterTone = colorTheme === 'system' ? 'system' : isDarkColorTheme(colorTheme) ? 'dark' : 'light'
   const islandAnimationScale = Math.max(0.1, islandAnimationScaleValue || 1)
   const animDuration = (HOVER_SPEED_MS[hoverSpeed] ?? 0.2) * islandAnimationScale
@@ -1568,7 +1573,7 @@ export function HoverList({
         </div>
         <div className="hover-list__empty-copy">
           <span className="hover-list__empty-title">
-            {focusFilteredEmpty ? t('notch.noSessionInFocus') : 'AgentBro'}
+            {focusFilteredEmpty ? t('notch.noSessionInFocus') : 'Agent Island'}
           </span>
           <span className="hover-list__empty-text">
             {focusFilteredEmpty ? t('notch.noSessionInFocusHint') : t('notch.slogan')}
@@ -1629,8 +1634,8 @@ export function HoverList({
       {!hideBrandFooter && (
         <div className={`hover-list__brand-footer hover-list__brand-footer--${brandFooterTone}`} aria-hidden>
           <span className="hover-list__brand-logo-stack">
-            <img className="hover-list__brand-logo hover-list__brand-logo--light" src="/agentbro-logo.png" alt="" />
-            <img className="hover-list__brand-logo hover-list__brand-logo--dark" src="/agentbro-logo-dark.png" alt="" />
+            <img className="hover-list__brand-logo hover-list__brand-logo--light" src="/agent-island-logo.png" alt="" />
+            <img className="hover-list__brand-logo hover-list__brand-logo--dark" src="/agent-island-logo-dark.png" alt="" />
           </span>
           <span className="hover-list__brand-slogan">{t('notch.slogan')}</span>
         </div>

@@ -5,7 +5,7 @@ import remarkGfm from 'remark-gfm'
 import type { SessionState } from '../../types/agent'
 import { useSessionStore } from '../../stores/sessionStore'
 import { sendMessage, setNotchFocusable } from '../../services/tauriApi'
-import { getAgentDisplayName, getSessionAppLabel, getSessionTerminalLabel, getSessionTitle } from '../../utils/sessionDisplay'
+import { getAgentDisplayName, getSessionAppLabel, getSessionTaskDurationSeconds, getSessionTerminalLabel, getSessionTitle } from '../../utils/sessionDisplay'
 import { getComposerCapability, type ComposerLockReason } from '../../utils/sessionCapabilities'
 import { formatDurationShort } from '../../utils/time'
 import { MascotRouter } from '../notch/mascots/MascotRouter'
@@ -293,7 +293,7 @@ export function OverlayFeedbackPanel({
             </span>
             <span className="overlay-feedback__badge">{agentName}</span>
             {terminalLabel && <span className="overlay-feedback__badge">{terminalLabel}</span>}
-            <span className="overlay-feedback__duration">{formatDurationShort(session.duration)}</span>
+            <span className="overlay-feedback__duration">{formatDurationShort(getSessionTaskDurationSeconds(session))}</span>
             <div className="overlay-feedback__actions">
               <button
                 type="button"
@@ -409,16 +409,16 @@ export function OverlayFeedbackPanel({
             }}
           >
             <span className="overlay-card__brand-logo-stack" aria-hidden="true">
-              <img className="overlay-card__brand-logo overlay-card__brand-logo--light" src="/agentbro-logo.png" alt="" />
-              <img className="overlay-card__brand-logo overlay-card__brand-logo--dark" src="/agentbro-logo-dark.png" alt="" />
+              <img className="overlay-card__brand-logo overlay-card__brand-logo--light" src="/agent-island-logo.png" alt="" />
+              <img className="overlay-card__brand-logo overlay-card__brand-logo--dark" src="/agent-island-logo-dark.png" alt="" />
             </span>
             <span>{t('notch.slogan', { defaultValue: '让 Agent 更好用' })}</span>
           </button>
         ) : (
           <div className="overlay-card__show-sessions overlay-card__show-sessions--static">
             <span className="overlay-card__brand-logo-stack" aria-hidden="true">
-              <img className="overlay-card__brand-logo overlay-card__brand-logo--light" src="/agentbro-logo.png" alt="" />
-              <img className="overlay-card__brand-logo overlay-card__brand-logo--dark" src="/agentbro-logo-dark.png" alt="" />
+              <img className="overlay-card__brand-logo overlay-card__brand-logo--light" src="/agent-island-logo.png" alt="" />
+              <img className="overlay-card__brand-logo overlay-card__brand-logo--dark" src="/agent-island-logo-dark.png" alt="" />
             </span>
             <span>{t('notch.slogan', { defaultValue: '让 Agent 更好用' })}</span>
           </div>

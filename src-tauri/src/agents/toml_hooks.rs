@@ -22,7 +22,7 @@ pub enum Segment {
 }
 
 pub fn is_managed(entry: &TomlHookEntry) -> bool {
-    entry.command.contains("agentbro-bridge")
+    entry.command.contains("agentbro-bridge") || entry.command.contains("agent-island-bridge")
 }
 
 fn is_legacy_vibe_island(entry: &TomlHookEntry) -> bool {

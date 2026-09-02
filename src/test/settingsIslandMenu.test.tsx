@@ -157,7 +157,7 @@ describe('settings island menu', () => {
     fireEvent.click(screen.getByText('settings.remoteServers.title'))
 
     await waitFor(() => expect(screen.getByText('settings.listeningPortDesc')).toBeInTheDocument())
-    expect(screen.getByText('One server directory for AgentBro')).toBeInTheDocument()
+    expect(screen.getByText('One server directory for Agent Island')).toBeInTheDocument()
   })
 
   it('places Remote Servers immediately after Agent management', () => {
@@ -368,38 +368,6 @@ describe('settings island menu', () => {
     expect(tauriMocks.previewIslandLayout).toHaveBeenCalledWith('expanded', expect.objectContaining({
       detailPanelMaxHeight: 420,
     }))
-  })
-
-  it('localizes sound event labels and explains probe session filtering', async () => {
-    render(<SettingsApp onClose={vi.fn()} />)
-
-    fireEvent.click(screen.getByText('settings.island.title'))
-    fireEvent.click(screen.getByRole('button', { name: /Notifications/ }))
-
-    await waitFor(() => expect(screen.getByText('会话开始')).toBeInTheDocument())
-    expect(screen.getByText('权限请求')).toBeInTheDocument()
-    expect(screen.getByText('上下文压缩')).toBeInTheDocument()
-    expect(screen.queryByText('Session Started')).not.toBeInTheDocument()
-    expect(screen.getByText('静音很快结束的后台探测会话，避免连接检查、模型探测等短任务播放提示音。')).toBeInTheDocument()
-  })
-
-  it('previews notification sounds without rewriting the saved event rule', async () => {
-    useConfigStore.setState({
-      soundRules: {
-        ...useConfigStore.getState().soundRules,
-        'session-start': { enabled: false, sound: 'builtin:hero' },
-      },
-    })
-    render(<SettingsApp onClose={vi.fn()} />)
-
-    fireEvent.click(screen.getByText('settings.island.title'))
-    fireEvent.click(screen.getByRole('button', { name: /Notifications/ }))
-
-    const row = (await screen.findByText('会话开始')).closest('.sound-event-row')!
-    fireEvent.click(row.querySelector('.sound-event-row__play')!)
-
-    await waitFor(() => expect(tauriMocks.previewSound).toHaveBeenCalledWith('session-start', 'builtin:hero'))
-    expect(tauriMocks.setSoundEventRule).not.toHaveBeenCalled()
   })
 
   it('records and clears in-window shortcuts from the shortcuts page', async () => {

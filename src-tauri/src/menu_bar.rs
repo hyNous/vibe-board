@@ -14,31 +14,31 @@ pub struct MenuBarLabels {
 pub fn labels(language: &str) -> MenuBarLabels {
     match language {
         "zh" => MenuBarLabels {
-            open: "打开 AgentBro",
+            open: "打开 Agent Island",
             skill_packs: "技能包…",
             settings: "设置",
             quit: "退出",
         },
         "ja" => MenuBarLabels {
-            open: "AgentBro を開く",
+            open: "Agent Island を開く",
             skill_packs: "スキルパック…",
             settings: "設定",
             quit: "終了",
         },
         "ko" => MenuBarLabels {
-            open: "AgentBro 열기",
+            open: "Agent Island 열기",
             skill_packs: "스킬 팩…",
             settings: "설정",
             quit: "종료",
         },
         "tr" => MenuBarLabels {
-            open: "AgentBro'yu Aç",
+            open: "Agent Island'yu Aç",
             skill_packs: "Beceri Paketleri…",
             settings: "Ayarlar",
             quit: "Çıkış",
         },
         _ => MenuBarLabels {
-            open: "Open AgentBro",
+            open: "Open Agent Island",
             skill_packs: "Skill Packs…",
             settings: "Settings",
             quit: "Quit",

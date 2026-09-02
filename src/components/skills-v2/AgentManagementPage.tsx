@@ -736,7 +736,7 @@ export function AgentManagementPage() {
           onCancel={() => setUninstallAgentTarget(null)}
           onConfirm={() => uninstallAgent(uninstallAgentTarget)}
         >
-          <p className="sm2-agent-uninstall__intro">卸载会移除支持自动卸载的程序，并清理 AgentBro 检测到的本地能力残留。</p>
+          <p className="sm2-agent-uninstall__intro">卸载会移除支持自动卸载的程序，并清理 Agent Island 检测到的本地能力残留。</p>
           <div className="sm2-agent-uninstall__summary" aria-label="卸载清理范围">
             {uninstallProgramInstalled && uninstallProgram?.uninstallCommand && (
               <div><strong>程序</strong><span>{uninstallProgram.kind === 'app' ? '移到废纸篓' : '执行卸载命令'}</span></div>
@@ -754,14 +754,14 @@ export function AgentManagementPage() {
               <div><strong>{uninstallAgentTarget.appliedPacks.length}</strong><span>技能包关联</span></div>
             )}
             {uninstallProgram?.hooksInstalled && (
-              <div><strong>Hook</strong><span>移除 AgentBro Hook</span></div>
+              <div><strong>Hook</strong><span>移除 Agent Island Hook</span></div>
             )}
             {!uninstallProgramInstalled && (
               <div><strong>程序</strong><span>未安装，仅清理残留</span></div>
             )}
           </div>
           {uninstallUnmanagedItems.length > 0 && (
-            <div className="sm2-agent-uninstall__warning">未管理 Skills 会直接删除；若中心库没有副本，删除后无法从 AgentBro 恢复。</div>
+            <div className="sm2-agent-uninstall__warning">未管理 Skills 会直接删除；若中心库没有副本，删除后无法从 Agent Island 恢复。</div>
           )}
           <div className="sm2-agent-uninstall__preserved">保留：中心技能库、Agent 配置、会话记录、MCP 与插件配置。</div>
           {uninstallProgramInstalled && uninstallProgram?.uninstallCommand && (
@@ -783,7 +783,7 @@ export function AgentManagementPage() {
           onCancel={() => setDeleteAgentTarget(null)}
           onConfirm={() => deleteCustomAgent(deleteAgentTarget)}
         >
-          <p>会移除 AgentBro 注册并清理该实例的 AgentBro Hook，不会删除配置目录、会话记录或 Skills 文件。</p>
+          <p>会移除 Agent Island 注册并清理该实例的 Agent Island Hook，不会删除配置目录、会话记录或 Skills 文件。</p>
         </PreviewDialog>
       )}
     </div>
@@ -868,7 +868,7 @@ function CustomAgentDialog({
         <div className="skills-dialog__header">
           <div>
             <div className="skills-dialog__title" id="custom-agent-dialog-title">{t('settings.addEngineBranch')}</div>
-            <p className="custom-agent-dialog__subtitle">让企业封装版 Claude Code 使用自己的配置目录，同时复用 AgentBro 的 Hook、会话和 Skills 管理。</p>
+            <p className="custom-agent-dialog__subtitle">让企业封装版 Claude Code 使用自己的配置目录，同时复用 Agent Island 的 Hook、会话和 Skills 管理。</p>
           </div>
         </div>
         <div className="skills-dialog__body">
@@ -2396,7 +2396,7 @@ function SkillsTab({
           ) : (
             <>
               <p><strong>{batchDeleteUnmanagedTargets.length}</strong> 个未管理 Skill 将从当前 Agent 直接删除。</p>
-              <p>这些 Skill 不会写入中心库，删除后无法从 AgentBro 恢复。</p>
+              <p>这些 Skill 不会写入中心库，删除后无法从 Agent Island 恢复。</p>
             </>
           )}
         </PreviewDialog>
@@ -4158,7 +4158,7 @@ function HookEventRow({
           </span>
         </div>
         <div className="sm2__hook-event-hooks">
-          <span>{installed && event.enabled ? 'AgentBro Bridge' : '未生效'}</span>
+          <span>{installed && event.enabled ? 'Agent Island Bridge' : '未生效'}</span>
           {typeof event.timeout === 'number' && <span>timeout {event.timeout}s</span>}
         </div>
         {configPath && <code>{configPath}</code>}

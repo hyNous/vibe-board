@@ -3,8 +3,10 @@
 
 use std::path::{Path, PathBuf};
 
-const AGENTBRO_MARKER: &str = "agentbro";
-const AGENTBRO_BRIDGE_MARKER: &str = "agentbro-bridge";
+const AGENT_ISLAND_MARKER: &str = "agent-island";
+const LEGACY_AGENTBRO_MARKER: &str = "agentbro";
+const AGENT_ISLAND_BRIDGE_MARKER: &str = "agent-island-bridge";
+const LEGACY_AGENTBRO_BRIDGE_MARKER: &str = "agentbro-bridge";
 const BLOCK_START: &str = "# [AGENTBRO-START]";
 const BLOCK_END: &str = "# [AGENTBRO-END]";
 
@@ -35,9 +37,9 @@ pub fn write_json_config(
     Ok(())
 }
 
-/// Inject agentbro hook entries into a JSON "hooks" object.
+/// Inject Agent Island hook entries into a JSON "hooks" object.
 /// Keys are event names; each value is an array of hook entries.
-/// Existing non-agentbro entries are preserved.
+/// Existing non-Agent Island entries are preserved.
 pub fn inject_hooks_json(settings: &mut serde_json::Value, events: &[&str], hook_command: &str) {
     if settings.get("hooks").is_none() {
         settings["hooks"] = serde_json::json!({});
@@ -48,11 +50,11 @@ pub fn inject_hooks_json(settings: &mut serde_json::Value, events: &[&str], hook
             .entry(event.to_string())
             .or_insert_with(|| serde_json::json!([]));
         if let Some(arr) = entry.as_array_mut() {
-            // Remove stale agentbro entries
+            // Remove stale Agent Island and legacy AgentBro entries.
             arr.retain(|e| {
                 !e.get("command")
                     .and_then(|c| c.as_str())
-                    .map(|c| c.contains(AGENTBRO_MARKER))
+                    .map(is_managed_hook_command)
                     .unwrap_or(false)
             });
             arr.push(serde_json::json!({"type": "command", "command": hook_command}));
@@ -60,7 +62,7 @@ pub fn inject_hooks_json(settings: &mut serde_json::Value, events: &[&str], hook
     }
 }
 
-/// Remove all agentbro hook entries from a JSON config.
+/// Remove all Agent Island and legacy AgentBro hook entries from a JSON config.
 pub fn remove_hooks_json(settings: &mut serde_json::Value) {
     if let Some(hooks) = settings.get_mut("hooks").and_then(|h| h.as_object_mut()) {
         for (_, v) in hooks.iter_mut() {
@@ -68,7 +70,7 @@ pub fn remove_hooks_json(settings: &mut serde_json::Value) {
                 arr.retain(|e| {
                     !e.get("command")
                         .and_then(|c| c.as_str())
-                        .map(|c| c.contains(AGENTBRO_MARKER))
+                        .map(is_managed_hook_command)
                         .unwrap_or(false)
                 });
             }
@@ -78,7 +80,7 @@ pub fn remove_hooks_json(settings: &mut serde_json::Value) {
 
 // ── YAML ─────────────────────────────────────────────────────────────────────
 
-/// Inject agentbro hooks into a YAML config using sentinel block markers.
+/// Inject Agent Island hooks into a YAML config using sentinel block markers.
 /// The user's existing YAML content is preserved outside the sentinel block.
 pub fn inject_hooks_yaml(
     config_path: &Path,
@@ -106,13 +108,13 @@ pub fn inject_hooks_yaml(
     Ok(())
 }
 
-/// Remove the agentbro sentinel block from a YAML config.
+/// Remove the Agent Island sentinel block from a YAML config.
 pub fn remove_hooks_yaml(config_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
     if !config_path.exists() {
         return Ok(());
     }
     let content = std::fs::read_to_string(config_path)?;
-    if !content.contains(AGENTBRO_MARKER) {
+    if !is_managed_hook_command(&content) {
         return Ok(());
     }
     let stripped = strip_sentinel_block(&content);
@@ -133,7 +135,7 @@ fn build_yaml_block(hook_command: &str, events: &[&str]) -> String {
 
 // ── TOML ─────────────────────────────────────────────────────────────────────
 
-/// Inject agentbro hooks into a TOML config using sentinel block markers.
+/// Inject Agent Island hooks into a TOML config using sentinel block markers.
 pub fn inject_hooks_toml(
     config_path: &Path,
     hook_command: &str,
@@ -160,13 +162,13 @@ pub fn inject_hooks_toml(
     Ok(())
 }
 
-/// Remove the agentbro sentinel block from a TOML config.
+/// Remove the Agent Island sentinel block from a TOML config.
 pub fn remove_hooks_toml(config_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
     if !config_path.exists() {
         return Ok(());
     }
     let content = std::fs::read_to_string(config_path)?;
-    if !content.contains(AGENTBRO_MARKER) {
+    if !is_managed_hook_command(&content) {
         return Ok(());
     }
     let stripped = strip_sentinel_block(&content);
@@ -225,7 +227,7 @@ pub fn has_agentbro_hooks(path: &Path) -> bool {
         for name in ["plugin.yaml", "__init__.py"] {
             let candidate = path.join(name);
             if std::fs::read_to_string(candidate)
-                .map(|s| s.contains(AGENTBRO_BRIDGE_MARKER) || s.contains(BLOCK_START))
+                .map(|s| is_managed_hook_command(&s) || s.contains(BLOCK_START))
                 .unwrap_or(false)
             {
                 return true;
@@ -235,8 +237,15 @@ pub fn has_agentbro_hooks(path: &Path) -> bool {
     }
 
     std::fs::read_to_string(path)
-        .map(|s| s.contains(AGENTBRO_BRIDGE_MARKER) || s.contains(BLOCK_START))
+        .map(|s| is_managed_hook_command(&s) || s.contains(BLOCK_START))
         .unwrap_or(false)
+}
+
+fn is_managed_hook_command(value: &str) -> bool {
+    value.contains(AGENT_ISLAND_MARKER)
+        || value.contains(LEGACY_AGENTBRO_MARKER)
+        || value.contains(AGENT_ISLAND_BRIDGE_MARKER)
+        || value.contains(LEGACY_AGENTBRO_BRIDGE_MARKER)
 }
 
 /// Return the bridge binary path for use in hook commands.
@@ -266,16 +275,16 @@ fn bridge_binary_is_current_at(dest: &Path, source: Option<&Path>) -> bool {
 
 fn raw_bridge_binary_path() -> PathBuf {
     let home = dirs::home_dir().unwrap_or_else(std::env::temp_dir);
-    home.join(".agentbro")
+    home.join(".agent-island")
         .join("bin")
         .join(bridge_binary_name())
 }
 
 fn bridge_binary_name() -> &'static str {
     if cfg!(target_os = "windows") {
-        "agentbro-bridge.exe"
+        "agent-island-bridge.exe"
     } else {
-        "agentbro-bridge"
+        "agent-island-bridge"
     }
 }
 
@@ -311,7 +320,7 @@ pub fn bridge_command_parts(bridge: &Path, args: &[String]) -> Vec<String> {
     parts
 }
 
-/// Ensure the bridge binary is deployed to ~/.agentbro/bin.
+/// Ensure the bridge binary is deployed to ~/.agent-island/bin.
 pub fn ensure_bridge_binary() -> Result<PathBuf, Box<dyn std::error::Error>> {
     let dest = raw_bridge_binary_path();
     if let Some(parent) = dest.parent() {
@@ -404,10 +413,10 @@ fn bridge_source_candidates() -> Vec<PathBuf> {
     if let Ok(exe) = std::env::current_exe() {
         if let Some(exe_dir) = exe.parent() {
             candidates.push(exe_dir.join(bridge_binary_name()));
-            candidates.push(exe_dir.join("agentbro-bridge"));
+            candidates.push(exe_dir.join(legacy_bridge_binary_name()));
             if let Some(contents_dir) = exe_dir.parent() {
                 candidates.push(contents_dir.join("Resources").join(bridge_binary_name()));
-                candidates.push(contents_dir.join("Resources").join("agentbro-bridge"));
+                candidates.push(contents_dir.join("Resources").join(legacy_bridge_binary_name()));
                 if let Some(app_dir) = contents_dir.parent() {
                     candidates.push(
                         app_dir
@@ -419,7 +428,7 @@ fn bridge_source_candidates() -> Vec<PathBuf> {
                         app_dir
                             .join("Contents")
                             .join("Resources")
-                            .join("agentbro-bridge"),
+                            .join(legacy_bridge_binary_name()),
                     );
                 }
             }
@@ -429,18 +438,39 @@ fn bridge_source_candidates() -> Vec<PathBuf> {
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join(format!("target/debug/{}", bridge_binary_name())),
     );
-    candidates.push(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/debug/agentbro-bridge"));
+    candidates.push(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("target/debug")
+            .join(legacy_bridge_binary_name()),
+    );
     candidates.push(
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join(format!("target/release/{}", bridge_binary_name())),
     );
-    candidates
-        .push(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/release/agentbro-bridge"));
     candidates.push(
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("target/agentbro-bridge-resource/agentbro-bridge"),
+            .join("target/release")
+            .join(legacy_bridge_binary_name()),
+    );
+    candidates.push(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("target/agent-island-bridge-resource")
+            .join(bridge_binary_name()),
+    );
+    candidates.push(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("target/agentbro-bridge-resource")
+            .join(legacy_bridge_binary_name()),
     );
     candidates
+}
+
+fn legacy_bridge_binary_name() -> &'static str {
+    if cfg!(target_os = "windows") {
+        "agentbro-bridge.exe"
+    } else {
+        "agentbro-bridge"
+    }
 }
 
 fn command_quote(value: &str) -> String {
