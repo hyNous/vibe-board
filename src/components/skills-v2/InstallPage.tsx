@@ -3,11 +3,9 @@ import { useSkillStoreV2 } from '../../stores/skillStoreV2'
 import type { SkillInstallTab } from '../../stores/skillStoreV2'
 import type { SkillSummary } from '../../services/skillApiV2'
 import { AgentSyncPanel, LocalPanel, GitPanel } from './InstallView'
-import { OfficialSourcesPanel } from './OfficialSourcesPanel'
 import { DistributeDialog } from './DistributeDialog'
 
 const TABS: Array<{ id: SkillInstallTab; icon: string; label: string }> = [
-  { id: 'official', icon: '★', label: '市场' },
   { id: 'agent', icon: '◌', label: 'Agent 同步' },
   { id: 'local', icon: '📁', label: '本地导入' },
   { id: 'git', icon: '⑂', label: 'Git 安装' },
@@ -15,15 +13,10 @@ const TABS: Array<{ id: SkillInstallTab; icon: string; label: string }> = [
 
 export function InstallPage() {
   const state = useSkillStoreV2()
-  const tab = state.activeInstallTab
+  // Older persisted state may still contain the removed marketplace tab.
+  const tab = state.activeInstallTab === 'official' ? 'git' : state.activeInstallTab
   const setTab = state.setInstallTab
-  const [gitUrl, setGitUrl] = useState('')
   const [justInstalled, setJustInstalled] = useState<SkillSummary | null>(null)
-
-  const installFromSource = (source?: string) => {
-    if (source) setGitUrl(source)
-    setTab('git')
-  }
 
   const handleDone = async (skillId?: string) => {
     await state.loadOverview(true)
@@ -56,10 +49,9 @@ export function InstallPage() {
       </div>
 
       <div className="sm2__install-page-body settings-scroll">
-        {tab === 'official' && <OfficialSourcesPanel onInstall={installFromSource} onDone={handleDone} />}
         {tab === 'agent' && <AgentSyncPanel onDone={handleDone} />}
         {tab === 'local' && <LocalPanel onDone={handleDone} />}
-        {tab === 'git' && <GitPanel initialUrl={gitUrl} onDone={handleDone} />}
+        {tab === 'git' && <GitPanel onDone={handleDone} />}
       </div>
 
       {justInstalled && state.settings && (

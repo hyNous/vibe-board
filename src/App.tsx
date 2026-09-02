@@ -199,8 +199,8 @@ function App() {
   // Wait for detection
   if (windowLabel === null) return null
 
-  // Product Slimming keeps the underlying windows available for later cleanup
-  // but exposes no Pet or Skill Pack UI in the Control Tower shell.
+  // Product slimming keeps legacy windows available for compatibility, but
+  // the active shell no longer exposes the removed Pet surface or picker.
   if (windowLabel === 'pet' || windowLabel === 'skill-pack-picker') return null
 
   // Settings window

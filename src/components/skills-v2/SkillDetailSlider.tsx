@@ -3,7 +3,7 @@ import type { MouseEvent, RefObject, UIEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 import { skillApiV2 } from '../../services/skillApiV2'
-import type { CopyTargetDiffPreview, SkillDetail, SkillSummary, FileTreeNode } from '../../services/skillApiV2'
+import type { CopyTargetDiffPreview, GitHubSkillSyncResult, GitHubSkillUpdatePreview, SkillDetail, SkillSummary, FileTreeNode } from '../../services/skillApiV2'
 import { SlideOver } from './SlideOver'
 import { AgentIconBadge } from './AgentIconBadge'
 import { skillModeLabel, skillSourceTypeLabel, targetClaimLabel } from './skillLabels'
@@ -183,14 +183,20 @@ export function SkillDetailSlider({
     }
   }
 
+  const reloadDetail = async () => {
+    if (!skillId || readOnly) return
+    try {
+      setDetail(await skillApiV2.getSkillDetail(skillId))
+    } catch (e) {
+      setError(String(e))
+    }
+  }
+
   const doSync = async (targetId: string, action: string) => {
     setSyncing(targetId)
     try {
       await skillApiV2.executeSyncCopy(targetId, action)
-      if (skillId) {
-        const d = await skillApiV2.getSkillDetail(skillId)
-        setDetail(d)
-      }
+      await reloadDetail()
       setDiffPreview(null)
     } catch (e) {
       setError(String(e))
@@ -429,7 +435,7 @@ export function SkillDetailSlider({
               onConfirmBatchDelete={() => setBatchDeleteTargetIds(selectedBatchDeleteTargets.map((target) => target.id))}
             />
           )}
-          {tab === 'source' && <SourceTab detail={detail} />}
+          {tab === 'source' && <SourceTab detail={detail} onUpdated={reloadDetail} />}
         </div>
       )}
     </SlideOver>
@@ -1252,17 +1258,67 @@ function SkillFrontmatterIntro({ description, compact = false }: { description?:
   )
 }
 
-function SourceTab({ detail }: { detail: SkillDetail }) {
+function SourceTab({ detail, onUpdated }: { detail: SkillDetail; onUpdated?: () => Promise<void> }) {
   const { t } = useTranslation()
   const sourceType = detail.source?.sourceType || detail.sourceType
   const sourceUri = detail.source?.sourceUri || detail.sourceUri
   const linkedCenter = isLinkedCenterSkill(detail)
+  const [updatePreview, setUpdatePreview] = useState<GitHubSkillUpdatePreview | null>(null)
+  const [checking, setChecking] = useState(false)
+  const [syncing, setSyncing] = useState(false)
+  const [updateError, setUpdateError] = useState<string | null>(null)
+  const [syncResult, setSyncResult] = useState<GitHubSkillSyncResult | null>(null)
+  const isGitHubSource = sourceType?.toLowerCase() === 'github'
+    || sourceUri?.startsWith('github:')
+    || sourceUri?.includes('github.com/')
+  useEffect(() => {
+    setUpdatePreview(null)
+    setChecking(false)
+    setSyncing(false)
+    setUpdateError(null)
+    setSyncResult(null)
+  }, [detail.id, sourceUri])
+  const checkForUpdate = async () => {
+    setChecking(true)
+    setUpdateError(null)
+    setSyncResult(null)
+    try {
+      setUpdatePreview(await skillApiV2.checkGitHubSkillUpdate(detail.id))
+    } catch (e) {
+      setUpdateError(String(e))
+      setUpdatePreview(null)
+    } finally {
+      setChecking(false)
+    }
+  }
+  const syncFromGitHub = async () => {
+    if (!updatePreview?.updateAvailable) return
+    setSyncing(true)
+    setUpdateError(null)
+    try {
+      const result = await skillApiV2.syncGitHubSkill(detail.id)
+      setSyncResult(result)
+      setUpdatePreview((current) => current ? {
+        ...current,
+        localHash: result.currentHash,
+        remoteHash: result.currentHash,
+        updateAvailable: false,
+      } : current)
+      await onUpdated?.()
+    } catch (e) {
+      setUpdateError(String(e))
+    } finally {
+      setSyncing(false)
+    }
+  }
   const summaryCards = [
     { label: '类型', value: skillSourceTypeLabel(t, sourceType) },
     { label: '中心类型', value: linkedCenter ? '软链中心目录' : null },
     { label: '导入 Agent', value: detail.source?.importedFromAgent },
     { label: '安装方式', value: detail.source?.installedVia },
     { label: '来源 Ref', value: detail.source?.sourceRef },
+    { label: '创建时间', value: formatSourceTimestamp(detail.source?.createdAt) },
+    { label: '更新时间', value: formatSourceTimestamp(detail.source?.updatedAt) },
   ].filter(hasSourceValue)
   const pathCards = [
     { label: '真实源目录', value: linkedCenter ? detail.centerResolvedPath : null },
@@ -1293,12 +1349,43 @@ function SourceTab({ detail }: { detail: SkillDetail }) {
           ))}
         </div>
       )}
+      {isGitHubSource && sourceUri && (
+        <div className="sm2__skill-source-sync">
+          <div>
+            <strong>GitHub 来源同步</strong>
+            <span>检查远端内容；有变化时同步回中心库。</span>
+          </div>
+          <div className="sm2__skill-source-sync-actions">
+            <button type="button" className="sm2__btn" disabled={checking || syncing} onClick={() => void checkForUpdate()}>
+              {checking ? '检查中…' : '检查更新'}
+            </button>
+            {updatePreview?.updateAvailable && (
+              <button type="button" className="sm2__btn sm2__btn--primary" disabled={checking || syncing} onClick={() => void syncFromGitHub()}>
+                {syncing ? '同步中…' : '同步到中心库'}
+              </button>
+            )}
+          </div>
+          {updatePreview && (
+            <small className={updatePreview.updateAvailable ? 'sm2__skill-source-sync-status sm2__skill-source-sync-status--update' : 'sm2__skill-source-sync-status'}>
+              {updatePreview.updateAvailable ? '发现远端更新' : '已是最新'} · 检查于 {formatSourceTimestamp(updatePreview.checkedAt)}
+            </small>
+          )}
+          {syncResult?.updated && <small className="sm2__skill-source-sync-status">已同步到中心库 · {formatSourceTimestamp(syncResult.syncedAt)}</small>}
+          {updateError && <small className="sm2__skill-source-sync-error">{updateError}</small>}
+        </div>
+      )}
     </section>
   )
 }
 
 function hasSourceValue(item: { label: string; value?: string | null }): item is { label: string; value: string } {
   return typeof item.value === 'string' && item.value.length > 0
+}
+
+function formatSourceTimestamp(value?: string | null): string | null {
+  if (!value) return null
+  const timestamp = new Date(value)
+  return Number.isNaN(timestamp.getTime()) ? value : timestamp.toLocaleString()
 }
 
 function isLinkedCenterSkill(detail: SkillDetail): boolean {

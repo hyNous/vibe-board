@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SettingsSidebar } from '../components/settings/SettingsSidebar'
 import { SkillManagerShell } from '../components/skills-v2/SkillManagerShell'
@@ -117,7 +117,7 @@ describe('runtime environment switcher', () => {
     delete (window as Window & { isTauri?: boolean }).isTauri
   })
 
-  it('switches the global target from this Mac to a configured remote server', () => {
+  it('does not expose the removed runtime environment switcher in the skill sidebar', () => {
     const onSelect = vi.fn()
     render(
       <SettingsSidebar
@@ -132,19 +132,9 @@ describe('runtime environment switcher', () => {
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: 'Current runtime environment: This Mac' }))
-    expect(screen.getByRole('listbox', { name: 'Switch runtime environment' })).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('option', { name: /GPU Box/ }))
-
-    expect(useRuntimeEnvironmentStore.getState().selectedEnvironmentId).toBe('gpu-box')
-    expect(JSON.parse(window.localStorage.getItem('agentbro-runtime-environment') || '{}')).toMatchObject({
-      state: { selectedEnvironmentId: 'gpu-box' },
-    })
-    expect(screen.getByRole('button', { name: 'Current runtime environment: GPU Box' })).toBeInTheDocument()
-
-    fireEvent.click(screen.getByRole('button', { name: 'Current runtime environment: GPU Box' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Manage servers' }))
-    expect(onSelect).toHaveBeenCalledWith('remote-servers')
+    expect(screen.queryByRole('button', { name: /Current runtime environment/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('listbox', { name: 'Switch runtime environment' })).not.toBeInTheDocument()
+    expect(onSelect).not.toHaveBeenCalled()
   })
 
   it('keeps the original Agent management interface for a remote server', () => {
@@ -164,9 +154,9 @@ describe('runtime environment switcher', () => {
 
     render(<SkillManagerShell />)
 
-    expect(screen.getByRole('status', { name: 'Current runtime environment: GPU Box' })).toBeInTheDocument()
+    expect(screen.queryByRole('status', { name: 'Current runtime environment: GPU Box' })).not.toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Agent 管理' })).toBeInTheDocument()
-    expect(screen.getByText('查看每个 Agent 的 Skills、技能包、MCP、插件与 Hook 状态。')).toBeInTheDocument()
+    expect(screen.getByText('查看每个 Agent 的 Skills、技能包与 Hook 状态。')).toBeInTheDocument()
   })
 
   it('keeps the original Skill library interface for a remote server', async () => {
@@ -192,7 +182,7 @@ describe('runtime environment switcher', () => {
     expect(screen.getByRole('button', { name: '批量管理' })).toBeInTheDocument()
   })
 
-  it('offers a direct connection action for the selected disconnected server', async () => {
+  it('does not expose a direct connection action in the skill manager shell', () => {
     const connectServer = vi
       .spyOn(useRemoteServerStore.getState(), 'connectServer')
       .mockResolvedValue(undefined)
@@ -216,11 +206,10 @@ describe('runtime environment switcher', () => {
     })
 
     render(<SkillManagerShell />)
-    fireEvent.click(screen.getByRole('button', {
+    expect(screen.queryByRole('button', {
       name: /Connect the live event channel for GPU Box|连接 GPU Box 的实时事件通道/,
-    }))
-
-    expect(connectServer).toHaveBeenCalledWith('gpu-box')
+    })).not.toBeInTheDocument()
+    expect(connectServer).not.toHaveBeenCalled()
   })
 
   it('routes the existing Skill API to the selected remote host', async () => {

@@ -5,11 +5,9 @@ import { open as openDialog, ask as askDialog } from '@tauri-apps/plugin-dialog'
 import { useConfigStore } from '../../../stores/configStore'
 import { useThemeStore, COLOR_THEMES } from '../../../stores/themeStore'
 import type { ThemeConfig } from '../../../types/theme'
-import { usePetStore } from '../../../stores/petStore'
 import { SpriteCanvas } from '../../notch/SpriteCanvas'
 import { PRIORITY } from '../../../types/priority'
 import { CUSTOM_NOTCH_HEIGHT_MAX, CUSTOM_NOTCH_HEIGHT_MIN } from '../../../utils/islandLayout'
-import { MarketSection } from './MarketSection'
 import {
   formatShortcutKeyEvent,
   isRecordableShortcutEvent,
@@ -19,12 +17,10 @@ import {
   listDisplays, isTauri,
   setDisplayId, repositionNotch,
   previewIslandLayout, clearIslandLayoutPreview,
-  registerGlobalShortcut, setGlobalActionShortcuts, setIslandFeatureFlags, setIslandSurfaceOptions,
+  registerGlobalShortcut, setGlobalActionShortcuts, setIslandFeatureFlags,
   setActiveBackendTheme,
   runHookDoctor, uninstallAllHooks,
   getConfig, updateConfig as updateBackendConfig, listUsageProviders, authorizeUsageProvider,
-  setAgentDefaultPet,
-  resetPetPosition,
 } from '../../../services/tauriApi'
 import type { BackendDisplayInfo, HookDoctorCheck, HookDoctorReport, HookEventStatus, UsageProviderStatus } from '../../../services/tauriApi'
 import type { IslandLayoutPreviewMode, IslandLayoutPreviewOptions } from '../../../services/tauriApi'
@@ -122,20 +118,6 @@ function persistIslandFeatureFlags(next: Partial<Record<IslandFeatureFlag, boole
   }).catch((err) => console.error('Failed to persist island feature flags:', err))
 }
 
-function persistIslandSurfaceOptions(next: Partial<{ islandSurfaceMode: 'island' | 'pet'; islandPetScale: number }>) {
-  const state = useConfigStore.getState()
-  setIslandSurfaceOptions({
-    islandSurfaceMode: next.islandSurfaceMode ?? state.islandSurfaceMode,
-    islandPetScale: next.islandPetScale ?? state.islandPetScale,
-  }).catch((err) => console.error('Failed to persist island surface options:', err))
-}
-
-function persistPetVitalsDebugOpen(open: boolean) {
-  getConfig()
-    .then((backendConfig) => updateBackendConfig({ ...backendConfig, petVitalsDebugOpen: open }))
-    .catch((err) => console.error('Failed to persist pet vitals debug panel setting:', err))
-}
-
 function persistUsageQuerySettings(next: Partial<{ usageQueryEnabled: boolean; showUsageQuota: boolean }>) {
   const state = useConfigStore.getState()
   getConfig()
@@ -169,37 +151,6 @@ function persistWindowCloseBehavior(value: 'tray' | 'exit') {
   getConfig()
     .then((backendConfig) => updateBackendConfig({ ...backendConfig, windowCloseBehavior: value }))
     .catch((err) => console.error('Failed to persist window close behavior:', err))
-}
-
-function SurfaceModeSegmentedControl({
-  onChange,
-  value,
-}: {
-  value: 'island' | 'pet'
-  onChange: (value: 'island' | 'pet') => void
-}) {
-  const { t } = useTranslation()
-  const options = [
-    { value: 'island' as const, label: t('settings.surfaceIsland', { defaultValue: '灵动岛' }) },
-    { value: 'pet' as const, label: t('settings.surfacePet', { defaultValue: '宠物' }) },
-  ]
-
-  return (
-    <div className="surface-mode-segmented" role="radiogroup" aria-label={t('settings.islandSurfaceMode', { defaultValue: '展示模式' })}>
-      {options.map((option) => (
-        <button
-          aria-checked={value === option.value}
-          className={`surface-mode-segmented__option ${value === option.value ? 'surface-mode-segmented__option--active' : ''}`}
-          key={option.value}
-          onClick={() => onChange(option.value)}
-          role="radio"
-          type="button"
-        >
-          {option.label}
-        </button>
-      ))}
-    </div>
-  )
 }
 
 const PRIMARY_SHORTCUT_ACTIONS = new Set(['toggle-panel', 'collapse-panel', 'open-settings'])
@@ -349,185 +300,6 @@ function hookDoctorSuggestion(t: (key: string, options?: Record<string, unknown>
   return t('settings.hookDoctorSuggestionGeneric', { defaultValue: 'Fix the issue from the detail above, then run diagnostics again.' })
 }
 
-// ── Webhook helpers ──
-interface WebhookConfig {
-  enabled: boolean
-  url: string
-  secret?: string
-  events: string[]
-  delayEnabled: boolean
-  delayMinutes: number
-}
-
-interface SavedWebhookConfig {
-  id: string
-  platform: WebhookProvider
-  url: string
-  secret: string | null
-  enabled: boolean
-  events?: string[]
-  delayEnabled?: boolean
-  delayMinutes?: number
-}
-
-type WebhookProvider = 'dingtalk' | 'feishu'
-
-const WEBHOOK_EVENT_OPTIONS = [
-  'session_start', 'task_complete', 'error', 'waiting_approval', 'waiting_input', 'plan_approval',
-]
-const DEFAULT_WEBHOOK_EVENTS = ['error', 'waiting_approval', 'waiting_input', 'plan_approval']
-
-function WebhookProviderSection({
-  provider, labelKey, descKey, urlPlaceholder, iconEmoji,
-}: {
-  provider: WebhookProvider; labelKey: string; descKey: string; urlPlaceholder: string; iconEmoji: string
-}) {
-  const { t } = useTranslation()
-  const [config, setConfig] = useState<WebhookConfig>({
-    enabled: false,
-    url: '',
-    secret: '',
-    events: DEFAULT_WEBHOOK_EVENTS,
-    delayEnabled: false,
-    delayMinutes: 1,
-  })
-  const [saving, setSaving] = useState(false)
-  const [savingEnabled, setSavingEnabled] = useState(false)
-  const [testResult, setTestResult] = useState<'success' | 'error' | null>(null)
-  const [saveResult, setSaveResult] = useState<'success' | 'error' | null>(null)
-
-  useEffect(() => {
-    let cancelled = false
-
-    const loadSavedConfig = async () => {
-      try {
-        const webhooks = await invoke<SavedWebhookConfig[]>('list_webhooks')
-        if (cancelled) return
-        const saved = webhooks.find((webhook) => webhook.platform === provider || webhook.id === provider)
-        if (!saved) return
-        setConfig((prev) => ({
-          ...prev,
-          enabled: saved.enabled,
-          url: saved.url,
-          secret: saved.secret ?? '',
-          events: saved.events?.length ? saved.events : prev.events,
-          delayEnabled: saved.delayEnabled ?? false,
-          delayMinutes: Math.max(1, saved.delayMinutes ?? 1),
-        }))
-      } catch (e) {
-        console.error('Failed to load webhook config:', e)
-      }
-    }
-
-    loadSavedConfig()
-    return () => {
-      cancelled = true
-    }
-  }, [provider])
-
-  const saveConfig = async (nextConfig: WebhookConfig, showSaving = true) => {
-    setSaveResult(null)
-    if (showSaving) setSaving(true)
-    try {
-      await invoke('save_webhook_config', { provider, config: nextConfig })
-      setSaveResult('success')
-    } catch (e) {
-      console.error('Failed to save webhook config:', e)
-      setSaveResult('error')
-    } finally {
-      if (showSaving) setSaving(false)
-      setTimeout(() => setSaveResult(null), 3000)
-    }
-  }
-
-  const save = () => saveConfig(config)
-
-  const toggleEnabled = async (enabled: boolean) => {
-    const nextConfig = { ...config, enabled }
-    setConfig(nextConfig)
-    if (nextConfig.url.trim()) {
-      setSavingEnabled(true)
-      try {
-        await saveConfig(nextConfig, false)
-      } finally {
-        setSavingEnabled(false)
-      }
-    }
-  }
-
-  const test = async () => {
-    setTestResult(null)
-    try { await invoke('test_webhook', { provider, url: config.url, secret: config.secret }); setTestResult('success') }
-    catch { setTestResult('error') }
-    setTimeout(() => setTestResult(null), 3000)
-  }
-
-  const toggleEvent = (event: string) => {
-    setConfig(prev => ({
-      ...prev,
-      events: prev.events.includes(event) ? prev.events.filter(e => e !== event) : [...prev.events, event],
-    }))
-  }
-
-  return (
-    <SettingGroup label={`${iconEmoji} ${t(labelKey)}`}>
-      <SettingRow label={t('settings.webhookEnabled')} description={t(descKey)}>
-        <Toggle checked={config.enabled} onChange={(v) => { void toggleEnabled(v) }} disabled={savingEnabled} />
-      </SettingRow>
-      {config.enabled && (
-        <>
-          <SettingRow label={t('settings.webhookUrl')}>
-            <GlassInput placeholder={urlPlaceholder} value={config.url}
-              onChange={(e) => setConfig(prev => ({ ...prev, url: (e.target as HTMLInputElement).value }))}
-              style={{ width: 260, fontSize: 12 }} />
-          </SettingRow>
-          <SettingRow label={t('settings.webhookSecret')}>
-            <GlassInput type="password" placeholder={t('settings.webhookSecretPlaceholder')} value={config.secret ?? ''}
-              onChange={(e) => setConfig(prev => ({ ...prev, secret: (e.target as HTMLInputElement).value }))}
-              style={{ width: 200, fontSize: 12 }} />
-          </SettingRow>
-          <SettingRow label={t('settings.webhookEvents')} description={t('settings.webhookEventsDesc')}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end' }}>
-              {WEBHOOK_EVENT_OPTIONS.map(event => (
-                <label key={event} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer' }}>
-                  <input type="checkbox" checked={config.events.includes(event)} onChange={() => toggleEvent(event)} />
-                  <span style={{ color: 'var(--settings-text-secondary)' }}>{t(`settings.webhookEvent_${event}`, { defaultValue: event })}</span>
-                </label>
-              ))}
-            </div>
-          </SettingRow>
-          <SettingRow label={t('settings.webhookDelayEnabled')} description={t('settings.webhookDelayDesc')}>
-            <Toggle checked={config.delayEnabled} onChange={(v) => setConfig(prev => ({ ...prev, delayEnabled: v }))} />
-          </SettingRow>
-          {config.delayEnabled && (
-            <SettingRow label={t('settings.webhookDelayMinutes')} description={t('settings.webhookDelayMinutesDesc')}>
-              <GlassInput
-                type="number"
-                min="1"
-                max="120"
-                value={String(config.delayMinutes)}
-                onChange={(e) => setConfig(prev => ({
-                  ...prev,
-                  delayMinutes: Math.max(1, Number((e.target as HTMLInputElement).value) || 1),
-                }))}
-                style={{ width: 96, fontSize: 12 }}
-              />
-            </SettingRow>
-          )}
-          <div style={{ display: 'flex', gap: 8, paddingTop: 8, justifyContent: 'flex-end' }}>
-            {testResult === 'success' && <span style={{ fontSize: 12, color: 'var(--settings-status-active)', alignSelf: 'center' }}>{t('settings.webhookTestSuccess')}</span>}
-            {testResult === 'error' && <span style={{ fontSize: 12, color: 'var(--settings-danger)', alignSelf: 'center' }}>{t('settings.webhookTestError')}</span>}
-            {saveResult === 'success' && <span style={{ fontSize: 12, color: 'var(--settings-status-active)', alignSelf: 'center' }}>{t('settings.saved', { defaultValue: '已保存' })}</span>}
-            {saveResult === 'error' && <span style={{ fontSize: 12, color: 'var(--settings-danger)', alignSelf: 'center' }}>{t('settings.saveFailed', { defaultValue: '保存失败' })}</span>}
-            <GlassButton type="button" variant="ghost" onClick={test} disabled={!config.url}>{t('settings.webhookTest')}</GlassButton>
-            <GlassButton type="button" variant="primary" onClick={save} disabled={saving || !config.url}>{saving ? '...' : t('settings.save')}</GlassButton>
-          </div>
-        </>
-      )}
-    </SettingGroup>
-  )
-}
-
 // ═══════════════════════════════════════════════
 // Main IslandSection
 // ═══════════════════════════════════════════════
@@ -538,10 +310,6 @@ interface IslandSectionProps {
 
 export function IslandSection({ activeView }: IslandSectionProps) {
   const { t } = useTranslation()
-
-  if (activeView === 'market') {
-    return <MarketSection />
-  }
 
   return (
     <SettingSection className="setting-section--compact island-settings-section" title={t('settings.island.title')} description={t('settings.island.desc')}>
@@ -586,8 +354,6 @@ function OverviewTab() {
     setDisplayId('auto')
       .then(() => repositionNotch('auto', 0))
       .catch((e) => console.error('Failed to reset island position:', e))
-    resetPetPosition()
-      .catch((e) => console.error('Failed to reset pet position:', e))
   }
 
   return (
@@ -800,19 +566,10 @@ function DisplayTab() {
   const { t, i18n } = useTranslation()
   const config = useConfigStore()
   const { themes, activeThemeName, setActiveTheme, colorTheme, setColorTheme } = useThemeStore()
-  const petRegistry = usePetStore((s) => s.registry)
-  const activePetId = usePetStore((s) => s.activePetId)
-  const setActivePet = usePetStore((s) => s.setActivePet)
-  const loadPetRegistry = usePetStore((s) => s.loadRegistry)
   const isZh = i18n.language?.startsWith('zh')
   const [displays, setDisplays] = useState<BackendDisplayInfo[]>([])
   const previewTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
-  useEffect(() => {
-    if (config.islandSurfaceMode === 'pet' && petRegistry.length === 0) {
-      void loadPetRegistry()
-    }
-  }, [config.islandSurfaceMode, petRegistry.length, loadPetRegistry])
   const compactPillWidthValue = Math.round(config.compactPillWidth * (config.collapsedWidthScale / 100))
 
   useEffect(() => {
@@ -898,98 +655,21 @@ function DisplayTab() {
   return (
     <>
       <SettingGroup label={t('settings.island.section.surface', { defaultValue: '展示形态' })}>
-        <SettingRow label={t('settings.islandSurfaceMode', { defaultValue: '展示模式' })} description={t('settings.islandSurfaceModeDesc', { defaultValue: '在灵动岛和宠物状态面板之间切换。' })}>
-          <SurfaceModeSegmentedControl
-            value={config.islandSurfaceMode}
-            onChange={(mode) => {
-              config.updateConfig('islandSurfaceMode', mode)
-              persistIslandSurfaceOptions({ islandSurfaceMode: mode })
-              previewLayout(mode === 'pet' ? 'expanded' : 'compact')
-            }}
-          />
-        </SettingRow>
-        {config.islandSurfaceMode !== 'pet' && (
-          <div className="pet-picker-block">
-            <div className="pet-picker-block__header">
-              <div className="pet-picker-block__title">
-                {t('settings.activeTheme')}
-              </div>
-              <div className="pet-picker-block__desc">
-                {t('settings.activeThemeDesc')}
-              </div>
-            </div>
-            <ThemePicker
-              themes={themes}
-              activeThemeName={activeThemeName}
-              onSelect={(name) => {
-                setActiveTheme(name)
-                setActiveBackendTheme(name).catch((e) => console.error('Failed to persist active theme:', e))
-              }}
-              isZh={isZh}
-            />
+        <div className="pet-picker-block">
+          <div className="pet-picker-block__header">
+            <div className="pet-picker-block__title">{t('settings.activeTheme')}</div>
+            <div className="pet-picker-block__desc">{t('settings.activeThemeDesc')}</div>
           </div>
-        )}
-        {config.islandSurfaceMode === 'pet' && (
-          <>
-            <SettingRow label={t('settings.islandPetScale', { defaultValue: '宠物大小' })} description={`${config.islandPetScale}%`}>
-              <Slider
-                value={config.islandPetScale}
-                min={10}
-                max={120}
-                step={5}
-                onCommit={(v) => {
-                  config.updateConfig('islandPetScale', v)
-                  persistIslandSurfaceOptions({ islandPetScale: v })
-                }}
-                unit="%"
-              />
-            </SettingRow>
-            <SettingRow
-              label={t('settings.petVitals', { defaultValue: '宠物活力' })}
-              description={t('settings.petVitalsDesc', { defaultValue: '根据上下文压力和 Token 用量显示宠物状态变化' })}
-            >
-              <Toggle
-                checked={config.petVitalsEnabled}
-                onChange={(v) => config.updateConfig('petVitalsEnabled', v)}
-              />
-            </SettingRow>
-            {import.meta.env.DEV && (
-              <SettingRow
-                label={t('settings.petVitalsDebug', { defaultValue: '宠物活力调试' })}
-                description={t('settings.petVitalsDebugDesc', { defaultValue: '打开宠物窗口上的调试面板，用 mock 数据预览阶段、上下文压力和体力消耗。' })}
-              >
-                <Toggle
-                  checked={config.petVitalsDebugOpen}
-                  onChange={(v) => {
-                    config.updateConfig('petVitalsDebugOpen', v)
-                    persistPetVitalsDebugOpen(v)
-                  }}
-                />
-              </SettingRow>
-            )}
-            <div className="pet-picker-block">
-              <div className="pet-picker-block__header">
-                <div className="pet-picker-block__title">
-                  {t('settings.petPickerTitle', { defaultValue: '选择宠物' })}
-                </div>
-                <div className="pet-picker-block__desc">
-                  {t('settings.petPickerDesc', { defaultValue: '自动跟随当前活跃 Agent，或锁定一只固定宠物。' })}
-                </div>
-              </div>
-              <PetPicker
-                registry={petRegistry}
-                activePetId={activePetId}
-                onSelect={(id) => {
-                  void setActivePet(id)
-                }}
-                autoLabel={t('settings.petAuto', { defaultValue: '自动跟随 Agent' })}
-                emptyHint={t('settings.petInstallHint', {
-                  defaultValue: '未检测到 Codex.app 的内置宠物。安装 Codex 或在 ~/.codex/pets 添加自定义。',
-                })}
-              />
-            </div>
-          </>
-        )}
+          <ThemePicker
+            themes={themes}
+            activeThemeName={activeThemeName}
+            onSelect={(name) => {
+              setActiveTheme(name)
+              setActiveBackendTheme(name).catch((e) => console.error('Failed to persist active theme:', e))
+            }}
+            isZh={isZh}
+          />
+        </div>
       </SettingGroup>
 
       <SettingGroup label={t('settings.colorTheme')}>
@@ -1017,8 +697,7 @@ function DisplayTab() {
         </div>
       </SettingGroup>
 
-      {config.islandSurfaceMode !== 'pet' && (
-        <SettingGroup label={t('settings.island.section.displayPlacement', { defaultValue: '显示器位置' })}>
+      <SettingGroup label={t('settings.island.section.displayPlacement', { defaultValue: '显示器位置' })}>
           <SettingRow label={t('settings.displayMonitor')} description={t('settings.displayMonitorDesc')}>
             <Dropdown value={displayMonitorValue} options={monitorOptions}
               onChange={(v) => {
@@ -1038,8 +717,7 @@ function DisplayTab() {
               </button>
             </div>
           </SettingRow>
-        </SettingGroup>
-      )}
+      </SettingGroup>
 
       <SettingGroup label={t('settings.panelSize')}>
         <SettingRow label={t('settings.maxVisibleSessions')} description={t('settings.maxVisibleSessionsDesc')}>
@@ -1261,173 +939,6 @@ function ThemePicker({ themes, activeThemeName, onSelect, isZh }: ThemePickerPro
   )
 }
 
-// ── Pet Picker ──
-
-interface PetPickerProps {
-  registry: ReturnType<typeof usePetStore.getState>['registry']
-  activePetId: string | null
-  onSelect: (id: string | null) => void
-  autoLabel: string
-  emptyHint: string
-  hideAutoCard?: boolean
-}
-
-function PetPicker({ registry, activePetId, onSelect, autoLabel, emptyHint, hideAutoCard }: PetPickerProps) {
-  const isAuto = activePetId === null
-
-  const groups = registry.reduce<Map<string, typeof registry>>((acc, pet) => {
-    const key = pet.provider || 'other'
-    const bucket = acc.get(key) ?? []
-    bucket.push(pet)
-    acc.set(key, bucket)
-    return acc
-  }, new Map())
-  const preferredProviders = ['agentbro', 'codex', 'user']
-  const orderedProviders = [
-    ...preferredProviders,
-    ...Array.from(groups.keys()).filter((k) => !preferredProviders.includes(k)),
-  ]
-
-  return (
-    <div className="pet-picker">
-      {!hideAutoCard && (
-        <div className="pet-picker__group">
-          <div className="pet-picker__group-label">auto</div>
-          <div className="pet-picker__grid">
-            <button
-              type="button"
-              className={`pet-picker__card pet-picker__card--auto ${isAuto ? 'pet-picker__card--active' : ''}`}
-              aria-pressed={isAuto}
-              onClick={() => onSelect(null)}
-            >
-              <div className="pet-picker__thumb pet-picker__thumb--auto">A</div>
-              <div className="pet-picker__name">{autoLabel}</div>
-            </button>
-          </div>
-        </div>
-      )}
-
-      {registry.length === 0 ? (
-        <div className="pet-picker__empty">{emptyHint}</div>
-      ) : (
-        orderedProviders
-          .filter((provider) => groups.has(provider))
-          .map((provider) => (
-            <div className="pet-picker__group" key={provider}>
-              <div className="pet-picker__group-label">{provider}</div>
-              <div className="pet-picker__grid">
-                {groups.get(provider)!.map((pet) => {
-                  const selected = pet.id === activePetId
-                  return (
-                    <button
-                      key={pet.id}
-                      type="button"
-                      className={`pet-picker__card ${selected ? 'pet-picker__card--active' : ''}`}
-                      aria-pressed={selected}
-                      onClick={() => onSelect(pet.id)}
-                      title={pet.description ?? pet.displayName}
-                    >
-                      <div className="pet-picker__thumb">
-                        <SpriteCanvas
-                          pet={pet}
-                          priority={PRIORITY.idle}
-                          size={56}
-                          enableIdleBehaviors={false}
-                          animationOverride="idle"
-                        />
-                      </div>
-                      <div className="pet-picker__name">{pet.displayName}</div>
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-          ))
-      )}
-    </div>
-  )
-}
-
-// ── Agent Default Pet Button ──
-
-interface AgentDefaultPetButtonProps {
-  agentName: string
-  registry: ReturnType<typeof usePetStore.getState>['registry']
-  map: Record<string, string>
-  onChange: (petId: string | null) => void
-}
-
-function AgentDefaultPetButton({ agentName, registry, map, onChange }: AgentDefaultPetButtonProps) {
-  const { t } = useTranslation()
-  const [open, setOpen] = useState(false)
-  const wrapRef = useRef<HTMLDivElement>(null)
-  const currentPetId = map[agentName] ?? null
-  const currentPet = currentPetId ? registry.find((p) => p.id === currentPetId) : null
-
-  useEffect(() => {
-    if (!open) return
-    const onDown = (e: MouseEvent) => {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener('mousedown', onDown)
-    return () => document.removeEventListener('mousedown', onDown)
-  }, [open])
-
-  const tooltip = currentPet
-    ? `${t('settings.defaultPetForAgent', { defaultValue: '默认宠物' })}: ${currentPet.displayName}`
-    : t('settings.defaultPetTooltip', { defaultValue: 'AUTO 模式下这个 Agent 显示的宠物' })
-
-  return (
-    <div className="agent-default-pet" ref={wrapRef}>
-      <button
-        type="button"
-        className={`agent-default-pet__btn ${open ? 'agent-default-pet__btn--open' : ''}`}
-        title={tooltip}
-        onClick={() => setOpen(!open)}
-      >
-        {currentPet ? (
-          <SpriteCanvas
-            pet={currentPet}
-            size={28}
-            priority={PRIORITY.idle}
-            enableIdleBehaviors={false}
-            animationOverride="idle"
-          />
-        ) : (
-          <span className="agent-default-pet__placeholder">A</span>
-        )}
-      </button>
-      {open && (
-        <div className="agent-default-pet__popover" role="dialog">
-          <div className="agent-default-pet__popover-header">
-            <div className="agent-default-pet__popover-title">
-              {t('settings.defaultPetForAgent', { defaultValue: '默认宠物' })}
-            </div>
-            <button
-              type="button"
-              className="agent-default-pet__clear"
-              onClick={() => { onChange(null); setOpen(false) }}
-              disabled={!currentPetId}
-            >
-              {t('settings.defaultPetClear', { defaultValue: '跟随注册表默认' })}
-            </button>
-          </div>
-          <PetPicker
-            registry={registry}
-            activePetId={currentPetId}
-            onSelect={(id) => { onChange(id); setOpen(false) }}
-            autoLabel=""
-            emptyHint={t('settings.petInstallHint', {
-              defaultValue: '未检测到 Codex.app 的内置宠物。安装 Codex 或在 ~/.codex/pets 添加自定义。',
-            })}
-            hideAutoCard
-          />
-        </div>
-      )}
-    </div>
-  )
-}
-
 // ── Shortcuts Tab ──
 function ShortcutsTab() {
   const { t } = useTranslation()
@@ -1639,8 +1150,6 @@ function ShortcutsTab() {
 function IntegrationTab() {
   const { t } = useTranslation()
   const config = useConfigStore()
-  const petRegistry = usePetStore((s) => s.registry)
-  const loadPetRegistry = usePetStore((s) => s.loadRegistry)
   const [tools, setTools] = useState<ToolHookStatus[]>([])
   const [loading, setLoading] = useState(false)
   const [actionLoading, setActionLoading] = useState<Record<string, string>>({})
@@ -1714,10 +1223,6 @@ function IntegrationTab() {
     const timer = window.setTimeout(() => { fetchUsageProviders({ live: false, showLoading: false }) }, 0)
     return () => window.clearTimeout(timer)
   }, [fetchUsageProviders, config.islandExternalEnabled])
-
-  useEffect(() => {
-    if (petRegistry.length === 0) void loadPetRegistry()
-  }, [petRegistry.length, loadPetRegistry])
 
   const detectNow = async () => {
     if (!isTauri()) {
@@ -2080,20 +1585,6 @@ function IntegrationTab() {
               <div className={`hook-status-badge hook-status-badge--${installStatus}`}>
                 {hookInstallStatusLabel(t, installStatus)}
               </div>
-              {!tool.isCustom && (
-                <AgentDefaultPetButton
-                  agentName={toolId}
-                  registry={petRegistry}
-                  map={config.islandAgentPetMap}
-                  onChange={(petId) => {
-                    const next = { ...config.islandAgentPetMap }
-                    if (petId) next[toolId] = petId
-                    else delete next[toolId]
-                    config.updateConfig('islandAgentPetMap', next)
-                    setAgentDefaultPet(toolId, petId).catch((err) => console.error('setAgentDefaultPet failed:', err))
-                  }}
-                />
-              )}
               <div className="hook-tool-row__actions">
                 {canConfigureHook && (
                   <GlassButton variant="ghost" onClick={() => setConfiguringTool(tool)} disabled={busy}>
@@ -2263,14 +1754,6 @@ function AdvancedTab() {
         </SettingRow>
       </SettingGroup>
 
-      {/* Webhooks */}
-      <div className="description-card">{t('settings.webhooksInfo')}</div>
-
-      <WebhookProviderSection provider="dingtalk" labelKey="settings.dingtalk" descKey="settings.dingtalkDesc"
-        urlPlaceholder="https://oapi.dingtalk.com/robot/send?access_token=..." iconEmoji="🔔" />
-
-      <WebhookProviderSection provider="feishu" labelKey="settings.feishu" descKey="settings.feishuDesc"
-        urlPlaceholder="https://open.feishu.cn/open-apis/bot/v2/hook/..." iconEmoji="🪶" />
     </>
   )
 }

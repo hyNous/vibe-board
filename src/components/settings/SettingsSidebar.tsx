@@ -7,7 +7,6 @@ import type { SkillManagerTab } from '../../stores/skillStoreV2'
 import { AgentIconBadge } from '../skills-v2/AgentIconBadge'
 import type { IslandSettingsView, MonitorSettingsView } from '../../types/capability'
 import { buildAgentUsageScores, readStoredAgentOrder, sortAgentSummaries, writeStoredAgentOrder } from '../../utils/agentOrdering'
-import { RuntimeEnvironmentSwitcher } from './RuntimeEnvironmentSwitcher'
 
 interface SidebarItem {
   id: string
@@ -73,8 +72,6 @@ export function SettingsSidebar({
   const { t } = useTranslation()
   const skillActiveTab = useSkillStoreV2((s) => s.activeTab)
   const setSkillTab = useSkillStoreV2((s) => s.setTab)
-  const setSkillInstallTab = useSkillStoreV2((s) => s.setInstallTab)
-  const marketplaceInstallTask = useSkillStoreV2((s) => s.marketplaceInstallTask)
   const skillAgents = useSkillStoreV2((s) => s.agents)
   const skillSelectedAgentId = useSkillStoreV2((s) => s.selectedAgentId)
   const selectAgent = useSkillStoreV2((s) => s.selectAgent)
@@ -87,17 +84,6 @@ export function SettingsSidebar({
   const [agentDropTarget, setAgentDropTarget] = useState<AgentDropTarget | null>(null)
   const agentMouseCleanupRef = useRef<(() => void) | null>(null)
   const suppressAgentClickRef = useRef(false)
-  const marketplaceTaskItems = marketplaceInstallTask ? Object.values(marketplaceInstallTask.items) : []
-  const marketplaceTaskCompleted = marketplaceTaskItems.filter((item) => ['success', 'failed', 'cancelled'].includes(item.status)).length
-  const marketplaceTaskBadge = marketplaceInstallTask
-    ? marketplaceInstallTask.busy
-      ? `${marketplaceTaskCompleted}/${marketplaceTaskItems.length}`
-      : marketplaceInstallTask.result?.cancelled
-        ? '■'
-        : marketplaceInstallTask.result?.failedCount
-          ? '!'
-          : '✓'
-    : null
   const agentUsageScores = useMemo(() => buildAgentUsageScores(sessionList, activeSessionId), [sessionList, activeSessionId])
   const visibleSkillAgents = useMemo(() => skillAgents.filter((agent) => agent.id !== SHARED_SKILLS_AGENT_ID), [skillAgents])
   const installedSkillAgents = useMemo(
@@ -202,7 +188,6 @@ export function SettingsSidebar({
   const backToSettingsLabel = t('settings.backToSettings', { defaultValue: 'Back to Settings' })
   const openSkillTab = (tab: SkillManagerTab) => {
     setSkillTab(tab)
-    if (tab === 'install' && marketplaceInstallTask) setSkillInstallTab('official')
   }
   const toggleSidebar = (
     <div className={`settings-sidebar__brand${isCapabilitySection ? ' settings-sidebar__brand--contextual' : ''}`}>
@@ -238,7 +223,6 @@ export function SettingsSidebar({
     const navItems: Array<{ id: IslandSettingsView; label: string; icon: string; iconBg: string }> = [
       { id: 'overview', label: t('settings.island.tabs.overview', { defaultValue: 'Overview' }), icon: '✦', iconBg: '#5856D6' },
       { id: 'display', label: t('settings.island.tabs.display', { defaultValue: 'Display' }), icon: '◉', iconBg: '#007AFF' },
-      { id: 'market', label: t('settings.island.tabs.market', { defaultValue: 'Pet Market' }), icon: '🛒', iconBg: '#34C759' },
       { id: 'behavior', label: t('settings.island.tabs.behavior', { defaultValue: 'Behavior' }), icon: '⚡', iconBg: '#FF9500' },
       { id: 'integration', label: t('settings.island.tabs.integration', { defaultValue: 'Integration' }), icon: '⚙', iconBg: '#34C759' },
       { id: 'keys', label: t('settings.island.tabs.keys', { defaultValue: 'Shortcuts' }), icon: '⌨', iconBg: '#8E8E93' },
@@ -339,11 +323,6 @@ export function SettingsSidebar({
                 {item.icon}
               </span>
               <span className="settings-sidebar__label-text">{item.label}</span>
-              {item.id === 'install' && marketplaceTaskBadge && (
-                <em className="settings-sidebar__task-count" aria-label={t('skills.marketInstall.globalTaskTitle')}>
-                  {marketplaceTaskBadge}
-                </em>
-              )}
             </button>
           ))}
           {skillActiveTab === 'agents' && (
@@ -425,10 +404,6 @@ export function SettingsSidebar({
             </div>
           )}
         </div>
-        <RuntimeEnvironmentSwitcher
-          collapsed={collapsed}
-          onManageRemote={() => onSelect('remote-servers')}
-        />
       </nav>
     )
   }
@@ -454,13 +429,11 @@ export function SettingsSidebar({
                   aria-label={label}
                   title={label}
                   onClick={() => {
-                    if (item.id === 'skill-manager-v2' && marketplaceInstallTask) openSkillTab('install')
                     onSelect(item.id)
                   }}
                   onKeyDown={(e) => {
                     if (e.key !== 'Enter' && e.key !== ' ') return
                     e.preventDefault()
-                    if (item.id === 'skill-manager-v2' && marketplaceInstallTask) openSkillTab('install')
                     onSelect(item.id)
                   }}
                 >
@@ -471,14 +444,6 @@ export function SettingsSidebar({
                     {item.icon}
                   </span>
                   <span className="settings-sidebar__label-text">{label}</span>
-                  {item.id === 'skill-manager-v2' && marketplaceTaskBadge && (
-                    <span
-                      className={`settings-sidebar__task-badge${marketplaceInstallTask?.busy ? ' settings-sidebar__task-badge--busy' : ''}`}
-                      aria-label={t('skills.marketInstall.globalTaskTitle')}
-                    >
-                      {marketplaceTaskBadge}
-                    </span>
-                  )}
                 </div>
               )
             })}

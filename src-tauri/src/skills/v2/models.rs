@@ -497,6 +497,30 @@ pub struct AddCenterSkillResult {
     pub skipped: Vec<String>,
 }
 
+/// Result of checking a GitHub-backed Skill against its recorded source.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitHubSkillUpdatePreview {
+    pub skill_id: String,
+    pub source_uri: String,
+    pub local_hash: String,
+    pub remote_hash: String,
+    pub update_available: bool,
+    pub checked_at: String,
+}
+
+/// Result of synchronising a GitHub-backed Skill into the center library.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitHubSkillSyncResult {
+    pub skill_id: String,
+    pub source_uri: String,
+    pub previous_hash: String,
+    pub current_hash: String,
+    pub updated: bool,
+    pub synced_at: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MarketplaceBatchSkillInput {

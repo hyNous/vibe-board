@@ -104,7 +104,7 @@ describe('settings island menu', () => {
     await waitFor(() => expect(screen.getByText('settings.language')).toBeInTheDocument())
   })
 
-  it('keeps first-run analytics consent without exposing Pet choices', async () => {
+  it('does not expose first-run analytics consent or Pet choices', () => {
     useConfigStore.setState({
       analyticsEnabled: false,
       analyticsConsentPromptCompleted: false,
@@ -112,11 +112,10 @@ describe('settings island menu', () => {
     render(<SettingsApp onClose={vi.fn()} />)
 
     expect(screen.queryByRole('radio', { name: /settings.surfacePet/ })).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'settings.welcomeContinue' }))
-
-    await waitFor(() => expect(useConfigStore.getState().analyticsConsentPromptCompleted).toBe(true))
-    expect(useConfigStore.getState().analyticsEnabled).toBe(true)
-    expect(tauriMocks.setAnalyticsEnabled).toHaveBeenCalledWith(true)
+    expect(screen.queryByRole('button', { name: 'settings.welcomeContinue' })).not.toBeInTheDocument()
+    expect(useConfigStore.getState().analyticsConsentPromptCompleted).toBe(false)
+    expect(useConfigStore.getState().analyticsEnabled).toBe(false)
+    expect(tauriMocks.setAnalyticsEnabled).not.toHaveBeenCalled()
   })
 
   it('uses the left settings menu for island pages instead of top tabs', async () => {
@@ -133,8 +132,8 @@ describe('settings island menu', () => {
 
     await waitFor(() => expect(screen.getByRole('button', { name: /Display/ })).toHaveClass('active'))
     await waitFor(() => expect(screen.getByText('settings.colorTheme')).toBeInTheDocument())
-    expect(screen.getByRole('radiogroup', { name: '展示模式' })).toBeInTheDocument()
-    expect(screen.getByRole('radio', { name: '灵动岛' })).toHaveAttribute('aria-checked', 'true')
+    expect(screen.queryByRole('radiogroup', { name: '展示模式' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('radio', { name: '灵动岛' })).not.toBeInTheDocument()
     expect(container.querySelector('.island-tabs')).not.toBeInTheDocument()
   })
 

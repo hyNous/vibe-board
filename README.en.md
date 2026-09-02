@@ -7,7 +7,7 @@
 
   <p>
     Spend less time watching terminals and switching windows.<br />
-    Handle agent sessions, approvals, and questions from a floating workspace, then manage hooks, skills, MCP servers, plugins, API providers, and remote hosts in the same app.
+    Handle agent sessions, approvals, and questions from a floating workspace, then manage hooks, real usage, and cross-agent skills in the same app.
   </p>
 
   <p>
@@ -45,17 +45,16 @@ After installing, open **Island -> Integration**, run **Hook Doctor**, and insta
 
 ## What does Agent Island solve?
 
-AI coding agents can work for long stretches, but people still end up watching the terminal: waiting for permissions, answering questions, checking whether a task is stuck, and maintaining separate hooks, skills, MCP servers, and plugins for every tool. Agent Island puts those jobs behind one desktop entry point.
+AI coding agents can work for long stretches, but people still end up watching the terminal: waiting for permissions, answering questions, checking whether a task is stuck, and maintaining separate hooks and skills for every tool. Agent Island puts those jobs behind one desktop entry point.
 
 | When you are... | Agent Island can... |
 | --- | --- |
 | Running several agent sessions | Collect status, tool calls, subagents, token usage, and completion notices in the island. |
 | Waiting on an approval or question | Approve a permission, answer a question, confirm a plan, or send a quick reply without finding the original terminal. |
-| Maintaining several agent environments | Scan versions, paths, and hooks, then manage skills, MCP servers, plugins, and config files together. |
-| Switching models or API providers | Manage, test, and switch provider configs for Claude, Codex, Gemini, OpenCode, and Hermes. |
-| Running agents on a server | Bring remote sessions and hook events back over SSH and diagnose the connection in the same app. |
+| Maintaining several agent environments | Scan versions, paths, and hooks, then manage skills and config files together. |
+| Viewing real usage | Show tokens when available; otherwise show current Provider quota and refresh time without inventing price estimates. |
 
-Agent session events and local configuration do not need a cloud relay. The hook server uses a per-user local Unix socket on macOS and a local TCP endpoint on Windows. Update checks, marketplace downloads, SSH, and webhooks contact their respective services only when you use those features.
+Agent session events and local configuration do not need a cloud relay. The hook server uses a per-user local Unix socket on macOS and a local TCP endpoint on Windows. Update checks and GitHub Skill sync contact their respective services only when you use those features.
 
 ## Demo videos
 
@@ -74,8 +73,7 @@ https://github.com/user-attachments/assets/374d6e53-c126-41be-a593-4e5f63485602
 - Sessions have compact, hover, expanded, and detail views. Quiet Assistant mode keeps the island hidden until something needs you.
 - Handle permission requests, questions, plan approvals, completions, and errors in the floating window. Supported agents also accept quick replies.
 - Tool calls, file diffs, subagents, task summaries, context pressure, tokens, and rate limits update with the session.
-- Global shortcuts, sounds, quiet hours, multi-display placement, and terminal-focus suppression keep the window useful without making it noisy.
-- Important events can also be forwarded to DingTalk or Feishu webhooks.
+- Global shortcuts, quiet hours, multi-display placement, and terminal-focus suppression keep the window useful without making it noisy.
 
 <table>
   <tr>
@@ -92,21 +90,7 @@ https://github.com/user-attachments/assets/374d6e53-c126-41be-a593-4e5f63485602
 
 ### Agent Monitor shows what an agent is doing
 
-Agent Monitor collects active and historical sessions. Inspect phases, tool timelines, approvals, questions, conversations, and raw hook events by project. If you manually enable Claude Code network monitoring, the local inspector can also show system prompts, messages, tools, responses, token usage, and KV cache statistics grouped by model and project. Network monitoring is off by default.
-
-## Pet market
-
-Beyond the island, Agent Island can switch the floating window into a **pet status panel**: a desktop pet follows your active agent, and its vitals react in real time to context pressure and token usage — so you can tell at a glance whether a session is relaxed or under strain.
-
-The **Pet Market** lets you browse community-contributed pets and install them with one click, all driven by the [`abpets`](https://www.npmjs.com/package/abpets) CLI (Node.js v18+). Open it from **Island -> Pet Market** in settings, or preview every pet on the web:
-
-👉 **[www.agentbro.net/pets](https://www.agentbro.net/pets)**
-
-Want to author your own pet? Use the [`shirenchuang/agentbro-pet`](https://github.com/shirenchuang/agentbro-pet) skill to turn a character concept, brand cue, or reference image into an Agent Island-ready `pet.json` + `spritesheet.webp` package with pluggable image-generation backends. Install it with `npx skills add https://github.com/shirenchuang/agentbro-pet.git` or clone it directly; Codex, Claude Code, Cursor, Gemini CLI, and any other agent that can run scripts and generate images can use the workflow.
-
-<img src="https://github.com/user-attachments/assets/53a17db6-54c4-40f1-95b6-89a7f1977f00" alt="Agent Island pet mode" width="100%" />
-
-<img src="https://github.com/user-attachments/assets/efd1acc8-67bb-460f-b7c9-3faa490611f5" alt="Agent Island Pet Market" width="100%" />
+Agent Monitor collects active and historical sessions. Inspect phases, tool timelines, approvals, questions, conversations, and raw hook events by project.
 
 The island includes Midnight, Agent Island Classic, Frosted Glass, Apple, Smoke, Ocean Mist, Warm Paper, and Soft Lavender themes. It can also follow the system light or dark appearance.
 
@@ -116,11 +100,9 @@ If you use Claude Code, Codex, Gemini CLI, Cursor, Kimi, Doubao, Qoder, OpenCode
 
 - Discover CLIs and desktop apps, with installed and available versions, executables, config directories, and official download pages. Supported CLIs can be installed, updated, or removed in place.
 - Install and repair hooks per agent, inspect bridge commands and config paths, and control approval, notification, lifecycle, and activity events separately.
-- Scan skills scattered across agent folders, adopt them into a center library, and distribute them to agents or projects by symlink or copy. Batch jobs, conflict decisions, and diagnostics stay visible.
+- Scan skills scattered across agent folders, adopt them into a center library, and distribute them to agents by symlink or copy. Batch jobs, conflict decisions, and diagnostics stay visible.
 - Group common skills into reusable packs, apply them to several agents, and safely revoke them later.
-- Manage stdio, HTTP, and SSE MCP servers. Inspect tools, resources, prompts, and connection logs, with arguments and a risk confirmation before tool calls.
-- Browse plugins for Codex, Claude Code, WorkBuddy, ZCode, Kimi, and other supported agents. Search, enable or disable supported plugins, inspect manifests and packaged capabilities, and preview files.
-- Edit supported JSON or text config files with validation. The Projects view imports repositories and checks project-level instructions, skills, MCP servers, and plugins.
+- GitHub-backed Skills can check their remote hash, show source timestamps, and sync updates into the center library.
 
 <table>
   <tr>
@@ -130,7 +112,7 @@ If you use Claude Code, Codex, Gemini CLI, Cursor, Kimi, Doubao, Qoder, OpenCode
     </td>
     <td width="50%">
       <img src="docs/assets/screenshots/agent-management-install-skills.png" alt="Agent Island Install Skills" width="100%" />
-      <sub>Install Skills: import from the market, another agent, a local folder, or Git.</sub>
+      <sub>Install Skills: import from another agent, a local folder, or Git.</sub>
     </td>
   </tr>
   <tr>
@@ -140,28 +122,20 @@ If you use Claude Code, Codex, Gemini CLI, Cursor, Kimi, Doubao, Qoder, OpenCode
     </td>
     <td width="50%">
       <img src="docs/assets/screenshots/agent-management-agent-detail.png" alt="Agent Island Agent Management Detail" width="100%" />
-      <sub>Agent Management: inspect skills, MCP servers, plugins, hooks, and paths per agent.</sub>
+      <sub>Agent Management: inspect skills, hooks, and paths per agent.</sub>
     </td>
   </tr>
 </table>
 
-## Agent Switch
-
-Agent Switch manages API provider configuration for Claude, Codex, Gemini, OpenCode, and Hermes. Add or duplicate providers, switch the active config, test connectivity and latency, or preview and import existing providers, MCP servers, prompts, and skills from CC Switch.
-
-## SSH Remote
-
-Remote development does not need a separate monitoring setup. Agent Island can import hosts from `~/.ssh/config`, receive remote hook events through an SSH tunnel, show remote sessions locally, install or repair hooks, and run connection diagnostics. Sessions keep their host identity, so local work and tasks from several servers remain easy to distinguish.
-
 ## Supported agents
 
-Agent Island supports agents at two levels. Runtime hook adapters send session events into the island, while Agent Management scans a wider set of CLIs, desktop apps, skills, MCP servers, plugins, and paths. Event coverage and interaction depth vary because each agent exposes different hooks.
+Agent Island supports agents at two levels. Runtime hook adapters send session events into the island, while Agent Management scans a wider set of CLIs, desktop apps, skills, and paths. Event coverage and interaction depth vary because each agent exposes different hooks.
 
 | Scope | Agents |
 | --- | --- |
 | Island / hook integration | Claude Code, Codex, Gemini CLI, Cursor / Cursor CLI, GitHub Copilot, Cline, Qoder / Qoder CLI, CodeBuddy / CodeBuddy CN, Qwen, Kimi, DeepSeek, OpenCode, Factory Droid, StepFun, AntiGravity, WorkBuddy, Hermes, Pi, Kiro, ZCode |
 | Agent Management scan | Everything above, plus Doubao, the `.agents` shared folder, Junie, Windsurf, Augment, KiloCode, OB1, Amp, Aider, OpenClaw / QClaw / EasyClaw / AutoClaw, and custom agents |
-| Project-level scan | Currently focused on common Claude Code and Codex project config: project-level skills, MCP servers, plugins, and instruction files |
+| Project-level scan | Not part of the current core version |
 
 Doubao support on macOS detects `/Applications/Doubao.app`, manages `~/Doubao/skills`, and continues to cover Doubao's compatible `~/.agents/skills` through the central library. Doubao does not currently expose a public hook, so island activity is a best-effort inference from local processes and read-only metadata for two task-state directories; conversation contents are never read, and page synchronization can cause a brief false positive.
 
@@ -169,15 +143,12 @@ Doubao support on macOS detects `/Applications/Doubao.app`, manages `~/Doubao/sk
 
 Agent Island will remain local-first. The next priorities include:
 
-- Remote sync: sync settings, hooks, themes, prompts, skills, and remote host configuration across devices.
-- Skills community: discover, install, share, and update Skill Packs for different agents.
+- Skills center: cross-agent distribution, GitHub source update checks, and sync.
 - Windows: add code signing, automatic updates, and deeper interaction with more agents.
-- Pet ecosystem: ship more community pets, grow the Pet Market, and open up authoring and sharing of custom pets.
-- Team collaboration: shared configuration, team Skill Packs, access control, and clearer collaboration views.
 
 ## Join the community
 
-If you use Agent Island or want to discuss the Windows experience, deeper agent integrations, Agent Monitor, Agent Switch, or the skills community, scan the QR code to add the maintainer on WeChat (mention **Agent Island community**), or join the **Agent Island Open Source Community** group chat directly.
+If you use Agent Island or want to discuss the Windows experience, deeper agent integrations, Agent Monitor, or the Skills center, scan the QR code to add the maintainer on WeChat (mention **Agent Island community**), or join the **Agent Island Open Source Community** group chat directly.
 
 <div align="center">
   <table>
@@ -258,8 +229,8 @@ pnpm tauri:build:windows                           # Build Windows NSIS / MSI in
 1. Open Agent Island settings.
 2. If you only want the island integration, go to **Island -> Integration** and run **Hook Doctor**.
 3. Click **Install All Hooks**, or install the hook for the agent you use.
-4. If you want unified agent, skills, MCP, and plugin management, open **Agent Management**, then choose the **Agent Management** page.
-5. Select an agent to install or update it, then use the **Hooks**, **Skills**, **MCP**, or **Plugins** pages as needed.
+4. If you want unified agent, skills, and hook management, open **Agent Management**, then choose the **Agent Management** page.
+5. Select an agent to install or update it, then use the **Hooks** or **Skills** pages as needed.
 6. Restart the corresponding CLI session, then start Claude Code, Codex, Gemini CLI, or another supported agent.
 
 Agent Island will then show session state, tool activity, approvals, questions, plans, and completions in the island.

@@ -5,7 +5,6 @@ import { ask } from '@tauri-apps/plugin-dialog'
 import { motion, AnimatePresence } from 'framer-motion'
 import { SettingsSidebar } from './SettingsSidebar'
 import { UpdateDialog } from './UpdateDialog'
-import { FirstRunWelcome } from './FirstRunWelcome'
 import { GeneralSection } from './sections/GeneralSection'
 import { IslandSection } from './sections/IslandSection'
 import { UnifiedUsageSection } from './sections/UnifiedUsageSection'
@@ -34,16 +33,14 @@ export function SettingsApp({ onClose }: SettingsAppProps) {
   const { t } = useTranslation()
   const updater = useUpdater()
   const autoInstallUpdate = useConfigStore((s) => s.autoInstallUpdate)
-  const analyticsConsentPromptCompleted = useConfigStore((s) => s.analyticsConsentPromptCompleted)
   const [activeSection, setActiveSection] = useState('tasks')
   const [activeIslandView, setActiveIslandView] = useState<IslandSettingsView>('overview')
   const [activeMonitorView, setActiveMonitorView] = useState<MonitorSettingsView>('overview')
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [updateMinimized, setUpdateMinimized] = useState(false)
   const SectionComponent = sections[activeSection] ?? GeneralSection
-  const isMarketSection = activeSection === 'island' && activeIslandView === 'market'
   const isSkillManager = activeSection === 'skill-manager-v2'
-  const contentClassName = `settings-content settings-scroll${isMarketSection ? ' settings-content--market' : ''}${isSkillManager ? ' settings-content--skill-manager' : ''}`
+  const contentClassName = `settings-content settings-scroll${isSkillManager ? ' settings-content--skill-manager' : ''}`
   // Guard both the in-app close button and the native close event while an
   // update is downloading. The native handler applies tray/exit behavior.
   const downloadingRef = useRef(false)
@@ -200,7 +197,6 @@ export function SettingsApp({ onClose }: SettingsAppProps) {
           }}
         />
       )}
-      {!analyticsConsentPromptCompleted && <FirstRunWelcome />}
     </div>
   )
 }

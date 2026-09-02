@@ -15,13 +15,11 @@ import {
 import { AgentIconBadge } from './AgentIconBadge'
 import { AdoptDialog } from './AdoptDialog'
 import { PreviewDialog } from './PreviewDialog'
-import { McpManagementTab } from './McpManagementTab'
-import { PluginManagementTab } from './PluginManagementTab'
 import { SkillDetailSlider, type SkillDetailFallback } from './SkillDetailSlider'
 import { distributionBlockerReason, isAdoptOptionUnavailableError, skillErrorMessage, skillModeLabel, skillSourceTypeLabel, skillStatusLabel, targetClaimLabel, unmanagedReasonLabel } from './skillLabels'
 import { buildAgentUsageScores, readStoredAgentOrder, sortAgentSummaries } from '../../utils/agentOrdering'
 
-type DetailTab = 'overview' | 'skills' | 'mcp' | 'plugins' | 'hooks' | 'config'
+type DetailTab = 'overview' | 'skills' | 'hooks' | 'config'
 type AgentSkillViewMode = 'cards' | 'list'
 type AgentSkillSource = 'agent' | 'shared'
 type AgentSkillStatus = 'managed' | 'unmanaged' | 'builtin'
@@ -577,7 +575,7 @@ export function AgentManagementPage() {
       <div className="sm2__header sm2__header--stacked">
         <div>
           <h2 className="sm2__title">Agent 管理</h2>
-          <p className="sm2__header-subtitle">查看每个 Agent 的 Skills、技能包、MCP、插件与 Hook 状态。</p>
+          <p className="sm2__header-subtitle">查看每个 Agent 的 Skills、技能包与 Hook 状态。</p>
         </div>
         <div className="sm2__tabs">
           {detail && canUninstallSelectedAgent && (
@@ -763,7 +761,7 @@ export function AgentManagementPage() {
           {uninstallUnmanagedItems.length > 0 && (
             <div className="sm2-agent-uninstall__warning">未管理 Skills 会直接删除；若中心库没有副本，删除后无法从 Agent Island 恢复。</div>
           )}
-          <div className="sm2-agent-uninstall__preserved">保留：中心技能库、Agent 配置、会话记录、MCP 与插件配置。</div>
+          <div className="sm2-agent-uninstall__preserved">保留：中心技能库、Agent 配置与会话记录。</div>
           {uninstallProgramInstalled && uninstallProgram?.uninstallCommand && (
             <code className="sm2__command-preview">
               {uninstallProgram.kind === 'app'
@@ -804,8 +802,6 @@ function CustomAgentDialog({
   const [configRoot, setConfigRoot] = useState('')
   const [skillsDir, setSkillsDir] = useState('')
   const [settingsFile, setSettingsFile] = useState('')
-  const [mcpConfig, setMcpConfig] = useState('')
-  const [pluginDir, setPluginDir] = useState('')
   const [error, setError] = useState<string | null>(null)
 
   const applyRoot = (root: string) => {
@@ -813,8 +809,6 @@ function CustomAgentDialog({
     const paths = deriveCustomAgentPaths(root)
     setSkillsDir(paths.skillsDir)
     setSettingsFile(paths.settingsFile)
-    setMcpConfig(paths.mcpConfig)
-    setPluginDir(paths.pluginDir)
   }
 
   const chooseRoot = async () => {
@@ -851,8 +845,6 @@ function CustomAgentDialog({
       iconName: 'claude-code',
       configDir: root,
       settingsFile: settingsFile.trim() || null,
-      mcpConfig: mcpConfig.trim() || null,
-      pluginDir: pluginDir.trim() || null,
     })
   }
 
@@ -927,24 +919,6 @@ function CustomAgentDialog({
                   onChange={(e) => setSettingsFile(e.target.value)}
                 />
               </div>
-              <div className="install-form-row">
-                <label className="install-form-label" htmlFor="custom-agent-mcp">MCP 配置</label>
-                <input
-                  className="install-form-input"
-                  id="custom-agent-mcp"
-                  value={mcpConfig}
-                  onChange={(e) => setMcpConfig(e.target.value)}
-                />
-              </div>
-              <div className="install-form-row">
-                <label className="install-form-label" htmlFor="custom-agent-plugin">Plugin 目录</label>
-                <input
-                  className="install-form-input"
-                  id="custom-agent-plugin"
-                  value={pluginDir}
-                  onChange={(e) => setPluginDir(e.target.value)}
-                />
-              </div>
             </div>
           </details>
           {error && <div className="custom-agent-error">{error}</div>}
@@ -963,14 +937,12 @@ function CustomAgentDialog({
 function deriveCustomAgentPaths(root: string) {
   const normalized = root.trim().replace(/\/+$/, '')
   if (!normalized) {
-    return { skillsDir: '', settingsFile: '', mcpConfig: '', pluginDir: '' }
+    return { skillsDir: '', settingsFile: '' }
   }
   const settingsFile = `${normalized}/settings.json`
   return {
     skillsDir: `${normalized}/skills`,
     settingsFile,
-    mcpConfig: settingsFile,
-    pluginDir: `${normalized}/plugins/cache`,
   }
 }
 
@@ -1134,8 +1106,6 @@ function AgentDetailView({
   const tabs: Array<{ id: DetailTab; label: string }> = [
     { id: 'overview', label: '概览' },
     { id: 'skills', label: `Skills (${logicalSkillCount})` },
-    { id: 'mcp', label: `MCP (${detail.mcpServers.length})` },
-    { id: 'plugins', label: `Plugins (${detail.plugins.length})` },
     { id: 'hooks', label: 'Hooks' },
     { id: 'config', label: t('skills.agentManagement.pathSettings.tab') },
   ]
@@ -1159,7 +1129,6 @@ function AgentDetailView({
           {inheritsSharedSkills && <Stat value={inheritedSkillCount} label={t('skills.agentManagement.inheritedSkills')} />}
           {readOnlySkills.length > 0 && <Stat value={readOnlySkills.length} label={t('skills.agentManagement.builtinSkills')} />}
           <Stat value={detail.appliedPacks.length} label="技能包" />
-          <Stat value={detail.mcpServers.length + detail.plugins.length} label="MCP/插件" />
         </div>
         <div className="sm2__btn-row" style={{ margin: 0 }}>
           <ActionButton className="sm2__btn sm2__btn--primary" disabled={primaryAction.disabled} onClick={primaryAction.onClick} busy={primaryAction.busy} busyLabel={primaryAction.label}>
@@ -1229,8 +1198,6 @@ function AgentDetailView({
             onOpenSkillDetail={onOpenSkillDetail}
           />
         )}
-        {tab === 'mcp' && <McpTab detail={detail} />}
-        {tab === 'plugins' && <PluginManagementTab detail={detail} />}
         {tab === 'hooks' && <HooksTab detail={detail} program={program} />}
         {tab === 'config' && <ConfigTab detail={detail} program={program} />}
       </div>
@@ -1269,13 +1236,10 @@ function OverviewTab({
   const inheritedCount = (detail.inheritedManagedSkills?.length ?? 0) + (detail.inheritedUnmanagedSkills?.length ?? 0)
   const appliedIds = new Set(detail.appliedPacks.map((p) => p.packId))
   const available = detail.availablePacks.filter((p) => !appliedIds.has(p.id))
-  const validMcpCount = detail.mcpServers.filter((server) => server.valid).length
-  const enabledPluginCount = detail.plugins.filter((plugin) => plugin.enabled).length
-  const invalidMcpCount = detail.mcpServers.length - validMcpCount
-  const configuredPaths = [detail.skillsDir, detail.configPath, detail.mcpConfigPath, detail.pluginDir]
+  const configuredPaths = [detail.skillsDir, detail.configPath]
     .filter(Boolean).length
   const healthErrors = detail.health.filter((issue) => ['error', 'critical'].includes(issue.severity.toLowerCase())).length
-  const attentionCount = detail.health.length + unmanagedCount + invalidMcpCount
+  const attentionCount = detail.health.length + unmanagedCount
   const statusTone = healthErrors > 0 ? 'danger' : attentionCount > 0 ? 'attention' : 'ready'
   const statusTitle = healthErrors > 0
     ? `${healthErrors} 项配置异常`
@@ -1286,14 +1250,11 @@ function OverviewTab({
     ? '关键配置存在异常，建议先修复后再同步能力。'
     : attentionCount > 0
       ? 'Agent 可以继续使用，完成下方事项后会更稳定。'
-      : 'Skills、扩展与配置均未发现待处理问题。'
+      : 'Skills、Hooks 与配置均未发现待处理问题。'
   const nextActions: Array<{ label: string; meta: string; tab: DetailTab; tone?: 'warn' }> = []
 
   if (unmanagedCount > 0) {
     nextActions.push({ label: `接管 ${unmanagedCount} 个未管理 Skill`, meta: '统一纳入中心库管理', tab: 'skills', tone: 'warn' })
-  }
-  if (invalidMcpCount > 0) {
-    nextActions.push({ label: `修复 ${invalidMcpCount} 个 MCP 配置`, meta: '存在缺失或无效命令', tab: 'mcp', tone: 'warn' })
   }
   if (detail.health.length > 0) {
     nextActions.push({ label: `查看 ${detail.health.length} 项健康提示`, meta: '检查路径与配置详情', tab: 'config', tone: 'warn' })
@@ -1338,26 +1299,6 @@ function OverviewTab({
       tone: 'violet',
       progress: detail.appliedPacks.length + available.length === 0 ? 0 : detail.appliedPacks.length / (detail.appliedPacks.length + available.length) * 100,
     },
-    {
-      id: 'mcp',
-      label: 'MCP 服务',
-      value: validMcpCount,
-      unit: detail.mcpServers.length > 0 ? `/ ${detail.mcpServers.length} 可用` : '未配置',
-      detail: detail.mcpServers.length === 0 ? '尚未连接服务' : invalidMcpCount > 0 ? `${invalidMcpCount} 个配置异常` : '服务连接正常',
-      tab: 'mcp',
-      tone: invalidMcpCount > 0 ? 'amber' : detail.mcpServers.length > 0 ? 'green' : 'blue',
-      progress: detail.mcpServers.length === 0 ? 0 : validMcpCount / detail.mcpServers.length * 100,
-    },
-    {
-      id: 'plugins',
-      label: 'Plugins',
-      value: enabledPluginCount,
-      unit: detail.plugins.length > 0 ? `/ ${detail.plugins.length} 启用` : '未安装',
-      detail: detail.plugins.length === 0 ? '暂无插件扩展' : enabledPluginCount === detail.plugins.length ? '插件均已启用' : `${detail.plugins.length - enabledPluginCount} 个未启用`,
-      tab: 'plugins',
-      tone: 'green',
-      progress: detail.plugins.length === 0 ? 0 : enabledPluginCount / detail.plugins.length * 100,
-    },
   ]
 
   return (
@@ -1371,13 +1312,13 @@ function OverviewTab({
           <h3>{statusTitle}</h3>
           <p>{statusDescription}</p>
         </div>
-        <div className="sm2__agent-overview-readiness" aria-label={`配置完整度 ${configuredPaths} / 4`}>
+        <div className="sm2__agent-overview-readiness" aria-label={`配置完整度 ${configuredPaths} / 2`}>
           <div>
             <span>配置完整度</span>
-            <strong>{configuredPaths}<small>/4</small></strong>
+            <strong>{configuredPaths}<small>/2</small></strong>
           </div>
           <div className="sm2__agent-overview-readiness-track" aria-hidden="true">
-            <span style={{ width: `${configuredPaths / 4 * 100}%` }} />
+            <span style={{ width: `${configuredPaths / 2 * 100}%` }} />
           </div>
           <button type="button" onClick={() => onOpenSection('config')}>查看配置 <span aria-hidden="true">→</span></button>
         </div>
@@ -1389,7 +1330,7 @@ function OverviewTab({
             <h3 id="agent-capability-title">能力快照</h3>
             <p>点击卡片查看和管理对应能力</p>
           </div>
-          <span>{detail.skills.length + readOnlyCount + detail.mcpServers.length + detail.plugins.length} 项能力已连接</span>
+            <span>{detail.skills.length + readOnlyCount} 项能力已连接</span>
         </div>
         <div className="sm2__agent-capability-grid">
           {capabilities.map((capability) => (
@@ -3921,10 +3862,6 @@ function initials(value: string) {
     .slice(0, 2) || 'SK'
 }
 
-function McpTab({ detail }: { detail: AgentDetail }) {
-  return <McpManagementTab detail={detail} />
-}
-
 function HooksTab({ detail, program }: { detail: AgentDetail; program: AgentProgramInfo | null }) {
   const agentId = detail.id
   const [hook, setHook] = useState<HookStatus | null>(null)
@@ -4216,19 +4153,6 @@ function ConfigTab({ detail, program }: { detail: AgentDetail; program: AgentPro
         kind: 'directory',
       },
       {
-        id: 'mcp-config',
-        label: t('skills.agentManagement.pathSettings.resources.mcpConfig'),
-        value: detail.mcpConfigPath,
-        kind: looksLikeWebUrl(detail.mcpConfigPath) ? 'link' : 'file',
-        editable: isEditableConfigFile(detail.mcpConfigPath),
-      },
-      {
-        id: 'plugin-directory',
-        label: t('skills.agentManagement.pathSettings.resources.pluginDirectory'),
-        value: detail.pluginDir,
-        kind: 'directory',
-      },
-      {
         id: 'agent-directory',
         label: t('skills.agentManagement.pathSettings.resources.agentDirectory'),
         value: detail.agentDir ?? null,
@@ -4241,8 +4165,6 @@ function ConfigTab({ detail, program }: { detail: AgentDetail; program: AgentPro
   }, [
     detail.agentDir,
     detail.configPath,
-    detail.mcpConfigPath,
-    detail.pluginDir,
     executableIsApp,
     executablePath,
     program?.configDir,

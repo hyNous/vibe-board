@@ -7,7 +7,7 @@
 
   <p>
     少盯终端，少切窗口。<br />
-    在一个悬浮工作台里处理 Agent 会话、审批与提问，并统一管理 Hooks、Skills、MCP、插件、API 供应商和远程主机。
+    在一个悬浮工作台里处理 Agent 会话、审批与提问，并统一管理 Hooks、真实用量与跨 Agent Skills。
   </p>
 
   <p>
@@ -45,17 +45,16 @@
 
 ## Agent Island 解决什么问题？
 
-AI 编程 Agent 已经能连续工作很久，但人仍要守着终端：等权限、回答问题、看任务有没有卡住，还要分别维护每个工具的 Hooks、Skills、MCP 和插件。Agent Island 把这些分散的操作放到一个桌面入口里。
+AI 编程 Agent 已经能连续工作很久，但人仍要守着终端：等权限、回答问题、看任务有没有卡住，还要分别维护每个工具的 Hooks 和 Skills。Agent Island 把这些分散的操作放到一个桌面入口里。
 
 | 你正在做的事 | Agent Island 提供的能力 |
 | --- | --- |
 | 同时跑多个 Agent 会话 | 灵动岛聚合状态、工具调用、Subagent、Token 和完成提醒。 |
 | Agent 等待审批或输入 | 直接批准权限、回答问题、确认计划或快速回复，不必找回原终端。 |
-| 维护多套 Agent 环境 | 扫描安装状态、版本、路径和 Hook，并集中管理 Skills、MCP、插件与配置文件。 |
-| 切换模型或 API 供应商 | Agent Switch 管理 Claude、Codex、Gemini、OpenCode 和 Hermes 的供应商配置、测速与切换。 |
-| 在服务器上跑 Agent | 通过 SSH 把远程会话和 Hook 事件带回本机，并在同一处诊断连接。 |
+| 维护多套 Agent 环境 | 扫描安装状态、版本、路径和 Hook，并集中管理 Skills 与配置文件。 |
+| 查看真实用量 | 能读取 token 时展示 token；否则展示当前 Provider quota 和刷新时间，不生成估算价格。 |
 
-Agent 会话事件和本地配置不需要云端中转。Hook Server 默认监听当前用户的本地 Unix Socket，Windows 使用本地 TCP 端点；更新检查、市场下载、SSH 和 Webhook 只会在你使用相应功能时访问对应服务。
+Agent 会话事件和本地配置不需要云端中转。Hook Server 默认监听当前用户的本地 Unix Socket，Windows 使用本地 TCP 端点；更新检查和 GitHub Skill 同步只会在你使用相应功能时访问对应服务。
 
 ## 演示视频
 
@@ -74,8 +73,7 @@ https://github.com/user-attachments/assets/374d6e53-c126-41be-a593-4e5f63485602
 - 会话有紧凑、悬停、展开和详情视图；只想在关键时刻出现，也可以使用“安静助手”模式。
 - 权限请求、问题、计划审批、完成结果和错误都能在浮窗里处理；支持的 Agent 还可以直接快速回复。
 - 工具调用、文件 Diff、Subagent、任务摘要、上下文压力、Token 和 Rate Limit 会跟随会话更新。
-- 支持全局快捷键、通知音、勿扰时段、多显示器位置和终端聚焦降噪。
-- 除了系统通知，关键事件也可以转发到钉钉或飞书 Webhook。
+- 支持全局快捷键、勿扰时段、多显示器位置和终端聚焦降噪。
 
 <table>
   <tr>
@@ -92,21 +90,7 @@ https://github.com/user-attachments/assets/374d6e53-c126-41be-a593-4e5f63485602
 
 ### Agent Monitor：看清 Agent 到底在做什么
 
-Agent Monitor 汇总当前和历史会话，可以按项目查看运行阶段、工具时间线、审批、问题、对话与原始 Hook 事件。手动开启 Claude Code 网络监控后，还能在本地 Inspector 中检查 system prompt、messages、tools、response、Token 用量和 KV cache，并按模型与项目汇总统计。网络监控默认关闭。
-
-## 宠物市场
-
-除了灵动岛，Agent Island 还可以把浮窗切换成宠物状态面板。一只桌面宠物会跟随当前活跃的 Agent，它的活力会随上下文压力和 Token 用量实时变化，让你一眼看出会话是轻松还是吃紧。
-
-宠物市场支持浏览和一键安装社区宠物，整个流程由 [`abpets`](https://www.npmjs.com/package/abpets) CLI 驱动（Node.js v18+）。在设置面板的 **Island -> 宠物市场** 即可打开，也可以在网页上预览：
-
-👉 **[www.agentbro.net/pets](https://www.agentbro.net/pets)**
-
-想自己创作宠物，可以使用 [`shirenchuang/agentbro-pet`](https://github.com/shirenchuang/agentbro-pet) Skill：它会把角色概念、品牌线索或参考图生成 Agent Island 可用的 `pet.json` + `spritesheet.webp` 宠物包，并支持接入不同的生图后端。可通过 `npx skills add https://github.com/shirenchuang/agentbro-pet.git` 安装，也可以直接克隆；Codex、Claude Code、Cursor、Gemini CLI 等任意能运行脚本和生成图片的 Agent 都可以使用。
-
-<img src="https://github.com/user-attachments/assets/53a17db6-54c4-40f1-95b6-89a7f1977f00" alt="Agent Island 宠物模式" width="100%" />
-
-<img src="https://github.com/user-attachments/assets/efd1acc8-67bb-460f-b7c9-3faa490611f5" alt="Agent Island 宠物市场" width="100%" />
+Agent Monitor 汇总当前和历史会话，可以按项目查看运行阶段、工具时间线、审批、问题、对话与原始 Hook 事件。
 
 灵动岛目前内置午夜、Agent Island 经典、磨砂玻璃、苹果、烟灰、海雾、暖纸和柔薰衣草等主题，也可以跟随系统自动切换浅色与深色外观。
 
@@ -116,11 +100,9 @@ Agent Monitor 汇总当前和历史会话，可以按项目查看运行阶段、
 
 - 自动发现 CLI 与桌面 App，显示当前版本、可用更新、可执行文件、配置目录和官方安装页；支持的 CLI 可以直接安装、更新或卸载。
 - 按 Agent 安装和修复 Hook，查看 Bridge 命令与配置路径，并分别控制审批、通知、生命周期和活动事件。
-- 扫描散落在不同目录中的 Skills，接管到中心库后，用软链接或副本分发给 Agent 与项目；批量操作、冲突处理和诊断状态都有记录。
+- 扫描散落在不同目录中的 Skills，接管到中心库后，用软链接或副本分发给 Agent；批量操作、冲突处理和诊断状态都有记录。
 - 把常用 Skills 组合成技能包，一键应用到多个 Agent，也能安全撤销。
-- 管理 stdio、HTTP 和 SSE MCP 服务，检查 tools、resources、prompts 与连接日志；调用工具前会显示参数和风险确认。
-- 查看 Codex、Claude Code、WorkBuddy、ZCode、Kimi 等 Agent 的插件，搜索、启停、检查清单和内置能力，并预览插件文件。
-- 在校验后编辑支持的 JSON 或文本配置文件；项目页可以导入仓库，检查项目级指令、Skills、MCP 和插件。
+- GitHub 来源的 Skill 可在详情页检查远端 Hash、查看来源创建/更新时间，并同步回中心库。
 
 <table>
   <tr>
@@ -130,7 +112,7 @@ Agent Monitor 汇总当前和历史会话，可以按项目查看运行阶段、
     </td>
     <td width="50%">
       <img src="docs/assets/screenshots/agent-management-install-skills.png" alt="Agent Island 安装 Skills" width="100%" />
-      <sub>安装 Skill：从市场、Agent、本地目录或 Git 仓库导入。</sub>
+      <sub>安装 Skill：从 Agent、本地目录或 Git 仓库导入。</sub>
     </td>
   </tr>
   <tr>
@@ -140,44 +122,31 @@ Agent Monitor 汇总当前和历史会话，可以按项目查看运行阶段、
     </td>
     <td width="50%">
       <img src="docs/assets/screenshots/agent-management-agent-detail.png" alt="Agent Island Agent 管理详情" width="100%" />
-      <sub>Agent 管理：按 Agent 查看 Skills、MCP、插件、Hooks 和路径。</sub>
+      <sub>Agent 管理：按 Agent 查看 Skills、Hooks 和路径。</sub>
     </td>
   </tr>
 </table>
 
-## Agent Switch
-
-Agent Switch 用来管理 Claude、Codex、Gemini、OpenCode 和 Hermes 的 API 供应商配置。你可以添加或复制供应商、切换当前配置、检测连通性与延迟，也可以从 CC Switch 预览并导入已有的供应商、MCP、Prompt 和 Skill 数据。
-
-## SSH 远程
-
-远程开发不需要再开一套监控界面。Agent Island 可以从 `~/.ssh/config` 导入主机，通过 SSH 隧道接收远端 Hook 事件，并在本机查看远程会话、安装或修复 Hooks、运行诊断。连接信息和会话来源会保留主机标识，便于同时区分本地与多台服务器上的任务。
-
 ## 支持的 Agent
 
-Agent Island 的支持分为两层。运行时 Hook 适配器负责把会话事件送进灵动岛；Agent 管理还会扫描更大范围的 CLI、桌面 App、Skills、MCP、插件和路径。各 Agent 公开的 Hook 能力不同，因此事件和交互深度会有差异。
+Agent Island 的支持分为两层。运行时 Hook 适配器负责把会话事件送进灵动岛；Agent 管理还会扫描 CLI、桌面 App、Skills 和路径。各 Agent 公开的 Hook 能力不同，因此事件和交互深度会有差异。
 
 | 范围 | Agent |
 | --- | --- |
 | 灵动岛 / Hook 接入 | Claude Code、Codex、Gemini CLI、Cursor / Cursor CLI、GitHub Copilot、Cline、Qoder / Qoder CLI、CodeBuddy / CodeBuddy CN、Qwen、Kimi、DeepSeek、OpenCode、Factory Droid、StepFun、AntiGravity、WorkBuddy、Hermes、Pi、Kiro、ZCode |
 | Agent 管理扫描 | 上面所有 Agent，另支持豆包、`.agents` 共享目录、Junie、Windsurf、Augment、KiloCode、OB1、Amp、Aider、OpenClaw / QClaw / EasyClaw / AutoClaw，以及自定义 Agent |
-| 项目级扫描 | 目前聚焦 Claude Code 与 Codex 常见项目配置：项目级 Skills、MCP、插件和指令文件 |
-
-豆包 macOS 支持会检测 `/Applications/Doubao.app`、管理 `~/Doubao/skills`，并继续通过中心库覆盖豆包兼容的 `~/.agents/skills`。由于豆包目前没有公开 Hook，灵动岛中的任务状态来自本机进程与两个任务存储目录的只读元数据关联，不读取聊天内容；该状态属于尽力推断，页面同步可能造成短暂误报。
+| 项目级扫描 | 不纳入当前核心版本 |
 
 ## 路线图
 
 Agent Island 会继续坚持本地优先。接下来的重点包括：
 
-- 远程同步：跨设备同步设置、Hook、主题、Prompt、Skills 和远程主机配置。
-- 技能社区：发现、安装、分享和更新面向不同 Agent 的 Skill Pack。
+- 技能中心：跨 Agent 分发、GitHub 来源检查更新和同步。
 - Windows：完善代码签名、自动更新和更多 Agent 的深度交互。
-- 宠物生态：上架更多社区宠物，完善自定义宠物的创作与分享流程。
-- 团队协作：共享配置、团队 Skill 包、权限控制和更清晰的协作视图。
 
 ## 加入交流群
 
-如果你正在使用 Agent Island，或者想讨论 Windows 体验、更多 Agent 适配、Agent Monitor、Agent Switch 和 Skills 社区，可以扫码添加微信，备注 **Agent Island 交流群**，或直接扫码加入 **Agent Island 开源社区** 群聊。
+如果你正在使用 Agent Island，或者想讨论 Windows 体验、更多 Agent 适配、Agent Monitor 和 Skills 中心，可以扫码添加微信，备注 **Agent Island 交流群**，或直接扫码加入 **Agent Island 开源社区** 群聊。
 
 <div align="center">
   <table>
@@ -258,8 +227,8 @@ pnpm tauri:build:windows                           # 构建 Windows NSIS / MSI
 1. 打开 Agent Island 设置。
 2. 如果只想接入灵动岛，进入 **Island -> Integration**，运行 **Hook Doctor**。
 3. 点击 **Install All Hooks**，或只安装你正在使用的 Agent Hook。
-4. 如果想统一管理 Agent、Skills、MCP 和插件，进入 **Agent管理**，再选择 **Agent 管理** 页。
-5. 选择一个 Agent，安装或更新它；再按需进入 **Hooks**、**Skills**、**MCP** 或 **插件** 页完成配置。
+4. 如果想统一管理 Agent、Skills 和 Hooks，进入 **Agent管理**，再选择 **Agent 管理** 页。
+5. 选择一个 Agent，安装或更新它；再按需进入 **Hooks** 或 **Skills** 页完成配置。
 6. 重启对应的 CLI 会话，再启动 Claude Code、Codex、Gemini CLI 或其他支持的 Agent。
 
 之后 Agent Island 会在灵动岛中展示会话状态、工具调用、权限请求、问题、计划和完成提醒。

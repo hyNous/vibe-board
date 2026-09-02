@@ -147,7 +147,7 @@ function ensureMarketplaceProgressListener() {
 export const useSkillStoreV2 = create<SkillV2State & SkillV2Actions>((set, get) => ({
   runtimeEnvironmentId: LOCAL_RUNTIME_ENVIRONMENT_ID,
   activeTab: 'library',
-  activeInstallTab: 'official',
+  activeInstallTab: 'git',
   viewMode: 'cards',
   overview: null,
   settings: null,

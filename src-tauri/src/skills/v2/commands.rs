@@ -100,6 +100,16 @@ pub fn execute_add_center_skill(
 }
 
 #[tauri::command(async)]
+pub fn check_github_skill_update(skill_id: String) -> Result<GitHubSkillUpdatePreview, String> {
+    Ok(svc()?.check_github_skill_update(&skill_id)?)
+}
+
+#[tauri::command(async)]
+pub fn sync_github_skill(skill_id: String) -> Result<GitHubSkillSyncResult, String> {
+    Ok(svc()?.sync_github_skill(&skill_id)?)
+}
+
+#[tauri::command(async)]
 pub fn execute_marketplace_skill_batch(
     app: AppHandle,
     job_id: String,

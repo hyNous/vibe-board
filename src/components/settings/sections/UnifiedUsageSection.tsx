@@ -1,13 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { CodexUsageSection } from './CodexUsageSection'
-import { SwitchAppTabs } from './switch/SwitchAppTabs'
-import { SwitchUsagePanel } from './switch/SwitchUsagePanel'
 import { getNetworkMonitorRequests, type NetworkRequestSummary } from '../../../services/monitorApi'
 import { getUsageSnapshots, isTauri, listUsageProviders, type UsageProviderStatus } from '../../../services/tauriApi'
-import { switchApi, type SwitchAppType } from '../../../services/switchApi'
 import type { RateLimitInfo } from '../../../types/agent'
 import { formatTokens } from '../../../utils/tokens'
-import './SwitchSection.css'
 import './UnifiedUsageSection.css'
 
 type UsageView = 'overview' | 'quota' | 'token-trend' | 'breakdown'
@@ -18,8 +14,6 @@ const USAGE_VIEWS: Array<{ id: UsageView; label: string }> = [
   { id: 'token-trend', label: 'Token Usage' },
   { id: 'breakdown', label: 'Breakdown' },
 ]
-
-const USAGE_APP_TYPES: SwitchAppType[] = ['claude', 'codex', 'gemini', 'opencode', 'hermes']
 
 type CoverageId = 'codex' | 'claude' | 'gemini' | 'pi' | 'opencode' | 'other'
 
@@ -243,14 +237,12 @@ export function UnifiedUsageSection() {
   const [providerStatuses, setProviderStatuses] = useState<UsageProviderStatus[]>([])
   const [providerError, setProviderError] = useState('')
   const [providerLoading, setProviderLoading] = useState(false)
-  const [todayUsage, setTodayUsage] = useState<{ tokens: number } | null>(null)
   const [quotaSnapshots, setQuotaSnapshots] = useState<RateLimitInfo[]>([])
 
   const loadRequests = useCallback(async () => {
     if (!isTauri()) {
       setRequests([])
       setProviderStatuses([])
-      setTodayUsage(null)
       setQuotaSnapshots([])
       return
     }
@@ -258,23 +250,15 @@ export function UnifiedUsageSection() {
     setError('')
     setProviderError('')
     try {
-      const [networkResult, providerResult, usageResult, quotaResult] = await Promise.allSettled([
+      const [networkResult, providerResult, quotaResult] = await Promise.allSettled([
         getNetworkMonitorRequests(),
         listUsageProviders(false),
-        Promise.all(USAGE_APP_TYPES.map((appType) => switchApi.getUsageSummary(appType, 1))),
         getUsageSnapshots(),
       ])
       if (networkResult.status === 'fulfilled') setRequests(networkResult.value)
       else setError(String(networkResult.reason))
       if (providerResult.status === 'fulfilled') setProviderStatuses(providerResult.value)
       else setProviderError(String(providerResult.reason))
-      if (usageResult.status === 'fulfilled') {
-        setTodayUsage({
-          tokens: usageResult.value.reduce((total, summary) => total + summary.total_input_tokens + summary.total_output_tokens, 0),
-        })
-      } else {
-        setTodayUsage(null)
-      }
       setQuotaSnapshots(quotaResult.status === 'fulfilled' ? quotaResult.value : [])
     } finally {
       setProviderLoading(false)
@@ -293,8 +277,7 @@ export function UnifiedUsageSection() {
     [requests],
   )
   const liveTokens = todayTokens(requests)
-  const persistedTokens = todayUsage?.tokens ?? 0
-  const tokensToday = persistedTokens > 0 ? persistedTokens : liveTokens
+  const tokensToday = liveTokens
   const quotaSummary = quotaSnapshots
     .map((snapshot) => {
       const label = snapshot.providerLabel ?? snapshot.provider ?? 'Provider'
@@ -334,7 +317,7 @@ export function UnifiedUsageSection() {
       {view === 'overview' && (
         <>
           <div className="unified-usage__summary">
-            <div><span>{tokensToday > 0 ? 'Tokens Today' : 'Quota Remaining'}</span><strong>{tokensToday > 0 ? formatTokens(tokensToday) : quotaSummary || 'Unknown'}</strong><em>{tokensToday > 0 ? (persistedTokens > 0 ? 'local usage_logs' : 'network monitor') : 'provider usage reader'}</em></div>
+            <div><span>{tokensToday > 0 ? 'Tokens Today' : 'Quota Remaining'}</span><strong>{tokensToday > 0 ? formatTokens(tokensToday) : quotaSummary || 'Unknown'}</strong><em>{tokensToday > 0 ? 'network monitor' : 'provider usage reader'}</em></div>
             <div><span>Active Providers</span><strong>{providers.size > 0 ? providers.size : '未采集'}</strong><em>当前请求来源</em></div>
           </div>
           <ProviderCoverage requests={requests} statuses={providerStatuses} snapshots={quotaSnapshots} loading={providerLoading} error={providerError} />
@@ -351,14 +334,11 @@ export function UnifiedUsageSection() {
       {view === 'token-trend' && (
         <div className="unified-usage__panel">
           <p className="unified-usage__panel-note">能读取 token 时展示真实 token；没有 token 时只展示 Provider quota 剩余值。</p>
-          <SwitchAppTabs />
-          <SwitchUsagePanel />
           <CodexUsageSection showHeader={false} />
         </div>
       )}
       {view === 'breakdown' && (
         <div className="unified-usage__panel">
-          <SwitchAppTabs />
           <UsageBreakdown requests={requests} />
         </div>
       )}

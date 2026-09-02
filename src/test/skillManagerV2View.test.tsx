@@ -924,7 +924,7 @@ describe('Marketplace install flow', () => {
     expect(screen.getByRole('status', { name: '市场 Skill 安装任务' })).toHaveTextContent('1/1')
   })
 
-  it('shows the running marketplace task on the Skill install sidebar entry', async () => {
+  it('keeps the Skill install sidebar entry free of marketplace progress', async () => {
     useSkillStoreV2.getState().beginMarketplaceInstallTask(
       'sidebar-market-job',
       'anthropics/skills',
@@ -947,10 +947,10 @@ describe('Marketplace install flow', () => {
     )
 
     const installEntry = screen.getByRole('button', { name: '安装 Skill' })
-    expect(installEntry).toHaveTextContent('0/1')
+    expect(installEntry).not.toHaveTextContent('0/1')
     fireEvent.click(installEntry)
     expect(useSkillStoreV2.getState().activeTab).toBe('install')
-    expect(useSkillStoreV2.getState().activeInstallTab).toBe('official')
+    expect(useSkillStoreV2.getState().activeInstallTab).toBe('git')
   })
 })
 
@@ -3198,8 +3198,6 @@ describe('Skill detail slider + agent page render without crashing', () => {
       iconName: 'claude-code',
       configDir: '~/.codefuse/engine/cc/',
       settingsFile: '~/.codefuse/engine/cc/settings.json',
-      mcpConfig: '~/.codefuse/engine/cc/settings.json',
-      pluginDir: '~/.codefuse/engine/cc/plugins/cache',
     }))
     expect(loadOverview).toHaveBeenCalledWith(true)
     expect(screen.queryByRole('dialog', { name: /添加 Claude Code 实例/ })).not.toBeInTheDocument()
@@ -5854,7 +5852,7 @@ describe('Skill detail slider + agent page render without crashing', () => {
     expect(screen.queryByText('hidden-skill')).not.toBeInTheDocument()
   })
 
-  it('renders MCP, plugin, config, and health details for the selected agent', async () => {
+  it('keeps MCP and plugin management out while retaining config and health details', async () => {
     useSkillStoreV2.setState({
       selectedAgentDetail: {
         ...agentDetail,
@@ -5874,19 +5872,13 @@ describe('Skill detail slider + agent page render without crashing', () => {
     render(<AgentManagementPage />)
 
     expect(screen.getByText('Skills directory does not exist: /c/skills')).toBeInTheDocument()
-    fireEvent.click(screen.getByText('MCP (2)'))
-    expect(screen.getByText('filesystem')).toBeInTheDocument()
-    expect(screen.getByText('broken')).toBeInTheDocument()
-    expect(screen.getByText('missing command')).toBeInTheDocument()
-
-    fireEvent.click(screen.getByText('Plugins (1)'))
-    expect(screen.getByText('Reviewer Tools')).toBeInTheDocument()
-    expect(screen.getByText('claude-plugin · v1.2.3')).toBeInTheDocument()
+    expect(screen.queryByText('MCP (2)')).not.toBeInTheDocument()
+    expect(screen.queryByText('Plugins (1)')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByText('路径与设置'))
     expect(screen.getByText('/c')).toBeInTheDocument()
     expect(screen.getByText('/c/config.json')).toBeInTheDocument()
-    expect(screen.getByText('/c/mcp.json')).toBeInTheDocument()
+    expect(screen.queryByText('/c/mcp.json')).not.toBeInTheDocument()
   })
 
   it('shows live program versions and config paths in the config tab', async () => {
@@ -5913,7 +5905,7 @@ describe('Skill detail slider + agent page render without crashing', () => {
     fireEvent.click(screen.getByText('路径与设置'))
     await waitFor(() => expect(container.querySelectorAll('.sm2__config-facts > div')[1]).toHaveTextContent('2.1.179'))
     expect(screen.getByText('/Users/me/.claude/settings.json')).toBeInTheDocument()
-    expect(screen.getByText('/Users/me/.claude/plugins/cache')).toBeInTheDocument()
+    expect(screen.queryByText('/Users/me/.claude/plugins/cache')).not.toBeInTheDocument()
   })
 
   it('formats, validates, edits, and reveals an Agent config resource', async () => {

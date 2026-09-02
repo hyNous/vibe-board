@@ -1110,6 +1110,95 @@ impl Service {
         })
     }
 
+    pub fn check_github_skill_update(
+        &self,
+        skill_id: &str,
+    ) -> Result<GitHubSkillUpdatePreview, String> {
+        let row = self
+            .skill_row(skill_id)?
+            .ok_or_else(|| format!("Skill not found: {skill_id}"))?;
+        let source = self
+            .source_for_skill(skill_id)?
+            .ok_or_else(|| "This Skill has no recorded source.".to_string())?;
+        let source_uri = source
+            .source_uri
+            .clone()
+            .ok_or_else(|| "This Skill has no recorded GitHub URI.".to_string())?;
+        if source.source_type != "github"
+            && !source_uri.starts_with("github:")
+            && !source_uri.starts_with("https://github.com/")
+            && !source_uri.starts_with("http://github.com/")
+        {
+            return Err("Only GitHub-backed Skills can be checked for updates.".to_string());
+        }
+        let center = Path::new(&row.center_path);
+        if !center.is_dir() {
+            return Err(format!("Center Skill directory is missing: {}", center.display()));
+        }
+        // Compare contents rather than absolute/root directory names: a cloned
+        // GitHub subdirectory lives under a temporary `repo` path while the
+        // center copy is named after the Skill id.
+        let local_hash = fsutil::hash_dir_contents(center);
+        let (remote, temp_root) = crate::skills::installer::resolve_external_skill_source(&source_uri)?;
+        let remote_hash = fsutil::hash_dir_contents(&remote);
+        let result = GitHubSkillUpdatePreview {
+            skill_id: skill_id.to_string(),
+            source_uri,
+            local_hash: local_hash.clone(),
+            remote_hash: remote_hash.clone(),
+            update_available: local_hash != remote_hash,
+            checked_at: db::now_iso(),
+        };
+        if let Some(root) = temp_root {
+            let _ = std::fs::remove_dir_all(root);
+        }
+        Ok(result)
+    }
+
+    pub fn sync_github_skill(&self, skill_id: &str) -> Result<GitHubSkillSyncResult, String> {
+        let preview = self.check_github_skill_update(skill_id)?;
+        if !preview.update_available {
+            return Ok(GitHubSkillSyncResult {
+                skill_id: preview.skill_id,
+                source_uri: preview.source_uri,
+                previous_hash: preview.local_hash.clone(),
+                current_hash: preview.local_hash,
+                updated: false,
+                synced_at: db::now_iso(),
+            });
+        }
+
+        let (remote, temp_root) = crate::skills::installer::resolve_external_skill_source(&preview.source_uri)?;
+        let import = self.execute_add_center_skill(
+            AddCenterSkillInput {
+                source_path: remote.display().to_string(),
+                source_type: "github".to_string(),
+                source_uri: Some(preview.source_uri.clone()),
+                imported_from_agent: None,
+                imported_from_path: None,
+                multi: Some(false),
+                import_mode: Some("copy".to_string()),
+            },
+            Vec::new(),
+        );
+        if let Some(root) = temp_root {
+            let _ = std::fs::remove_dir_all(root);
+        }
+        import?;
+        let current_hash = self
+            .skill_row(skill_id)?
+            .map(|row| fsutil::hash_dir(Path::new(&row.center_path)))
+            .unwrap_or_else(|| preview.remote_hash.clone());
+        Ok(GitHubSkillSyncResult {
+            skill_id: preview.skill_id,
+            source_uri: preview.source_uri,
+            previous_hash: preview.local_hash,
+            current_hash,
+            updated: true,
+            synced_at: db::now_iso(),
+        })
+    }
+
     fn frontmatter_for_skill(&self, skill_id: &str) -> Result<BTreeMap<String, String>, String> {
         self.db.with_conn(|c| {
             let s: Option<String> = c

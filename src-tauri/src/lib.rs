@@ -6315,6 +6315,8 @@ pub fn run() {
             skills::v2::commands::get_skill_detail_v2,
             skills::v2::commands::preview_add_center_skill,
             skills::v2::commands::execute_add_center_skill,
+            skills::v2::commands::check_github_skill_update,
+            skills::v2::commands::sync_github_skill,
             skills::v2::commands::execute_marketplace_skill_batch,
             skills::v2::commands::cancel_marketplace_skill_batch,
             skills::v2::commands::preview_delete_center_skill,

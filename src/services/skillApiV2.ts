@@ -910,6 +910,24 @@ export interface GitHubRepoImportResult {
   skippedSkills: string[]
 }
 
+export interface GitHubSkillUpdatePreview {
+  skillId: string
+  sourceUri: string
+  localHash: string
+  remoteHash: string
+  updateAvailable: boolean
+  checkedAt: string
+}
+
+export interface GitHubSkillSyncResult {
+  skillId: string
+  sourceUri: string
+  previousHash: string
+  currentHash: string
+  updated: boolean
+  syncedAt: string
+}
+
 export interface MarketplaceSkill {
   id: string
   registryId: string
@@ -1163,6 +1181,28 @@ export const skillApiV2 = {
     isTauriRuntime()
       ? invoke<AddCenterSkillResult>('execute_add_center_skill', { input, decisions })
       : Promise.resolve({ skillIds: [], updated: [], skipped: [] }),
+  checkGitHubSkillUpdate: (skillId: string) =>
+    isTauriRuntime()
+      ? invoke<GitHubSkillUpdatePreview>('check_github_skill_update', { skillId })
+      : Promise.resolve({
+          skillId,
+          sourceUri: '',
+          localHash: '',
+          remoteHash: '',
+          updateAvailable: false,
+          checkedAt: new Date().toISOString(),
+        }),
+  syncGitHubSkill: (skillId: string) =>
+    isTauriRuntime()
+      ? invoke<GitHubSkillSyncResult>('sync_github_skill', { skillId })
+      : Promise.resolve({
+          skillId,
+          sourceUri: '',
+          previousHash: '',
+          currentHash: '',
+          updated: false,
+          syncedAt: new Date().toISOString(),
+        }),
   executeMarketplaceSkillBatch: (jobId: string, repoSource: string, skills: MarketplaceBatchSkillInput[]) =>
     isTauriRuntime()
       ? invoke<MarketplaceBatchInstallResult>('execute_marketplace_skill_batch', { jobId, repoSource, skills })

@@ -974,15 +974,6 @@
   backdrop-filter: blur(14px);
 }
 
-.settings-content--market {
-  padding-right: 36px;
-  padding-left: 36px;
-}
-
-.settings-content--market .settings-window-brand {
-  left: 36px;
-}
-
 .settings-content--skill-manager {
   padding-top: 16px;
   padding-right: 16px;
