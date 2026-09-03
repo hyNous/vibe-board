@@ -6,7 +6,7 @@ use std::path::PathBuf;
 
 const SCHEMA_VERSION: &str = "1";
 const DEFAULT_TOPIC: &str = "product-telemetry";
-const DEFAULT_SOURCE: &str = "agentbro-macos";
+const DEFAULT_SOURCE: &str = "agent-island";
 
 #[derive(Debug, Clone)]
 pub struct TelemetryConfiguration {
@@ -21,9 +21,9 @@ pub struct TelemetryConfiguration {
 impl TelemetryConfiguration {
     pub fn from_build_env() -> Self {
         Self::new(
-            option_env!("AGENTBRO_TELEMETRY_SLS_HOST").unwrap_or(""),
-            option_env!("AGENTBRO_TELEMETRY_SLS_PROJECT").unwrap_or(""),
-            option_env!("AGENTBRO_TELEMETRY_SLS_LOGSTORE").unwrap_or(""),
+            option_env!("AGENT_ISLAND_TELEMETRY_SLS_HOST").unwrap_or(""),
+            option_env!("AGENT_ISLAND_TELEMETRY_SLS_PROJECT").unwrap_or(""),
+            option_env!("AGENT_ISLAND_TELEMETRY_SLS_LOGSTORE").unwrap_or(""),
         )
     }
 
@@ -117,7 +117,7 @@ impl TelemetryService {
         let state_dir = dirs::config_dir()
             .or_else(dirs::data_local_dir)
             .unwrap_or_else(std::env::temp_dir)
-            .join("agentbro")
+            .join("agent-island")
             .join("telemetry");
         Self {
             configuration,
@@ -229,7 +229,7 @@ impl TelemetryService {
         }
 
         let mut tags = BTreeMap::new();
-        tags.insert("app".to_string(), "agentbro".to_string());
+        tags.insert("app".to_string(), "agent-island".to_string());
         tags.insert("schema".to_string(), SCHEMA_VERSION.to_string());
 
         let payload = SlsPayload {
@@ -455,8 +455,8 @@ fn language_bucket() -> String {
 }
 
 fn install_channel() -> String {
-    if PathBuf::from("/opt/homebrew/Caskroom/agentbro").exists()
-        || PathBuf::from("/usr/local/Caskroom/agentbro").exists()
+    if PathBuf::from("/opt/homebrew/Caskroom/agent-island").exists()
+        || PathBuf::from("/usr/local/Caskroom/agent-island").exists()
     {
         return "homebrew".to_string();
     }
@@ -465,7 +465,7 @@ fn install_channel() -> String {
         .ok()
         .map(|path| path.display().to_string())
         .unwrap_or_default();
-    if exe.contains("/Applications/AgentBro.app/") {
+    if exe.contains("/Applications/Agent Island.app/") {
         "github_dmg".to_string()
     } else {
         "dev".to_string()

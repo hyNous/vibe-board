@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { open } from '@tauri-apps/plugin-shell'
 import { save } from '@tauri-apps/plugin-dialog'
@@ -23,10 +23,9 @@ interface AboutSectionProps {
   onCheckForUpdate?: () => void
 }
 
-const DEVELOPER_GITHUB_URL = 'https://github.com/shirenchuang'
-const REPO_ISSUES_URL = 'https://github.com/shirenchuang/agentbro/issues/new'
-const REPO_RELEASES_URL = 'https://github.com/shirenchuang/agentbro/releases'
-const WEBSITE_URL = 'https://www.agentbro.net'
+const REPOSITORY_URL = ((import.meta.env.VITE_AGENT_ISLAND_REPOSITORY_URL ?? '').trim() || 'https://github.com/hyNous/agent-island').replace(/\/$/, '')
+const REPO_ISSUES_URL = `${REPOSITORY_URL}/issues/new`
+const REPO_RELEASES_URL = `${REPOSITORY_URL}/releases`
 
 function RowIcon({ tone, children }: { tone: string; children: React.ReactNode }) {
   return (
@@ -56,32 +55,11 @@ export function AboutSection({
 }: AboutSectionProps) {
   const { t } = useTranslation()
   const [diagStatus, setDiagStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
-  const [communityOpen, setCommunityOpen] = useState(false)
   const [appVersion, setAppVersion] = useState<string>('...')
-  const communityBtnRef = useRef<HTMLButtonElement>(null)
-  const communityPopoverRef = useRef<HTMLDivElement>(null)
-  const [popoverPos, setPopoverPos] = useState<{ top: number; left: number } | null>(null)
 
   const autoCheckUpdate = useConfigStore((s) => s.autoCheckUpdate)
   const autoInstallUpdate = useConfigStore((s) => s.autoInstallUpdate)
   const updateConfig = useConfigStore((s) => s.updateConfig)
-
-  const updatePopoverPos = useCallback(() => {
-    const btn = communityBtnRef.current
-    if (!btn) return
-    const rect = btn.getBoundingClientRect()
-    const popoverWidth = 380
-    const popoverHeight = 320
-    const margin = 12
-    const anchorCenterX = rect.left + rect.width / 2
-    let left = anchorCenterX - popoverWidth / 2
-    left = Math.max(margin, Math.min(left, window.innerWidth - popoverWidth - margin))
-    let top = rect.bottom + 8
-    if (top + popoverHeight + margin > window.innerHeight) {
-      top = Math.max(margin, rect.top - popoverHeight - 8)
-    }
-    setPopoverPos({ top, left })
-  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -96,26 +74,6 @@ export function AboutSection({
       cancelled = true
     }
   }, [])
-
-  useEffect(() => {
-    if (!communityOpen) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setCommunityOpen(false)
-    }
-    const onScroll = () => updatePopoverPos()
-    window.addEventListener('keydown', onKey)
-    window.addEventListener('resize', onScroll)
-    window.addEventListener('scroll', onScroll, true)
-    return () => {
-      window.removeEventListener('keydown', onKey)
-      window.removeEventListener('resize', onScroll)
-      window.removeEventListener('scroll', onScroll, true)
-    }
-  }, [communityOpen, updatePopoverPos])
-
-  useLayoutEffect(() => {
-    if (communityOpen) updatePopoverPos()
-  }, [communityOpen, updatePopoverPos])
 
   const openExternalLink = (url: string) => {
     open(url).catch((err) => console.warn('[AboutSection] open link:', err))
@@ -207,29 +165,7 @@ export function AboutSection({
       </SettingGroup>
 
       <SettingGroup>
-        <button type="button" className="about-link-row" onClick={() => openExternalLink(WEBSITE_URL)}>
-          <RowIcon tone="#34C759">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2">
-              <circle cx="12" cy="12" r="9" />
-              <path d="M3.6 9h16.8M3.6 15h16.8M12 3c2.1 2.35 3.15 5.35 3.15 9S14.1 18.65 12 21M12 3C9.9 5.35 8.85 8.35 8.85 12S9.9 18.65 12 21" />
-            </svg>
-          </RowIcon>
-          <span className="about-link-row__label">{t('settings.website')}</span>
-          <span className="about-link-row__value">agentbro.net</span>
-          <ExternalArrow />
-        </button>
-        <button type="button" className="about-link-row" onClick={() => openExternalLink(DEVELOPER_GITHUB_URL)}>
-          <RowIcon tone="#8E8E93">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2">
-              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-              <circle cx="12" cy="7" r="4" />
-            </svg>
-          </RowIcon>
-          <span className="about-link-row__label">{t('settings.developer')}</span>
-          <span className="about-link-row__value">{t('settings.developerName')}</span>
-          <ExternalArrow />
-        </button>
-        <button type="button" className="about-link-row" onClick={() => openExternalLink(REPO_RELEASES_URL)}>
+        {REPO_RELEASES_URL && <button type="button" className="about-link-row" onClick={() => openExternalLink(REPO_RELEASES_URL)}>
           <RowIcon tone="#AF52DE">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2">
               <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" />
@@ -239,17 +175,8 @@ export function AboutSection({
           <span className="about-link-row__label">{t('settings.releases')}</span>
           <span className="about-link-row__value">GitHub</span>
           <ExternalArrow />
-        </button>
-        <button ref={communityBtnRef} type="button" className="about-link-row" onClick={() => setCommunityOpen((open) => !open)}>
-          <RowIcon tone="#5856D6">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2">
-              <path d="M4 5.5A3.5 3.5 0 0 1 7.5 2h9A3.5 3.5 0 0 1 20 5.5v7A3.5 3.5 0 0 1 16.5 16H12l-4.5 4v-4A3.5 3.5 0 0 1 4 12.5v-7Z" />
-            </svg>
-          </RowIcon>
-          <span className="about-link-row__label">{t('settings.community')}</span>
-          <ExternalArrow />
-        </button>
-        <button type="button" className="about-link-row" onClick={() => openExternalLink(REPO_ISSUES_URL)}>
+        </button>}
+        {REPO_ISSUES_URL && <button type="button" className="about-link-row" onClick={() => openExternalLink(REPO_ISSUES_URL)}>
           <RowIcon tone="#FF9500">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2">
               <path d="M8 2v3M16 2v3M5 8h14a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2Z" />
@@ -259,61 +186,8 @@ export function AboutSection({
           <span className="about-link-row__label">{t('settings.reportBug')}</span>
           <span className="about-link-row__value">GitHub</span>
           <ExternalArrow />
-        </button>
-        <button
-          type="button"
-          className="about-link-row"
-          onClick={() => openExternalLink(`mailto:${t('settings.feedbackEmail')}`)}
-        >
-          <RowIcon tone="#007AFF">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2">
-              <rect x="3" y="5" width="18" height="14" rx="2" />
-              <path d="m3 7 9 6 9-6" />
-            </svg>
-          </RowIcon>
-          <span className="about-link-row__label">{t('settings.sendFeedback')}</span>
-          <span className="about-link-row__value about-link-row__value--accent">{t('settings.feedbackEmail')}</span>
-          <ExternalArrow />
-        </button>
+        </button>}
       </SettingGroup>
-
-      {communityOpen && (
-        <>
-          <div className="about-community-backdrop" onClick={() => setCommunityOpen(false)} />
-          <div
-            ref={communityPopoverRef}
-            className="about-community-popover"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="about-community-title"
-            style={popoverPos ? { top: popoverPos.top, left: popoverPos.left, visibility: 'visible' } : { visibility: 'hidden' }}
-          >
-            <div className="about-community-popover__header">
-              <h3 id="about-community-title">{t('settings.community')}</h3>
-              <button
-                type="button"
-                className="about-community-popover__close"
-                aria-label={t('settings.communityClose', { defaultValue: '关闭' })}
-                onClick={() => setCommunityOpen(false)}
-              >
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-                  <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-                </svg>
-              </button>
-            </div>
-            <div className="about-community-popover__grid">
-              <div className="about-community-popover__item">
-                <img src="/agent-island-wechat-qr.jpg" alt={t('settings.communityWechatAlt', { defaultValue: 'WeChat QR code' })} />
-                <span className="about-community-popover__label">{t('settings.communityWechat', { defaultValue: 'WeChat' })}</span>
-              </div>
-              <div className="about-community-popover__item">
-                <img src="/agent-island-group-qr.png" alt={t('settings.communityGroupAlt', { defaultValue: 'WeChat Group QR code' })} />
-                <span className="about-community-popover__label">{t('settings.communityGroup', { defaultValue: 'WeChat Group' })}</span>
-              </div>
-            </div>
-          </div>
-        </>
-      )}
 
       <SettingGroup label={t('settings.logoMeaning', { defaultValue: 'Logo Meaning' })}>
         <div className="about-logo-meaning">

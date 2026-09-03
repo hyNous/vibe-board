@@ -974,7 +974,7 @@ fn catalog_supported_agent_usage_providers(enabled: bool) -> Vec<UsageProviderSt
             true,
             "available",
             source,
-            &format!("{source_name} has a known usage strategy; AgentBro usage reader is not wired yet."),
+            &format!("{source_name} has a known usage strategy; Agent Island usage reader is not wired yet."),
             "unknown",
             auth_path,
             can_authorize,
@@ -1583,7 +1583,7 @@ async fn codex_rate_limits_via_stdio(binary: &str) -> Option<UsageRateLimitSnaps
                 "method": "initialize",
                 "params": {
                     "clientInfo": {
-                        "name": "AgentBro",
+                        "name": "Agent Island",
                         "version": env!("CARGO_PKG_VERSION")
                     }
                 }
@@ -1707,7 +1707,7 @@ async fn initialize_codex_app_server_ws(
             "method": "initialize",
             "params": {
                 "clientInfo": {
-                    "name": "AgentBro",
+                    "name": "Agent Island",
                     "version": env!("CARGO_PKG_VERSION")
                 }
             }
@@ -3490,7 +3490,7 @@ pub async fn respond_permission(
             #[cfg(target_os = "windows")]
             {
                 return Err(format!(
-                    "Hook response failed on Windows: {e}. Make sure the AgentBro hook TCP bridge is running, then retry from the island."
+                    "Hook response failed on Windows: {e}. Make sure the Agent Island hook TCP bridge is running, then retry from the island."
                 ));
             }
             #[cfg(not(target_os = "windows"))]
@@ -3652,7 +3652,7 @@ fn codex_desktop_windows_message_error(app_server_error: Option<&str>) -> String
         .map(|error| format!(" Last app-server error: {error}"))
         .unwrap_or_default();
     format!(
-        "Codex Desktop replies on Windows require the Codex app-server bridge. Install a spawnable Codex CLI, enable background app-server sync in AgentBro, wait for the thread to sync, then try again.{detail}"
+        "Codex Desktop replies on Windows require the Codex app-server bridge. Install a spawnable Codex CLI, enable background app-server sync in Agent Island, wait for the thread to sync, then try again.{detail}"
     )
 }
 
@@ -3874,7 +3874,7 @@ fn app_host_message_unsupported_error(session: &SessionState) -> Option<String> 
         && !is_qoder_app_session(session)
     {
         return Some(format!(
-            "{} sessions do not support AgentBro message injection yet. Open the app to continue.",
+            "{} sessions do not support Agent Island message injection yet. Open the app to continue.",
             app_host_display_name(session)
         ));
     }
@@ -4790,7 +4790,7 @@ async fn submit_codex_request_user_input_output(
                 "method": "initialize",
                 "params": {
                     "clientInfo": {
-                        "name": "AgentBro",
+                        "name": "Agent Island",
                         "version": env!("CARGO_PKG_VERSION")
                     }
                 }
@@ -4901,7 +4901,7 @@ pub async fn respond_auto_approve(
             #[cfg(target_os = "windows")]
             {
                 return Err(format!(
-                    "Auto-approve failed on Windows: {e}. Make sure the AgentBro hook TCP bridge is running, then retry."
+                    "Auto-approve failed on Windows: {e}. Make sure the Agent Island hook TCP bridge is running, then retry."
                 ));
             }
 
@@ -5041,8 +5041,8 @@ pub async fn simulate_hook_event(
         "event": start_event,
         "session_id": sid,
         "cwd": cwd,
-        "tty": "AgentBro Hook Tester",
-        "terminal": "AgentBro Hook Tester",
+        "tty": "Agent Island Hook Tester",
+        "terminal": "Agent Island Hook Tester",
     });
 
     let processing_payload = |event: &str, message: &str| {
@@ -5051,8 +5051,8 @@ pub async fn simulate_hook_event(
             "event": event,
             "session_id": sid,
             "cwd": cwd,
-            "tty": "AgentBro Hook Tester",
-            "terminal": "AgentBro Hook Tester",
+            "tty": "Agent Island Hook Tester",
+            "terminal": "Agent Island Hook Tester",
             "prompt": message,
             "description": message,
         })
@@ -5064,8 +5064,8 @@ pub async fn simulate_hook_event(
             "event": event,
             "session_id": sid,
             "cwd": cwd,
-            "tty": "AgentBro Hook Tester",
-            "terminal": "AgentBro Hook Tester",
+            "tty": "Agent Island Hook Tester",
+            "terminal": "Agent Island Hook Tester",
             "description": message,
             "status": status_text,
             "tool": "Bash",
@@ -5085,8 +5085,8 @@ pub async fn simulate_hook_event(
             "event": event,
             "session_id": sid,
             "cwd": cwd,
-            "tty": "AgentBro Hook Tester",
-            "terminal": "AgentBro Hook Tester",
+            "tty": "Agent Island Hook Tester",
+            "terminal": "Agent Island Hook Tester",
             "description": message,
             "tool": "Bash",
             "tool_name": "Bash",
@@ -5106,8 +5106,8 @@ pub async fn simulate_hook_event(
             "event": event,
             "session_id": sid,
             "cwd": cwd,
-            "tty": "AgentBro Hook Tester",
-            "terminal": "AgentBro Hook Tester",
+            "tty": "Agent Island Hook Tester",
+            "terminal": "Agent Island Hook Tester",
             "message": message,
         })
     };
@@ -5118,8 +5118,8 @@ pub async fn simulate_hook_event(
             "event": event,
             "session_id": sid,
             "cwd": cwd,
-            "tty": "AgentBro Hook Tester",
-            "terminal": "AgentBro Hook Tester",
+            "tty": "Agent Island Hook Tester",
+            "terminal": "Agent Island Hook Tester",
             "summary": message,
             "message": message,
             "last_assistant_message": message,
@@ -5132,8 +5132,8 @@ pub async fn simulate_hook_event(
             "event": event,
             "session_id": sid,
             "cwd": cwd,
-            "tty": "AgentBro Hook Tester",
-            "terminal": "AgentBro Hook Tester",
+            "tty": "Agent Island Hook Tester",
+            "terminal": "Agent Island Hook Tester",
             "error": message,
             "message": message,
         })
@@ -5145,8 +5145,8 @@ pub async fn simulate_hook_event(
             "event": event,
             "session_id": sid,
             "cwd": cwd,
-            "tty": "AgentBro Hook Tester",
-            "terminal": "AgentBro Hook Tester",
+            "tty": "Agent Island Hook Tester",
+            "terminal": "Agent Island Hook Tester",
             "description": message,
             "message": message,
             "last_assistant_message": message,
@@ -5157,7 +5157,7 @@ pub async fn simulate_hook_event(
     };
 
     let test_message = format!(
-        "正在测试 {} 的 {} 事件：这是 AgentBro 生成的模拟 Hook payload。",
+        "正在测试 {} 的 {} 事件：这是 Agent Island 生成的模拟 Hook payload。",
         agent, event_name
     );
 
@@ -5167,8 +5167,8 @@ pub async fn simulate_hook_event(
             "event": event_name,
             "session_id": sid,
             "cwd": format!("/Users/demo/{}-SessionStart-Hook", agent),
-            "tty": "AgentBro Hook Tester",
-            "terminal": "AgentBro Hook Tester",
+            "tty": "Agent Island Hook Tester",
+            "terminal": "Agent Island Hook Tester",
         })],
         "SessionEnd" => vec![
             session_start.clone(),
@@ -5988,10 +5988,10 @@ pub async fn run_hook_doctor(state: State<'_, AppState>) -> Result<HookDoctorRep
         }
         .to_string(),
         detail: if installed_hook_names.is_empty() {
-            "No adapter configs contain AgentBro hooks".to_string()
+            "No adapter configs contain Agent Island hooks".to_string()
         } else {
             format!(
-                "{} adapter configs contain AgentBro hooks: {}",
+                "{} adapter configs contain Agent Island hooks: {}",
                 installed_hook_names.len(),
                 installed_hook_names.join(", ")
             )
@@ -6311,11 +6311,11 @@ fn launch_agent_path() -> Result<PathBuf, String> {
     Ok(home
         .join("Library")
         .join("LaunchAgents")
-        .join("com.agentbro.desktop.login.plist"))
+        .join("com.agentisland.desktop.login.plist"))
 }
 
 #[cfg(target_os = "macos")]
-const APP_BUNDLE_IDENTIFIER: &str = "com.agentbro.desktop";
+const APP_BUNDLE_IDENTIFIER: &str = "com.agentisland.desktop";
 
 #[cfg(target_os = "macos")]
 fn set_launch_at_login_state(enabled: bool) -> Result<(), String> {
@@ -6330,7 +6330,7 @@ fn set_launch_at_login_state(enabled: bool) -> Result<(), String> {
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>com.agentbro.desktop.login</string>
+  <string>com.agentisland.desktop.login</string>
   <key>ProgramArguments</key>
   <array>
     <string>/usr/bin/open</string>
@@ -6360,7 +6360,7 @@ fn set_launch_at_login_state(enabled: bool) -> Result<(), String> {
 const WINDOWS_RUN_KEY: &str = r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run";
 
 #[cfg(target_os = "windows")]
-const WINDOWS_RUN_VALUE: &str = "AgentBro";
+const WINDOWS_RUN_VALUE: &str = "Agent Island";
 
 #[cfg(target_os = "windows")]
 fn set_launch_at_login_state(enabled: bool) -> Result<(), String> {
@@ -6604,7 +6604,7 @@ pub async fn install_hooks(state: State<'_, AppState>, agent: String) -> Result<
         return Err(format!(
             "{} CLI not found. Searched process PATH, login shell PATH, \
              and common directories (homebrew, nvm, volta, mise, cargo). \
-             Confirm it is installed and try restarting AgentBro.",
+             Confirm it is installed and try restarting Agent Island.",
             adapter.display_name()
         ));
     }
@@ -7604,7 +7604,7 @@ fn recent_bridge_invocations(limit: usize) -> Vec<String> {
     lines
 }
 
-/// Collect crash reports matching AgentBro from the system DiagnosticReports dir.
+/// Collect crash reports matching Agent Island or legacy AgentBro from the system DiagnosticReports dir.
 fn collect_crash_reports() -> Vec<(String, Vec<u8>)> {
     let crash_dir = PathBuf::from("/Library/Logs/DiagnosticReports");
     let user_crash_dir = dirs::home_dir()
@@ -7616,7 +7616,10 @@ fn collect_crash_reports() -> Vec<(String, Vec<u8>)> {
             for entry in entries.filter_map(|e| e.ok()) {
                 let path = entry.path();
                 let name = path.file_name().unwrap_or_default().to_string_lossy();
-                if name.contains("AgentBro") || name.contains("agentbro") {
+                if name.contains("Agent Island")
+                    || name.contains("AgentBro")
+                    || name.contains("agentbro")
+                {
                     if let Ok(data) = std::fs::read(&path) {
                         let redacted = redact_paths(&String::from_utf8_lossy(&data));
                         files.push((format!("crashes/{}", name), redacted.into_bytes()));
@@ -7646,7 +7649,7 @@ pub async fn export_diagnostics(
     let mut md = String::new();
 
     // Header
-    md.push_str("# AgentBro Diagnostic Report\n\n");
+    md.push_str("# Agent Island Diagnostic Report\n\n");
     md.push_str("| Field | Value |\n|---|---|\n");
     md.push_str(&format!("| Generated | {} |\n", timestamp));
     md.push_str(&format!("| Version | {} |\n", env!("CARGO_PKG_VERSION")));

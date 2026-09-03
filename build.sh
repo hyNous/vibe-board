@@ -2,7 +2,7 @@
 set -euo pipefail
 
 APP_NAME="${APP_NAME:-Agent Island}"
-BUNDLE_ID="${BUNDLE_ID:-com.agentbro.desktop}"
+BUNDLE_ID="${BUNDLE_ID:-com.agentisland.desktop}"
 BUILD_DIR="src-tauri/target"
 DIST_DIR="dist"
 DMG_NAME="${DMG_NAME:-Agent Island.dmg}"

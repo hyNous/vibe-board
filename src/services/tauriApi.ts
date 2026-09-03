@@ -1395,50 +1395,6 @@ export async function setAgentDefaultPet(agent: string, petId: string | null): P
   return invoke<void>('set_agent_default_pet', { agent, petId })
 }
 
-// ── Pet Market (abpets CLI) ─────────────────────────────────────
-
-export interface AbpetsStatus {
-  nodeAvailable: boolean
-  abpetsCallable: boolean
-  nodeVersion: string | null
-}
-
-export async function checkAbpetsAvailable(force = false): Promise<AbpetsStatus> {
-  if (!isTauri()) {
-    return { nodeAvailable: false, abpetsCallable: false, nodeVersion: null }
-  }
-  return invoke<AbpetsStatus>('check_abpets_available', { force })
-}
-
-export async function installAbpetsGlobally(jobId: string): Promise<void> {
-  if (!isTauri()) return
-  return invoke<void>('install_abpets_globally', { jobId })
-}
-
-export async function installPetFromMarket(
-  jobId: string,
-  handle: string,
-  slug: string,
-): Promise<void> {
-  if (!isTauri()) return
-  return invoke<void>('install_pet_from_market', { jobId, handle, slug })
-}
-
-export async function uninstallPetFromMarket(jobId: string, slug: string): Promise<void> {
-  if (!isTauri()) return
-  return invoke<void>('uninstall_pet_from_market', { jobId, slug })
-}
-
-export async function fetchMarketManifest(baseUrl?: string): Promise<string | null> {
-  if (!isTauri()) return null
-  return invoke<string>('fetch_market_manifest', { baseUrl })
-}
-
-export async function pingMarketDownload(handle: string, slug: string, baseUrl?: string): Promise<void> {
-  if (!isTauri()) return
-  return invoke<void>('ping_market_download', { baseUrl, handle, slug })
-}
-
 export interface LogicalRect {
   left: number
   top: number

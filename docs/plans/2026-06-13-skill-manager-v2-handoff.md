@@ -16,7 +16,7 @@
 3. [验收标准](./2026-06-13-skill-manager-v2-acceptance-criteria.md)
    - 定义 P0 验收项、测试环境、主流程脚本、非功能标准和 DoD。
 
-4. [静态 Demo](../design-demos/agentbro-skill-manager-v2-demo.html)
+4. 当前交互以本目录中的产品需求、技术方案和验收标准为准；旧静态 Demo 已从发布树移除。
    - 只作为视觉探索参考，不作为验收依据。
 
 ## 推荐并行分工

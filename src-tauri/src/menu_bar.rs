@@ -1,7 +1,7 @@
 use tauri::menu::{Menu, MenuBuilder, MenuItemBuilder};
 use tauri::{Manager, Wry};
 
-pub const TRAY_ID: &str = "agentbro-tray";
+pub const TRAY_ID: &str = "agentisland-tray";
 pub const SKILL_PACK_PICKER_ID: &str = "skill-pack-picker";
 
 pub struct MenuBarLabels {

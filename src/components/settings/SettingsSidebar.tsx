@@ -41,7 +41,7 @@ const sidebarGroups: SidebarGroup[] = [
     ],
   },
   {
-    labelKey: 'settings.agentBro',
+    labelKey: 'settings.agentIsland',
     items: [
       { id: 'about', labelKey: 'settings.about', icon: 'ℹ', iconBg: '#007AFF', hidden: true },
     ],

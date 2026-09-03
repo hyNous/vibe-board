@@ -244,7 +244,7 @@ function LayoutPreviewBody({ mode }: { mode: IslandLayoutPreview['mode'] }) {
       <div className="layout-preview layout-preview--completion" style={{ '--preview-content-font-size': contentFontSize } as CSSProperties}>
         <div className="layout-preview__eyebrow">Task Complete</div>
         <div className="layout-preview__title">Codex finished running tests</div>
-        <div className="layout-preview__meta">agentBro · npm run test:run · now</div>
+        <div className="layout-preview__meta">Agent Island · npm run test:run · now</div>
       </div>
     )
   }
@@ -531,7 +531,7 @@ export function NotchPanel() {
     let unlisten: (() => void) | undefined
 
     import('@tauri-apps/api/event').then(({ listen }) => {
-      listen('tray-open-agentbro', () => {
+      listen('tray-open-agentisland', () => {
         detailModeRef.current = false
         detailBackGuardUntilRef.current = 0
         nativeHoverInsideRef.current = true

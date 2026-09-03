@@ -5,7 +5,6 @@ import { useEffect } from 'react'
 import i18n from 'i18next'
 import { isTauri, getSessions, getAgentStatuses, getUsageRateLimits, getUsageSnapshots, getConfig, listThemes, setSoundEventRule, getActiveThemeBundle, setLanguage, getAppStateFlags } from '../services/tauriApi'
 import { usePetStore } from '../stores/petStore'
-import { useMarketStore } from '../stores/marketStore'
 import type { BackendSession, BackendConfig, ParsedMessage, ParsedMessageBlock } from '../services/tauriApi'
 import { useSessionStore } from '../stores/sessionStore'
 import { useConfigStore } from '../stores/configStore'
@@ -17,7 +16,6 @@ import { agentRunStateFromSession } from '../utils/agentRunState'
 
 type Unlisten = () => void
 type TauriInitScope = string | null
-type MarketEventMode = 'full' | 'completion' | 'off'
 
 function listenForTauriEvent<T>(
   eventName: string,
@@ -993,49 +991,4 @@ export function useTauriInit(scope: TauriInitScope = 'notch') {
   useConfigSync(ready, scope === 'notch')
   useConversationUpdates(scope === 'notch')
   useHookRecoveryEvents(scope === 'notch')
-  useMarketInstallEvents(scope === 'settings' ? 'full' : ready ? 'completion' : 'off')
-}
-
-/** Listen for abpets install/uninstall log lines and completion events. */
-export function useMarketInstallEvents(mode: MarketEventMode = 'full') {
-  useEffect(() => {
-    if (!isTauri() || mode === 'off') return
-
-    let unlistenLog: (() => void) | undefined
-    let unlistenDone: (() => void) | undefined
-    let cancelled = false
-
-    if (mode === 'full') {
-      listenForTauriEvent<{ jobId: string; stream: 'stdout' | 'stderr'; line: string }>(
-        'market:install_log',
-        (event) => {
-          const { jobId, stream, line } = event.payload
-          if (typeof jobId !== 'string' || typeof line !== 'string') return
-          useMarketStore.getState().appendLog(jobId, stream, line)
-        },
-        (fn) => { unlistenLog = fn },
-        () => cancelled,
-      )
-    }
-
-    listenForTauriEvent<{ jobId: string; success: boolean; exitCode: number | null; error: string | null }>(
-      'market:install_done',
-      (event) => {
-        const { jobId, success, exitCode, error } = event.payload
-        if (typeof jobId !== 'string') return
-        useMarketStore.getState().markDone(jobId, !!success, exitCode ?? null, error ?? null)
-        if (success) {
-          void usePetStore.getState().loadRegistry()
-        }
-      },
-      (fn) => { unlistenDone = fn },
-      () => cancelled,
-    )
-
-    return () => {
-      cancelled = true
-      unlistenLog?.()
-      unlistenDone?.()
-    }
-  }, [mode])
 }

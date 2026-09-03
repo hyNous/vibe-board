@@ -132,7 +132,7 @@ const schemaSource = read('src-tauri/src/switch/schema.rs')
 
 requireEqual('package.json name', pkg.name, 'agent-island')
 requireEqual('Tauri productName', tauri.productName, 'Agent Island')
-requireEqual('Tauri identifier', tauri.identifier, 'com.agentbro.desktop')
+requireEqual('Tauri identifier', tauri.identifier, 'com.agentisland.desktop')
 requireEqual('Tauri updater artifact generation', String(tauri.bundle?.createUpdaterArtifacts), 'true')
 requireEqual('Cargo package name', cargoName, 'agent-island')
 requireEqual('Cargo default-run', cargoDefaultRun, 'agent-island')
@@ -187,9 +187,7 @@ if (tagVersion) {
 
 const releaseFiles = [
   '.github/workflows/build.yml',
-  '.github/workflows/release.yml',
   'build.sh',
-  'homebrew/Casks/agentbro.rb',
   'package.json',
   'src-tauri/Cargo.toml',
   'src-tauri/tauri.conf.json',
@@ -226,27 +224,20 @@ if (strictRelease) {
     requireEnv('APPLE_ID')
     requireEnv('APPLE_PASSWORD')
     requireEnv('APPLE_TEAM_ID')
-    if (!process.env.HOMEBREW_TAP_TOKEN?.trim()) {
-      warnings.push('HOMEBREW_TAP_TOKEN is not set; stable DMG release will proceed without updating Homebrew.')
-    }
-
-    if (!process.env.OSS_ACCESS_KEY_ID?.trim() || !process.env.OSS_ACCESS_KEY_SECRET?.trim()) {
-      warnings.push('OSS_ACCESS_KEY_ID/OSS_ACCESS_KEY_SECRET not set; stable release will skip the Aliyun OSS mirror and the Homebrew cask will point at GitHub.')
-    }
 
     const telemetryEnvNames = [
-      'AGENTBRO_TELEMETRY_SLS_HOST',
-      'AGENTBRO_TELEMETRY_SLS_PROJECT',
-      'AGENTBRO_TELEMETRY_SLS_LOGSTORE',
+      'AGENT_ISLAND_TELEMETRY_SLS_HOST',
+      'AGENT_ISLAND_TELEMETRY_SLS_PROJECT',
+      'AGENT_ISLAND_TELEMETRY_SLS_LOGSTORE',
     ]
     const telemetryEnvCount = countPresentEnv(telemetryEnvNames)
     if (telemetryEnvCount > 0 && telemetryEnvCount < telemetryEnvNames.length) {
-      errors.push('AGENTBRO_TELEMETRY_SLS_HOST, AGENTBRO_TELEMETRY_SLS_PROJECT, and AGENTBRO_TELEMETRY_SLS_LOGSTORE must all be set together')
+      errors.push('AGENT_ISLAND_TELEMETRY_SLS_HOST, AGENT_ISLAND_TELEMETRY_SLS_PROJECT, and AGENT_ISLAND_TELEMETRY_SLS_LOGSTORE must all be set together')
     } else if (telemetryEnvCount === 0) {
-      warnings.push('AgentBro anonymous telemetry SLS target is not set; release builds will not upload anonymous usage stats.')
+      warnings.push('Agent Island anonymous telemetry SLS target is not set; release builds will not upload anonymous usage stats.')
     }
   } else {
-    warnings.push('unsigned prerelease mode enabled; Apple signing, notarization, and Homebrew update are skipped.')
+    warnings.push('unsigned prerelease mode enabled; Apple signing and notarization are skipped.')
   }
 }
 

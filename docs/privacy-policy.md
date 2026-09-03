@@ -1,55 +1,52 @@
 # Privacy Policy
 
-Last updated: May 28, 2026
+Last updated: September 3, 2026
 
-AgentBro is a macOS utility for surfacing local AI coding agent events in a
-floating island. AgentBro is designed to process coding session data locally on
-your Mac.
+Agent Island is a local-first desktop utility for surfacing AI coding-agent
+events in a floating island. Coding session data and local configuration stay
+on your device unless you explicitly use a remote integration or enable the
+optional telemetry build.
 
-## Data Collection
+## Data collection
 
-AgentBro does not sell personal information and does not use advertising
-tracking.
+Agent Island does not sell personal information or use advertising tracking.
 
-AgentBro may send optional anonymous usage telemetry. Anonymous usage stats are
-enabled by default for new configs and can be disabled in Settings at any time.
+Optional anonymous usage telemetry is disabled unless the build provides a
+complete SLS target and analytics is enabled in the app. When active, it sends
+at most one daily aggregate containing app version, operating system,
+architecture, language bucket, display mode, install channel, launch count,
+and coarse Hook install/uninstall totals. See [telemetry.md](telemetry.md).
 
-When enabled, AgentBro may send one anonymous daily usage snapshot to help
-understand daily active devices, launch counts, coarse install channel, display
-mode, and Hook install or uninstall counts.
+Telemetry does not include prompts, responses, code, diffs, terminal output,
+project paths, file paths, repository names, usernames, hostnames, SSH targets,
+IP addresses, raw Hook payloads, diagnostic contents, secrets, tokens, or API
+keys.
 
-Anonymous telemetry does not include prompts, responses, code, diffs, terminal
-output, project paths, file paths, repository names, usernames, hostnames, SSH
-targets, IP addresses, raw Hook payloads, diagnostic contents, secrets, tokens,
-or API keys. See [telemetry.md](telemetry.md) for the current field allowlist.
+## Local processing
 
-## Local Processing
+To provide its core features, Agent Island may process local session status,
+approvals, questions, completion notifications, supported-tool configuration,
+preferences, and integration state. This information is used to display state,
+route notifications, install or remove integrations you request, and focus
+related local windows.
 
-To provide its core features, AgentBro may process local information such as AI
-coding session status, approvals, questions, completion notifications,
-configuration files for supported tools, user preferences, and local integration
-state. This information is used to display session state, route notifications,
-install or remove integrations you request, and jump back to related local
-windows.
+## Remote SSH features
 
-## Remote SSH Features
-
-If you enable remote SSH support, AgentBro uses the SSH target information you
-provide to connect to the selected host and forward session events back to the
-local app. Remote SSH information and forwarded events are used for that feature
-and are not sent to AgentBro telemetry.
+If you enable remote SSH support, Agent Island uses the SSH target information
+you provide to connect to the selected host and forward session events back to
+the local app. Remote connection details and forwarded events are not sent to
+telemetry.
 
 ## Diagnostics
 
-AgentBro may let you export diagnostics for troubleshooting. Diagnostic exports
-are user-initiated and saved to a location you choose. Review diagnostic files
-before sharing them in an issue or support request.
+Diagnostic exports are user-initiated and saved to a location you choose.
+Review exported files before sharing them.
 
-## Third-Party Services
+## Third-party services
 
-If anonymous telemetry is enabled, AgentBro may use Alibaba Cloud Simple Log
-Service to store anonymous product usage events.
+If you enable the optional telemetry build, the configured SLS endpoint stores
+the anonymous usage events. GitHub is contacted only for release checks or
+GitHub-backed Skill synchronization that you explicitly use.
 
-For privacy questions or support, open an issue at:
-
-https://github.com/shirenchuang/agentbro/issues
+For privacy questions, use the issue tracker for the repository that distributes
+your Agent Island build.

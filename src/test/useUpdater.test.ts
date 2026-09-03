@@ -16,12 +16,6 @@ const assets = [
   },
 ]
 
-const legacyAssets = [
-  { name: 'AgentBro_latest_universal.dmg', browser_download_url: 'https://example.com/AgentBro_latest_universal.dmg' },
-  { name: 'AgentBro_latest_x64.msi', browser_download_url: 'https://example.com/AgentBro_latest_x64.msi' },
-  { name: 'AgentBro_latest_x64-setup.exe', browser_download_url: 'https://example.com/AgentBro_latest_x64-setup.exe' },
-]
-
 describe('selectReleaseDownloadAsset', () => {
   it('prefers the Windows setup executable on Windows', () => {
     expect(selectReleaseDownloadAsset(assets, 'windows')?.name).toBe('Agent Island_latest_x64-setup.exe')
@@ -35,8 +29,4 @@ describe('selectReleaseDownloadAsset', () => {
     expect(selectReleaseDownloadAsset(assets, 'macos')?.name).toBe('Agent Island_latest_universal.dmg')
   })
 
-  it('keeps compatibility with legacy AgentBro release assets', () => {
-    expect(selectReleaseDownloadAsset(legacyAssets, 'windows')?.name).toBe('AgentBro_latest_x64-setup.exe')
-    expect(selectReleaseDownloadAsset(legacyAssets, 'macos')?.name).toBe('AgentBro_latest_universal.dmg')
-  })
 })

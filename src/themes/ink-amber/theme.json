@@ -2,8 +2,8 @@
   "name": "ink-amber",
   "version": "1.0.0",
   "author": "builtin",
-  "displayName": "AgentBro Classic",
-  "description": "AgentBro classic status theme matching the official app logo.",
+  "displayName": "Agent Island Classic",
+  "description": "Agent Island's classic status theme with warm amber accents.",
   "pixelGrid": { "cols": 5, "rows": 5 },
   "priorityColors": {
     "dormant": "#766753",

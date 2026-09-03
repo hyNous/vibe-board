@@ -1116,7 +1116,7 @@ impl HookServer {
                         });
                 }
 
-                // Wait for the UI to respond. Codex uses a longer hook timeout for AgentBro
+                // Wait for the UI to respond. Codex uses a longer hook timeout for Agent Island
                 // approvals; other agents keep the existing five-minute fallback window.
                 let response =
                     tokio::time::timeout(Self::interaction_response_timeout(&raw), rx).await;
@@ -3396,7 +3396,7 @@ impl HookServer {
             reason: if allowed {
                 None
             } else {
-                Some("Denied by user via AgentBro".to_string())
+                Some("Denied by user via Agent Island".to_string())
             },
             always: if allowed && always { Some(true) } else { None },
         };

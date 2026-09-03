@@ -1,263 +1,149 @@
 <div align="center">
-  <img src="public/agent-island-logo.png" alt="Agent Island Logo" width="148" />
-
-  <h1>Agent Island</h1>
-
-  <p><strong>Your desktop control center for AI coding agents</strong></p>
+  <img src="./assets/readme/agent-island-hero.svg" alt="Agent Island: one desktop workspace for AI coding agent sessions, approvals, traces, and usage" width="100%" />
 
   <p>
-    Spend less time watching terminals and switching windows.<br />
-    Handle agent sessions, approvals, and questions from a floating workspace, then manage hooks, real usage, and cross-agent skills in the same app.
+    <strong>Your desktop control console for AI coding agents</strong><br />
+    See sessions clearly, handle approvals, and inspect trace time and real usage without chasing terminals.
   </p>
 
   <p>
-    <a href="https://www.agentbro.net">Website</a>
-    ·
-    <a href="https://github.com/shirenchuang/agentbro/releases">Download</a>
-    ·
-    <a href="docs/privacy-policy.md">Privacy</a>
-    ·
-    <a href="README.md">中文</a>
+    <a href="./README.md">中文</a> ·
+    <a href="./UPSTREAM.md">Upstream &amp; license</a> ·
+    <a href="./docs/privacy-policy.md">Privacy</a>
   </p>
 
   <p>
     <img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-111820" />
     <img alt="Platform" src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-f5b84b" />
-    <img alt="Release" src="https://img.shields.io/github/v/release/shirenchuang/agentbro?color=0c6b63" />
-    <img alt="Built with Tauri" src="https://img.shields.io/badge/Tauri-React%20%2B%20Rust-0c6b63" />
-  </p>
-
-  <p>
-    <strong>Available for macOS and Windows, with integrations for Claude Code, Codex, Gemini CLI, Cursor, Copilot, Kimi, OpenCode, ZCode, and more.</strong>
+    <img alt="Stack" src="https://img.shields.io/badge/Tauri-React%20%2B%20Rust-0c6b63" />
   </p>
 </div>
 
-<img src="docs/assets/screenshots/island-expanded.png" alt="Agent Island expanded Dynamic Island" width="100%" />
+## What it is
 
-## Download and get started
+Agent Island is a local-first Tauri desktop app that brings events from Claude Code, Codex, Gemini CLI, OpenCode, Antigravity, and other coding agents into one floating workspace.
 
-| Platform | Recommended install | Other package |
-| --- | --- | --- |
-| macOS | `brew tap shirenchuang/tap && brew install --cask agentbro` | [Universal DMG](https://github.com/shirenchuang/agentbro/releases/latest/download/Agent Island_latest_universal.dmg) · [China mirror](https://agentbro.oss-cn-hangzhou.aliyuncs.com/Agent Island_latest_universal.dmg) |
-| Windows x64 | [Download the EXE installer](https://github.com/shirenchuang/agentbro/releases/latest/download/Agent Island_latest_x64-setup.exe) | [MSI](https://github.com/shirenchuang/agentbro/releases/latest/download/Agent Island_latest_x64.msi) |
+It helps with three everyday problems:
 
-After installing, open **Island -> Integration**, run **Hook Doctor**, and install the hook for the agent you use. The Windows build is an early MVP: the floating workspace, hook transport, path detection, and Agent Management work, but unsigned installers may trigger a SmartScreen warning.
+- Approvals, questions, and plan confirmations no longer require a trip back to the terminal.
+- Multiple sessions stay distinguishable through the current task, trace duration, tool activity, and completion state.
+- When token data is available it is shown directly; otherwise the UI shows provider quota and reset time without inventing a price estimate.
 
-## What does Agent Island solve?
-
-AI coding agents can work for long stretches, but people still end up watching the terminal: waiting for permissions, answering questions, checking whether a task is stuck, and maintaining separate hooks and skills for every tool. Agent Island puts those jobs behind one desktop entry point.
-
-| When you are... | Agent Island can... |
-| --- | --- |
-| Running several agent sessions | Collect status, tool calls, subagents, token usage, and completion notices in the island. |
-| Waiting on an approval or question | Approve a permission, answer a question, confirm a plan, or send a quick reply without finding the original terminal. |
-| Maintaining several agent environments | Scan versions, paths, and hooks, then manage skills and config files together. |
-| Viewing real usage | Show tokens when available; otherwise show current Provider quota and refresh time without inventing price estimates. |
-
-Agent session events and local configuration do not need a cloud relay. The hook server uses a per-user local Unix socket on macOS and a local TCP endpoint on Windows. Update checks and GitHub Skill sync contact their respective services only when you use those features.
-
-## Demo videos
-
-### Interaction demo
-
-https://github.com/user-attachments/assets/df857822-ea0a-4745-a0b9-80f265f30dc6
-
-### Theme demo
-
-https://github.com/user-attachments/assets/374d6e53-c126-41be-a593-4e5f63485602
-
-## Core capabilities
-
-### The island brings attention requests to your desktop
-
-- Sessions have compact, hover, expanded, and detail views. Quiet Assistant mode keeps the island hidden until something needs you.
-- Handle permission requests, questions, plan approvals, completions, and errors in the floating window. Supported agents also accept quick replies.
-- Tool calls, file diffs, subagents, task summaries, context pressure, tokens, and rate limits update with the session.
-- Global shortcuts, quiet hours, multi-display placement, and terminal-focus suppression keep the window useful without making it noisy.
+## See the real interface
 
 <table>
   <tr>
     <td width="50%">
-      <img src="docs/assets/screenshots/island-permission.png" alt="Handle a permission request in the Agent Island island" width="100%" />
-      <sub>Handle approvals, questions, and plan confirmations without returning to the terminal.</sub>
+      <img src="./docs/assets/screenshots/island-expanded.png" alt="Agent Island expanded session list with approval states" width="100%" />
+      <sub>Expand the island to inspect sessions, tools, approvals, and plans.</sub>
     </td>
     <td width="50%">
-      <img src="docs/assets/screenshots/island-detail.png" alt="Agent Island island session details" width="100%" />
-      <sub>Inspect tasks, tool calls, tokens, and session details.</sub>
-    </td>
-  </tr>
-</table>
-
-### Agent Monitor shows what an agent is doing
-
-Agent Monitor collects active and historical sessions. Inspect phases, tool timelines, approvals, questions, conversations, and raw hook events by project.
-
-The island includes Midnight, Agent Island Classic, Frosted Glass, Apple, Smoke, Ocean Mist, Warm Paper, and Soft Lavender themes. It can also follow the system light or dark appearance.
-
-## Agent Management puts every agent capability in one place
-
-If you use Claude Code, Codex, Gemini CLI, Cursor, Kimi, Doubao, Qoder, OpenCode, and other tools side by side, **Agent Management** brings their installs, integrations, and local configuration into one workspace.
-
-- Discover CLIs and desktop apps, with installed and available versions, executables, config directories, and official download pages. Supported CLIs can be installed, updated, or removed in place.
-- Install and repair hooks per agent, inspect bridge commands and config paths, and control approval, notification, lifecycle, and activity events separately.
-- Scan skills scattered across agent folders, adopt them into a center library, and distribute them to agents by symlink or copy. Batch jobs, conflict decisions, and diagnostics stay visible.
-- Group common skills into reusable packs, apply them to several agents, and safely revoke them later.
-- GitHub-backed Skills can check their remote hash, show source timestamps, and sync updates into the center library.
-
-<table>
-  <tr>
-    <td width="50%">
-      <img src="docs/assets/screenshots/agent-management-skill-library.png" alt="Agent Island Skill Library" width="100%" />
-      <sub>Skill Library: review center-library skills, distribution state, and diagnostics.</sub>
-    </td>
-    <td width="50%">
-      <img src="docs/assets/screenshots/agent-management-install-skills.png" alt="Agent Island Install Skills" width="100%" />
-      <sub>Install Skills: import from another agent, a local folder, or Git.</sub>
+      <img src="./docs/assets/screenshots/island-detail.png" alt="Agent Island session details with trace information" width="100%" />
+      <sub>Details keep trace, token, rate-limit, and raw-event context together.</sub>
     </td>
   </tr>
   <tr>
     <td width="50%">
-      <img src="docs/assets/screenshots/agent-management-skill-packs.png" alt="Agent Island Skill Packs" width="100%" />
-      <sub>Skill Packs: apply grouped skills to agents while keeping revocable claims.</sub>
+      <img src="./docs/assets/screenshots/island-permission.png" alt="Handling an agent permission request in Agent Island" width="100%" />
+      <sub>Approve, deny, answer, or confirm directly from the floating UI.</sub>
     </td>
     <td width="50%">
-      <img src="docs/assets/screenshots/agent-management-agent-detail.png" alt="Agent Island Agent Management Detail" width="100%" />
-      <sub>Agent Management: inspect skills, hooks, and paths per agent.</sub>
+      <img src="./docs/assets/screenshots/agent-management-skill-library.png" alt="Agent Island shared Skill library" width="100%" />
+      <sub>Adopt Skills into a center library and distribute them to agents.</sub>
     </td>
   </tr>
 </table>
 
-## Supported agents
+## Start in 30 seconds
 
-Agent Island supports agents at two levels. Runtime hook adapters send session events into the island, while Agent Management scans a wider set of CLIs, desktop apps, skills, and paths. Event coverage and interaction depth vary because each agent exposes different hooks.
+### Windows installer
 
-| Scope | Agents |
-| --- | --- |
-| Island / hook integration | Claude Code, Codex, Gemini CLI, Cursor / Cursor CLI, GitHub Copilot, Cline, Qoder / Qoder CLI, CodeBuddy / CodeBuddy CN, Qwen, Kimi, DeepSeek, OpenCode, Factory Droid, StepFun, AntiGravity, WorkBuddy, Hermes, Pi, Kiro, ZCode |
-| Agent Management scan | Everything above, plus Doubao, the `.agents` shared folder, Junie, Windsurf, Augment, KiloCode, OB1, Amp, Aider, OpenClaw / QClaw / EasyClaw / AutoClaw, and custom agents |
-| Project-level scan | Not part of the current core version |
+1. Download the latest package from [GitHub Releases](https://github.com/hyNous/agent-island/releases), or use the checked-in [Agent Island-latest-setup.exe](./releases/Agent%20Island-latest-setup.exe).
+2. Install and launch Agent Island. The app stays in the system tray while the island appears when needed.
+3. Open **Island → Integration** in Settings, run **Hook Doctor**, and install hooks for the agents you use.
+4. Restart the relevant CLI session and wait for events to appear in the island.
 
-Doubao support on macOS detects `/Applications/Doubao.app`, manages `~/Doubao/skills`, and continues to cover Doubao's compatible `~/.agents/skills` through the central library. Doubao does not currently expose a public hook, so island activity is a best-effort inference from local processes and read-only metadata for two task-state directories; conversation contents are never read, and page synchronization can cause a brief false positive.
+The Windows installer is currently unsigned, so SmartScreen may ask for confirmation. Automatic updates are disabled for now; releases are downloaded manually from GitHub.
 
-## Roadmap
+### Run from source
 
-Agent Island will remain local-first. The next priorities include:
-
-- Skills center: cross-agent distribution, GitHub source update checks, and sync.
-- Windows: add code signing, automatic updates, and deeper interaction with more agents.
-
-## Join the community
-
-If you use Agent Island or want to discuss the Windows experience, deeper agent integrations, Agent Monitor, or the Skills center, scan the QR code to add the maintainer on WeChat (mention **Agent Island community**), or join the **Agent Island Open Source Community** group chat directly.
-
-<div align="center">
-  <table>
-    <tr>
-      <td align="center">
-        <img src="public/agent-island-wechat-qr.jpg" alt="Agent Island WeChat community QR code" width="260" /><br />
-        <sub>Add on WeChat — mention <b>Agent Island community</b></sub>
-      </td>
-      <td align="center">
-        <img src="public/agent-island-group-qr.png" alt="Agent Island Open Source Community group QR code" width="260" /><br />
-        <sub>Group chat: <b>Agent Island Open Source Community</b> (QR refreshed every 7 days)</sub>
-      </td>
-    </tr>
-  </table>
-</div>
-
-## Platform support
-
-Official releases now include downloadable artifacts for both macOS and Windows:
-
-| Platform | Current status | Distribution |
-| --- | --- | --- |
-| macOS | Primary development and signed release platform, with the broadest feature coverage | Universal Apple Silicon / Intel DMG, Homebrew Cask, in-app updates |
-| Windows x64 | Early MVP with the floating window, TCP hooks, Windows path detection, Agent Management, skills, and installers working | NSIS `.exe`, MSI |
-| Linux | No official build | Not in the current release plan |
-
-Windows still needs code signing, a smoother SmartScreen experience, automatic updates, and deeper interaction with some agents. A small number of features, including free-text replies to Codex Desktop, are unavailable because of Windows client API limitations. Session monitoring and basic hook interactions still work.
-
-## Local development
-
-### Prerequisites
-
-- macOS or Windows
-- Node.js 20+ and pnpm
-- Rust toolchain + Cargo
-- Tauri CLI: `cargo tauri --version`
-- Xcode Command Line Tools on macOS; Microsoft C++ Build Tools and WebView2 on Windows
-
-### Start the project
+Requirements: Node.js 20+, pnpm, Rust/Cargo, and the Tauri CLI. Windows also needs Microsoft C++ Build Tools and WebView2; macOS needs Xcode Command Line Tools.
 
 ```bash
-git clone https://github.com/shirenchuang/agentbro.git
-cd agentbro
+git clone https://github.com/hyNous/agent-island.git
+cd agent-island
 pnpm install
 pnpm tauri:dev
 ```
 
-`pnpm tauri:dev` starts the Vite dev server on `http://localhost:1423` and opens the native Agent Island windows.
-
-### Browser-only UI development
+For browser-only UI work:
 
 ```bash
 pnpm dev
 ```
 
-Open:
+## What you can do
 
-- Island UI: `http://localhost:1423`
-- Settings UI: `http://localhost:1423/#settings`
+| Need | How Agent Island handles it |
+| --- | --- |
+| Run several agents at once | Aggregate sessions, phases, tools, subagents, and completion reminders in the island. |
+| Wait for permission or input | Approve, deny, answer, or confirm plans without returning to the terminal. |
+| Know how long the current task ran | Show duration for the active agent trace instead of the lifetime of the surrounding session. |
+| Read usage | Prefer real tokens; otherwise show provider quota, window, and reset time. |
+| Manage agent installations | Scan CLIs, desktop apps, versions, paths, hooks, and configuration state. |
+| Share Skills across agents | Import from an agent, local folder, or GitHub; adopt into the center library and distribute by symlink or copy. |
 
-The browser development view includes the Claude Hook UI Lab for testing static island states such as permission requests, plan approval, questions, completion, compact mode, list mode, and detail mode.
+## How it works
 
-### Common commands
+Agent Island does not put session content through a hosted relay. The basic path is:
 
-```bash
-pnpm test:run                                      # Run tests once
-pnpm test                                          # Run tests in watch mode
-pnpm lint                                          # ESLint
-pnpm build                                         # Type-check and build frontend
-cargo check --manifest-path src-tauri/Cargo.toml   # Check the Rust backend
-pnpm tauri:build                                   # Build the macOS app / DMG
-pnpm tauri:build:windows                           # Build Windows NSIS / MSI installers
-./build.sh                                         # Build the universal macOS DMG
+```text
+Agent hooks / local app state
+          ↓
+Local bridge → hook server → agent adapter
+          ↓
+SessionStore / trace / usage snapshot
+          ↓
+Island · Agent Monitor · Skills manager
 ```
 
-## Use with an agent
+Hooks are the primary real-time path. Supported agents such as Codex can add thread, approval, and quota data through a local app-server or state files. When an external agent is offline, Agent Island keeps its last successfully read state and shows the source and update time.
 
-1. Open Agent Island settings.
-2. If you only want the island integration, go to **Island -> Integration** and run **Hook Doctor**.
-3. Click **Install All Hooks**, or install the hook for the agent you use.
-4. If you want unified agent, skills, and hook management, open **Agent Management**, then choose the **Agent Management** page.
-5. Select an agent to install or update it, then use the **Hooks** or **Skills** pages as needed.
-6. Restart the corresponding CLI session, then start Claude Code, Codex, Gemini CLI, or another supported agent.
+## Support scope
 
-Agent Island will then show session state, tool activity, approvals, questions, plans, and completions in the island.
+Runtime hook adapters and agent-management discovery are separate layers; event depth depends on the interfaces each agent exposes.
 
-## Contributing
+| Capability | Current coverage |
+| --- | --- |
+| Island / hooks | Claude Code, Codex, Gemini CLI, Cursor, Copilot, Cline, Qoder, CodeBuddy, Qwen, Kimi, DeepSeek, OpenCode, Factory Droid, StepFun, Antigravity, WorkBuddy, Hermes, Pi, Kiro, ZCode |
+| Management discovery | The agents above, plus Doubao, the shared `.agents` directory, Junie, Windsurf, Augment, KiloCode, OB1, Amp, Aider, OpenClaw / QClaw / EasyClaw / AutoClaw, and custom agents |
 
-Issues and pull requests are welcome!
+## Repository map
 
-- Contributing guide: [CONTRIBUTING.en.md](CONTRIBUTING.en.md)
-- Code of conduct: [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
-- AI agent collaboration guide: [AGENTS.md](AGENTS.md)
-- Claude Code project config: [.claude/CLAUDE.md](.claude/CLAUDE.md)
-- Community discussions: [GitHub Discussions](https://github.com/shirenchuang/agentbro/discussions)
-- Starter tasks: [`good first issue`](https://github.com/shirenchuang/agentbro/issues?q=is%3Aissue%20is%3Aopen%20label%3A%22good%20first%20issue%22) / [`help wanted`](https://github.com/shirenchuang/agentbro/issues?q=is%3Aissue%20is%3Aopen%20label%3A%22help%20wanted%22)
+- `src/`: React island, Settings, agent/Skill management, and themes.
+- `src-tauri/src/`: Rust hook server, bridge, adapters, trace/usage, and local storage.
+- `src-tauri/icons/`, `public/agent-island-*`: current Agent Island icons and presentation assets.
+- `releases/`: current Windows acceptance installer; older packages live only under `releases/archive/`.
+- `UPSTREAM.md`, `LICENSE`, `NOTICE`, `TRADEMARKS.md`: provenance, license, and branding boundaries.
 
-Please target the `dev` branch. Run `pnpm lint && pnpm test:run && pnpm build && cargo check --manifest-path src-tauri/Cargo.toml` before submitting.
+## Local checks
 
-## Release
+```bash
+pnpm lint
+pnpm test:run
+pnpm build
+cargo check --manifest-path src-tauri/Cargo.toml
+pnpm release:check
+```
 
-Release notes and signing requirements live in [`docs/release.md`](docs/release.md).
+## Contributing and releases
 
-- Website: [www.agentbro.net](https://www.agentbro.net)
-- China mirror: `https://agentbro.oss-cn-hangzhou.aliyuncs.com/Agent Island_latest_universal.dmg`
-- GitHub releases: `https://github.com/shirenchuang/agentbro/releases`
+Issues and pull requests are welcome. Read [CONTRIBUTING.md](./CONTRIBUTING.md) first, include verification results, and attach screenshots for UI changes.
 
-## License
+Releases are manual through GitHub Releases for now. Until signing keys and a release endpoint are configured, the repository will not enable automatic updates or automated publishing workflows.
 
-Agent Island source code is licensed under the [Apache License 2.0](LICENSE).
+## License and provenance
 
-The Agent Island name, logo, app icon, website design, and other brand assets are not licensed with the source code. Modified builds and redistributions should use a different name to avoid confusion with the official project and follow [NOTICE](NOTICE) and [TRADEMARKS.md](TRADEMARKS.md).
+Agent Island code is released under the [Apache License 2.0](./LICENSE), while the upstream [NOTICE](./NOTICE) and branding boundary in [TRADEMARKS.md](./TRADEMARKS.md) remain in the repository.
+
+This is an independent modification based on [AgentBro](./UPSTREAM.md): the product name, icons, and release configuration have been replaced, and this repository is not an official upstream distribution.

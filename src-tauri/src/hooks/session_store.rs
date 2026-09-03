@@ -200,7 +200,7 @@ impl RateLimitInfo {
 
 /// Last known state for an agent. This is deliberately separate from live
 /// sessions so a completed/offline CLI can still show its previous quota and
-/// token counters after AgentBro restarts.
+/// token counters after Agent Island restarts.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentStatusSnapshot {
@@ -1320,7 +1320,7 @@ mod tests {
             "s1",
             "agent-1",
             Some("island-audit".to_string()),
-            "Inspect AgentBro island",
+            "Inspect Agent Island",
             Some("research".to_string()),
             Some("/tmp/main.jsonl".to_string()),
         );

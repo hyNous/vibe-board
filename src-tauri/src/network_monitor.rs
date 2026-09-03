@@ -291,7 +291,7 @@ impl NetworkMonitor {
         if !status.enabled {
             return text_response(
                 StatusCode::SERVICE_UNAVAILABLE,
-                "AgentBro network monitor is off",
+                "Agent Island network monitor is off",
             );
         }
 
@@ -347,7 +347,7 @@ impl NetworkMonitor {
                 self.record_error(&request_id, elapsed, err.to_string());
                 return text_response(
                     StatusCode::BAD_GATEWAY,
-                    "AgentBro proxy upstream request failed",
+                    "Agent Island proxy upstream request failed",
                 );
             }
         };
@@ -605,13 +605,13 @@ fn resolve_route(default_upstream_base_url: &str, uri: &Uri) -> Result<RouteTarg
 
     let rest = &path_and_query[ROUTE_PREFIX.len()..];
     let Some((encoded_upstream, remaining)) = rest.split_once('/') else {
-        return Err("Invalid AgentBro route URL".to_string());
+        return Err("Invalid Agent Island route URL".to_string());
     };
     let decoded = base64::engine::general_purpose::URL_SAFE_NO_PAD
         .decode(encoded_upstream)
-        .map_err(|_| "Invalid AgentBro route upstream encoding".to_string())?;
+        .map_err(|_| "Invalid Agent Island route upstream encoding".to_string())?;
     let upstream_base_url = String::from_utf8(decoded)
-        .map_err(|_| "Invalid AgentBro route upstream text".to_string())?;
+        .map_err(|_| "Invalid Agent Island route upstream text".to_string())?;
     let upstream_base_url = normalize_upstream_base_url(Some(upstream_base_url))?;
     Ok(RouteTarget {
         upstream_base_url,

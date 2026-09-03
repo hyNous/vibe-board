@@ -1,4 +1,4 @@
-// AgentBro — Rust Backend Library
+// Agent Island — Rust Backend Library
 pub mod agents;
 pub mod commands;
 pub mod config;
@@ -7,7 +7,6 @@ pub mod data_dir;
 pub mod energy;
 pub mod hook_endpoint;
 pub mod hooks;
-pub mod market;
 pub mod menu_bar;
 pub mod network_monitor;
 pub mod pets;
@@ -130,7 +129,7 @@ async fn set_notch_focusable(app: tauri::AppHandle, focusable: bool) -> Result<(
                         let ns_window = ptr as *const NSWindow;
                         if focusable {
                             let _ = window.set_ignore_cursor_events(false);
-                            activate_agentbro_app();
+                            activate_agent_island_app();
                             (*ns_window).makeKeyWindow();
                         } else {
                             (*ns_window).resignKeyWindow();
@@ -469,7 +468,7 @@ fn ensure_installable(adapter: &dyn AgentAdapter) -> Result<(), String> {
         AdapterStatus::Unavailable => Err(format!(
             "{} CLI not found. Searched process PATH, login shell PATH, \
              and common directories (homebrew, nvm, volta, mise, cargo). \
-             Confirm it is installed and try restarting AgentBro.",
+             Confirm it is installed and try restarting Agent Island.",
             adapter.display_name()
         )),
         _ => Ok(()),
@@ -1955,13 +1954,13 @@ fn show_notch_window(app: &tauri::AppHandle) {
         let _ = window.show();
         configure_notch_window_for_spaces(app);
         let _ = window.set_focus();
-        let _ = app.emit("tray-open-agentbro", ());
+        let _ = app.emit("tray-open-agentisland", ());
     }
 }
 
 fn menu_bar_icon() -> tauri::image::Image<'static> {
     tauri::image::Image::from_bytes(include_bytes!("../icons/tray-ink-amber.png"))
-        .expect("embedded AgentBro tray icon must be a valid PNG")
+        .expect("embedded Agent Island tray icon must be a valid PNG")
         .to_owned()
 }
 
@@ -1973,7 +1972,7 @@ pub(crate) fn refresh_skill_pack_tray_menu(app: &tauri::AppHandle) -> Result<(),
     let menu = menu_bar::build_tray_menu(app, &language).map_err(|error| error.to_string())?;
     let tray = app
         .tray_by_id(menu_bar::TRAY_ID)
-        .ok_or_else(|| "AgentBro tray icon is unavailable".to_string())?;
+        .ok_or_else(|| "Agent Island tray icon is unavailable".to_string())?;
     tray.set_menu(Some(menu)).map_err(|error| error.to_string())
 }
 
@@ -2384,7 +2383,7 @@ fn set_dock_visible(app: tauri::AppHandle, visible: bool) {
 fn set_dock_visible(_app: tauri::AppHandle, _visible: bool) {}
 
 #[cfg(target_os = "macos")]
-fn activate_agentbro_app() {
+fn activate_agent_island_app() {
     unsafe {
         let cls = objc2::runtime::AnyClass::get("NSApplication").unwrap();
         let ns_app: *mut objc2::runtime::AnyObject = objc2::msg_send![cls, sharedApplication];
@@ -2555,7 +2554,7 @@ fn show_settings_window(app: &tauri::AppHandle) -> Result<(), String> {
         let _ = window.set_focus();
 
         #[cfg(target_os = "macos")]
-        activate_agentbro_app();
+        activate_agent_island_app();
         focus_settings_window_native(&window);
     })
     .map_err(|e| e.to_string())
@@ -6118,12 +6117,6 @@ pub fn run() {
             end_pet_drag,
             reset_pet_position,
             pets::discover_pets,
-            market::check_abpets_available,
-            market::install_abpets_globally,
-            market::install_pet_from_market,
-            market::uninstall_pet_from_market,
-            market::fetch_market_manifest,
-            market::ping_market_download,
             commands::set_active_pet_id,
             commands::set_agent_default_pet,
             is_cursor_in_window_zones,
@@ -6380,5 +6373,5 @@ pub fn run() {
             skills::v2::commands::reveal_skill_path,
         ])
         .run(tauri::generate_context!())
-        .expect("error while running AgentBro");
+        .expect("error while running Agent Island");
 }

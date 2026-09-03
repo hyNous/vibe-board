@@ -9,15 +9,15 @@ import { isWindowsPlatform } from '../utils/platform'
 export type UpdateStatus = 'idle' | 'checking' | 'available' | 'downloading' | 'ready' | 'error' | 'up-to-date'
 export type UpdateInstallChannel = 'direct' | 'homebrew'
 
-const RELEASE_API_URL = 'https://api.github.com/repos/shirenchuang/agentbro/releases/latest'
-const LATEST_DMG_URL = 'https://github.com/shirenchuang/agentbro/releases/latest/download/AgentBro_latest_universal.dmg'
-const LATEST_WINDOWS_SETUP_URL = 'https://github.com/shirenchuang/agentbro/releases/latest/download/AgentBro_latest_x64-setup.exe'
+const RELEASE_API_URL = (import.meta.env.VITE_AGENT_ISLAND_RELEASE_API_URL ?? '').trim()
+const LATEST_DMG_URL = (import.meta.env.VITE_AGENT_ISLAND_LATEST_DMG_URL ?? '').trim()
+const LATEST_WINDOWS_SETUP_URL = (import.meta.env.VITE_AGENT_ISLAND_LATEST_WINDOWS_SETUP_URL ?? '').trim()
 const UPDATE_CHECK_TIMEOUT_MS = 8_000
 const SETTINGS_AUTO_CHECK_DELAY_MS = 5_000
 const BACKGROUND_AUTO_CHECK_DELAY_MS = 60_000
 const BACKGROUND_AUTO_CHECK_INTERVAL_MS = 12 * 60 * 60 * 1000
 const AUTO_RESTART_IDLE_GRACE_MS = 2 * 60 * 1000
-export const HOMEBREW_UPDATE_COMMAND = 'brew upgrade --cask agentbro'
+export const HOMEBREW_UPDATE_COMMAND = 'brew upgrade --cask agent-island'
 
 interface UpdateState {
   status: UpdateStatus
@@ -392,6 +392,10 @@ async function checkGitHubLatestRelease(): Promise<{
   date: string | null
   downloadUrl: string | null
 }> {
+  if (!RELEASE_API_URL) {
+    return { available: false, version: null, notes: null, date: null, downloadUrl: null }
+  }
+
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), UPDATE_CHECK_TIMEOUT_MS)
   let response: Response
@@ -435,20 +439,18 @@ export function selectReleaseDownloadAsset(
 ): GitHubRelease['assets'][number] | undefined {
   if (platform === 'windows') {
     return assets.find((asset) => asset.name === 'Agent Island_latest_x64-setup.exe')
-      ?? assets.find((asset) => asset.name === 'AgentBro_latest_x64-setup.exe')
       ?? assets.find((asset) => asset.name === 'Agent Island_latest_x64.msi')
-      ?? assets.find((asset) => asset.name === 'AgentBro_latest_x64.msi')
       ?? assets.find((asset) => asset.name.endsWith('_x64-setup.exe'))
       ?? assets.find((asset) => asset.name.endsWith('_x64.msi'))
   }
 
   return assets.find((asset) => asset.name === 'Agent Island_latest_universal.dmg')
-    ?? assets.find((asset) => asset.name === 'AgentBro_latest_universal.dmg')
     ?? assets.find((asset) => asset.name.endsWith('_universal.dmg'))
 }
 
-function fallbackDownloadUrl(platform: UpdateDownloadPlatform): string {
-  return platform === 'windows' ? LATEST_WINDOWS_SETUP_URL : LATEST_DMG_URL
+function fallbackDownloadUrl(platform: UpdateDownloadPlatform): string | null {
+  const url = platform === 'windows' ? LATEST_WINDOWS_SETUP_URL : LATEST_DMG_URL
+  return url || null
 }
 
 function compareVersions(left: string, right: string): number {

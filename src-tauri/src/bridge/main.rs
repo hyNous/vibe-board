@@ -197,7 +197,7 @@ fn permission_hook_output_gemini(decision: &str, reason: &str) -> serde_json::Va
         }),
         "deny" => {
             let msg = if reason.is_empty() {
-                "Denied by user via AgentBro"
+                "Denied by user via Agent Island"
             } else {
                 reason
             };
@@ -217,14 +217,14 @@ fn permission_hook_output_antigravity(decision: &str, reason: &str) -> serde_jso
         "deny" => serde_json::json!({
             "decision": "deny",
             "reason": if reason.is_empty() {
-                "Denied by user via AgentBro"
+                "Denied by user via Agent Island"
             } else {
                 reason
             }
         }),
         _ => serde_json::json!({
             "decision": "ask",
-            "reason": "AgentBro could not resolve this permission request"
+            "reason": "Agent Island could not resolve this permission request"
         }),
     }
 }
@@ -277,7 +277,7 @@ fn permission_hook_output(
         }
         "deny" => {
             let msg = if reason.is_empty() {
-                "Denied by user via AgentBro"
+                "Denied by user via Agent Island"
             } else {
                 reason
             };
@@ -1068,7 +1068,7 @@ fn main() {
             }
 
             // Gemini: BeforeTool acts as the permission gate (no separate PermissionRequest event).
-            // Block and wait for user approval via AgentBro UI.
+            // Block and wait for user approval via Agent Island UI.
             if is_gemini_source(&source) {
                 obj.insert("status".into(), "waiting_for_approval".into());
                 if !tool_name.is_empty() {

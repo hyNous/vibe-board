@@ -5,7 +5,7 @@
 
 ## What this is
 
-**AgentBro** is a macOS-only Tauri app (Rust backend + React 19 / TypeScript frontend) that surfaces events from AI coding agents (Claude Code, Codex, Gemini CLI, Cursor, Copilot, etc.) into a floating "Dynamic Island" overlay.
+**Agent Island** is a cross-platform Tauri app (Rust backend + React 19 / TypeScript frontend) that surfaces events from AI coding agents (Claude Code, Codex, Gemini CLI, Cursor, Copilot, etc.) into a floating "Dynamic Island" overlay.
 
 ## Local commands
 
@@ -24,36 +24,11 @@ cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
 
 Before any PR, all of these must be green: `pnpm lint`, `pnpm test:run`, `pnpm build`, `cargo check`.
 
-## Mandatory GitHub delivery workflow
+## Repository workflow
 
-Use this workflow for every task that changes repository files, including bug fixes, features, refactors, tests, documentation, and configuration.
-
-Pure questions, explanations, code review, read-only diagnosis, and research do not require an Issue or PR unless they turn into a repository change.
-
-### Before editing
-
-1. Confirm GitHub access with `gh auth status` and inspect the current branch and worktree.
-2. Search open Issues for the same scope. Reuse an existing Issue only when it describes the requested work; otherwise create a focused Issue with context, goal, acceptance criteria, and constraints.
-3. Start from the latest `origin/dev` on a dedicated branch named `<agent>/issue-<number>-<slug>` (for example, `codex/issue-61-agent-github-workflow`). Never implement on `dev`, `main`, or an unrelated task branch.
-4. If another task owns the current branch or worktree, preserve it and use a separate git worktree.
-5. Do not edit files until the Issue exists and its number is known.
-
-### Finishing the task
-
-1. Run the required local checks and fix failures before publishing.
-2. Review the diff for unrelated edits and secrets, then create a Conventional Commit.
-3. Push the task branch and open a PR against `dev`. The PR body must contain `Closes #<issue-number>` so the repository automation can close the Issue after the PR merges.
-4. Enable squash auto-merge with branch deletion:
-
-   ```bash
-   gh pr merge --auto --squash --delete-branch
-   ```
-
-5. Monitor required checks. If a check fails, diagnose it, update the same branch, and leave auto-merge enabled. Never bypass checks, force-push shared branches, or merge a failing PR.
-6. After the PR merges, verify that the linked Issue was closed by the `Close linked Issues` workflow. If it remains open, close it with `gh issue close <number> --reason completed` and report the fallback.
-7. The task is complete only when the PR is merged and its Issue is closed (or when a concrete external blocker is reported). Report the Issue, PR, checks, and merge result.
-
-Do not create duplicate or empty Issues just to increase activity. The Issue and PR must represent real, reviewable work.
+Keep changes on the local branch until they have been reviewed and verified.
+Use the issue and pull-request rules of the repository that distributes your
+Agent Island build; this fork does not require submitting changes upstream.
 
 ## Where to make changes
 
@@ -69,20 +44,20 @@ Detailed extension recipes: see [`.claude/CLAUDE.md`](.claude/CLAUDE.md) and [`C
 
 ## Branching & commits
 
-- Branch off `dev`. **PRs target `dev`**, not `main`.
+- Use the repository's default branch unless the distributor specifies another target.
 - [Conventional Commits](https://www.conventionalcommits.org/): `feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`.
 - Do NOT bump version numbers in PRs. Versions are kept in sync by maintainers across four files (`package.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, `Cargo.lock`); `pnpm release:check` validates this.
 
 ## Do NOT touch
 
-- Brand assets: `public/agentbro-*.{png,jpg}`, `docs/brand/`, `src-tauri/icons/`
+- Brand assets: `public/agent-island-*.{png,jpg}`, `src-tauri/icons/`
 - Legal / trademark: `LICENSE`, `NOTICE`, `TRADEMARKS.md`
-- Signing / release: `src-tauri/Entitlements.plist`, any `*.key`/`*.p12`/`*.pem`/`*.mobileprovision`, `.github/workflows/release.yml`, `homebrew/`
+- Signing / release: `src-tauri/Entitlements.plist`, any `*.key`/`*.p12`/`*.pem`/`*.mobileprovision`
 - Generated: `src-tauri/target/`, `dist/`, `output/`, `node_modules/`
 
 **Never commit secrets** (`.env`, signing keys, API tokens). `.gitignore` covers the common patterns; double-check before staging.
 
-If you fork and redistribute, you **must rename** the product — see [`TRADEMARKS.md`](TRADEMARKS.md).
+If you redistribute this fork, keep its Agent Island identity and follow [`UPSTREAM.md`](UPSTREAM.md), [`NOTICE`](NOTICE), and [`TRADEMARKS.md`](TRADEMARKS.md).
 
 ## Code style
 
@@ -94,4 +69,5 @@ If you fork and redistribute, you **must rename** the product — see [`TRADEMAR
 
 ## Platform support
 
-macOS only for now. Windows is on the roadmap but the codebase is not yet abstracted for it — don't `#[cfg(windows)]`-pepper the code preemptively.
+macOS and Windows are supported. Keep platform-specific behavior behind the
+existing `cfg` boundaries instead of duplicating cross-platform logic.

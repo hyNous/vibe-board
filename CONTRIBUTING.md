@@ -1,6 +1,6 @@
-# 贡献 AgentBro
+# 贡献 Agent Island
 
-感谢你愿意为 AgentBro 出一份力 🙌 不论是修 Bug、提建议、新增 Agent 适配,还是补一份翻译,我们都很欢迎。
+感谢你愿意为 Agent Island 出一份力 🙌 不论是修 Bug、提建议、新增 Agent 适配,还是补一份翻译,我们都很欢迎。
 
 > 本文档面向**所有贡献者**(包括用 AI 协作的)。AI Agent 还请先读 [`AGENTS.md`](AGENTS.md) 或 [`.claude/CLAUDE.md`](.claude/CLAUDE.md) 拿一份项目地图。
 > English version: [`CONTRIBUTING.en.md`](CONTRIBUTING.en.md)。
@@ -29,7 +29,7 @@
 
 ## 提 Issue 之前
 
-1. **先搜一下**:[Issues 列表](https://github.com/shirenchuang/agentbro/issues?q=is%3Aissue) 看是不是已经有人报过。
+1. **先搜一下**:[Issues 列表](../../issues?q=is%3Aissue) 看是不是已经有人报过。
 2. **确认版本**:用最新的 Release 重现。 老版本的 bug 大概率已经修了。
 3. **跑过 Hook Doctor**:设置 → Island → Integration → Run Hook Doctor。很多 Hook / 权限问题这里就能定位。
 4. **走对模板**:Bug 用 Bug 模板,新功能用 Feature 模板,新 Agent 适配用 Agent 请求模板。空白 Issue 已禁用。
@@ -40,7 +40,7 @@
 
 ### 环境
 
-- macOS(目前只支持 macOS)
+- macOS 或 Windows
 - Node.js 20+
 - pnpm 9+
 - Rust 稳定版 + Cargo
@@ -49,15 +49,15 @@
 ### 启动
 
 ```bash
-git clone https://github.com/shirenchuang/agentbro.git
-cd agentbro
+git clone https://github.com/hyNous/agent-island.git
+cd agent-island
 pnpm install
 pnpm tauri:dev   # 完整原生应用(推荐)
 # 或
 pnpm dev         # 仅浏览器 UI,适合调样式 → http://localhost:1423
 ```
 
-`pnpm tauri:dev` 会先 `cargo build` 一份 `agentbro-bridge` 二进制,再启 Vite + 原生窗口。第一次构建比较慢,Rust 依赖编译可能要 5-10 分钟,后续增量很快。
+`pnpm tauri:dev` 会先 `cargo build` 一份 `agent-island-bridge` 二进制,再启 Vite + 原生窗口。第一次构建比较慢,Rust 依赖编译可能要 5-10 分钟,后续增量很快。
 
 ### 提交前必跑
 
@@ -76,9 +76,8 @@ Claude Code 用户可以直接 `/check` 一条龙。
 
 ### 分支
 
-- `main` —— release 分支,只接收 maintainer 发版合并
-- `dev` —— **集成分支,所有 PR 都提到这里**
-- 你的功能分支可以叫 `feat/<short-name>` / `fix/<short-name>` / `docs/<short-name>`
+- 默认分支 —— 稳定发布分支
+- 功能分支 —— `feat/<short-name>` / `fix/<short-name>` / `docs/<short-name>`
 
 ### 提交信息
 
@@ -110,13 +109,9 @@ chore: 升级 vitest 到 4.2
 
 ## PR 流程
 
-1. 先创建或认领一个与改动范围一致的 Issue。
-2. Fork → 在 `dev` 上拉分支 → 改动 → 跑完上面四条检查。
-3. PR base 选 `dev`,标题写清楚改了什么(中英都可)。
-4. 按 PR 模板填写内容，并在正文保留 `Closes #<Issue 编号>`；`PR policy / Issue link` 会校验它。
-5. CI 会跑 `ci.yml`(lint + test + cargo check/clippy/fmt + cargo test)和 `build.yml`(macOS 双架构构建)。两个都得绿。
-6. Review 节奏:工作日基本能在 48 小时内给到第一轮反馈。如果一周没人理,可以在 PR 里 @maintainer 提醒一下。
-7. Merge 用 squash；仓库成员可预先开启 auto-merge，所有必需检查通过后会自动合并并删除任务分支。`Close linked Issues` 会在 PR 合并进 `dev` 后关闭正文中关联的 Issue。
+1. 从默认分支创建功能分支，标题写清楚改动内容。
+2. 提交前跑完上面四条检查，并在 PR 中说明验证结果。
+3. UI 改动附截图；涉及兼容层或发布配置时，说明影响范围。
 
 ---
 
@@ -152,7 +147,7 @@ chore: 升级 vitest 到 4.2
 
 ## AI 协作贡献指引
 
-我们鼓励用 AI 协作 —— AgentBro 自己就是为 AI Agent 服务的工具,理念一致。
+我们鼓励用 AI 协作 —— Agent Island 自己就是为 AI Agent 服务的工具,理念一致。
 
 - **善用项目级配置**:Claude Code 用户进仓库就能加载 [`.claude/CLAUDE.md`](.claude/CLAUDE.md);Codex / Cursor / Aider / Copilot / Gemini CLI 等读 [`AGENTS.md`](AGENTS.md)。先让 Agent 读这两份再开始改代码,能省大量瞎猜成本。
 - **代码改动先建 Issue**:Agent 必须在写文件前创建或关联 Issue,使用独立任务分支,并在 PR 中用 `Closes #<编号>` 建立闭环。纯问答和只读分析不需要制造 Issue。
@@ -165,20 +160,12 @@ chore: 升级 vitest 到 4.2
 
 ## 品牌与商标
 
-AgentBro **代码** 走 [Apache License 2.0](LICENSE)。但是 **名称 "AgentBro"、Logo、应用图标、官网视觉** 不在代码授权范围内。
-
-如果你 Fork 后:
-- 自用、改着玩、提 PR 给上游 —— 没问题。
-- 准备分发自己的版本 —— **必须改名**,不要让用户以为你的版本是官方 AgentBro。
-
-详见 [`TRADEMARKS.md`](TRADEMARKS.md) 和 [`NOTICE`](NOTICE)。
+Agent Island 是基于 [AgentBro](UPSTREAM.md) Apache-2.0 代码的独立分发版。分发时请保留 [LICENSE](LICENSE)、[NOTICE](NOTICE) 和 [TRADEMARKS.md](TRADEMARKS.md)，并使用自己的名称、图标和官网视觉。
 
 ---
 
 ## 社区
 
-- 微信群:扫 [README](README.md#加入交流群) 里的二维码,备注 **AgentBro 交流群**。
-- Releases:https://github.com/shirenchuang/agentbro/releases
-- 官网:https://www.agentbro.net
+- Releases: [hyNous/agent-island/releases](https://github.com/hyNous/agent-island/releases)
 
 有想做但不确定要不要做的 idea,可以先在 Issue 里开一个 Discussion 性质的帖子,聊清楚再动工 —— 比写完 PR 被请回去返工友好很多。
