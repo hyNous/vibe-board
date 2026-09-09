@@ -1,9 +1,9 @@
 <div align="center">
-  <img src="./assets/readme/vibe-board-hero.svg" alt="Vibe Board：把 AI 编程 Agent 会话、审批、Trace 和用量放进一个桌面工作台" width="100%" />
+  <img src="./assets/readme/vibe-board-hero.svg" alt="Vibe Board：在桌面边缘查看 AI 编程 Agent 的任务状态和额度" width="100%" />
 
   <p>
-    <strong>你的 AI 编程 Agent 桌面控制台</strong><br />
-    少盯终端，直接在一个悬浮工作台里看清会话、处理审批、查看 Trace 和真实用量。
+    <strong>你的 AI 编程 Agent 桌面看板</strong><br />
+    在屏幕边缘查看任务状态和真实额度，点击任务即可回到对应的桌面 Agent。
   </p>
 
   <p>
@@ -14,45 +14,20 @@
 
   <p>
     <img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-111820" />
-    <img alt="Platform" src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-f5b84b" />
+    <img alt="Platform" src="https://img.shields.io/badge/platform-Windows-f5b84b" />
     <img alt="Stack" src="https://img.shields.io/badge/Tauri-React%20%2B%20Rust-0c6b63" />
   </p>
 </div>
 
 ## 这是什么
 
-Vibe Board 是一个本地优先的 Tauri 桌面应用：把 Claude Code、Codex、Gemini CLI、OpenCode、Antigravity 等 Agent 的事件接入同一个悬浮窗。
+Vibe Board 是一个本地优先的 Tauri 桌面应用：把 Claude Code、Codex、Gemini CLI、OpenCode、Antigravity 等 Agent 的任务状态和额度接入同一个屏幕边缘看板。
 
 它解决的是三个日常问题：
 
-- Agent 在等待审批、提问或计划确认时，你不用切回终端。
-- 多个会话同时运行时，你能区分当前任务、Trace 时长、工具调用和完成状态。
+- 多个 Agent 同时运行时，你能看到当前对话名称和执行状态。
+- 点击任务可以恢复并置顶对应的桌面 Agent；纯 CLI Agent 会提示手动打开终端。
 - 能读取 token 就显示 token；读不到时只显示 Provider quota 和重置时间，不生成价格估算。
-
-## 先看真实界面
-
-<table>
-  <tr>
-    <td width="50%">
-      <img src="./docs/assets/screenshots/island-expanded.png" alt="Vibe Board 展开的会话列表与审批状态" width="100%" />
-      <sub>展开后查看会话、工具调用、审批和计划。</sub>
-    </td>
-    <td width="50%">
-      <img src="./docs/assets/screenshots/island-detail.png" alt="Vibe Board 的会话详情和 Trace 信息" width="100%" />
-      <sub>详情页保留 Trace、Token、Rate Limit 和原始事件。</sub>
-    </td>
-  </tr>
-  <tr>
-    <td width="50%">
-      <img src="./docs/assets/screenshots/island-permission.png" alt="在 Vibe Board 中处理 Agent 权限请求" width="100%" />
-      <sub>审批、提问和计划确认直接在悬浮窗完成。</sub>
-    </td>
-    <td width="50%">
-      <img src="./docs/assets/screenshots/agent-management-skill-library.png" alt="Vibe Board 的统一 Skill 库" width="100%" />
-      <sub>Skills 可接管到中心库，再分发给多个 Agent。</sub>
-    </td>
-  </tr>
-</table>
 
 ## 30 秒开始
 
@@ -88,9 +63,9 @@ pnpm dev
 
 | 需求 | Vibe Board 的处理方式 |
 | --- | --- |
-| 同时运行多个 Agent | 灵动岛聚合会话、运行阶段、工具、Subagent 和完成提醒。 |
+| 同时运行多个 Agent | 看板聚合对话名称、运行状态和完成提醒，不展开会话正文。 |
+| 返回桌面 Agent | 点击任务即可恢复并置顶对应窗口；纯 CLI Agent 给出手动查看提示。 |
 | 等待权限或输入 | 直接批准、拒绝、回答问题或确认计划。 |
-| 看清一次任务跑了多久 | 以当前 Agent trace 为单位显示执行时间，不用 Session 存活时长代替。 |
 | 读取用量 | 优先显示真实 token；没有 token 时显示 Provider quota、周期和重置时间。 |
 | 管理多个 Agent | 扫描 CLI、桌面 App、版本、路径、Hook 和配置状态。 |
 | 统一管理 Skills | 从 Agent、本地目录或 GitHub 导入，接管到中心库，再用软链接或副本分发。 |
@@ -109,7 +84,7 @@ SessionStore / Trace / Usage snapshot
 灵动岛 · Agent Monitor · Skills 管理
 ```
 
-Hook 是实时事件的主要入口；Codex 等支持的 Agent 还会通过本地 app-server 或状态文件补充线程、审批和 quota。所有外部 Agent 不在线时，界面会保留上一次已读取的状态，并标注数据来源和更新时间。
+Hook 是实时事件的主要入口；Codex 等支持的 Agent 还会通过本地 app-server 或状态文件补充线程、审批和 quota。会话状态另有可配置的定时轮询兜底（默认 3 秒），Codex Desktop 还会补读本地 rollout 日志。由于各 Agent 暂无统一、稳定的任务生命周期接口，当前同步属于尽力而为，不能承诺 100% 捕获所有正在执行的任务。
 
 ## 宿主插件（可选兼容方式）
 
@@ -136,8 +111,8 @@ codex plugin list
 
 - `src/`：React 灵动岛、设置页、Agent/Skill 管理和主题。
 - `src-tauri/src/`：Rust Hook Server、Bridge、Agent 适配器、Trace/Usage 和本地存储。
-- `src-tauri/icons/`、`public/agent-island-*`：当前 Vibe Board 图标和展示资源。
-- `releases/`：当前 Windows 验收安装包；旧包只放在 `releases/archive/`。
+- `src-tauri/icons/`、`public/vibe-board-*`：当前 Vibe Board 图标和展示资源。
+- `releases/`：唯一的当前 Windows 验收安装包。
 - `UPSTREAM.md`、`LICENSE`、`NOTICE`、`TRADEMARKS.md`：来源、许可和品牌边界。
 
 ## 本地检查
