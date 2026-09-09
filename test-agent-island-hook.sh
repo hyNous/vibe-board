@@ -1,11 +1,11 @@
 #!/bin/bash
-# Test script for Agent Island HookServer
+# Test script for Vibe Board HookServer
 # Run this while the app is running to verify the full event pipeline.
 
 SOCKET="/tmp/agentbro.sock"
 SESSION_ID="test-$(date +%s)"
 
-echo "=== Agent Island Hook Test ==="
+echo "=== Vibe Board Hook Test ==="
 echo "Socket: $SOCKET"
 echo "Session: $SESSION_ID"
 echo ""

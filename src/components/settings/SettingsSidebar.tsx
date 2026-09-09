@@ -199,7 +199,7 @@ export function SettingsSidebar({
         onClick={() => onSelect('general')}
       >
         <span className="settings-sidebar__brand-mark" aria-hidden="true">
-          <img className="settings-sidebar__collapse-logo" src="/agent-island-logo.png" alt="" />
+          <img className="settings-sidebar__collapse-logo" src="/vibe-board-logo.png" alt="" />
         </span>
         <span className="settings-sidebar__brand-copy">
           <span className="settings-sidebar__brand-title">{brandTitle}</span>

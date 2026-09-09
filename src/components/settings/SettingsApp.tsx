@@ -13,9 +13,10 @@ import { AboutSection } from './sections/AboutSection'
 import { SwitchSection } from './sections/SwitchSection'
 import { RemoteServersSection } from './sections/RemoteServersSection'
 import { SkillManagerSection } from '../skills-v2/SkillManagerSection'
+import { SetupWizard } from './SetupWizard'
 import { useUpdater } from '../../hooks/useUpdater'
 import { useConfigStore } from '../../stores/configStore'
-import { isTauri } from '../../services/tauriApi'
+import { getConfig, isTauri } from '../../services/tauriApi'
 import type { IslandSettingsView, MonitorSettingsView } from '../../types/capability'
 import '../../styles/settings.css'
 
@@ -33,6 +34,8 @@ export function SettingsApp({ onClose }: SettingsAppProps) {
   const { t } = useTranslation()
   const updater = useUpdater()
   const autoInstallUpdate = useConfigStore((s) => s.autoInstallUpdate)
+  const setupWizardCompleted = useConfigStore((s) => s.setupWizardCompleted)
+  const [setupConfigLoaded, setSetupConfigLoaded] = useState(() => !isTauri())
   const [activeSection, setActiveSection] = useState('tasks')
   const [activeIslandView, setActiveIslandView] = useState<IslandSettingsView>('overview')
   const [activeMonitorView, setActiveMonitorView] = useState<MonitorSettingsView>('overview')
@@ -89,6 +92,26 @@ export function SettingsApp({ onClose }: SettingsAppProps) {
 
   useEffect(() => {
     if (!isTauri()) return
+    let cancelled = false
+    getConfig()
+      .then((config) => {
+        if (cancelled) return
+        useConfigStore.setState({
+          setupWizardCompleted: config.setupWizardCompleted ?? false,
+          hostAgent: config.hostAgent ?? null,
+          childAgents: Array.isArray(config.childAgents) ? config.childAgents : [],
+          autoStartOnHostSession: config.autoStartOnHostSession ?? true,
+        })
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setSetupConfigLoaded(true)
+      })
+    return () => { cancelled = true }
+  }, [])
+
+  useEffect(() => {
+    if (!isTauri()) return
     let unlisten: (() => void) | undefined
     import('@tauri-apps/api/event')
       .then(({ listen }) => listen('settings-window-opened', () => { closingRef.current = false }))
@@ -96,6 +119,14 @@ export function SettingsApp({ onClose }: SettingsAppProps) {
       .catch(() => {})
     return () => unlisten?.()
   }, [])
+
+  if (isTauri() && setupConfigLoaded && !setupWizardCompleted) {
+    return (
+      <div className="settings-app">
+        <SetupWizard onClose={handleCloseRequest} />
+      </div>
+    )
+  }
 
   return (
     <div className="settings-app">
@@ -113,10 +144,10 @@ export function SettingsApp({ onClose }: SettingsAppProps) {
         {activeSection !== 'skill-manager-v2' && (
           <div className="settings-window-brand" aria-hidden="true">
             <span className="settings-window-brand__mark">
-              <img src="/agent-island-app-icon.png" alt="" />
+              <img src="/vibe-board-app-icon.png" alt="" />
             </span>
             <span className="settings-window-brand__copy">
-              <span className="settings-window-brand__name">Agent Island</span>
+              <span className="settings-window-brand__name">Vibe Board</span>
               <span className="settings-window-brand__slogan">{t('notch.slogan')}</span>
             </span>
           </div>

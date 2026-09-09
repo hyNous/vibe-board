@@ -1,4 +1,4 @@
-/* Agent Island — Session State Management (Zustand) */
+/* Vibe Board — Session State Management (Zustand) */
 import { create, type StoreApi, type UseBoundStore } from 'zustand'
 import { useConfigStore } from './configStore'
 import type { AgentEvent, AgentRunState, AgentStatusSnapshot, BaseLayer, ChatHistoryMeta, ChatMessage, OverlayItem, PanelState, RateLimitInfo, SessionState } from '../types/agent'
@@ -1224,7 +1224,14 @@ export const useSessionStore: UseBoundStore<StoreApi<SessionStore>> = create<Ses
     if (isNonBlocking && useSessionStore.getState().isWakeSilenced()) return
 
     set((state) => {
-      const queue = [...state.overlayQueue, item].sort(
+      const replacesSessionResult = item.type === 'response' || item.type === 'completion'
+      const pending = replacesSessionResult
+        ? state.overlayQueue.filter((overlay) => !(
+            overlay.sessionId === item.sessionId
+            && (overlay.type === 'response' || overlay.type === 'completion')
+          ))
+        : state.overlayQueue
+      const queue = [...pending, item].sort(
         (a, b) => (OVERLAY_PRIORITY[b.type] ?? 0) - (OVERLAY_PRIORITY[a.type] ?? 0)
       )
       return { overlayQueue: queue, activeOverlay: queue[0] ?? null }

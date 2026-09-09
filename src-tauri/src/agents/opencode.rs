@@ -1,7 +1,10 @@
 // OpenCodeAdapter — Agent adapter for OpenCode AI
 
 use super::profiles;
-use super::{rate_limit_event_from_raw, AdapterStatus, AgentAdapter, AgentEvent, QuestionItem, QuestionOption};
+use super::{
+    rate_limit_event_from_raw, AdapterStatus, AgentAdapter, AgentEvent, QuestionItem,
+    QuestionOption,
+};
 use std::path::PathBuf;
 
 /// Result of verifying hook installation integrity for OpenCode
@@ -213,9 +216,7 @@ impl AgentAdapter for OpenCodeAdapter {
         };
 
         match event {
-            "RateLimitsUpdate" | "StatusLineUpdate" => {
-                rate_limit_event_from_raw(raw, session_id)
-            }
+            "RateLimitsUpdate" | "StatusLineUpdate" => rate_limit_event_from_raw(raw, session_id),
             "SessionStart" => Ok(AgentEvent::SessionStart {
                 session_id,
                 project: super::project_name_from_path(&cwd),

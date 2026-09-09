@@ -19,7 +19,7 @@ export function buildTips(config: {
 }, surface: TipSurface = 'island'): string[] {
   const tips = surface === 'pet'
     ? [
-        `${formatShortcut(config.globalShortcut)} 可切换 Agent Island 显示`,
+        `${formatShortcut(config.globalShortcut)} 可切换 Vibe Board 显示`,
         '点击宠物可查看当前会话列表',
         'ESC 可以收起宠物弹窗',
         'Agents 设置里可以一键安装或修复 hooks',

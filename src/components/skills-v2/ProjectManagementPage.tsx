@@ -101,7 +101,7 @@ export function ProjectManagementPage() {
           {state.projects.length === 0 ? (
             <div className="sm2__project-empty">
               <strong>还没有导入项目</strong>
-              <span>粘贴项目根目录后，Agent Island 会扫描项目级 Skills、MCP、插件和指令文件。</span>
+              <span>粘贴项目根目录后，Vibe Board 会扫描项目级 Skills、MCP、插件和指令文件。</span>
             </div>
           ) : filteredProjects.length === 0 ? (
             <div className="sm2__empty sm2__empty--compact">没有匹配的项目</div>

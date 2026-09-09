@@ -1223,12 +1223,8 @@ function SessionCard({
   const remoteHostLabel = session.remoteHostName || session.remoteHostId
   const showAgentBadge = Boolean(appLabel || terminalLabel) || shouldShowAgentBadge(session)
   const termBadge = terminalLabel ? getTerminalBadge(terminalLabel) : null
-  const recentUserMessage = latestUserMessage(session)
-  const title = getHoverSessionTitle(session, recentUserMessage)
-  const assistantPreview = latestAssistantPreview(session)
   const priority = computePriority(session)
   const showCacheTTL = useConfigStore((s) => s.showCacheTTL)
-  const cacheTtl = showCacheTTL ? formatCacheTtl(session) : null
   const mutedSessions = useSessionStore((s) => s.mutedSessions)
   const muteSession = useSessionStore((s) => s.muteSession)
   const unmuteSession = useSessionStore((s) => s.unmuteSession)
@@ -1244,7 +1240,20 @@ function SessionCard({
   const showInlineQuestion = !!session.pendingQuestion
   const showInlinePlan = !!(session.planTitle || session.planContent)
   const notice = inferSessionNotice(session)
-  const listSubagents = getSessionListSubagents(session)
+  const showOperationalDetails = Boolean(
+    inlinePermission
+    || showInlineQuestion
+    || showInlinePlan
+    || notice
+    || session.phase === 'waiting_approval'
+    || session.phase === 'waiting_input'
+    || session.phase === 'error',
+  )
+  const recentUserMessage = latestUserMessage(session)
+  const title = getHoverSessionTitle(session, recentUserMessage)
+  const assistantPreview = showOperationalDetails ? latestAssistantPreview(session) : undefined
+  const cacheTtl = showOperationalDetails && showCacheTTL ? formatCacheTtl(session) : null
+  const listSubagents = showOperationalDetails ? getSessionListSubagents(session) : []
   const iconAgentType = appLabel === 'Codex App' ? 'codex' : session.agentType
   const shouldShowAgentIcon = !showPassiveDot && (isStatic || appLabel === 'Codex App' || session.agentType === 'codex')
   const handleOpen = () => onSessionClick(session.id)
@@ -1319,7 +1328,7 @@ function SessionCard({
             <div className="hover-list__row1">
               <span className="hover-list__session-title">{title}</span>
 
-              <div className="hover-list__meta">
+              {showOperationalDetails && <div className="hover-list__meta">
                 {showAgentBadge && (
                   <span className="hover-list__agent-badge" style={{ background: badge.bg, color: badge.text }}>
                     {agentName}
@@ -1393,76 +1402,80 @@ function SessionCard({
                     ↗
                   </button>
                 )}
-              </div>
+              </div>}
             </div>
 
-            {/* Row 2: user's last message */}
-            {recentUserMessage && (
-              <div className="hover-list__row2">
-                <span className="hover-list__you-label">{t('notch.you', '你')}：</span>
-                <span className="hover-list__user-msg">{truncateText(recentUserMessage, 100)}</span>
-              </div>
-            )}
-
-            {/* Row 3: tool action or status */}
-            {session.lastToolName ? (
+            {showOperationalDetails && (
               <>
-                <div className="hover-list__row3">
-                  <span className={`hover-list__tool-label${session.lastToolName.startsWith('Compacting') ? ' hover-list__tool-label--compact' : ''}`}>
-                    {getToolActivityLabel(t, session.lastToolName)}
-                  </span>
-                  {session.lastToolTarget && (
-                    <ToolTarget target={session.lastToolTarget} toolName={session.lastToolName} />
-                  )}
-                </div>
-                <ActiveToolDiffPreview session={session} />
-              </>
-            ) : session.phase === 'processing' || session.phase === 'compacting' ? (
-              <div className="hover-list__row3">
-                <span className={`hover-list__tool-label${isCompactingContext ? ' hover-list__tool-label--compact' : ''}`}>
-                  {isCompactingContext
-                    ? t('notch.tool.compactingContext')
-                    : session.description && !isGenericProcessingDescription(session.description)
-                    ? truncateText(stripMarkdown(session.description), 100)
-                    : t('notch.working')}
-                </span>
-              </div>
-            ) : assistantPreview ? (
-              <div className="hover-list__row3-preview">{truncateText(assistantPreview, 120)}</div>
-            ) : null}
+                {/* Row 2: user's last message */}
+                {recentUserMessage && (
+                  <div className="hover-list__row2">
+                    <span className="hover-list__you-label">{t('notch.you', '你')}：</span>
+                    <span className="hover-list__user-msg">{truncateText(recentUserMessage, 100)}</span>
+                  </div>
+                )}
 
-            {(session.statusLineText || session.contextWindow || cacheTtl) && (
-              <div className="hover-list__statusline">
-                {session.statusLineText && (
-                  <span className="hover-list__statusline-text">{truncateText(session.statusLineText, 80)}</span>
+                {/* Row 3: tool action or status */}
+                {session.lastToolName ? (
+                  <>
+                    <div className="hover-list__row3">
+                      <span className={`hover-list__tool-label${session.lastToolName.startsWith('Compacting') ? ' hover-list__tool-label--compact' : ''}`}>
+                        {getToolActivityLabel(t, session.lastToolName)}
+                      </span>
+                      {session.lastToolTarget && (
+                        <ToolTarget target={session.lastToolTarget} toolName={session.lastToolName} />
+                      )}
+                    </div>
+                    <ActiveToolDiffPreview session={session} />
+                  </>
+                ) : session.phase === 'processing' || session.phase === 'compacting' ? (
+                  <div className="hover-list__row3">
+                    <span className={`hover-list__tool-label${isCompactingContext ? ' hover-list__tool-label--compact' : ''}`}>
+                      {isCompactingContext
+                        ? t('notch.tool.compactingContext')
+                        : session.description && !isGenericProcessingDescription(session.description)
+                        ? truncateText(stripMarkdown(session.description), 100)
+                        : t('notch.working')}
+                    </span>
+                  </div>
+                ) : assistantPreview ? (
+                  <div className="hover-list__row3-preview">{truncateText(assistantPreview, 120)}</div>
+                ) : null}
+
+                {(session.statusLineText || session.contextWindow || cacheTtl) && (
+                  <div className="hover-list__statusline">
+                    {session.statusLineText && (
+                      <span className="hover-list__statusline-text">{truncateText(session.statusLineText, 80)}</span>
+                    )}
+                    {session.contextWindow?.usedPercentage != null && (
+                      <span className="hover-list__statusline-pill">
+                        ctx {session.contextWindow.usedPercentage.toFixed(0)}%
+                      </span>
+                    )}
+                    {session.contextWindow && (
+                      <span className="hover-list__statusline-pill">
+                        {formatTokens(session.contextWindow.totalInputTokens + session.contextWindow.totalOutputTokens)}
+                      </span>
+                    )}
+                    {cacheTtl && <span className="hover-list__statusline-pill">{cacheTtl}</span>}
+                  </div>
                 )}
-                {session.contextWindow?.usedPercentage != null && (
-                  <span className="hover-list__statusline-pill">
-                    ctx {session.contextWindow.usedPercentage.toFixed(0)}%
-                  </span>
-                )}
-                {session.contextWindow && (
-                  <span className="hover-list__statusline-pill">
-                    {formatTokens(session.contextWindow.totalInputTokens + session.contextWindow.totalOutputTokens)}
-                  </span>
-                )}
-                {cacheTtl && <span className="hover-list__statusline-pill">{cacheTtl}</span>}
-              </div>
+              </>
             )}
           </div>
         </div>
 
-        {notice && (
+        {showOperationalDetails && notice && (
           <SessionNoticeRow
             notice={notice}
             onJump={canJump ? () => onJumpToTerminal?.(session.id) : undefined}
           />
         )}
 
-        <SessionStateRibbon session={session} />
+        {showOperationalDetails && <SessionStateRibbon session={session} />}
 
         {/* Row 4: error */}
-        {session.phase === 'error' && session.description && (
+        {showOperationalDetails && session.phase === 'error' && session.description && (
           <div className="hover-list__row4-error">
             <span className="hover-list__error-icon">⚠</span>
             <span className="hover-list__error-text">{session.description}</span>
@@ -1470,23 +1483,23 @@ function SessionCard({
         )}
 
         {/* Row 5: subagents */}
-        {listSubagents.length > 0 && (
+        {showOperationalDetails && listSubagents.length > 0 && (
           <SubagentRow sessionId={session.id} subagents={listSubagents} onSubagentClick={onSubagentClick} />
         )}
 
         {/* Row 6: tasks */}
-        {session.tasks && session.tasks.length > 0 && (
+        {showOperationalDetails && session.tasks && session.tasks.length > 0 && (
           <TaskRow tasks={session.tasks} />
         )}
 
         {/* Row 7: inline permission */}
-        {inlinePermission && <InlinePermissionPreview session={session} permission={inlinePermission} />}
+        {showOperationalDetails && inlinePermission && <InlinePermissionPreview session={session} permission={inlinePermission} />}
 
         {/* Row 8: inline question */}
-        {showInlineQuestion && <InlineQuestionPreview session={session} onDraftStateChange={onInputDraftStateChange} />}
+        {showOperationalDetails && showInlineQuestion && <InlineQuestionPreview session={session} onDraftStateChange={onInputDraftStateChange} />}
 
         {/* Row 9: inline plan */}
-        {showInlinePlan && <InlinePlanPreview session={session} />}
+        {showOperationalDetails && showInlinePlan && <InlinePlanPreview session={session} />}
       </div>
     </motion.div>
   )
@@ -1507,7 +1520,7 @@ export function HoverList({
   const islandAnimationScaleValue = useConfigStore((s) => s.islandAnimationScale)
   const maxVisibleSessions = useConfigStore((s) => s.maxVisibleSessions)
   const colorTheme = useThemeStore((s) => s.colorTheme)
-  const emptyLogoSrc = isDarkColorTheme(colorTheme) ? '/agent-island-logo-dark.png' : '/agent-island-logo.png'
+  const emptyLogoSrc = isDarkColorTheme(colorTheme) ? '/vibe-board-logo-dark.png' : '/vibe-board-logo.png'
   const brandFooterTone = colorTheme === 'system' ? 'system' : isDarkColorTheme(colorTheme) ? 'dark' : 'light'
   const islandAnimationScale = Math.max(0.1, islandAnimationScaleValue || 1)
   const animDuration = (HOVER_SPEED_MS[hoverSpeed] ?? 0.2) * islandAnimationScale
@@ -1573,7 +1586,7 @@ export function HoverList({
         </div>
         <div className="hover-list__empty-copy">
           <span className="hover-list__empty-title">
-            {focusFilteredEmpty ? t('notch.noSessionInFocus') : 'Agent Island'}
+            {focusFilteredEmpty ? t('notch.noSessionInFocus') : 'Vibe Board'}
           </span>
           <span className="hover-list__empty-text">
             {focusFilteredEmpty ? t('notch.noSessionInFocusHint') : t('notch.slogan')}
@@ -1634,8 +1647,8 @@ export function HoverList({
       {!hideBrandFooter && (
         <div className={`hover-list__brand-footer hover-list__brand-footer--${brandFooterTone}`} aria-hidden>
           <span className="hover-list__brand-logo-stack">
-            <img className="hover-list__brand-logo hover-list__brand-logo--light" src="/agent-island-logo.png" alt="" />
-            <img className="hover-list__brand-logo hover-list__brand-logo--dark" src="/agent-island-logo-dark.png" alt="" />
+            <img className="hover-list__brand-logo hover-list__brand-logo--light" src="/vibe-board-logo.png" alt="" />
+            <img className="hover-list__brand-logo hover-list__brand-logo--dark" src="/vibe-board-logo-dark.png" alt="" />
           </span>
           <span className="hover-list__brand-slogan">{t('notch.slogan')}</span>
         </div>

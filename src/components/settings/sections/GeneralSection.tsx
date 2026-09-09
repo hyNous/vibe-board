@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import { useConfigStore } from '../../../stores/configStore'
@@ -6,16 +7,34 @@ import { SettingGroup } from '../SettingGroup'
 import { SettingRow } from '../SettingRow'
 import { Toggle } from '../Toggle'
 import { Dropdown } from '../Dropdown'
-import { quitApp, setLanguage, setLaunchAtLogin } from '../../../services/tauriApi'
+import { getConfig, quitApp, setLanguage, setLaunchAtLogin, updateConfig as updateBackendConfig } from '../../../services/tauriApi'
 import { GlassButton } from '../../shared'
 
 export function GeneralSection() {
   const { t, i18n } = useTranslation()
-  const { language, launchAtLogin, updateConfig } = useConfigStore(useShallow((state) => ({
+  const { language, launchAtLogin, hostAgent, childAgents, updateConfig } = useConfigStore(useShallow((state) => ({
     language: state.language,
     launchAtLogin: state.launchAtLogin,
+    hostAgent: state.hostAgent,
+    childAgents: state.childAgents,
     updateConfig: state.updateConfig,
   })))
+  const [reconfiguring, setReconfiguring] = useState(false)
+  const [setupError, setSetupError] = useState<string | null>(null)
+
+  const reopenSetupWizard = async () => {
+    setReconfiguring(true)
+    setSetupError(null)
+    try {
+      const backend = await getConfig()
+      await updateBackendConfig({ ...backend, setupWizardCompleted: false })
+      updateConfig('setupWizardCompleted', false)
+    } catch (error) {
+      setSetupError(error instanceof Error ? error.message : String(error))
+    } finally {
+      setReconfiguring(false)
+    }
+  }
 
   const languageOptions = [
     { value: 'en', label: 'English' },
@@ -63,6 +82,21 @@ export function GeneralSection() {
             })
           }} />
         </SettingRow>
+        <SettingRow
+          label={t('settings.agentConnection', { defaultValue: 'Agent connection' })}
+          description={t('settings.agentConnectionDesc', { defaultValue: 'Choose which local Agent wakes Vibe Board and which child Agents are monitored.' })}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            <span style={{ color: 'var(--settings-text-secondary)', fontSize: 12 }}>
+              {hostAgent ?? t('settings.notConfigured', { defaultValue: 'Not configured' })}
+              {childAgents.length > 0 && ` · ${childAgents.length} ${t('settings.childAgents', { defaultValue: 'child' })}`}
+            </span>
+            <GlassButton variant="secondary" onClick={reopenSetupWizard} disabled={reconfiguring}>
+              {reconfiguring ? t('settings.opening', { defaultValue: 'Opening…' }) : t('settings.configure', { defaultValue: 'Configure' })}
+            </GlassButton>
+          </div>
+        </SettingRow>
+        {setupError && <div className="hook-error-card" role="alert">{setupError}</div>}
         <SettingRow label={t('settings.quitApp')}>
           <GlassButton variant="danger" onClick={() => quitApp()}>
             {t('tray.quit')}

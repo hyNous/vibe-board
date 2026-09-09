@@ -1,8 +1,14 @@
 use serde::Deserialize;
+use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
 fn themes_dir() -> PathBuf {
+    let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
+    home.join(".config").join("agent-island").join("themes")
+}
+
+fn legacy_themes_dir() -> PathBuf {
     let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
     home.join(".config").join("agentbro").join("themes")
 }
@@ -13,27 +19,34 @@ fn codex_pets_dir() -> PathBuf {
 }
 
 pub fn scan_themes() -> Vec<serde_json::Value> {
-    let dir = themes_dir();
-
     let mut themes = Vec::new();
-    if dir.exists() {
-        if let Ok(entries) = fs::read_dir(&dir) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if !path.is_dir() {
-                    continue;
-                }
-                let theme_json = path.join("theme.json");
-                if theme_json.exists() {
-                    if let Ok(content) = fs::read_to_string(&theme_json) {
-                        if let Ok(mut val) = serde_json::from_str::<serde_json::Value>(&content) {
-                            if let Some(obj) = val.as_object_mut() {
-                                obj.insert(
-                                    "_dir".to_string(),
-                                    serde_json::json!(path.to_string_lossy()),
-                                );
+    let mut seen_names = HashSet::new();
+    for dir in [themes_dir(), legacy_themes_dir()] {
+        if dir.exists() {
+            if let Ok(entries) = fs::read_dir(&dir) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if !path.is_dir() {
+                        continue;
+                    }
+                    let theme_json = path.join("theme.json");
+                    if theme_json.exists() {
+                        if let Ok(content) = fs::read_to_string(&theme_json) {
+                            if let Ok(mut val) = serde_json::from_str::<serde_json::Value>(&content)
+                            {
+                                if let Some(name) = val.get("name").and_then(|v| v.as_str()) {
+                                    if !seen_names.insert(name.to_string()) {
+                                        continue;
+                                    }
+                                }
+                                if let Some(obj) = val.as_object_mut() {
+                                    obj.insert(
+                                        "_dir".to_string(),
+                                        serde_json::json!(path.to_string_lossy()),
+                                    );
+                                }
+                                themes.push(val);
                             }
-                            themes.push(val);
                         }
                     }
                 }
@@ -51,14 +64,15 @@ pub fn get_theme_bundle(name: &str) -> Option<serde_json::Value> {
         return codex_pet_theme_from_dir(&dir);
     }
 
-    let dir = themes_dir().join(name);
-    let theme_json = dir.join("theme.json");
-    if !theme_json.exists() {
-        return None;
-    }
-
-    let content = fs::read_to_string(&theme_json).ok()?;
-    let mut val: serde_json::Value = serde_json::from_str(&content).ok()?;
+    let (dir, mut val) = [themes_dir(), legacy_themes_dir()]
+        .into_iter()
+        .map(|base| base.join(name))
+        .find_map(|dir| {
+            let theme_json = dir.join("theme.json");
+            let content = fs::read_to_string(theme_json).ok()?;
+            let val = serde_json::from_str::<serde_json::Value>(&content).ok()?;
+            Some((dir, val))
+        })?;
 
     if let Some(obj) = val.as_object_mut() {
         if let Some(character) = obj.get("character").cloned() {

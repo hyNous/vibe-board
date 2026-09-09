@@ -438,13 +438,13 @@ export function selectReleaseDownloadAsset(
   platform: UpdateDownloadPlatform,
 ): GitHubRelease['assets'][number] | undefined {
   if (platform === 'windows') {
-    return assets.find((asset) => asset.name === 'Agent Island_latest_x64-setup.exe')
-      ?? assets.find((asset) => asset.name === 'Agent Island_latest_x64.msi')
+    return assets.find((asset) => asset.name === 'Vibe Board_latest_x64-setup.exe')
+      ?? assets.find((asset) => asset.name === 'Vibe Board_latest_x64.msi')
       ?? assets.find((asset) => asset.name.endsWith('_x64-setup.exe'))
       ?? assets.find((asset) => asset.name.endsWith('_x64.msi'))
   }
 
-  return assets.find((asset) => asset.name === 'Agent Island_latest_universal.dmg')
+  return assets.find((asset) => asset.name === 'Vibe Board_latest_universal.dmg')
     ?? assets.find((asset) => asset.name.endsWith('_universal.dmg'))
 }
 

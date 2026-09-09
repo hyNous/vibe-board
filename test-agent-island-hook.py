@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Comprehensive test for Agent Island hook event pipeline.
+Comprehensive test for Vibe Board hook event pipeline.
 
 Simulates a full Claude Code session lifecycle by sending events directly
 to the HookServer Unix socket (or TCP fallback). This tests the path:
@@ -42,7 +42,7 @@ class Colors:
 
 
 def connect(use_tcp=False):
-    """Connect to Agent Island server."""
+    """Connect to Vibe Board server."""
     if not use_tcp:
         try:
             sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -109,7 +109,7 @@ def send_event(event_data, use_tcp=False, wait_response=False):
 
 def test_full_session(use_tcp=False):
     """Simulate a complete Claude Code session lifecycle."""
-    print(f"{Colors.BOLD}=== Agent Island Full Session Test ==={Colors.RESET}")
+    print(f"{Colors.BOLD}=== Vibe Board Full Session Test ==={Colors.RESET}")
     print(f"Socket: {Colors.DIM}{UNIX_SOCKET_PATH}{Colors.RESET}")
     print(f"TCP:    {Colors.DIM}{TCP_HOST}:{TCP_PORT}{Colors.RESET}")
     print(f"Session: {Colors.CYAN}{SESSION_ID}{Colors.RESET}")
@@ -380,9 +380,9 @@ def test_full_session(use_tcp=False):
 
     if failed == 0:
         print(f"{Colors.GREEN}All events delivered successfully!{Colors.RESET}")
-        print(f"Check the Agent Island notch panel for session state changes.")
+        print(f"Check the Vibe Board notch panel for session state changes.")
     else:
-        print(f"{Colors.RED}Some events failed. Is Agent Island running?{Colors.RESET}")
+        print(f"{Colors.RED}Some events failed. Is Vibe Board running?{Colors.RESET}")
         print(f"The app must be running to accept socket connections.")
 
     return failed == 0
@@ -424,7 +424,7 @@ def test_quick(use_tcp=False):
     if all_ok:
         print(f"{Colors.GREEN}Smoke test passed!{Colors.RESET}")
     else:
-        print(f"{Colors.RED}Smoke test failed. Is Agent Island running?{Colors.RESET}")
+        print(f"{Colors.RED}Smoke test failed. Is Vibe Board running?{Colors.RESET}")
     return all_ok
 
 
@@ -454,7 +454,7 @@ def test_permission(use_tcp=False):
 
     # Send permission request (this will BLOCK until UI responds)
     print("3. Sending PermissionRequest (waiting for UI decision)...")
-    print(f"   {Colors.YELLOW}Approve or deny in the Agent Island UI...{Colors.RESET}")
+    print(f"   {Colors.YELLOW}Approve or deny in the Vibe Board UI...{Colors.RESET}")
     ok, response = send_event({
         "agent": "claude-code", "event": "PermissionRequest",
         "session_id": SESSION_ID, "cwd": CWD,
@@ -502,7 +502,7 @@ def test_question(use_tcp=False):
     time.sleep(0.3)
 
     print("2. Sending AskQuestion (waiting for UI answer)...")
-    print(f"   {Colors.YELLOW}Answer in the Agent Island UI...{Colors.RESET}")
+    print(f"   {Colors.YELLOW}Answer in the Vibe Board UI...{Colors.RESET}")
     ok, response = send_event({
         "agent": "claude-code",
         "event": "AskQuestion",
@@ -566,7 +566,7 @@ def test_plan(use_tcp=False):
     time.sleep(0.3)
 
     print("2. Sending PlanApproval (waiting for UI decision)...")
-    print(f"   {Colors.YELLOW}Choose Manual / Accept Edits / Auto in Agent Island...{Colors.RESET}")
+    print(f"   {Colors.YELLOW}Choose Manual / Accept Edits / Auto in Vibe Board...{Colors.RESET}")
     ok, response = send_event({
         "agent": "claude-code",
         "event": "PlanApproval",
@@ -668,7 +668,7 @@ def test_multi_session(use_tcp=False):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Agent Island Hook Test")
+    parser = argparse.ArgumentParser(description="Vibe Board Hook Test")
     parser.add_argument("--quick", action="store_true", help="Quick 3-event smoke test")
     parser.add_argument("--permission", action="store_true", help="Test permission request flow")
     parser.add_argument("--question", action="store_true", help="Test AskQuestion flow")
@@ -680,13 +680,13 @@ def main():
     # Check connectivity first
     sock, transport = connect(args.tcp)
     if not sock:
-        print(f"{Colors.RED}Cannot connect to Agent Island.{Colors.RESET}")
+        print(f"{Colors.RED}Cannot connect to Vibe Board.{Colors.RESET}")
         print(f"Make sure the app is running and listening on:")
         print(f"  Unix: {UNIX_SOCKET_PATH}")
         print(f"  TCP:  {TCP_HOST}:{TCP_PORT}")
         sys.exit(1)
     sock.close()
-    print(f"{Colors.GREEN}Connected to Agent Island via {transport}{Colors.RESET}")
+    print(f"{Colors.GREEN}Connected to Vibe Board via {transport}{Colors.RESET}")
     print()
 
     if args.quick:

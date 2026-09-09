@@ -1,11 +1,11 @@
 #!/bin/bash
 set -euo pipefail
 
-APP_NAME="${APP_NAME:-Agent Island}"
+APP_NAME="${APP_NAME:-Vibe Board}"
 BUNDLE_ID="${BUNDLE_ID:-com.agentisland.desktop}"
 BUILD_DIR="src-tauri/target"
 DIST_DIR="dist"
-DMG_NAME="${DMG_NAME:-Agent Island.dmg}"
+DMG_NAME="${DMG_NAME:-Vibe Board.dmg}"
 APP_VERSION="${APP_VERSION:-$(node -e "console.log(JSON.parse(require('fs').readFileSync('src-tauri/tauri.conf.json', 'utf8')).version)" 2>/dev/null || echo "0.0.0")}"
 UPDATE_ARCHIVE_NAME="${UPDATE_ARCHIVE_NAME:-$APP_NAME.app.tar.gz}"
 UPDATE_MANIFEST_NAME="${UPDATE_MANIFEST_NAME:-latest.json}"

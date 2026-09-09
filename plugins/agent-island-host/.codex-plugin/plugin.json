@@ -1,0 +1,19 @@
+{
+  "name": "agent-island-host",
+  "version": "1.0.0",
+  "description": "Starts Vibe Board from a Codex session, marks Codex as the primary usage host, and exposes the shared Skill center.",
+  "author": {
+    "name": "Vibe Board"
+  },
+  "license": "Apache-2.0",
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Vibe Board",
+    "shortDescription": "Shared Skill center and desktop notch for Codex.",
+    "longDescription": "Connects Codex sessions to the Vibe Board desktop overlay and its shared Skill center.",
+    "developerName": "Vibe Board",
+    "category": "Productivity",
+    "capabilities": ["Shared Skills", "Desktop overlay"],
+    "defaultPrompt": ["Open Vibe Board settings."]
+  }
+}

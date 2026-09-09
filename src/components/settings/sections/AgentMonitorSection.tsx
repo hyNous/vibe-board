@@ -60,7 +60,7 @@ const DEFAULT_NETWORK_STATUS: NetworkMonitorStatus = {
 
 const DEFAULT_WRAPPER_STATUS: ClaudeWrapperStatus = {
   installed: false,
-  shimPath: '~/.agentbro/bin/claude',
+  shimPath: '~/.agent-island/bin/claude',
   pathHintInstalled: false,
   shellConfigPath: '~/.zshrc',
 }
@@ -339,6 +339,8 @@ function summaryFromSession(session: SessionState): MonitorSessionSummary {
   }
 }
 
+const LIVE_TASK_PHASES = new Set(['processing', 'compacting', 'waiting_approval', 'waiting_input'])
+
 function formatTime(timestampMs?: number | null) {
   if (!timestampMs) return '-'
   return new Date(timestampMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
@@ -515,6 +517,7 @@ function cacheHitRate(stats: RequestStats) {
 
 export function AgentMonitorSection({ activeView = 'sessions' }: AgentMonitorSectionProps) {
   const liveSessions = useSessionStore(selectSessionList)
+  const codexAppServerLive = useSessionStore((state) => state.codexAppServerLive)
   const sessionRefreshIntervalSeconds = useConfigStore((state) => state.sessionRefreshIntervalSeconds)
   const [sessions, setSessions] = useState<MonitorSessionSummary[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -579,6 +582,9 @@ export function AgentMonitorSection({ activeView = 'sessions' }: AgentMonitorSec
     if (taskFilter === 'failed') return tasks.filter(isTaskFailed)
     return tasks
   }, [taskFilter, tasks])
+  const liveTaskSessions = useMemo(() => sessions
+    .filter((session) => LIVE_TASK_PHASES.has(session.phase))
+    .sort((a, b) => Number(b.waitingUser) - Number(a.waitingUser) || b.startedAt - a.startedAt), [sessions])
   const selectedTaskMetrics = selectedRunItem ? taskMetrics(selectedRunItem.task) : null
 
   const loadTasks = useCallback(async (showSpinner = false) => {
@@ -624,7 +630,10 @@ export function AgentMonitorSection({ activeView = 'sessions' }: AgentMonitorSec
     setError('')
     try {
       const remoteSessions = await getMonitorSessions()
-      const nextSessions = remoteSessions.length > 0 ? remoteSessions : liveSessions.map(summaryFromSession)
+      const nextSessions = Array.from(new Map(
+        [...remoteSessions, ...liveSessions.map(summaryFromSession)]
+          .map((session) => [session.id, session] as const),
+      ).values())
       setSessions(nextSessions)
       setSelectedId((current) => {
         if (current && nextSessions.some((session) => session.id === current)) return current
@@ -678,9 +687,10 @@ export function AgentMonitorSection({ activeView = 'sessions' }: AgentMonitorSec
 
   useEffect(() => {
     if (activeView === 'tasks') {
-      loadTasks(true)
+      void loadSessions(true)
+      void loadTasks(true)
     } else {
-      loadSessions(true)
+      void loadSessions(true)
     }
   }, [activeView, loadSessions, loadTasks])
 
@@ -692,10 +702,12 @@ export function AgentMonitorSection({ activeView = 'sessions' }: AgentMonitorSec
   }, [loadNetworkRequests, loadNetworkStatus, loadWrapperStatus])
 
   useEffect(() => {
-    if (activeView === 'tasks') return
-    const timer = window.setInterval(() => loadSessions(false), sessionRefreshIntervalMs)
+    const timer = window.setInterval(() => {
+      void loadSessions(false)
+      if (activeView === 'tasks') void loadTasks(false)
+    }, activeView === 'tasks' ? configuredRefreshMs : sessionRefreshIntervalMs)
     return () => window.clearInterval(timer)
-  }, [activeView, loadSessions, sessionRefreshIntervalMs])
+  }, [activeView, configuredRefreshMs, loadSessions, loadTasks, sessionRefreshIntervalMs])
 
   useEffect(() => {
     if (!networkStatus.enabled) return
@@ -898,7 +910,7 @@ export function AgentMonitorSection({ activeView = 'sessions' }: AgentMonitorSec
         <div>
           <strong>Claude 命令无感接入</strong>
           <span>
-            安装一次后，新开的 iTerm、Terminal、Cursor/VS Code 终端里继续输入 claude，会先进入 Agent Island inspector，再启动真实 Claude。只注入进程级环境变量，不覆盖 Claude settings 或 hooks。
+            安装一次后，新开的 iTerm、Terminal、Cursor/VS Code 终端里继续输入 claude，会先进入 Vibe Board inspector，再启动真实 Claude。只注入进程级环境变量，不覆盖 Claude settings 或 hooks。
           </span>
           <code>{wrapperStatus.shimPath}</code>
           <em>{wrapperStatus.pathHintInstalled ? `PATH 已写入 ${wrapperStatus.shellConfigPath} · hooks preserved` : `PATH 尚未写入 ${wrapperStatus.shellConfigPath}`}</em>
@@ -1092,7 +1104,7 @@ export function AgentMonitorSection({ activeView = 'sessions' }: AgentMonitorSec
         <header className="agent-monitor__header">
           <div>
             <h2>Tasks</h2>
-            <p>持久化任务链路，查看 Codex 与嵌套子 Agent 的执行层级与事件追踪。</p>
+            <p>上方实时任务来自当前 Agent session；下方 Task Trace 用于持久化链路与事件追踪，两者分开统计。Codex app-server：{codexAppServerLive ? '已连接' : '未连接'}。</p>
           </div>
           <div className="agent-monitor__header-actions">
             <button
@@ -1107,7 +1119,10 @@ export function AgentMonitorSection({ activeView = 'sessions' }: AgentMonitorSec
             <button
               type="button"
               className="agent-monitor__refresh"
-              onClick={() => loadTasks(true)}
+              onClick={() => {
+                void loadSessions(true)
+                void loadTasks(true)
+              }}
             >
               重新加载
             </button>
@@ -1116,6 +1131,48 @@ export function AgentMonitorSection({ activeView = 'sessions' }: AgentMonitorSec
 
         {demoNotice && <div className="agent-monitor__notice agent-monitor__notice--success">{demoNotice}</div>}
         {tasksError && <div className="agent-monitor__notice">{tasksError}</div>}
+
+        <section className="agent-monitor__live-tasks" data-testid="live-task-list" aria-label="当前实时任务">
+          <div className="agent-monitor__live-tasks-header">
+            <div>
+              <h3>当前实时任务 <em>{liveTaskSessions.length}</em></h3>
+              <p>宿主和其他 Agent 的独立 session 都会显示；嵌套 subagent 计入宿主的子任务数，不重复计数。</p>
+            </div>
+            <span>{codexAppServerLive ? 'Codex 已连接' : 'Codex 未连接'} · {sessions.length} 个已同步会话</span>
+          </div>
+          {loading && sessions.length === 0 ? (
+            <div className="agent-monitor__empty">正在同步当前 Agent 会话...</div>
+          ) : liveTaskSessions.length === 0 ? (
+            <div className="agent-monitor__empty">
+              {codexAppServerLive
+                ? `当前没有正在运行或等待中的任务（已同步 ${sessions.length} 个会话）。`
+                : '当前没有可用的 Codex 实时同步连接。若 Codex 正在处理，请先在设置 → 通用完成宿主/Hook 配置并重启 Vibe Board。'}
+            </div>
+          ) : (
+            <div className="agent-monitor__live-task-list">
+              {liveTaskSessions.map((session) => (
+                <article key={session.id} className="agent-monitor__live-task-row" data-testid={`live-task-${session.id}`}>
+                  <span className="agent-monitor__live-task-agent">{agentLabel(session.agentType, session.engineLabel)}</span>
+                  <div className="agent-monitor__live-task-main">
+                    <strong>{session.title || session.project || 'Unknown'}</strong>
+                    <code title={session.id}>{session.id}</code>
+                  </div>
+                  <span className="agent-monitor__live-task-state">{phaseLabel(session.phase)}</span>
+                  <span className="agent-monitor__live-task-meta">
+                    {formatDurationShort(session.duration)} · {formatTokens(session.tokenTotal)} tok · {session.subagentCount} sub
+                  </span>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <div className="agent-monitor__task-trace-heading">
+          <div>
+            <h3>持久化 Task Trace</h3>
+            <p>这里的数量包含历史/演示 Trace，不代表当前正在运行的 session 数量。</p>
+          </div>
+        </div>
 
         <div className="agent-monitor__task-filters" role="tablist" aria-label="Task status">
           {([

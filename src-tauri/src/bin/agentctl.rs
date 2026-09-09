@@ -1,3 +1,8 @@
+// Keep the standalone helper from opening a transient console when launched
+// by the desktop app or an installer. When invoked from an existing terminal,
+// inherited standard handles still receive its output.
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 use std::env;
 use std::sync::Arc;
 

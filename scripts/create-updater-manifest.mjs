@@ -42,7 +42,7 @@ const pubDate = new Date().toISOString()
 
 const manifest = {
   version: VERSION,
-  notes: RELEASE_NOTES || `Agent Island ${VERSION}`,
+  notes: RELEASE_NOTES || `Vibe Board ${VERSION}`,
   pub_date: pubDate,
   platforms: {
     'darwin-aarch64': {

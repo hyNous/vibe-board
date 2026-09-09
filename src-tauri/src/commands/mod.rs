@@ -10,8 +10,8 @@ use crate::energy::{self, EnergyMode};
 use crate::hook_endpoint;
 use crate::hooks::conversation_parser::{
     all_projects_dirs, discover_codex_session_file, discover_session_file_in_dirs,
-    extract_subagents_from_transcript, ChatRole, MessageBlock, ParsedMessage,
-    TranscriptSubagentInfo,
+    extract_latest_assistant_text, extract_session_title, extract_subagents_from_transcript,
+    ChatRole, MessageBlock, ParsedMessage, TranscriptSubagentInfo,
 };
 use crate::hooks::diagnostics::DiagnosticRingBuffer;
 use crate::hooks::file_watcher::ConversationWatcher;
@@ -261,6 +261,10 @@ enum CodexAppServerOutgoingRequest {
 
 #[tauri::command]
 pub async fn get_sessions(state: State<'_, AppState>) -> Result<Vec<SessionState>, String> {
+    // Codex Desktop writes its live rollout directly to ~/.codex/sessions but
+    // does not reliably invoke Vibe Board's CLI hook. Refresh that local
+    // source before returning the snapshot used by the panel.
+    sync_local_codex_rollouts_to_store(&state.session_store);
     let sessions = state.session_store.get_all_sessions();
     for session in &sessions {
         hydrate_subagents_for_session(&state.session_store, session);
@@ -283,8 +287,7 @@ pub async fn get_usage_rate_limits(
         let is_newer = latest
             .as_ref()
             .map(|current| {
-                rate_limits.updated_at.unwrap_or_default()
-                    > current.updated_at.unwrap_or_default()
+                rate_limits.updated_at.unwrap_or_default() > current.updated_at.unwrap_or_default()
             })
             .unwrap_or(true);
         if is_newer {
@@ -295,9 +298,7 @@ pub async fn get_usage_rate_limits(
 }
 
 #[tauri::command]
-pub async fn get_usage_snapshots(
-    state: State<'_, AppState>,
-) -> Result<Vec<RateLimitInfo>, String> {
+pub async fn get_usage_snapshots(state: State<'_, AppState>) -> Result<Vec<RateLimitInfo>, String> {
     if !state.config_store.get().usage_query_enabled {
         return Ok(Vec::new());
     }
@@ -313,9 +314,7 @@ pub async fn get_usage_snapshots(
             .iter_mut()
             .find(|current| current.provider.as_deref() == Some(provider))
         {
-            if rate_limits.updated_at.unwrap_or_default()
-                > current.updated_at.unwrap_or_default()
-            {
+            if rate_limits.updated_at.unwrap_or_default() > current.updated_at.unwrap_or_default() {
                 *current = rate_limits;
             }
         } else {
@@ -622,6 +621,7 @@ pub fn start_remote_codex_state_sync(
 pub struct UsageProviderStatus {
     provider: String,
     label: String,
+    primary: bool,
     enabled: bool,
     available: bool,
     catalog_supported: bool,
@@ -677,6 +677,7 @@ pub async fn get_agent_statuses(
             .or_insert_with(|| AgentStatusSnapshot {
                 agent: agent.to_string(),
                 label: label.to_string(),
+                primary: false,
                 online: false,
                 last_seen_at: 0,
                 last_completed_at: None,
@@ -732,6 +733,10 @@ pub async fn get_agent_statuses(
 
     let mut result = statuses.into_values().collect::<Vec<_>>();
     result.sort_by_key(|snapshot| tracked_agent_rank(&snapshot.agent));
+    let primary_host = crate::data_dir::usage_host();
+    for snapshot in &mut result {
+        snapshot.primary = primary_host.as_deref() == Some(snapshot.agent.as_str());
+    }
     state.session_store.persist_agent_status_snapshots(&result);
     Ok(result)
 }
@@ -785,6 +790,12 @@ pub async fn list_usage_providers(
     providers.push(opencode_usage_provider_status(enabled).await);
     providers.push(antigravity_usage_provider_status(enabled).await);
     providers.extend(catalog_unsupported_agent_usage_providers(enabled));
+
+    if let Some(primary) = crate::data_dir::usage_host() {
+        for provider in &mut providers {
+            provider.primary = provider.provider == primary;
+        }
+    }
     Ok(providers)
 }
 
@@ -895,6 +906,7 @@ async fn codex_usage_provider_status(enabled: bool, allow_live: bool) -> UsagePr
     UsageProviderStatus {
         provider: "codex".to_string(),
         label: "Codex".to_string(),
+        primary: false,
         enabled,
         available: snapshot.is_some(),
         catalog_supported: true,
@@ -928,6 +940,7 @@ fn claude_usage_provider_status(enabled: bool) -> UsageProviderStatus {
     UsageProviderStatus {
         provider: "claude-code".to_string(),
         label: "Claude Code".to_string(),
+        primary: false,
         enabled,
         available: snapshot.is_some(),
         catalog_supported: true,
@@ -974,7 +987,7 @@ fn catalog_supported_agent_usage_providers(enabled: bool) -> Vec<UsageProviderSt
             true,
             "available",
             source,
-            &format!("{source_name} has a known usage strategy; Agent Island usage reader is not wired yet."),
+            &format!("{source_name} has a known usage strategy; Vibe Board usage reader is not wired yet."),
             "unknown",
             auth_path,
             can_authorize,
@@ -1006,6 +1019,7 @@ async fn opencode_usage_provider_status(enabled: bool) -> UsageProviderStatus {
     UsageProviderStatus {
         provider: "opencode".to_string(),
         label: "OpenCode Go".to_string(),
+        primary: false,
         enabled,
         available: snapshot.is_some(),
         catalog_supported: true,
@@ -1045,6 +1059,7 @@ async fn antigravity_usage_provider_status(enabled: bool) -> UsageProviderStatus
     UsageProviderStatus {
         provider: "antigravity".to_string(),
         label: "Antigravity".to_string(),
+        primary: false,
         enabled,
         available: snapshot.is_some(),
         catalog_supported: true,
@@ -1057,7 +1072,12 @@ async fn antigravity_usage_provider_status(enabled: bool) -> UsageProviderStatus
         } else {
             "Antigravity CLI (agy) was not found.".to_string()
         },
-        auth_status: if snapshot.is_some() { "authorized" } else { "unknown" }.to_string(),
+        auth_status: if snapshot.is_some() {
+            "authorized"
+        } else {
+            "unknown"
+        }
+        .to_string(),
         auth_path: None,
         can_authorize: false,
         updated_at: snapshot
@@ -1116,6 +1136,7 @@ fn known_provider_status(
     UsageProviderStatus {
         provider: provider.to_string(),
         label: label.to_string(),
+        primary: false,
         enabled,
         available: false,
         catalog_supported,
@@ -1212,7 +1233,14 @@ async fn fetch_antigravity_usage_rate_limits() -> Option<UsageRateLimitSnapshot>
     let binary = find_antigravity_binary()?;
     let mut command = crate::platform::process::background_tokio_command(binary);
     command
-        .args(["--print", "/usage", "--output-format", "json", "--mode", "plan"])
+        .args([
+            "--print",
+            "/usage",
+            "--output-format",
+            "json",
+            "--mode",
+            "plan",
+        ])
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
@@ -1241,7 +1269,10 @@ fn parse_antigravity_usage_payload(
     let mut legacy_seven_day: Option<(f64, String)> = None;
 
     for (group_index, group) in groups.iter().enumerate() {
-        let group_name = group.get("name").and_then(|value| value.as_str()).unwrap_or("");
+        let group_name = group
+            .get("name")
+            .and_then(|value| value.as_str())
+            .unwrap_or("");
         let group_label = antigravity_group_label(group_name);
         let Some(buckets) = group.get("buckets").and_then(|value| value.as_array()) else {
             continue;
@@ -1288,10 +1319,8 @@ fn parse_antigravity_usage_payload(
     if windows.is_empty() {
         return None;
     }
-    let (five_hour_usage, five_hour_remaining) =
-        legacy_five_hour.unwrap_or((0.0, String::new()));
-    let (seven_day_usage, seven_day_remaining) =
-        legacy_seven_day.unwrap_or((0.0, String::new()));
+    let (five_hour_usage, five_hour_remaining) = legacy_five_hour.unwrap_or((0.0, String::new()));
+    let (seven_day_usage, seven_day_remaining) = legacy_seven_day.unwrap_or((0.0, String::new()));
     Some(UsageRateLimitSnapshot {
         rate_limits: RateLimitInfo {
             five_hour_usage,
@@ -1583,7 +1612,7 @@ async fn codex_rate_limits_via_stdio(binary: &str) -> Option<UsageRateLimitSnaps
                 "method": "initialize",
                 "params": {
                     "clientInfo": {
-                        "name": "Agent Island",
+                        "name": "Vibe Board",
                         "version": env!("CARGO_PKG_VERSION")
                     }
                 }
@@ -1707,7 +1736,7 @@ async fn initialize_codex_app_server_ws(
             "method": "initialize",
             "params": {
                 "clientInfo": {
-                    "name": "Agent Island",
+                    "name": "Vibe Board",
                     "version": env!("CARGO_PKG_VERSION")
                 }
             }
@@ -1840,7 +1869,19 @@ async fn send_codex_app_server_thread_list_request(
             "params": {
                 "archived": false,
                 "limit": 30,
-                "sortKey": "updated_at"
+                "sortKey": "updated_at",
+                "sourceKinds": [
+                    "cli",
+                    "vscode",
+                    "appServer",
+                    "subAgent",
+                    "subAgentReview",
+                    "subAgentCompact",
+                    "subAgentThreadSpawn",
+                    "subAgentOther",
+                    "exec",
+                    "unknown"
+                ]
             }
         }),
     )
@@ -2875,6 +2916,203 @@ fn load_codex_usage_rate_limits_from_jsonl() -> Option<UsageRateLimitSnapshot> {
     best
 }
 
+const CODEX_LOCAL_ROLLOUT_MAX_FILES: usize = 40;
+const CODEX_LOCAL_ROLLOUT_MAX_AGE_SECONDS: i64 = 30 * 60;
+
+#[derive(Debug, Default, PartialEq, Eq)]
+struct LocalCodexRolloutState {
+    session_id: Option<String>,
+    cwd: Option<String>,
+    active: bool,
+    saw_task_event: bool,
+    started_at: Option<i64>,
+    updated_at: Option<i64>,
+    last_response: Option<String>,
+}
+
+/// Recover the host Codex Desktop turn state from its rollout file.
+///
+/// Codex Desktop currently writes these lifecycle events even when it does not
+/// execute the configured Vibe Board hook. The app-server bridge remains the
+/// richer source when it can see the same Codex home; this is the local fallback
+/// that makes the host's active turn visible in either case.
+fn read_local_codex_rollout_state(
+    path: &Path,
+    fallback_updated_at: i64,
+) -> Option<LocalCodexRolloutState> {
+    let file = fs::File::open(path).ok()?;
+    let mut state = LocalCodexRolloutState::default();
+
+    for line in StdBufReader::new(file).lines().map_while(Result::ok) {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let Ok(json) = serde_json::from_str::<serde_json::Value>(line) else {
+            continue;
+        };
+        let timestamp = codex_timestamp(json.get("timestamp"));
+        if let Some(timestamp) = timestamp {
+            state.updated_at = Some(timestamp);
+        }
+
+        match json.get("type").and_then(|value| value.as_str()) {
+            Some("session_meta") => {
+                let Some(payload) = json.get("payload") else {
+                    continue;
+                };
+                state.session_id =
+                    codex_string(payload, "session_id").or_else(|| codex_string(payload, "id"));
+                state.cwd = codex_string(payload, "cwd");
+            }
+            Some("event_msg") => {
+                let Some(payload) = json.get("payload") else {
+                    continue;
+                };
+                match codex_string(payload, "type").as_deref() {
+                    Some("task_started") => {
+                        state.active = true;
+                        state.saw_task_event = true;
+                        state.started_at = codex_timestamp(payload.get("started_at"))
+                            .or(timestamp)
+                            .or(state.started_at);
+                    }
+                    Some("task_complete") => {
+                        state.active = false;
+                        state.saw_task_event = true;
+                        if let Some(response) = codex_string(payload, "last_agent_message") {
+                            state.last_response = Some(response);
+                        }
+                    }
+                    Some("turn_aborted") | Some("turn_failed") => {
+                        state.active = false;
+                        state.saw_task_event = true;
+                    }
+                    _ => {}
+                }
+            }
+            _ => {}
+        }
+    }
+
+    state.updated_at = state.updated_at.or(Some(fallback_updated_at));
+    state
+        .session_id
+        .as_ref()
+        .filter(|value| !value.is_empty())?;
+    Some(state)
+}
+
+fn sync_local_codex_rollouts_to_store(store: &SessionStore) {
+    let Some(home) = dirs::home_dir() else {
+        return;
+    };
+    let mut candidates = Vec::new();
+    collect_codex_rollout_files(&home.join(".codex").join("sessions"), &mut candidates);
+    candidates.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| b.0.cmp(&a.0)));
+
+    let cutoff = chrono::Utc::now().timestamp() - CODEX_LOCAL_ROLLOUT_MAX_AGE_SECONDS;
+    for (path, modified_at) in candidates.into_iter().take(CODEX_LOCAL_ROLLOUT_MAX_FILES) {
+        let fallback_updated_at = modified_at
+            .duration_since(std::time::UNIX_EPOCH)
+            .ok()
+            .map(|value| value.as_secs() as i64)
+            .unwrap_or_default();
+        let Some(snapshot) = read_local_codex_rollout_state(&path, fallback_updated_at) else {
+            continue;
+        };
+        if !snapshot.saw_task_event || snapshot.updated_at.unwrap_or(fallback_updated_at) < cutoff {
+            continue;
+        }
+
+        let Some(session_id) = snapshot.session_id.clone() else {
+            continue;
+        };
+        let cwd = snapshot.cwd.clone().unwrap_or_else(|| "/".to_string());
+        let title = extract_session_title(&path);
+        let project = title
+            .clone()
+            .or_else(|| {
+                Path::new(&cwd)
+                    .file_name()
+                    .and_then(|value| value.to_str())
+                    .map(str::to_string)
+            })
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or_else(|| "Codex".to_string());
+        let phase = if snapshot.active {
+            SessionPhase::Processing
+        } else {
+            SessionPhase::Idle
+        };
+        let existing = store.get_session(&session_id);
+
+        // The app-server snapshot is authoritative when it already sees this
+        // thread. Local rollout sync only fills the Desktop/CLI visibility gap.
+        if existing
+            .as_ref()
+            .and_then(|session| session.engine_label.as_deref())
+            == Some("Codex App")
+        {
+            continue;
+        }
+
+        let updated_at = snapshot.updated_at.or(Some(fallback_updated_at));
+        let last_response = snapshot.last_response.clone().or_else(|| {
+            (!snapshot.active)
+                .then(|| extract_latest_assistant_text(&path))
+                .flatten()
+        });
+        let changed = existing
+            .as_ref()
+            .map(|session| {
+                session.phase != phase
+                    || session.cwd != cwd
+                    || session.project != project
+                    || session.session_title != title
+                    || session.last_main_agent_at != updated_at
+                    || last_response
+                        .as_ref()
+                        .is_some_and(|response| session.last_response.as_ref() != Some(response))
+            })
+            .unwrap_or(true);
+        if !changed {
+            continue;
+        }
+
+        store.get_or_create_session(&session_id, "codex", &project, &cwd, "Codex");
+        store.update_session(&session_id, |session| {
+            session.agent_type = "codex".to_string();
+            session.engine_label = Some("Codex Desktop".to_string());
+            session.codex_app_server_thread_id = Some(session_id.clone());
+            session.project = project.clone();
+            session.cwd = cwd.clone();
+            session.terminal = "Codex".to_string();
+            session.term_bundle_id = Some("com.openai.codex".to_string());
+            session.phase =
+                if session.pending_permission.is_some() || session.pending_plan.is_some() {
+                    SessionPhase::WaitingApproval
+                } else if session.pending_question.is_some() {
+                    SessionPhase::WaitingInput
+                } else {
+                    phase.clone()
+                };
+            session.session_title = title.clone();
+            session.description = title.clone();
+            if let Some(started_at) = snapshot.started_at {
+                session.started_at = started_at;
+            }
+            session.last_main_agent_at = updated_at;
+            if let Some(title) = title.clone() {
+                session.last_user_message = Some(title);
+            }
+            if let Some(response) = last_response.clone() {
+                session.last_response = Some(response);
+            }
+        });
+    }
+}
+
 fn collect_codex_rollout_files(
     root: &Path,
     candidates: &mut Vec<(PathBuf, std::time::SystemTime)>,
@@ -3490,7 +3728,7 @@ pub async fn respond_permission(
             #[cfg(target_os = "windows")]
             {
                 return Err(format!(
-                    "Hook response failed on Windows: {e}. Make sure the Agent Island hook TCP bridge is running, then retry from the island."
+                    "Hook response failed on Windows: {e}. Make sure the Vibe Board hook TCP bridge is running, then retry from the island."
                 ));
             }
             #[cfg(not(target_os = "windows"))]
@@ -3652,7 +3890,7 @@ fn codex_desktop_windows_message_error(app_server_error: Option<&str>) -> String
         .map(|error| format!(" Last app-server error: {error}"))
         .unwrap_or_default();
     format!(
-        "Codex Desktop replies on Windows require the Codex app-server bridge. Install a spawnable Codex CLI, enable background app-server sync in Agent Island, wait for the thread to sync, then try again.{detail}"
+        "Codex Desktop replies on Windows require the Codex app-server bridge. Install a spawnable Codex CLI, enable background app-server sync in Vibe Board, wait for the thread to sync, then try again.{detail}"
     )
 }
 
@@ -3874,7 +4112,7 @@ fn app_host_message_unsupported_error(session: &SessionState) -> Option<String> 
         && !is_qoder_app_session(session)
     {
         return Some(format!(
-            "{} sessions do not support Agent Island message injection yet. Open the app to continue.",
+            "{} sessions do not support Vibe Board message injection yet. Open the app to continue.",
             app_host_display_name(session)
         ));
     }
@@ -4790,7 +5028,7 @@ async fn submit_codex_request_user_input_output(
                 "method": "initialize",
                 "params": {
                     "clientInfo": {
-                        "name": "Agent Island",
+                        "name": "Vibe Board",
                         "version": env!("CARGO_PKG_VERSION")
                     }
                 }
@@ -4901,7 +5139,7 @@ pub async fn respond_auto_approve(
             #[cfg(target_os = "windows")]
             {
                 return Err(format!(
-                    "Auto-approve failed on Windows: {e}. Make sure the Agent Island hook TCP bridge is running, then retry."
+                    "Auto-approve failed on Windows: {e}. Make sure the Vibe Board hook TCP bridge is running, then retry."
                 ));
             }
 
@@ -5041,8 +5279,8 @@ pub async fn simulate_hook_event(
         "event": start_event,
         "session_id": sid,
         "cwd": cwd,
-        "tty": "Agent Island Hook Tester",
-        "terminal": "Agent Island Hook Tester",
+        "tty": "Vibe Board Hook Tester",
+        "terminal": "Vibe Board Hook Tester",
     });
 
     let processing_payload = |event: &str, message: &str| {
@@ -5051,8 +5289,8 @@ pub async fn simulate_hook_event(
             "event": event,
             "session_id": sid,
             "cwd": cwd,
-            "tty": "Agent Island Hook Tester",
-            "terminal": "Agent Island Hook Tester",
+            "tty": "Vibe Board Hook Tester",
+            "terminal": "Vibe Board Hook Tester",
             "prompt": message,
             "description": message,
         })
@@ -5064,8 +5302,8 @@ pub async fn simulate_hook_event(
             "event": event,
             "session_id": sid,
             "cwd": cwd,
-            "tty": "Agent Island Hook Tester",
-            "terminal": "Agent Island Hook Tester",
+            "tty": "Vibe Board Hook Tester",
+            "terminal": "Vibe Board Hook Tester",
             "description": message,
             "status": status_text,
             "tool": "Bash",
@@ -5085,8 +5323,8 @@ pub async fn simulate_hook_event(
             "event": event,
             "session_id": sid,
             "cwd": cwd,
-            "tty": "Agent Island Hook Tester",
-            "terminal": "Agent Island Hook Tester",
+            "tty": "Vibe Board Hook Tester",
+            "terminal": "Vibe Board Hook Tester",
             "description": message,
             "tool": "Bash",
             "tool_name": "Bash",
@@ -5106,8 +5344,8 @@ pub async fn simulate_hook_event(
             "event": event,
             "session_id": sid,
             "cwd": cwd,
-            "tty": "Agent Island Hook Tester",
-            "terminal": "Agent Island Hook Tester",
+            "tty": "Vibe Board Hook Tester",
+            "terminal": "Vibe Board Hook Tester",
             "message": message,
         })
     };
@@ -5118,8 +5356,8 @@ pub async fn simulate_hook_event(
             "event": event,
             "session_id": sid,
             "cwd": cwd,
-            "tty": "Agent Island Hook Tester",
-            "terminal": "Agent Island Hook Tester",
+            "tty": "Vibe Board Hook Tester",
+            "terminal": "Vibe Board Hook Tester",
             "summary": message,
             "message": message,
             "last_assistant_message": message,
@@ -5132,8 +5370,8 @@ pub async fn simulate_hook_event(
             "event": event,
             "session_id": sid,
             "cwd": cwd,
-            "tty": "Agent Island Hook Tester",
-            "terminal": "Agent Island Hook Tester",
+            "tty": "Vibe Board Hook Tester",
+            "terminal": "Vibe Board Hook Tester",
             "error": message,
             "message": message,
         })
@@ -5145,8 +5383,8 @@ pub async fn simulate_hook_event(
             "event": event,
             "session_id": sid,
             "cwd": cwd,
-            "tty": "Agent Island Hook Tester",
-            "terminal": "Agent Island Hook Tester",
+            "tty": "Vibe Board Hook Tester",
+            "terminal": "Vibe Board Hook Tester",
             "description": message,
             "message": message,
             "last_assistant_message": message,
@@ -5157,7 +5395,7 @@ pub async fn simulate_hook_event(
     };
 
     let test_message = format!(
-        "正在测试 {} 的 {} 事件：这是 Agent Island 生成的模拟 Hook payload。",
+        "正在测试 {} 的 {} 事件：这是 Vibe Board 生成的模拟 Hook payload。",
         agent, event_name
     );
 
@@ -5167,8 +5405,8 @@ pub async fn simulate_hook_event(
             "event": event_name,
             "session_id": sid,
             "cwd": format!("/Users/demo/{}-SessionStart-Hook", agent),
-            "tty": "Agent Island Hook Tester",
-            "terminal": "Agent Island Hook Tester",
+            "tty": "Vibe Board Hook Tester",
+            "terminal": "Vibe Board Hook Tester",
         })],
         "SessionEnd" => vec![
             session_start.clone(),
@@ -5988,10 +6226,10 @@ pub async fn run_hook_doctor(state: State<'_, AppState>) -> Result<HookDoctorRep
         }
         .to_string(),
         detail: if installed_hook_names.is_empty() {
-            "No adapter configs contain Agent Island hooks".to_string()
+            "No adapter configs contain Vibe Board hooks".to_string()
         } else {
             format!(
-                "{} adapter configs contain Agent Island hooks: {}",
+                "{} adapter configs contain Vibe Board hooks: {}",
                 installed_hook_names.len(),
                 installed_hook_names.join(", ")
             )
@@ -6256,6 +6494,35 @@ pub async fn update_config(
     if config.window_close_behavior != "exit" {
         config.window_close_behavior = "tray".to_string();
     }
+    if config.host_visibility_mode != "follow" {
+        config.host_visibility_mode = "independent".to_string();
+    }
+    if config.notch_position_mode == "custom" {
+        config.notch_position_mode = "top".to_string();
+        config.notch_vertical_offset = 0.0;
+    } else if !matches!(
+        config.notch_position_mode.as_str(),
+        "top" | "left" | "right"
+    ) {
+        config.notch_position_mode = "top".to_string();
+    }
+    if !config.notch_vertical_offset.is_finite() {
+        config.notch_vertical_offset = 0.0;
+    }
+    config.host_agent = config.host_agent.and_then(|agent| {
+        let agent = agent.trim().to_string();
+        (!agent.is_empty() && agent.len() <= 64).then_some(agent)
+    });
+    config.child_agents = config
+        .child_agents
+        .into_iter()
+        .map(|agent| agent.trim().to_string())
+        .filter(|agent| !agent.is_empty() && agent.len() <= 64)
+        .take(32)
+        .collect();
+    if let Some(host) = config.host_agent.as_deref() {
+        config.child_agents.retain(|agent| agent != host);
+    }
     config.codex_app_server_sync_configured = true;
     let previous = state.config_store.get();
     state.config_store.update(config.clone())?;
@@ -6360,11 +6627,30 @@ fn set_launch_at_login_state(enabled: bool) -> Result<(), String> {
 const WINDOWS_RUN_KEY: &str = r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run";
 
 #[cfg(target_os = "windows")]
-const WINDOWS_RUN_VALUE: &str = "Agent Island";
+const WINDOWS_RUN_VALUE: &str = "Vibe Board";
+
+#[cfg(target_os = "windows")]
+const LEGACY_WINDOWS_RUN_VALUE: &str = "Agent Island";
+
+#[cfg(target_os = "windows")]
+fn remove_legacy_windows_run_value() {
+    let _ = crate::platform::process::background_command(crate::agents::executable::command_path(
+        "reg",
+    ))
+    .args([
+        "delete",
+        WINDOWS_RUN_KEY,
+        "/v",
+        LEGACY_WINDOWS_RUN_VALUE,
+        "/f",
+    ])
+    .output();
+}
 
 #[cfg(target_os = "windows")]
 fn set_launch_at_login_state(enabled: bool) -> Result<(), String> {
     if enabled {
+        remove_legacy_windows_run_value();
         let exe = std::env::current_exe()
             .map_err(|err| format!("Unable to resolve current executable: {err}"))?;
         let command = format!("\"{}\"", exe.display());
@@ -6393,6 +6679,7 @@ fn set_launch_at_login_state(enabled: bool) -> Result<(), String> {
     .args(["delete", WINDOWS_RUN_KEY, "/v", WINDOWS_RUN_VALUE, "/f"])
     .output()
     .map_err(|err| format!("Failed to update Windows startup registry: {err}"))?;
+    remove_legacy_windows_run_value();
     if output.status.success() || !get_launch_at_login_state() {
         Ok(())
     } else {
@@ -6604,7 +6891,7 @@ pub async fn install_hooks(state: State<'_, AppState>, agent: String) -> Result<
         return Err(format!(
             "{} CLI not found. Searched process PATH, login shell PATH, \
              and common directories (homebrew, nvm, volta, mise, cargo). \
-             Confirm it is installed and try restarting Agent Island.",
+             Confirm it is installed and try restarting Vibe Board.",
             adapter.display_name()
         ));
     }
@@ -7351,10 +7638,12 @@ fn redact_env_values(value: &mut serde_json::Value) {
 
 /// Generate or retrieve an anonymous install ID stored in the config directory.
 fn get_or_create_install_id() -> String {
-    let id_path = dirs::config_dir()
-        .unwrap_or_else(std::env::temp_dir)
-        .join("agentbro")
-        .join("install_id");
+    let base = dirs::config_dir().unwrap_or_else(std::env::temp_dir);
+    let id_path = base.join("agent-island").join("install_id");
+    let legacy_path = base.join("agentbro").join("install_id");
+    if !id_path.exists() {
+        crate::data_dir::migrate_file(&legacy_path, &id_path);
+    }
     if let Ok(id) = std::fs::read_to_string(&id_path) {
         let trimmed = id.trim().to_string();
         if !trimmed.is_empty() {
@@ -7542,10 +7831,16 @@ fn collect_hooks_sections(adapters: &[Arc<dyn AgentAdapter>]) -> Vec<String> {
 
 /// Read recent log files from tauri-plugin-log's log directory.
 fn collect_log_files() -> Vec<(String, Vec<u8>)> {
-    let log_dir = dirs::data_local_dir()
+    let base = dirs::data_local_dir()
         .unwrap_or_else(|| PathBuf::from("/tmp"))
-        .join("agentbro")
-        .join("logs");
+        .join("agent-island");
+    let log_dir = if base.join("logs").is_dir() {
+        base.join("logs")
+    } else {
+        base.parent()
+            .map(|parent| parent.join("agentbro").join("logs"))
+            .unwrap_or_else(|| base.join("logs"))
+    };
     let mut files = Vec::new();
     if let Ok(entries) = std::fs::read_dir(&log_dir) {
         let mut entries: Vec<_> = entries.filter_map(|e| e.ok()).collect();
@@ -7574,16 +7869,21 @@ fn collect_log_files() -> Vec<(String, Vec<u8>)> {
 fn bridge_invocations_path() -> PathBuf {
     let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("/tmp"));
     let new_path = home
-        .join(".agentbro")
+        .join(".agent-island")
         .join("hooks")
         .join("invocations.jsonl");
     if new_path.exists() {
         return new_path;
     }
     // Fall back to legacy path for reading
-    let old_path = home.join(".agentbro").join("hook-invocations.jsonl");
-    if old_path.exists() {
-        return old_path;
+    let legacy_root = crate::data_dir::legacy_agentbro_home();
+    for old_path in [
+        legacy_root.join("hooks").join("invocations.jsonl"),
+        legacy_root.join("hook-invocations.jsonl"),
+    ] {
+        if old_path.exists() {
+            return old_path;
+        }
     }
     new_path
 }
@@ -7604,7 +7904,7 @@ fn recent_bridge_invocations(limit: usize) -> Vec<String> {
     lines
 }
 
-/// Collect crash reports matching Agent Island or legacy AgentBro from the system DiagnosticReports dir.
+/// Collect crash reports matching Vibe Board or legacy AgentBro from the system DiagnosticReports dir.
 fn collect_crash_reports() -> Vec<(String, Vec<u8>)> {
     let crash_dir = PathBuf::from("/Library/Logs/DiagnosticReports");
     let user_crash_dir = dirs::home_dir()
@@ -7616,7 +7916,7 @@ fn collect_crash_reports() -> Vec<(String, Vec<u8>)> {
             for entry in entries.filter_map(|e| e.ok()) {
                 let path = entry.path();
                 let name = path.file_name().unwrap_or_default().to_string_lossy();
-                if name.contains("Agent Island")
+                if name.contains("Vibe Board")
                     || name.contains("AgentBro")
                     || name.contains("agentbro")
                 {
@@ -7649,7 +7949,7 @@ pub async fn export_diagnostics(
     let mut md = String::new();
 
     // Header
-    md.push_str("# Agent Island Diagnostic Report\n\n");
+    md.push_str("# Vibe Board Diagnostic Report\n\n");
     md.push_str("| Field | Value |\n|---|---|\n");
     md.push_str(&format!("| Generated | {} |\n", timestamp));
     md.push_str(&format!("| Version | {} |\n", env!("CARGO_PKG_VERSION")));
@@ -7956,11 +8256,11 @@ mod tests {
         codex_phase_from_thread, codex_request_user_input_output, codex_token_counts_from_line,
         codex_turn_steer_payload, fallback_terminal_app_name, handle_codex_app_server_request,
         is_codex_desktop_session, is_ide_terminal_session, is_uuid_like,
-        load_codex_token_usage_summary_from_root, parse_opencode_usage_payload,
-        parse_antigravity_usage_payload,
-        parse_subagent_chat_history_for_session, qoder_app_send_message_script,
-        read_codex_session_meta_from_path, redact_sensitive_hook_config,
-        remote_session_chat_history, resolve_session_tty, sync_codex_app_server_thread_to_store,
+        load_codex_token_usage_summary_from_root, parse_antigravity_usage_payload,
+        parse_opencode_usage_payload, parse_subagent_chat_history_for_session,
+        qoder_app_send_message_script, read_codex_session_meta_from_path,
+        read_local_codex_rollout_state, redact_sensitive_hook_config, remote_session_chat_history,
+        resolve_session_tty, sync_codex_app_server_thread_to_store,
         sync_remote_codex_thread_to_store, terminal_hint_for_fallback, CodexAppServerPendingKind,
         CodexAppServerPendingRequest, CODEX_TOKEN_SOURCE_LABEL,
     };
@@ -8043,10 +8343,16 @@ mod tests {
         )
         .expect("valid Antigravity /usage payload");
 
-        assert_eq!(snapshot.rate_limits.provider.as_deref(), Some("antigravity"));
+        assert_eq!(
+            snapshot.rate_limits.provider.as_deref(),
+            Some("antigravity")
+        );
         assert_eq!(snapshot.rate_limits.windows.len(), 4);
         assert_eq!(snapshot.rate_limits.windows[0].title, "Gemini 7d");
-        assert_eq!(snapshot.rate_limits.windows[1].remaining_percent, Some(77.0));
+        assert_eq!(
+            snapshot.rate_limits.windows[1].remaining_percent,
+            Some(77.0)
+        );
         assert_eq!(snapshot.rate_limits.windows[2].title, "Claude/GPT 7d");
         assert_eq!(snapshot.rate_limits.windows[3].used_percent, 0.0);
         assert_eq!(snapshot.rate_limits.five_hour_usage, 23.0);
@@ -8063,6 +8369,34 @@ mod tests {
         });
 
         assert_eq!(codex_phase_from_thread(&thread), SessionPhase::WaitingInput);
+    }
+
+    #[test]
+    fn local_codex_rollout_state_tracks_latest_task_lifecycle() {
+        let path = std::env::temp_dir().join(format!(
+            "vibe-board-codex-rollout-{}-{}.jsonl",
+            std::process::id(),
+            chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
+        ));
+        fs::write(
+            &path,
+            r#"{"type":"session_meta","payload":{"session_id":"desktop-thread","cwd":"C:\\work"}}
+{"timestamp":"2026-09-08T00:00:00Z","type":"event_msg","payload":{"type":"task_started","started_at":1788825600}}
+{"timestamp":"2026-09-08T00:00:01Z","type":"event_msg","payload":{"type":"task_complete","last_agent_message":"done"}}
+{"timestamp":"2026-09-08T00:01:00Z","type":"event_msg","payload":{"type":"task_started","started_at":1788825660}}
+"#,
+        )
+        .expect("write rollout fixture");
+
+        let state = read_local_codex_rollout_state(&path, 0).expect("parse rollout fixture");
+        assert_eq!(state.session_id.as_deref(), Some("desktop-thread"));
+        assert_eq!(state.cwd.as_deref(), Some("C:\\work"));
+        assert!(state.active);
+        assert!(state.saw_task_event);
+        assert_eq!(state.started_at, Some(1788825660));
+        assert_eq!(state.updated_at, Some(1788825660));
+
+        let _ = fs::remove_file(path);
     }
 
     #[test]

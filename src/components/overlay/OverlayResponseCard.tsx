@@ -18,15 +18,12 @@ interface OverlayResponseCardProps {
 export function OverlayResponseCard({ overlay, session, onJumpToTerminal, onShowSessions, onDismiss, onDraftStateChange, sessionCount }: OverlayResponseCardProps) {
   const { t } = useTranslation()
   const data = overlay.data as { responseText: string; userMessage?: string }
-  const dwellSeconds = useConfigStore((s) => s.taskCompleteDwellSeconds) || 6
   const completionCardHeight = useConfigStore((s) => s.completionCardHeight)
   const maxPanelHeight = useConfigStore((s) => s.maxPanelHeight)
   const readableCardHeight = getReadableNotificationHeight(completionCardHeight, maxPanelHeight, {
     text: data.responseText,
     userMessage: data.userMessage || session.lastUserMessage,
   })
-  const dwellMs = dwellSeconds * 1000
-
   return (
     <OverlayFeedbackPanel
       session={session}
@@ -34,8 +31,6 @@ export function OverlayResponseCard({ overlay, session, onJumpToTerminal, onShow
       text={data.responseText}
       kind="response"
       maxHeight={readableCardHeight}
-      dwellMs={dwellMs}
-      startedAt={overlay.createdAt}
       statusLabel={t('notch.replied', { defaultValue: 'New reply' })}
       onJumpToTerminal={onJumpToTerminal}
       onShowSessions={onShowSessions}

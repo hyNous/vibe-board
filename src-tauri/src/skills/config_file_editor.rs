@@ -37,7 +37,7 @@ pub fn write_agent_config_file(
         &path,
         content,
         expected_revision,
-        &crate::skills::v2::fsutil::agentbro_home()
+        &crate::skills::v2::fsutil::agent_island_home()
             .join("config")
             .join("backups"),
     )

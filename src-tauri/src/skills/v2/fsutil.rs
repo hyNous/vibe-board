@@ -36,37 +36,97 @@ pub fn home() -> PathBuf {
     dirs::home_dir().unwrap_or_else(std::env::temp_dir)
 }
 
-pub fn agentbro_home() -> PathBuf {
+pub fn agent_island_home() -> PathBuf {
+    home().join(".agent-island")
+}
+
+/// Legacy AgentBro data root retained for one-way migration and compatibility.
+pub fn legacy_agentbro_home() -> PathBuf {
     home().join(".agentbro")
 }
 
-/// Primary center library for Skill Manager v2.
-pub fn default_center_path() -> PathBuf {
-    home().join(".agentbro").join("skills")
+/// Compatibility alias for older callers. New Vibe Board data belongs under
+/// `.agent-island`.
+pub fn agentbro_home() -> PathBuf {
+    agent_island_home()
 }
 
-/// Legacy roots that may contain skills from older AgentBro builds. v2 keeps
-/// them discoverable for migration/diagnosis, but new writes always go to
-/// `default_center_path()`.
+pub fn unified_center_marker_path() -> PathBuf {
+    agent_island_home().join("unified-skill-center")
+}
+
+pub fn unified_center_active() -> bool {
+    unified_center_marker_path().is_file()
+}
+
+/// Activate the single shared Skill center used by Codex, Claude Code and any
+/// compatible Agent. Existing `.agentbro/skills` content is copied once; the
+/// legacy directory is never deleted so rollback remains possible.
+pub fn activate_unified_center() -> Result<(), String> {
+    if unified_center_active() {
+        return Ok(());
+    }
+    let canonical = home().join(".agents").join("skills");
+    let legacy = legacy_agentbro_home().join("skills");
+    fs::create_dir_all(&canonical).map_err(|e| format!("create shared Skill center: {e}"))?;
+    if legacy.is_dir() {
+        let entries =
+            fs::read_dir(&legacy).map_err(|e| format!("read legacy Skill center: {e}"))?;
+        for entry in entries.flatten() {
+            let source = entry.path();
+            let target = canonical.join(entry.file_name());
+            if target.exists() || target.symlink_metadata().is_ok() || !is_skill_dir(&source) {
+                continue;
+            }
+            copy_dir_recursive(&source, &target)
+                .map_err(|e| format!("migrate Skill {}: {e}", source.display()))?;
+        }
+    }
+    let marker = unified_center_marker_path();
+    if let Some(parent) = marker.parent() {
+        fs::create_dir_all(parent).map_err(|e| format!("create Vibe Board data dir: {e}"))?;
+    }
+    fs::write(marker, b"Vibe Board unified Skill center\n")
+        .map_err(|e| format!("write unified Skill center marker: {e}"))
+}
+
+/// Primary center library for Skill Manager v2. Runtime builds activate the
+/// shared `.agents/skills` root; tests and old callers remain on the legacy
+/// path until activation so their migration behavior stays backwards-safe.
+pub fn default_center_path() -> PathBuf {
+    if unified_center_active() {
+        home().join(".agents").join("skills")
+    } else {
+        legacy_agentbro_home().join("skills")
+    }
+}
+
+/// Both roots stay discoverable for migration/diagnosis. New writes use the
+/// activated shared root.
 pub fn all_center_dirs() -> Vec<PathBuf> {
-    vec![
-        home().join(".agentbro").join("skills"),
-        home().join(".agents").join("skills"),
-    ]
+    let primary = default_center_path();
+    let legacy = legacy_agentbro_home().join("skills");
+    if primary == legacy {
+        vec![primary]
+    } else {
+        vec![primary, legacy]
+    }
 }
 
 pub fn default_sqlite_path() -> PathBuf {
-    agentbro_home()
+    agent_island_home()
         .join("skill-manager")
         .join("skill-manager.db")
 }
 
 pub fn default_snapshot_path() -> PathBuf {
-    default_center_path().join("agentbro-skills.snapshot.json")
+    default_center_path().join("agent-island-skills.snapshot.json")
 }
 
 pub fn settings_path() -> PathBuf {
-    agentbro_home().join("skill-manager").join("settings.json")
+    agent_island_home()
+        .join("skill-manager")
+        .join("settings.json")
 }
 
 pub fn expand_tilde(p: &str) -> PathBuf {

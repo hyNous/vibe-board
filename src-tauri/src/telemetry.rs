@@ -465,7 +465,7 @@ fn install_channel() -> String {
         .ok()
         .map(|path| path.display().to_string())
         .unwrap_or_default();
-    if exe.contains("/Applications/Agent Island.app/") {
+    if exe.contains("/Applications/Vibe Board.app/") {
         "github_dmg".to_string()
     } else {
         "dev".to_string()

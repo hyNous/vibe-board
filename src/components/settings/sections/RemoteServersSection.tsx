@@ -40,7 +40,7 @@ export function RemoteServersSection() {
       <div className="remote-servers-foundation">
         <span className="remote-servers-foundation__terminal" aria-hidden="true">&gt;_</span>
         <span className="remote-servers-foundation__copy">
-          <strong>{t('settings.remoteServers.foundationTitle', { defaultValue: 'One server directory for Agent Island' })}</strong>
+          <strong>{t('settings.remoteServers.foundationTitle', { defaultValue: 'One server directory for Vibe Board' })}</strong>
           <span>{t('settings.remoteServers.foundationDescription', {
             defaultValue: 'Configure each server once, then select it wherever you work.',
           })}</span>

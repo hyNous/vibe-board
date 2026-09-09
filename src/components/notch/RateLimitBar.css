@@ -11,6 +11,23 @@
   color: var(--island-text-secondary);
 }
 
+.rate-limit--stacked {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.rate-limit__group {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+}
+
+.rate-limit__group-title {
+  color: var(--island-text-secondary);
+}
+
 .rate-limit__segment {
   --rate-limit-tone: var(--island-success-text);
   display: inline-flex;

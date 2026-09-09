@@ -7,7 +7,7 @@
   white-space: nowrap;
 }
 
-/* Tool name in Agent Island green */
+/* Tool name in Vibe Board green */
 .tool-call-display__name {
   font-family: var(--font-mono, 'SF Mono', monospace);
   color: #22c55e;

@@ -5,7 +5,7 @@
 
 ## What this is
 
-**Agent Island** is a cross-platform Tauri app (Rust backend + React 19 / TypeScript frontend) that surfaces events from AI coding agents (Claude Code, Codex, Gemini CLI, Cursor, Copilot, etc.) into a floating "Dynamic Island" overlay.
+**Vibe Board** is a cross-platform Tauri app (Rust backend + React 19 / TypeScript frontend) that surfaces events from AI coding agents (Claude Code, Codex, Gemini CLI, Cursor, Copilot, etc.) into a floating "Dynamic Island" overlay.
 
 ## Local commands
 
@@ -28,7 +28,7 @@ Before any PR, all of these must be green: `pnpm lint`, `pnpm test:run`, `pnpm b
 
 Keep changes on the local branch until they have been reviewed and verified.
 Use the issue and pull-request rules of the repository that distributes your
-Agent Island build; this fork does not require submitting changes upstream.
+Vibe Board build; this fork does not require submitting changes upstream.
 
 ## Where to make changes
 
@@ -57,7 +57,7 @@ Detailed extension recipes: see [`.claude/CLAUDE.md`](.claude/CLAUDE.md) and [`C
 
 **Never commit secrets** (`.env`, signing keys, API tokens). `.gitignore` covers the common patterns; double-check before staging.
 
-If you redistribute this fork, keep its Agent Island identity and follow [`UPSTREAM.md`](UPSTREAM.md), [`NOTICE`](NOTICE), and [`TRADEMARKS.md`](TRADEMARKS.md).
+If you redistribute this fork, keep its Vibe Board identity and follow [`UPSTREAM.md`](UPSTREAM.md), [`NOTICE`](NOTICE), and [`TRADEMARKS.md`](TRADEMARKS.md).
 
 ## Code style
 

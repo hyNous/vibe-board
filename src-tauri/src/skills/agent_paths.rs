@@ -332,6 +332,10 @@ pub fn central_skill_dirs() -> Vec<PathBuf> {
 }
 
 pub fn agentbro_metadata_path() -> PathBuf {
+    home().join(".agent-island").join("metadata.json")
+}
+
+pub fn legacy_agentbro_metadata_path() -> PathBuf {
     home().join(".agentbro").join("metadata.json")
 }
 
@@ -360,7 +364,9 @@ fn custom_agent_plugin_dir(agent: &str) -> Option<PathBuf> {
 }
 
 fn custom_agent_entry(agent: &str) -> Option<serde_json::Value> {
-    let content = std::fs::read_to_string(agentbro_metadata_path()).ok()?;
+    let content = std::fs::read_to_string(agentbro_metadata_path())
+        .or_else(|_| std::fs::read_to_string(legacy_agentbro_metadata_path()))
+        .ok()?;
     let json: serde_json::Value = serde_json::from_str(&content).ok()?;
     let custom_agents = json
         .get("customAgents")

@@ -1,4 +1,4 @@
-/* Agent Island — Main App */
+/* Vibe Board — Main App */
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { COLOR_THEMES, useThemeStore } from './stores/themeStore'
 import { useConfigStore } from './stores/configStore'
@@ -23,6 +23,7 @@ const BACKEND_MANAGED_CONFIG_KEYS = new Set<keyof ReturnType<typeof useConfigSto
   'soundEnabled', 'volume', 'launchAtLogin', 'autoHide', 'smartSuppression',
   'showUsageQuota', 'usageQueryEnabled', 'language', 'autoHideNoSessions', 'displayMonitor',
   'codexAppServerSyncEnabled', 'codexAppServerSyncIntervalSeconds', 'sessionRefreshIntervalSeconds', 'windowCloseBehavior',
+  'hostVisibilityMode', 'notchPositionMode', 'notchVerticalOffset', 'panelHorizontalOffset',
   'globalShortcut',
   'shortcutApprove', 'shortcutApproveEnabled',
   'shortcutDeny', 'shortcutDenyEnabled',
@@ -35,7 +36,15 @@ const BACKEND_MANAGED_CONFIG_KEYS = new Set<keyof ReturnType<typeof useConfigSto
   'islandSurfaceMode', 'islandPetScale', 'islandPetWindowOrigin', 'islandPetWindowAnchor', 'islandActivePetId', 'islandAgentPetMap',
   'followFocus', 'quietHours', 'idleTimeoutMinutes',
   'idleInteractionRoutingEnabled', 'idleInteractionRoutingMinutes',
+  'setupWizardCompleted', 'hostAgent', 'childAgents', 'autoStartOnHostSession',
 ])
+
+const CONFIG_STORAGE_KEY = 'agent-island-config'
+const LEGACY_CONFIG_STORAGE_KEY = 'agentbro-config'
+const THEME_STORAGE_KEY = 'agent-island-theme'
+const LEGACY_THEME_STORAGE_KEY = 'agentbro-theme'
+const PET_STORAGE_KEY = 'agent-island-pet'
+const LEGACY_PET_STORAGE_KEY = 'agentbro-pet'
 
 function applyPersistedConfig(raw: string | null) {
   if (!raw) return
@@ -128,9 +137,11 @@ function App() {
     }
 
     const handleStorage = (event: StorageEvent) => {
-      if (event.key === 'agentbro-theme') applyPersistedTheme(event.newValue)
+      if (event.key === THEME_STORAGE_KEY || event.key === LEGACY_THEME_STORAGE_KEY) applyPersistedTheme(event.newValue)
     }
-    const handleFocus = () => applyPersistedTheme(window.localStorage.getItem('agentbro-theme'))
+    const handleFocus = () => applyPersistedTheme(
+      window.localStorage.getItem(THEME_STORAGE_KEY) ?? window.localStorage.getItem(LEGACY_THEME_STORAGE_KEY),
+    )
 
     handleFocus()
     window.addEventListener('storage', handleStorage)
@@ -143,9 +154,11 @@ function App() {
 
   useEffect(() => {
     const handleStorage = (event: StorageEvent) => {
-      if (event.key === 'agentbro-config') applyPersistedConfig(event.newValue)
+      if (event.key === CONFIG_STORAGE_KEY || event.key === LEGACY_CONFIG_STORAGE_KEY) applyPersistedConfig(event.newValue)
     }
-    const handleFocus = () => applyPersistedConfig(window.localStorage.getItem('agentbro-config'))
+    const handleFocus = () => applyPersistedConfig(
+      window.localStorage.getItem(CONFIG_STORAGE_KEY) ?? window.localStorage.getItem(LEGACY_CONFIG_STORAGE_KEY),
+    )
 
     handleFocus()
     window.addEventListener('storage', handleStorage)
@@ -165,9 +178,11 @@ function App() {
       } catch { /* ignore */ }
     }
     const handleStorage = (event: StorageEvent) => {
-      if (event.key === 'agentbro-pet') applyPersistedPet(event.newValue)
+      if (event.key === PET_STORAGE_KEY || event.key === LEGACY_PET_STORAGE_KEY) applyPersistedPet(event.newValue)
     }
-    const handleFocus = () => applyPersistedPet(window.localStorage.getItem('agentbro-pet'))
+    const handleFocus = () => applyPersistedPet(
+      window.localStorage.getItem(PET_STORAGE_KEY) ?? window.localStorage.getItem(LEGACY_PET_STORAGE_KEY),
+    )
 
     handleFocus()
     window.addEventListener('storage', handleStorage)

@@ -716,7 +716,7 @@ fn safe_write(
 }
 
 fn write_backup(path: &Path, content: &[u8], agent_id: &str) -> Result<(), String> {
-    let dir = super::v2::fsutil::agentbro_home()
+    let dir = super::v2::fsutil::agent_island_home()
         .join("plugins")
         .join("backups")
         .join(agent_id);

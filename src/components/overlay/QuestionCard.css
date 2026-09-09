@@ -1,4 +1,4 @@
-/* QuestionCard — Agent Island-style with numbered options, custom input, multi-select */
+/* QuestionCard — Vibe Board-style with numbered options, custom input, multi-select */
 
 .overlay-card.overlay-card--question {
   --question-accent: var(--island-warning);

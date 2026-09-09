@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="./assets/readme/agent-island-hero.svg" alt="Agent Island：把 AI 编程 Agent 会话、审批、Trace 和用量放进一个桌面工作台" width="100%" />
+  <img src="./assets/readme/vibe-board-hero.svg" alt="Vibe Board：把 AI 编程 Agent 会话、审批、Trace 和用量放进一个桌面工作台" width="100%" />
 
   <p>
     <strong>你的 AI 编程 Agent 桌面控制台</strong><br />
@@ -21,7 +21,7 @@
 
 ## 这是什么
 
-Agent Island 是一个本地优先的 Tauri 桌面应用：把 Claude Code、Codex、Gemini CLI、OpenCode、Antigravity 等 Agent 的事件接入同一个悬浮窗。
+Vibe Board 是一个本地优先的 Tauri 桌面应用：把 Claude Code、Codex、Gemini CLI、OpenCode、Antigravity 等 Agent 的事件接入同一个悬浮窗。
 
 它解决的是三个日常问题：
 
@@ -34,21 +34,21 @@ Agent Island 是一个本地优先的 Tauri 桌面应用：把 Claude Code、Cod
 <table>
   <tr>
     <td width="50%">
-      <img src="./docs/assets/screenshots/island-expanded.png" alt="Agent Island 展开的会话列表与审批状态" width="100%" />
+      <img src="./docs/assets/screenshots/island-expanded.png" alt="Vibe Board 展开的会话列表与审批状态" width="100%" />
       <sub>展开后查看会话、工具调用、审批和计划。</sub>
     </td>
     <td width="50%">
-      <img src="./docs/assets/screenshots/island-detail.png" alt="Agent Island 的会话详情和 Trace 信息" width="100%" />
+      <img src="./docs/assets/screenshots/island-detail.png" alt="Vibe Board 的会话详情和 Trace 信息" width="100%" />
       <sub>详情页保留 Trace、Token、Rate Limit 和原始事件。</sub>
     </td>
   </tr>
   <tr>
     <td width="50%">
-      <img src="./docs/assets/screenshots/island-permission.png" alt="在 Agent Island 中处理 Agent 权限请求" width="100%" />
+      <img src="./docs/assets/screenshots/island-permission.png" alt="在 Vibe Board 中处理 Agent 权限请求" width="100%" />
       <sub>审批、提问和计划确认直接在悬浮窗完成。</sub>
     </td>
     <td width="50%">
-      <img src="./docs/assets/screenshots/agent-management-skill-library.png" alt="Agent Island 的统一 Skill 库" width="100%" />
+      <img src="./docs/assets/screenshots/agent-management-skill-library.png" alt="Vibe Board 的统一 Skill 库" width="100%" />
       <sub>Skills 可接管到中心库，再分发给多个 Agent。</sub>
     </td>
   </tr>
@@ -58,12 +58,14 @@ Agent Island 是一个本地优先的 Tauri 桌面应用：把 Claude Code、Cod
 
 ### Windows 安装包
 
-1. 从 [GitHub Releases](https://github.com/hyNous/agent-island/releases) 下载最新安装包，或直接使用仓库内的 [Agent Island-latest-setup.exe](./releases/Agent%20Island-latest-setup.exe)。
-2. 安装并启动 Agent Island；应用默认缩到系统托盘，悬浮窗按需出现。
-3. 打开设置中的 **Island → Integration**，运行 **Hook Doctor**，再给正在使用的 Agent 安装 Hook。
-4. 重启对应的 CLI 会话，等待事件进入悬浮窗。
+1. 从 [GitHub Releases](https://github.com/hyNous/agent-island/releases) 下载最新安装包，或直接使用仓库内的 [Vibe Board-latest-setup.exe](./releases/Vibe%20Board-latest-setup.exe)。
+2. 安装并启动 Vibe Board；首次启动会打开设置向导，扫描本机已安装的 Agent。
+3. 选择一个宿主 Agent、可选的子 Agent，确认“批准并完成设置”；向导会自动安装 Hook、保存启动选项并重新校验。
+4. 重启对应的 CLI 会话。以后宿主 Agent 创建新会话时，Vibe Board 会按选择自动唤醒；也可在 **Settings → General → Agent connection** 重新配置。
 
 Windows 安装包目前未签名，SmartScreen 可能会提示确认；自动更新暂未启用，发布采用 GitHub Releases 手动下载。
+
+完整的首次设置、权限边界和迁移说明见 [产品安装与首次设置说明](./docs/product-setup.md)。
 
 ### 从源码运行
 
@@ -84,7 +86,7 @@ pnpm dev
 
 ## 你能用它做什么
 
-| 需求 | Agent Island 的处理方式 |
+| 需求 | Vibe Board 的处理方式 |
 | --- | --- |
 | 同时运行多个 Agent | 灵动岛聚合会话、运行阶段、工具、Subagent 和完成提醒。 |
 | 等待权限或输入 | 直接批准、拒绝、回答问题或确认计划。 |
@@ -95,7 +97,7 @@ pnpm dev
 
 ## 工作方式
 
-Agent Island 不把会话内容上传到中转服务。基本链路是：
+Vibe Board 不把会话内容上传到中转服务。基本链路是：
 
 ```text
 Agent Hook / 本地 App 状态
@@ -108,6 +110,18 @@ SessionStore / Trace / Usage snapshot
 ```
 
 Hook 是实时事件的主要入口；Codex 等支持的 Agent 还会通过本地 app-server 或状态文件补充线程、审批和 quota。所有外部 Agent 不在线时，界面会保留上一次已读取的状态，并标注数据来源和更新时间。
+
+## 宿主插件（可选兼容方式）
+
+首选使用首次启动向导，不需要手动注册插件或额外安装 Node 运行时。`plugins/agent-island-host/` 仍保留 Codex 与 Claude Code 的手动/兼容清单，适用于已有插件工作流或需要在 Agent 自己管理 Hook 的场景。
+
+在仓库根目录执行以下命令即可把本地插件注册到 Codex：
+
+```bash
+codex plugin marketplace add .
+codex plugin add agent-island-host@agent-island-local
+codex plugin list
+```
 
 ## 支持范围
 
@@ -122,7 +136,7 @@ Hook 是实时事件的主要入口；Codex 等支持的 Agent 还会通过本�
 
 - `src/`：React 灵动岛、设置页、Agent/Skill 管理和主题。
 - `src-tauri/src/`：Rust Hook Server、Bridge、Agent 适配器、Trace/Usage 和本地存储。
-- `src-tauri/icons/`、`public/agent-island-*`：当前 Agent Island 图标和展示资源。
+- `src-tauri/icons/`、`public/agent-island-*`：当前 Vibe Board 图标和展示资源。
 - `releases/`：当前 Windows 验收安装包；旧包只放在 `releases/archive/`。
 - `UPSTREAM.md`、`LICENSE`、`NOTICE`、`TRADEMARKS.md`：来源、许可和品牌边界。
 
@@ -144,6 +158,6 @@ pnpm release:check
 
 ## 许可与来源
 
-Agent Island 代码基于 [Apache License 2.0](./LICENSE) 发布，同时保留上游的 [NOTICE](./NOTICE) 和品牌边界说明 [TRADEMARKS.md](./TRADEMARKS.md)。
+Vibe Board 代码基于 [Apache License 2.0](./LICENSE) 发布，同时保留上游的 [NOTICE](./NOTICE) 和品牌边界说明 [TRADEMARKS.md](./TRADEMARKS.md)。
 
 本项目是基于 [AgentBro](./UPSTREAM.md) 的独立修改版：产品名称、图标和发布配置已经替换，不代表上游项目的官方发行版。

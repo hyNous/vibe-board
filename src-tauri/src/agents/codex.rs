@@ -166,7 +166,7 @@ pub fn probe_app_server_readiness() -> CodexAppServerProbe {
         suggestion: if server_listening {
             None
         } else {
-            Some("Optional: AgentBro background sync uses stdio and does not require this local WebSocket port.".to_string())
+            Some("Optional: Vibe Board background sync uses stdio and does not require this local WebSocket port.".to_string())
         },
     });
     checks.push(CodexAppServerProbeCheck {
@@ -207,9 +207,9 @@ pub fn probe_app_server_readiness() -> CodexAppServerProbe {
     });
     checks.push(CodexAppServerProbeCheck {
         id: "live-sync".to_string(),
-        label: "AgentBro live sync".to_string(),
+        label: "Vibe Board live sync".to_string(),
         status: if app_server_command_available { "ok" } else { "warn" }.to_string(),
-        detail: "AgentBro can keep a persistent Codex stdio app-server listener for thread sync and realtime prompts, with energy-aware thread/list refresh, when background sync is enabled.".to_string(),
+        detail: "Vibe Board can keep a persistent Codex stdio app-server listener for thread sync and realtime prompts, with energy-aware thread/list refresh, when background sync is enabled.".to_string(),
         suggestion: Some("Enable background thread sync in Island settings for app-server prompt routing.".to_string()),
     });
 

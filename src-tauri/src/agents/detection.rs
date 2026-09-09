@@ -19,7 +19,12 @@ pub fn detect_installed_tools() -> Vec<DetectedTool> {
     vec![
         detect_tool("claude-code", "Claude Code", &["claude"], &[".claude"]),
         detect_tool("codex", "OpenAI Codex", &["codex"], &[".codex"]),
-        detect_tool("gemini", "Google Gemini", &["gemini"], &[".gemini"]),
+        detect_tool(
+            "gemini",
+            "Google Gemini",
+            &["gemini"],
+            &[".gemini/settings.json"],
+        ),
         detect_cursor(),
         detect_copilot(),
         detect_tool("qoder", "Qoder", &["qoder"], &[".qoder"]),

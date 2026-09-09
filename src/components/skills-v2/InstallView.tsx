@@ -3029,7 +3029,7 @@ function OneClickOrganizeDialog({
       <div className="sm2-oneclick">
         <div className="sm2-oneclick__summary">
           <strong>将整理 {importableCount} 个可接管 Skill</strong>
-          <span>Agent Island 会先同步到中心库，再按你选择的方式更新当前 Agent 目录。</span>
+          <span>Vibe Board 会先同步到中心库，再按你选择的方式更新当前 Agent 目录。</span>
           {conflictCount > 0 && (
             <em>{conflictCount} 个同名冲突会保留给原来的冲突处理流程。</em>
           )}

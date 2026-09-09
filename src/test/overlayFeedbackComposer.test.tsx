@@ -72,7 +72,6 @@ function renderPanel(s: SessionState, onJumpToTerminal = vi.fn(), onDismiss = vi
     <OverlayFeedbackPanel
       session={s}
       text="Done"
-      dwellMs={6000}
       statusLabel="New reply"
       onJumpToTerminal={onJumpToTerminal}
       onDismiss={onDismiss}

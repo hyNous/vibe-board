@@ -51,6 +51,19 @@ describe('sessionStore backend overlays', () => {
     })
   })
 
+  it('keeps only the latest result overlay for the same session', () => {
+    useSessionStore.getState().replaceAllSessions([
+      session({ responseText: 'Partial reply', lastUserMessage: 'Continue the migration' }),
+    ])
+    useSessionStore.getState().replaceAllSessions([
+      session({ responseText: 'Final reply', lastUserMessage: 'Continue the migration' }),
+    ])
+
+    const state = useSessionStore.getState()
+    expect(state.overlayQueue).toHaveLength(1)
+    expect(state.activeOverlay?.data).toMatchObject({ responseText: 'Final reply' })
+  })
+
   it('treats backend idle response as response feedback, not completion feedback', () => {
     useSessionStore.getState().replaceAllSessions([session({ phase: 'processing' })])
     useSessionStore.getState().replaceAllSessions([

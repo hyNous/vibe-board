@@ -73,7 +73,7 @@ export const usePetStore = create<PetStore>()(
       },
     }),
     {
-      name: 'agentbro-pet',
+      name: 'agent-island-pet',
       version: 1,
       partialize: (state) => ({ activePetId: state.activePetId }),
     },

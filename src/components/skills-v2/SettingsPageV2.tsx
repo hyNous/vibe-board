@@ -128,7 +128,7 @@ export function SettingsPageV2() {
           <h4 className="sm2__settings-label">SQLite / JSON 快照</h4>
           <div className="sm2__detail-meta">
             <div>SQLite：{settings.sqlitePath}</div>
-            <div>快照：{settings.centerPath}/agentbro-skills.snapshot.json</div>
+            <div>快照：{settings.centerPath}/agent-island-skills.snapshot.json</div>
           </div>
           <div className="sm2__btn-row">
             <button className="sm2__btn" onClick={exportSnapshot} disabled={busy}>导出/刷新 JSON 快照</button>

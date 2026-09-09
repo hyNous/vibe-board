@@ -526,18 +526,3 @@
   opacity: 0.35;
 }
 
-.overlay-feedback__progress {
-  flex: 0 0 auto;
-  height: 2px;
-  background: var(--island-subtle);
-  overflow: hidden;
-}
-
-.overlay-feedback__progress-bar {
-  width: 100%;
-  height: 100%;
-  border-radius: 999px;
-  background: var(--overlay-feedback-accent);
-  transform-origin: left center;
-  transition: transform 100ms linear;
-}

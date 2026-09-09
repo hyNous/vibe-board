@@ -84,7 +84,7 @@ export function AgentDetailSlider({ agent, open, onClose, onRefresh, onRun }: Ag
             </section>
 
             <section className="agent-detail-section">
-              <div className="agent-detail-section__title">Agent Island Hooks</div>
+              <div className="agent-detail-section__title">Vibe Board Hooks</div>
               <div className="agent-detail-hook-state">
                 <span className={`agent-detail-hook-dot ${agent.hooksInstalled ? 'agent-detail-hook-dot--on' : ''}`} />
                 {agent.hooksInstalled ? 'Hooks 已安装' : 'Hooks 未安装'}

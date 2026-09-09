@@ -1,12 +1,13 @@
 // Pet asset discovery — Codex-compatible sprite atlas loading in pure Rust.
 //
 // Sources, in order of precedence:
-//   1. ~/.agentbro/pets/<id>/pet.json + <spritesheetPath>   (AgentBro user-defined)
-//   2. AgentBro bundled resources: <resources>/pets/<id>/pet.json + spritesheet
-//   3. Codex Desktop resources/webview/assets/<id>-spritesheet-*.webp
-//   4. Codex Desktop resources/app.asar  (handwritten asar parser)
-//   5. ~/.codex/pets/<id>/pet.json + <spritesheetPath>      (Codex user-defined)
-//   6. ~/Applications/Codex.app/...                         (per-user install fallback)
+//   1. ~/.agent-island/pets/<id>/pet.json + <spritesheetPath> (user-defined)
+//   2. ~/.agentbro/pets/<id>/pet.json + <spritesheetPath>   (legacy fallback)
+//   3. Vibe Board bundled resources: <resources>/pets/<id>/pet.json + spritesheet
+//   4. Codex Desktop resources/webview/assets/<id>-spritesheet-*.webp
+//   5. Codex Desktop resources/app.asar  (handwritten asar parser)
+//   6. ~/.codex/pets/<id>/pet.json + <spritesheetPath>      (Codex user-defined)
+//   7. ~/Applications/Codex.app/...                         (per-user install fallback)
 //
 // All sources return an absolute filesystem path to the spritesheet. The
 // frontend uses `convertFileSrc` to map that into the `asset://` protocol so
@@ -142,8 +143,10 @@ pub fn discover_all_pets_with_dirs(
     let mut pets = Vec::new();
     let mut warnings = Vec::new();
 
-    if let Some(user_dir) = find_agentbro_user_pets_dir() {
-        pets.extend(discover_user_pets(&user_dir, "agentbro"));
+    for (home_child, provider) in [(".agent-island", "agent-island"), (".agentbro", "agentbro")] {
+        if let Some(user_dir) = find_home_pets_dir(home_child) {
+            pets.extend(discover_user_pets(&user_dir, provider));
+        }
     }
 
     let agentbro_resource_dirs = find_agentbro_resource_dirs(agentbro_resources_dir);
@@ -287,10 +290,6 @@ fn codex_resource_candidates() -> Vec<PathBuf> {
     }
 
     dedupe_paths(candidates)
-}
-
-fn find_agentbro_user_pets_dir() -> Option<PathBuf> {
-    find_home_pets_dir(".agentbro")
 }
 
 fn find_codex_user_pets_dir() -> Option<PathBuf> {

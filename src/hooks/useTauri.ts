@@ -1,4 +1,4 @@
-/* Agent Island — Tauri Event Hooks
+/* Vibe Board — Tauri Event Hooks
  * Listens for backend events and syncs stores. No-ops in browser dev mode.
  */
 import { useEffect } from 'react'
@@ -371,9 +371,15 @@ function applyBackendConfig(config: BackendConfig) {
     codexAppServerSyncIntervalSeconds: config.codexAppServerSyncIntervalSeconds ?? 30,
     sessionRefreshIntervalSeconds: Math.max(1, Math.min(30, config.sessionRefreshIntervalSeconds ?? 3)),
     windowCloseBehavior: config.windowCloseBehavior === 'exit' ? 'exit' : 'tray',
+    hostVisibilityMode: config.hostVisibilityMode === 'follow' ? 'follow' : 'independent',
+    notchPositionMode: ['top', 'left', 'right'].includes(config.notchPositionMode)
+      ? config.notchPositionMode
+      : 'top',
+    notchVerticalOffset: Number.isFinite(config.notchVerticalOffset) ? config.notchVerticalOffset : 0,
     language: config.language || store.language,
     autoHideNoSessions: config.autoHideNoSessions,
     displayMonitor: config.displayId,
+    panelHorizontalOffset: Number.isFinite(config.panelHorizontalOffset) ? config.panelHorizontalOffset : store.panelHorizontalOffset,
     globalShortcut: config.globalShortcut,
     shortcutApprove: config.shortcutApprove,
     shortcutApproveEnabled: config.shortcutApproveEnabled,
@@ -413,6 +419,10 @@ function applyBackendConfig(config: BackendConfig) {
     idleTimeoutMinutes: config.idleTimeoutMinutes ?? 5,
     idleInteractionRoutingEnabled: config.idleInteractionRoutingEnabled ?? false,
     idleInteractionRoutingMinutes: config.idleInteractionRoutingMinutes ?? 5,
+    setupWizardCompleted: config.setupWizardCompleted ?? false,
+    hostAgent: config.hostAgent ?? null,
+    childAgents: Array.isArray(config.childAgents) ? config.childAgents : [],
+    autoStartOnHostSession: config.autoStartOnHostSession ?? true,
   })
 
   if (config.language) {
@@ -653,11 +663,13 @@ export function useConfigSync(enabled = true, canWriteMigrations = true) {
         clearPendingBackendTheme(detail.name)
       }
     }
+    window.addEventListener('agent-island-theme-sync', handleThemeSync)
     window.addEventListener('agentbro-theme-sync', handleThemeSync)
 
     return () => {
       cancelled = true
       unlisten?.()
+      window.removeEventListener('agent-island-theme-sync', handleThemeSync)
       window.removeEventListener('agentbro-theme-sync', handleThemeSync)
     }
   }, [canWriteMigrations, enabled])

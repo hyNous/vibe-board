@@ -39,6 +39,7 @@ pub fn rebuild_service() -> Result<Arc<service::Service>, String> {
 
 fn build_service() -> Result<Arc<service::Service>, String> {
     let home = fsutil::home();
+    fsutil::activate_unified_center()?;
     // Temporarily open a transient connection to read the configured sqlite path.
     let sqlite_path = resolve_sqlite_path(&home)?;
     let svc = service::Service::new(&sqlite_path, home.clone())?;
@@ -51,8 +52,10 @@ fn resolve_sqlite_path(home: &std::path::Path) -> Result<PathBuf, String> {
     // Check new location first, then legacy flat location
     let settings_file = fsutil::settings_path();
     let legacy_settings = home.join(".agentbro/skill-manager-settings.json");
+    let legacy_nested_settings = home.join(".agentbro/skill-manager/settings.json");
     let content = std::fs::read_to_string(&settings_file)
-        .or_else(|_| std::fs::read_to_string(&legacy_settings));
+        .or_else(|_| std::fs::read_to_string(&legacy_settings))
+        .or_else(|_| std::fs::read_to_string(&legacy_nested_settings));
     if let Ok(content) = content {
         if let Ok(v) = serde_json::from_str::<serde_json::Value>(&content) {
             if let Some(p) = v.get("sqlitePath").and_then(|p| p.as_str()) {
@@ -64,5 +67,6 @@ fn resolve_sqlite_path(home: &std::path::Path) -> Result<PathBuf, String> {
     }
     // Migrate legacy settings file if it exists
     crate::data_dir::migrate_file(&legacy_settings, &settings_file);
+    crate::data_dir::migrate_file(&legacy_nested_settings, &settings_file);
     Ok(default)
 }

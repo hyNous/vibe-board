@@ -4,7 +4,7 @@ import { computePriority, PRIORITY } from '../types/priority'
 const startedAt = Date.now()
 
 describe('computePriority', () => {
-  it('matches Agent Island island session sorting order', () => {
+  it('matches Vibe Board island session sorting order', () => {
     expect(computePriority({ phase: 'error', startedAt })).toBe(PRIORITY.error)
     expect(computePriority({ phase: 'waiting_approval', startedAt })).toBe(PRIORITY.attention)
     expect(computePriority({ phase: 'processing', lastToolName: 'Bash', startedAt })).toBe(PRIORITY.working)

@@ -6,7 +6,7 @@ Please do not open a public issue for security vulnerabilities, leaked secrets, 
 
 Use GitHub's private vulnerability reporting flow if it is available for this repository. If that is not available, contact the maintainer through the community channels listed in the README and include:
 
-- The affected Agent Island version or commit.
+- The affected Vibe Board version or commit.
 - A clear description of the issue and impact.
 - Reproduction steps or a minimal proof of concept.
 - Any relevant logs with tokens, hostnames, private paths, and secrets removed.

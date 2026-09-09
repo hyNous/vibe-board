@@ -1,6 +1,6 @@
 {
   "$schema": "https://raw.githubusercontent.com/nicedoctor/tauri-config-schema/v2/schema.json",
-  "productName": "Agent Island",
+  "productName": "Vibe Board",
   "identifier": "com.agentisland.desktop",
   "version": "3.1.1",
   "build": {
@@ -15,7 +15,7 @@
     "windows": [
       {
         "label": "notch",
-        "title": "Agent Island",
+        "title": "Vibe Board",
         "transparent": true,
         "decorations": false,
         "shadow": false,
@@ -38,8 +38,11 @@
         "scope": [
           "$RESOURCE/pets/**",
           "$RESOURCE/themes/**",
+          "$HOME/.agent-island/pets/**",
+          "$HOME/.agent-island/themes/**",
           "$HOME/.agentbro/pets/**",
           "$HOME/.codex/pets/**",
+          "$HOME/.config/agent-island/themes/**",
           "$HOME/.config/agentbro/themes/**",
           "$APPCACHE/pet-asar-cache/**",
           "/Applications/Codex.app/Contents/Resources/webview/assets/**",
@@ -55,7 +58,8 @@
   },
   "plugins": {
     "updater": {
-      "endpoints": []
+      "endpoints": [],
+      "pubkey": ""
     },
     "deep-link": {
       "desktop": {

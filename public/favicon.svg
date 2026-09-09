@@ -1,13 +1,16 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-label="Agent Island">
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-label="Vibe Board">
   <defs>
-    <linearGradient id="background" x1="18" y1="18" x2="238" y2="238" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#20283A"/>
-      <stop offset="1" stop-color="#101622"/>
+    <linearGradient id="background" x1="20" y1="14" x2="236" y2="242" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1D2A49"/>
+      <stop offset="1" stop-color="#080D18"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="45" y1="28" x2="94" y2="92" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#7628FF"/>
+      <stop offset="1" stop-color="#009CF4"/>
     </linearGradient>
   </defs>
   <rect x="8" y="8" width="240" height="240" rx="54" fill="url(#background)"/>
-  <rect x="9" y="9" width="238" height="238" rx="53" fill="none" stroke="#39455E" stroke-width="2"/>
-  <path fill="#F7F8FC" fill-rule="evenodd" d="M38 198 81 68c3.5-11 10-17 21-17h5c11 0 17.5 6 21 17l43 130h-31l-10-34H78l-10 34H38Zm49-61h25L99.5 88 87 137Z"/>
-  <path fill="#79E0CC" d="M184 51h34c5.5 0 10 4.5 10 10v10c0 5.5-4.5 10-10 10h-6v94h6c5.5 0 10 4.5 10 10v10c0 5.5-4.5 10-10 10h-34c-5.5 0-10-4.5-10-10v-10c0-5.5 4.5-10 10-10h6V81h-6c-5.5 0-10-4.5-10-10V61c0-5.5 4.5-10 10-10Z"/>
-  <path d="M82 145h35" stroke="#79E0CC" stroke-width="8" stroke-linecap="round"/>
+  <rect x="9" y="9" width="238" height="238" rx="53" fill="none" stroke="#273452" stroke-width="2"/>
+  <text x="43" y="190" fill="#F7F8FC" font-family="Arial Black,Segoe UI,sans-serif" font-size="126" font-weight="900" letter-spacing="-12">VB</text>
+  <rect x="39" y="37" width="52" height="70" rx="13" fill="url(#accent)" transform="rotate(-16 65 72)"/>
 </svg>

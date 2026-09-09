@@ -39,6 +39,17 @@
   white-space: nowrap;
 }
 
+.agent-presence-strip__primary {
+  flex: 0 0 auto;
+  padding: 1px 4px;
+  border-radius: 999px;
+  background: rgba(0, 122, 255, 0.12);
+  color: #65a9ff;
+  font-size: 9px;
+  font-weight: 750;
+  line-height: 14px;
+}
+
 .agent-presence-strip__state {
   flex: 0 0 30px;
   color: var(--island-text-secondary);
@@ -53,4 +64,11 @@
 .agent-presence-strip__meta--quota {
   flex: 1 1 auto;
   min-width: 0;
+}
+
+.agent-presence-strip__quota-line {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

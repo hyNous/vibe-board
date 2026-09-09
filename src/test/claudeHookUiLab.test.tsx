@@ -137,7 +137,7 @@ describe('ClaudeHookUiLab', () => {
   it('switches the lab color appearance through the shared theme store', async () => {
     renderLab()
 
-    fireEvent.click(screen.getByTitle('午夜 · Agent Island'))
+    fireEvent.click(screen.getByTitle('午夜 · Vibe Board'))
 
     await waitFor(() => {
       expect(useThemeStore.getState().colorTheme).toBe('midnight')

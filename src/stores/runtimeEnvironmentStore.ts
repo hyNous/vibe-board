@@ -43,6 +43,8 @@ export const useRuntimeEnvironmentStore = create<RuntimeEnvironmentStore>()(
       },
     }),
     {
+      // Keep this storage key stable: it is a runtime selector shared by
+      // existing Skill Manager windows, not user-facing product branding.
       name: 'agentbro-runtime-environment',
       partialize: (state) => ({
         selectedEnvironmentId: state.selectedEnvironmentId,

@@ -6,12 +6,14 @@
 //! Reads JSON from stdin, forwards events to AgentBro via Unix socket or TCP.
 //! For PermissionRequest events, waits for a response and outputs it.
 
-use std::fs::OpenOptions;
+use std::fs::{self, OpenOptions};
 use std::io::{self, BufRead, BufReader, Read, Write};
 use std::net::TcpStream;
 #[cfg(unix)]
 use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
+use std::process::Stdio;
+use std::thread;
 use std::time::Duration;
 
 const TIMEOUT_SECONDS: u64 = 21_600;
@@ -197,7 +199,7 @@ fn permission_hook_output_gemini(decision: &str, reason: &str) -> serde_json::Va
         }),
         "deny" => {
             let msg = if reason.is_empty() {
-                "Denied by user via Agent Island"
+                "Denied by user via Vibe Board"
             } else {
                 reason
             };
@@ -217,14 +219,14 @@ fn permission_hook_output_antigravity(decision: &str, reason: &str) -> serde_jso
         "deny" => serde_json::json!({
             "decision": "deny",
             "reason": if reason.is_empty() {
-                "Denied by user via Agent Island"
+                "Denied by user via Vibe Board"
             } else {
                 reason
             }
         }),
         _ => serde_json::json!({
             "decision": "ask",
-            "reason": "Agent Island could not resolve this permission request"
+            "reason": "Vibe Board could not resolve this permission request"
         }),
     }
 }
@@ -277,7 +279,7 @@ fn permission_hook_output(
         }
         "deny" => {
             let msg = if reason.is_empty() {
-                "Denied by user via Agent Island"
+                "Denied by user via Vibe Board"
             } else {
                 reason
             };
@@ -557,6 +559,73 @@ fn connect() -> Option<Stream> {
     None
 }
 
+/// Start Vibe Board on the first host session when the desktop app is not
+/// already listening. The executable marker is written by the app itself, so
+/// no credentials or host-specific paths need to be embedded in a plugin.
+fn ensure_agent_island_running() {
+    for _ in 0..3 {
+        if connect().is_some() {
+            return;
+        }
+        thread::sleep(Duration::from_millis(50));
+    }
+
+    let Ok(raw_path) = fs::read_to_string(agent_island_lib::data_dir::executable_marker_path())
+    else {
+        return;
+    };
+    let executable = PathBuf::from(raw_path.trim());
+    if !executable.is_file() {
+        return;
+    }
+
+    let mut command = agent_island_lib::platform::process::background_command(&executable);
+    command
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    if command.spawn().is_err() {
+        return;
+    }
+
+    // Give the Tauri process a short head start so the triggering SessionStart
+    // event can still be forwarded. Later hooks naturally retry through their
+    // normal lifecycle.
+    for _ in 0..20 {
+        if connect().is_some() {
+            return;
+        }
+        thread::sleep(Duration::from_millis(100));
+    }
+}
+
+/// Honor the first-run host selection without requiring a separately
+/// registered Node plugin. Hooks for child agents still remain passive.
+fn maybe_start_configured_host(source: &str, event: &str) {
+    if event != "SessionStart" {
+        return;
+    }
+
+    let config = agent_island_lib::config::ConfigStore::new().get();
+    let Some(host) = config
+        .host_agent
+        .as_deref()
+        .and_then(agent_island_lib::data_dir::normalize_usage_host)
+    else {
+        return;
+    };
+    if !config.auto_start_on_host_session
+        || agent_island_lib::data_dir::normalize_usage_host(source) != Some(host)
+    {
+        return;
+    }
+
+    if let Err(error) = agent_island_lib::data_dir::set_usage_host(host) {
+        eprintln!("Vibe Board host marker failed: {error}");
+    }
+    ensure_agent_island_running();
+}
+
 fn send_and_maybe_receive(
     state: &serde_json::Value,
     wait_response: bool,
@@ -588,16 +657,25 @@ fn send_and_maybe_receive(
 fn invocation_log_path() -> PathBuf {
     let home = dirs::home_dir().unwrap_or_else(std::env::temp_dir);
     let new_path = home
-        .join(".agentbro")
+        .join(".agent-island")
         .join("hooks")
         .join("invocations.jsonl");
-    // Migrate from old flat location
-    let old_path = home.join(".agentbro").join("hook-invocations.jsonl");
-    if old_path.exists() && !new_path.exists() {
-        if let Some(parent) = new_path.parent() {
-            let _ = std::fs::create_dir_all(parent);
+    if !new_path.exists() {
+        let legacy_root = agent_island_lib::data_dir::legacy_agentbro_home();
+        for old_path in [
+            legacy_root.join("hooks").join("invocations.jsonl"),
+            legacy_root.join("hook-invocations.jsonl"),
+        ] {
+            if old_path.exists() {
+                if let Some(parent) = new_path.parent() {
+                    let _ = std::fs::create_dir_all(parent);
+                }
+                let _ = std::fs::rename(&old_path, &new_path);
+                if new_path.exists() {
+                    break;
+                }
+            }
         }
-        let _ = std::fs::rename(&old_path, &new_path);
     }
     new_path
 }
@@ -820,6 +898,15 @@ fn main() {
         .unwrap_or_else(|| "claude-code".to_string());
     let forced_event = arg_value("--event");
 
+    if let Some(host) = arg_value("--host") {
+        if let Some(normalized) = agent_island_lib::data_dir::normalize_usage_host(&host) {
+            if let Err(error) = agent_island_lib::data_dir::set_usage_host(normalized) {
+                eprintln!("Vibe Board host marker failed: {error}");
+            }
+            ensure_agent_island_running();
+        }
+    }
+
     // Read all stdin
     let mut input = String::new();
     if io::stdin().read_to_string(&mut input).is_err() {
@@ -847,6 +934,7 @@ fn main() {
         .or_else(|| string_field(&data, &["hook_event_name", "event", "hookType"]))
         .map(normalize_hook_event)
         .unwrap_or("");
+    maybe_start_configured_host(&source, hook_event);
     let event_payload = cline_event_payload(&source, hook_event, &data);
     let cwd = string_field(&data, &["cwd"])
         .or_else(|| first_string_array_field(&data, "workspaceRoots"))
@@ -1068,7 +1156,7 @@ fn main() {
             }
 
             // Gemini: BeforeTool acts as the permission gate (no separate PermissionRequest event).
-            // Block and wait for user approval via Agent Island UI.
+            // Block and wait for user approval via Vibe Board UI.
             if is_gemini_source(&source) {
                 obj.insert("status".into(), "waiting_for_approval".into());
                 if !tool_name.is_empty() {

@@ -77,13 +77,13 @@ describe('HoverList interactions', () => {
       <HoverList
         sessions={[session({
           sessionTitle: '<environment_context>\n  <cwd>/tmp/agentbro</cwd>\n</environment_context>',
-          lastUserMessage: 'Build Agent Island landing page',
+          lastUserMessage: 'Build Vibe Board landing page',
         })]}
         onSessionClick={vi.fn()}
       />,
     )
 
-    expect(screen.getByText('agentbro · Build Agent Island landing page')).toBeInTheDocument()
+    expect(screen.getByText('agentbro · Build Vibe Board landing page')).toBeInTheDocument()
     expect(screen.queryByText(/environment_context/)).not.toBeInTheDocument()
   })
 
@@ -121,49 +121,17 @@ describe('HoverList interactions', () => {
     expect(screen.queryByRole('menu')).not.toBeInTheDocument()
   })
 
-  it('shows named subagents and opens their history rows', () => {
-    const onSubagentClick = vi.fn()
-    const current = session({
-      subagents: [{
-        agentId: 'ae7a77784c43f40e1',
-        name: 'calc-a',
-        agentType: 'general-purpose',
-        description: 'Calculate 1+1 (Agent A)',
-        transcriptPath: '/tmp/main.jsonl',
-        agentTranscriptPath: '/tmp/agent-ae7a77784c43f40e1.jsonl',
-        lastAssistantMessage: '2',
-        startedAt: Date.now() - 2_000,
-        completedAt: Date.now() - 1_000,
-        status: 'completed',
-        tools: [],
-      }],
-    })
-
-    render(
-      <HoverList
-        sessions={[current]}
-        onSessionClick={vi.fn()}
-        onSubagentClick={onSubagentClick}
-      />,
-    )
-
-    expect(screen.getByText('Subagents (1)')).toBeInTheDocument()
-    expect(screen.getByText('@calc-a')).toBeInTheDocument()
-    expect(screen.getByText('Calculate 1+1 (Agent A)')).toBeInTheDocument()
-    expect(screen.getByText('完成')).toHaveClass('hover-list__subagent-status--completed')
-
-    fireEvent.click(screen.getByText('@calc-a'))
-
-    expect(onSubagentClick).toHaveBeenCalledWith('s1', current.subagents[0])
-  })
-
-  it('hides completed subagents in the session list after a newer user message', () => {
+  it('renders only the conversation title for ordinary sessions', () => {
     const now = Date.now()
     render(
       <HoverList
         sessions={[session({
           lastUserMessage: 'Next task please',
           lastUserMessageAt: now,
+          responseText: 'Detailed model response',
+          lastToolName: 'Edit',
+          lastToolTarget: 'src/App.tsx +1 -1',
+          model: 'gpt-5.6',
           subagents: [{
             agentId: 'old-agent',
             name: 'old-work',
@@ -180,162 +148,13 @@ describe('HoverList interactions', () => {
       />,
     )
 
+    expect(screen.getByText('agentbro · Fix island interactions')).toBeInTheDocument()
+    expect(screen.queryByText('Next task please')).not.toBeInTheDocument()
+    expect(screen.queryByText('Detailed model response')).not.toBeInTheDocument()
+    expect(screen.queryByText('gpt-5.6')).not.toBeInTheDocument()
+    expect(screen.queryByText('src/App.tsx')).not.toBeInTheDocument()
     expect(screen.queryByText('Subagents (1)')).not.toBeInTheDocument()
     expect(screen.queryByText('@old-work')).not.toBeInTheDocument()
-  })
-
-  it('keeps running subagents visible even after a newer user message', () => {
-    const now = Date.now()
-    render(
-      <HoverList
-        sessions={[session({
-          lastUserMessage: 'Next task please',
-          lastUserMessageAt: now,
-          subagents: [{
-            agentId: 'running-agent',
-            name: 'active-work',
-            agentType: 'explorer',
-            description: 'Explore current task',
-            startedAt: now - 8_000,
-            status: 'running',
-            tools: ['Read'],
-          }],
-        })]}
-        onSessionClick={vi.fn()}
-      />,
-    )
-
-    expect(screen.getByText('Subagents (1)')).toBeInTheDocument()
-    expect(screen.getByText('@active-work')).toBeInTheDocument()
-    expect(screen.getByText('运行中')).toHaveClass('hover-list__subagent-status--running')
-  })
-
-  it('drops completed subagents from an earlier wave once a new wave is running (codex)', () => {
-    const now = Date.now()
-    render(
-      <HoverList
-        sessions={[session({
-          agentType: 'codex',
-          subagents: [
-            {
-              agentId: 'old-done',
-              name: 'wave-1',
-              agentType: 'worker',
-              description: 'Earlier turn work',
-              startedAt: now - 60_000,
-              completedAt: now - 50_000,
-              status: 'completed',
-              tools: [],
-              lastAssistantMessage: 'Wave 1 done.',
-            },
-            {
-              agentId: 'new-running',
-              name: 'wave-2',
-              agentType: 'worker',
-              description: 'Current turn work',
-              startedAt: now - 2_000,
-              status: 'running',
-              tools: ['Read'],
-            },
-          ],
-        })]}
-        onSessionClick={vi.fn()}
-      />,
-    )
-
-    expect(screen.getByText('Subagents (1)')).toBeInTheDocument()
-    expect(screen.getByText('@wave-2')).toBeInTheDocument()
-    expect(screen.queryByText('@wave-1')).not.toBeInTheDocument()
-  })
-
-  it('summarizes running subagents like a child-agent team', () => {
-    render(
-      <HoverList
-        sessions={[session({
-          subagents: [
-            {
-              agentId: 'agent-a',
-              name: 'ui-state',
-              agentType: 'explorer',
-              description: 'Map session states',
-              startedAt: Date.now() - 2_000,
-              status: 'running',
-              tools: ['Read'],
-            },
-            {
-              agentId: 'agent-b',
-              name: 'parser',
-              agentType: 'worker',
-              description: 'Parse transcript sidechains',
-              startedAt: Date.now() - 3_000,
-              completedAt: Date.now() - 1_000,
-              status: 'completed',
-              tools: [],
-              lastAssistantMessage: 'Sidechain transcript is ready.',
-            },
-          ],
-        })]}
-        onSessionClick={vi.fn()}
-      />,
-    )
-
-    expect(screen.getByText('Subagents (2)')).toBeInTheDocument()
-    expect(screen.getByText('@ui-state')).toBeInTheDocument()
-    expect(screen.getByText('运行中')).toHaveClass('hover-list__subagent-status--running')
-    expect(screen.getByText('@parser')).toBeInTheDocument()
-    expect(screen.getByText('Parse transcript sidechains')).toBeInTheDocument()
-    expect(screen.getByText('完成')).toHaveClass('hover-list__subagent-status--completed')
-  })
-
-  it('jumps from the arrow without opening detail', () => {
-    const onSessionClick = vi.fn()
-    const onJumpToTerminal = vi.fn()
-    render(
-      <HoverList
-        sessions={[session()]}
-        onSessionClick={onSessionClick}
-        onJumpToTerminal={onJumpToTerminal}
-      />,
-    )
-
-    fireEvent.click(screen.getByRole('button', { name: 'notch.jumpToTerminal' }))
-
-    expect(onJumpToTerminal).toHaveBeenCalledWith('s1')
-    expect(onSessionClick).not.toHaveBeenCalled()
-  })
-
-  it('still jumps from the arrow when terminal metadata is not ready', () => {
-    const onSessionClick = vi.fn()
-    const onJumpToTerminal = vi.fn()
-    render(
-      <HoverList
-        sessions={[session({ agentType: 'claude-code', pid: undefined, tty: undefined })]}
-        onSessionClick={onSessionClick}
-        onJumpToTerminal={onJumpToTerminal}
-      />,
-    )
-
-    fireEvent.click(screen.getByRole('button', { name: 'notch.jumpToTerminal' }))
-
-    expect(onJumpToTerminal).toHaveBeenCalledWith('s1')
-    expect(onSessionClick).not.toHaveBeenCalled()
-  })
-
-  it('allows Codex Desktop sessions without terminal metadata to jump', () => {
-    const onSessionClick = vi.fn()
-    const onJumpToTerminal = vi.fn()
-    render(
-      <HoverList
-        sessions={[session({ pid: undefined, tty: undefined, terminal: 'Codex' })]}
-        onSessionClick={onSessionClick}
-        onJumpToTerminal={onJumpToTerminal}
-      />,
-    )
-
-    fireEvent.click(screen.getByRole('button', { name: 'notch.jumpToTerminal' }))
-
-    expect(onJumpToTerminal).toHaveBeenCalledWith('s1')
-    expect(onSessionClick).not.toHaveBeenCalled()
   })
 
   it('hides jump for recovered sessions without terminal metadata', () => {
@@ -348,62 +167,6 @@ describe('HoverList interactions', () => {
     )
 
     expect(screen.queryByRole('button', { name: 'notch.jumpToTerminal' })).not.toBeInTheDocument()
-  })
-
-  it('labels Codex App sessions by app instead of cwd-derived project names', () => {
-    const { container } = render(
-      <HoverList
-        sessions={[session({
-          project: 'free-chat',
-          cwd: '/Users/me/Library/Application Support/Codex/free-chat',
-          terminal: 'Codex',
-          termProgram: 'iTerm.app',
-          termBundleId: 'com.openai.codex',
-        })]}
-        onSessionClick={vi.fn()}
-      />,
-    )
-
-    expect(screen.getByText('Codex App')).toBeInTheDocument()
-    expect(screen.getByText('Codex')).toBeInTheDocument()
-    expect(screen.queryByText('iTerm2')).not.toBeInTheDocument()
-    expect(screen.queryByText('Free Chat')).not.toBeInTheDocument()
-    expect(container.querySelector('.mascot-image')).toHaveAttribute('data-mascot-source', 'codex')
-    expect(container.querySelector('.pixel-indicator')).not.toBeInTheDocument()
-  })
-
-  it('labels app-hosted sessions by app bundle and hides stale terminal metadata', () => {
-    render(
-      <HoverList
-        sessions={[session({
-          agentType: 'claude-code',
-          terminal: '/dev/ttys001',
-          termProgram: 'iTerm.app',
-          termBundleId: 'com.example.AgentHost',
-        })]}
-        onSessionClick={vi.fn()}
-      />,
-    )
-
-    expect(screen.getByText('Claude')).toBeInTheDocument()
-    expect(screen.getByText('AgentHost')).toBeInTheDocument()
-    expect(screen.queryByText('iTerm2')).not.toBeInTheDocument()
-  })
-
-  it('infers terminal source from bundle metadata when terminal is a tty', () => {
-    render(
-      <HoverList
-        sessions={[session({
-          agentType: 'claude-code',
-          terminal: '/dev/ttys001',
-          termBundleId: 'com.googlecode.iterm2',
-        })]}
-        onSessionClick={vi.fn()}
-      />,
-    )
-
-    expect(screen.getByText('Claude')).toBeInTheDocument()
-    expect(screen.getByText('iTerm2')).toBeInTheDocument()
   })
 
   it('uses a subdued dot for inactive sessions', () => {
@@ -421,64 +184,6 @@ describe('HoverList interactions', () => {
     expect(container.querySelector('.mascot-image')).not.toBeInTheDocument()
   })
 
-  it('shows terminal program badges even when the terminal is not in the color table', () => {
-    render(
-      <HoverList
-        sessions={[session({ terminal: 'Ghostty' })]}
-        onSessionClick={vi.fn()}
-      />,
-    )
-
-    expect(screen.getByText('Ghostty')).toHaveClass('hover-list__terminal-badge')
-  })
-
-  it('shows iTerm terminal badges with the terminal style', () => {
-    render(
-      <HoverList
-        sessions={[session({ terminal: 'iTerm' })]}
-        onSessionClick={vi.fn()}
-      />,
-    )
-
-    expect(screen.getByText('iTerm')).toHaveClass('hover-list__terminal-badge')
-  })
-
-  it('derives terminal badges from bundle ids when terminal is only a tty', () => {
-    render(
-      <HoverList
-        sessions={[session({ terminal: '/dev/ttys001', termBundleId: 'com.googlecode.iterm2' })]}
-        onSessionClick={vi.fn()}
-      />,
-    )
-
-    expect(screen.getByText('iTerm2')).toHaveClass('hover-list__terminal-badge')
-    expect(screen.queryByText('/dev/ttys001')).not.toBeInTheDocument()
-  })
-
-  it('labels Wave sessions from the bundle id', () => {
-    render(
-      <HoverList
-        sessions={[session({ terminal: '/dev/ttys001', termBundleId: 'dev.commandline.waveterm' })]}
-        onSessionClick={vi.fn()}
-      />,
-    )
-
-    expect(screen.getByText('Wave')).toHaveClass('hover-list__terminal-badge')
-    expect(screen.queryByText('/dev/ttys001')).not.toBeInTheDocument()
-  })
-
-  it('falls back to TERM_PROGRAM when bundle id is missing', () => {
-    render(
-      <HoverList
-        sessions={[session({ terminal: '/dev/ttys001', termProgram: 'Ghostty' })]}
-        onSessionClick={vi.fn()}
-      />,
-    )
-
-    expect(screen.getByText('Ghostty')).toHaveClass('hover-list__terminal-badge')
-    expect(screen.queryByText('/dev/ttys001')).not.toBeInTheDocument()
-  })
-
   it('keeps bare tty values out of the session list badges', () => {
     render(
       <HoverList
@@ -489,142 +194,6 @@ describe('HoverList interactions', () => {
 
     expect(screen.queryByText('/dev/ttys001')).not.toBeInTheDocument()
     expect(document.querySelector('.hover-list__terminal-badge')).not.toBeInTheDocument()
-  })
-
-  it('renders Codex list items with title, latest user prompt, and response fallback rows', () => {
-    render(
-      <HoverList
-        sessions={[session({
-          phase: 'idle',
-          sessionTitle: undefined,
-          lastUserMessage: undefined,
-          responseText: undefined,
-          description: undefined,
-          chatHistory: [
-            { role: 'user', content: '第三个自定义高度怎么都不生效', timestamp: 1 },
-            { role: 'assistant', content: '确实，第三个自定义高度之前没有正确同步。', timestamp: 2 },
-          ],
-        })]}
-        onSessionClick={vi.fn()}
-      />,
-    )
-
-    expect(screen.getByText('agentbro · 第三个自定义高度怎么都不生效')).toBeInTheDocument()
-    expect(screen.getByText('第三个自定义高度怎么都不生效')).toBeInTheDocument()
-    expect(screen.getByText('确实，第三个自定义高度之前没有正确同步。')).toBeInTheDocument()
-  })
-
-  it('unwraps Codex title metadata instead of rendering raw JSON', () => {
-    render(
-      <HoverList
-        sessions={[session({
-          phase: 'idle',
-          sessionTitle: '{"title":"修复灵动岛乱码"}',
-          lastUserMessage: undefined,
-          responseText: '{"title":"修复灵动岛乱码"}',
-          description: undefined,
-        })]}
-        onSessionClick={vi.fn()}
-      />,
-    )
-
-    expect(screen.getAllByText('修复灵动岛乱码').length).toBeGreaterThan(0)
-    expect(screen.queryByText('{"title":"修复灵动岛乱码"}')).not.toBeInTheDocument()
-  })
-
-  it('shows generic working text for processing sessions without a tool', () => {
-    render(
-      <HoverList
-        sessions={[session({
-          phase: 'processing',
-          lastToolName: undefined,
-          description: 'Processing user input: Please fix the island',
-        })]}
-        onSessionClick={vi.fn()}
-      />,
-    )
-
-    expect(screen.getByText('notch.working')).toBeInTheDocument()
-    expect(screen.queryByText('Processing user input: Please fix the island')).not.toBeInTheDocument()
-  })
-
-  it('shows done and needs-attention list ribbons', () => {
-    render(
-      <HoverList
-        sessions={[
-          session({ id: 'done', phase: 'done', sessionTitle: 'Completed task' }),
-          session({ id: 'error', phase: 'error', sessionTitle: 'Failed task', description: 'Hook failed' }),
-        ]}
-        onSessionClick={vi.fn()}
-      />,
-    )
-
-    expect(screen.getByText('Done')).toBeInTheDocument()
-    expect(screen.getByText('Needs attention')).toBeInTheDocument()
-  })
-
-  it('localizes compacting context tool labels', () => {
-    render(
-      <HoverList
-        sessions={[session({
-          phase: 'compacting',
-          lastToolName: 'Compacting context',
-        })]}
-        onSessionClick={vi.fn()}
-      />,
-    )
-
-    expect(screen.getByText('压缩上下文')).toHaveClass('hover-list__tool-label--compact')
-    expect(screen.queryByText('Compacting context')).not.toBeInTheDocument()
-  })
-
-  it('shows compacting context from a processing description without a tool label', () => {
-    render(
-      <HoverList
-        sessions={[session({
-          phase: 'processing',
-          lastToolName: undefined,
-          description: 'Compacting conversation...',
-        })]}
-        onSessionClick={vi.fn()}
-      />,
-    )
-
-    expect(screen.getByText('压缩上下文')).toHaveClass('hover-list__tool-label--compact')
-    expect(screen.queryByText('Compacting conversation...')).not.toBeInTheDocument()
-  })
-
-  it('renders Codex edit targets with change counts', () => {
-    const { container } = render(
-      <HoverList
-        sessions={[session({
-          lastToolName: 'Edit',
-          lastToolTarget: 'OverlayFeedbackPanel.tsx +68 -41',
-        })]}
-        onSessionClick={vi.fn()}
-      />,
-    )
-
-    expect(screen.getByText('notch.tool.editing')).toBeInTheDocument()
-    expect(screen.getByText('OverlayFeedbackPanel.tsx')).toHaveClass('hover-list__tool-target-name')
-    expect(screen.getByText('+68')).toHaveClass('hover-list__tool-count--add')
-    expect(screen.getByText('-41')).toHaveClass('hover-list__tool-count--del')
-    expect(container.querySelector('.hover-list__tool-target--changes')).toBeInTheDocument()
-  })
-
-  it('shows only file names for path-based tool targets in the session list', () => {
-    render(
-      <HoverList
-        sessions={[session({
-          lastToolName: 'Read',
-          lastToolTarget: '/Users/demo/projects/agentbro/src-tauri/src/hooks/tool_processor.rs',
-        })]}
-        onSessionClick={vi.fn()}
-      />,
-    )
-
-    expect(screen.getByText('tool_processor.rs')).toBeInTheDocument()
-    expect(screen.queryByText(/\/Users\/demo\/projects/)).not.toBeInTheDocument()
   })
 
   it('supports keyboard navigation and Enter jump like the island panel', () => {
@@ -875,34 +444,6 @@ describe('HoverList interactions', () => {
     expect(onSessionClick).not.toHaveBeenCalled()
   })
 
-  it('renders compact task rows with local expand interaction', () => {
-    const onSessionClick = vi.fn()
-    render(
-      <HoverList
-        sessions={[session({
-          tasks: [
-            { id: '1', name: 'Map SessionCardView', status: 'completed' },
-            { id: '2', name: 'Check TerminalApprovalHintView', status: 'in_progress' },
-            { id: '3', name: 'Preserve question overlay', status: 'pending' },
-            { id: '4', name: 'Preserve plan overlay', status: 'pending' },
-            { id: '5', name: 'Preserve subagent history', status: 'pending' },
-            { id: '6', name: 'Ship QA checklist', status: 'pending' },
-          ],
-        })]}
-        onSessionClick={onSessionClick}
-      />,
-    )
-
-    expect(screen.getByText('(1 已完成, 1 进行中, 4 待处理)')).toBeInTheDocument()
-    expect(screen.getByText('Map SessionCardView')).toHaveClass('hover-list__task-subject--done')
-    expect(screen.queryByText('Ship QA checklist')).not.toBeInTheDocument()
-
-    fireEvent.click(screen.getByRole('button', { name: '查看更多 (1 项)' }))
-
-    expect(screen.getByText('Ship QA checklist')).toBeInTheDocument()
-    expect(onSessionClick).not.toHaveBeenCalled()
-  })
-
   it('renders setup and trust notices without replacing deep session rows', () => {
     render(
       <HoverList
@@ -935,53 +476,6 @@ describe('HoverList interactions', () => {
     expect(screen.getByText('Restart your sessions')).toBeInTheDocument()
     expect(screen.getByText('Codex updated - confirm authorization')).toBeInTheDocument()
     expect(screen.getByText('Hooks just installed - restart running sessions to connect')).toBeInTheDocument()
-  })
-
-  it('does not render an authorization card for a normal edit tool row', () => {
-    render(
-      <HoverList
-        sessions={[session({
-          lastToolName: 'Edit',
-          lastToolTarget: 'src/App.tsx +1 -1',
-        })]}
-        onSessionClick={vi.fn()}
-      />,
-    )
-
-    expect(screen.getByText('notch.tool.editing')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: '允许一次' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: '拒绝' })).not.toBeInTheDocument()
-  })
-
-  it('renders a compact diff preview for active edit tools without approval actions', () => {
-    render(
-      <HoverList
-        sessions={[session({
-          lastToolName: 'Edit',
-          lastToolTarget: 'src/App.tsx +1 -1',
-          activeTools: [{
-            toolUseId: 'edit-1',
-            toolName: 'Edit',
-            status: 'running',
-            startedAt: Date.now() - 1000,
-            diff: {
-              filePath: 'src/App.tsx',
-              lines: [
-                { type: 'remove', lineNumber: 10, content: 'const label = "old"' },
-                { type: 'add', lineNumber: 10, content: 'const label = "new"' },
-              ],
-            },
-          }],
-        })]}
-        onSessionClick={vi.fn()}
-      />,
-    )
-
-    expect(screen.getByText('App.tsx')).toHaveClass('hover-list__tool-target-name')
-    expect(screen.getByText('src/App.tsx')).toBeInTheDocument()
-    expect(screen.getByText('const label = "old"')).toBeInTheDocument()
-    expect(screen.getByText('const label = "new"')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: '允许一次' })).not.toBeInTheDocument()
   })
 
   it('routes inline question options without opening the row', async () => {
@@ -1125,17 +619,4 @@ describe('HoverList interactions', () => {
     expect(onSessionClick).not.toHaveBeenCalled()
   })
 
-  it('only displays cache TTL when the setting is enabled', () => {
-    const cacheSession = session({
-      lastMainAgentAt: Date.now() - 60_000,
-      cacheTtlMs: 300_000,
-    })
-
-    const { rerender } = render(<HoverList sessions={[cacheSession]} onSessionClick={vi.fn()} />)
-    expect(screen.queryByText(/cache /)).not.toBeInTheDocument()
-
-    useConfigStore.setState({ showCacheTTL: true })
-    rerender(<HoverList sessions={[cacheSession]} onSessionClick={vi.fn()} />)
-    expect(screen.getByText(/cache \d+m/)).toBeInTheDocument()
-  })
 })

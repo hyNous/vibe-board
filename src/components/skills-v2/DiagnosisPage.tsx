@@ -14,7 +14,7 @@ const ISSUE_GROUPS: Array<{ id: IssueGroupId; title: string; description: string
   {
     id: 'unmanaged',
     title: '未接管的 Skill',
-    description: '这些 Skill 已经在某个 Agent 目录里，但还没有交给 Agent Island 管理。Agent Island 会先提示，不会擅自覆盖。',
+    description: '这些 Skill 已经在某个 Agent 目录里，但还没有交给 Vibe Board 管理。Vibe Board 会先提示，不会擅自覆盖。',
   },
   {
     id: 'sync',
@@ -308,7 +308,7 @@ function friendlyDetail(issue: DiagnosisIssue): string {
     return `${quotedPath(issue.detail)} 和中心库快照不同，需要确认是否把这份本地修改推回中心库。`
   }
   if (issue.issueType === 'center_unmanaged') {
-    return '这个目录看起来是 Skill，但还没有进入 Agent Island 的中心库索引。'
+    return '这个目录看起来是 Skill，但还没有进入 Vibe Board 的中心库索引。'
   }
   if (issue.issueType === 'pack_member_missing') {
     return '某个 Skill 包引用了中心库里不存在的 Skill，安装这个包时可能缺少内容。'
@@ -319,15 +319,15 @@ function friendlyDetail(issue: DiagnosisIssue): string {
 function unmanagedReasonText(reason: string): string {
   switch (reason) {
     case 'same_name_as_center_skill':
-      return '本地已有同名 Skill，Agent Island 暂时不会接管，避免覆盖你的内容。'
+      return '本地已有同名 Skill，Vibe Board 暂时不会接管，避免覆盖你的内容。'
     case 'not_in_center_library':
       return '这个 Skill 不在中心库里。你可以在 Agent 管理页把它导入中心库，之后再统一分发。'
     case 'path_conflict':
       return '这个路径和现有管理记录冲突，需要先确认保留哪一份。'
     case '':
-      return 'Agent Island 还没有接管这个 Skill。需要统一管理时，可以去 Agent 管理页接管。'
+      return 'Vibe Board 还没有接管这个 Skill。需要统一管理时，可以去 Agent 管理页接管。'
     default:
-      return 'Agent Island 还没有接管这个 Skill。需要统一管理时，可以去 Agent 管理页接管。'
+      return 'Vibe Board 还没有接管这个 Skill。需要统一管理时，可以去 Agent 管理页接管。'
   }
 }
 

@@ -4,7 +4,8 @@
 use super::{
     hook_manager, profiles, AdapterStatus, AgentAdapter, AgentEvent, QuestionItem, QuestionOption,
 };
-use std::path::PathBuf;
+use serde_json::Value;
+use std::path::{Path, PathBuf};
 
 /// Resolve Claude Code's config root, honoring the `CLAUDE_CONFIG_DIR` override
 /// that Claude Code itself respects. Falls back to `~/.claude`.
@@ -69,11 +70,7 @@ pub struct ClaudeCodeAdapter {
 impl ClaudeCodeAdapter {
     pub fn new() -> Self {
         let config_root = default_config_root();
-        let status = if Self::is_claude_code_installed() {
-            AdapterStatus::Available
-        } else {
-            AdapterStatus::Unavailable
-        };
+        let status = Self::status_for_config_root(&config_root);
 
         Self {
             config_root,
@@ -85,11 +82,7 @@ impl ClaudeCodeAdapter {
 
     /// Create an adapter for a custom engine instance path
     pub fn with_config_root(config_root: PathBuf, label: String) -> Self {
-        let status = if Self::is_claude_code_installed() {
-            AdapterStatus::Available
-        } else {
-            AdapterStatus::Unavailable
-        };
+        let status = Self::status_for_config_root(&config_root);
 
         Self {
             config_root,
@@ -119,8 +112,21 @@ impl ClaudeCodeAdapter {
         super::executable::command_exists("claude")
     }
 
+    fn status_for_config_root(config_root: &Path) -> AdapterStatus {
+        if Self::is_claude_code_installed() {
+            AdapterStatus::Available
+        } else if config_root.join("settings.json").is_file() {
+            // Claude can be installed through an IDE or a shell whose PATH is
+            // not inherited by the desktop app; the settings file is enough
+            // for hook/statusLine integration.
+            AdapterStatus::Installed
+        } else {
+            AdapterStatus::Unavailable
+        }
+    }
+
     /// Get the path where the bridge binary should be installed
-    /// Uses ~/.agentbro/bin/ to avoid spaces in path (shared across all instances)
+    /// Uses ~/.agent-island/bin/ to avoid spaces in path (shared across all instances)
     fn bridge_binary_path() -> PathBuf {
         hook_manager::bridge_binary_path()
     }
@@ -160,6 +166,24 @@ impl ClaudeCodeAdapter {
     }
 }
 
+fn is_managed_status_line(value: &Value) -> bool {
+    value.get("type").and_then(Value::as_str) == Some("command")
+        && value
+            .get("command")
+            .and_then(Value::as_str)
+            .map(|command| {
+                command.contains("agent-island-bridge") || command.contains("agentbro-bridge")
+            })
+            .unwrap_or(false)
+}
+
+fn status_line_should_be_installed(settings: &Value) -> bool {
+    settings
+        .get("statusLine")
+        .map(|value| value.is_null() || is_managed_status_line(value))
+        .unwrap_or(true)
+}
+
 impl AgentAdapter for ClaudeCodeAdapter {
     fn name(&self) -> &str {
         "claude-code"
@@ -178,18 +202,40 @@ impl AgentAdapter for ClaudeCodeAdapter {
         Self::cleanup_old_python_hook();
 
         let hook_command = self.hook_command()?;
-        profiles::install_nested_json_hooks_at(
+        let mut settings = profiles::install_nested_json_hooks_at(
             &profiles::claude_code_profile(),
             &self.settings_path(),
             &hook_command,
         )?;
+
+        // Claude's statusLine command is the only supported source for its
+        // live rate-limit/context snapshot. Preserve a user's custom command.
+        if status_line_should_be_installed(&settings) {
+            settings["statusLine"] = serde_json::json!({
+                "type": "command",
+                "command": format!("{hook_command} --event StatusLineUpdate"),
+            });
+            hook_manager::write_json_config(&self.settings_path(), &settings)?;
+        }
 
         log::info!("Claude Code hooks installed successfully");
         Ok(())
     }
 
     fn remove_hooks(&self) -> Result<(), Box<dyn std::error::Error>> {
-        profiles::uninstall_at(&profiles::claude_code_profile(), &self.settings_path())?;
+        let settings_path = self.settings_path();
+        profiles::uninstall_at(&profiles::claude_code_profile(), &settings_path)?;
+
+        let mut settings = hook_manager::read_json_config(&settings_path);
+        if settings
+            .get("statusLine")
+            .is_some_and(is_managed_status_line)
+        {
+            if let Some(root) = settings.as_object_mut() {
+                root.remove("statusLine");
+            }
+            hook_manager::write_json_config(&settings_path, &settings)?;
+        }
 
         // Also clean up old Python hook if present
         Self::cleanup_old_python_hook();
@@ -203,11 +249,7 @@ impl AgentAdapter for ClaudeCodeAdapter {
     }
 
     fn detect_status_now(&self) -> AdapterStatus {
-        if Self::is_claude_code_installed() {
-            AdapterStatus::Available
-        } else {
-            AdapterStatus::Unavailable
-        }
+        Self::status_for_config_root(&self.config_root)
     }
 
     fn parse_event(
@@ -965,6 +1007,16 @@ impl ClaudeCodeAdapter {
             }
         }
 
+        // A missing/null statusLine means the live Claude quota/context feed
+        // is not installed yet. Custom user commands remain valid.
+        if settings
+            .get("statusLine")
+            .map(|value| value.is_null())
+            .unwrap_or(true)
+        {
+            return HookVerificationResult::NeedsReinstall;
+        }
+
         HookVerificationResult::Ok
     }
 
@@ -1318,6 +1370,26 @@ mod tests {
             assert!(command.contains("AGENTBRO_ENGINE_LABEL"));
             assert!(command.contains("AGENTBRO_CONFIG_ROOT"));
         }
+    }
+
+    #[test]
+    fn status_line_install_preserves_custom_commands() {
+        assert!(status_line_should_be_installed(&json!({})));
+        assert!(status_line_should_be_installed(
+            &json!({ "statusLine": null })
+        ));
+        assert!(status_line_should_be_installed(&json!({
+            "statusLine": {
+                "type": "command",
+                "command": "C:/Users/me/.agent-island/bin/agent-island-bridge --source claude-code"
+            }
+        })));
+        assert!(!status_line_should_be_installed(&json!({
+            "statusLine": {
+                "type": "command",
+                "command": "node ~/.claude/statusline.js"
+            }
+        })));
     }
 
     #[test]

@@ -1,6 +1,6 @@
-# Contributing to Agent Island
+# Contributing to Vibe Board
 
-Thanks for your interest in contributing to Agent Island 🙌 Bug fixes, feature ideas, new Agent adapters, translations — all welcome.
+Thanks for your interest in contributing to Vibe Board 🙌 Bug fixes, feature ideas, new Agent adapters, translations — all welcome.
 
 > This document is for **all contributors**, including those working with AI assistants. AI agents should also read [`AGENTS.md`](AGENTS.md) (or [`.claude/CLAUDE.md`](.claude/CLAUDE.md) for Claude Code) first to pick up the project map.
 > 中文版: [`CONTRIBUTING.md`](CONTRIBUTING.md).
@@ -147,7 +147,7 @@ Edit `README.md` / `README.en.md` / `docs/*.md` directly. Don't add standalone R
 
 ## Working with AI assistants
 
-We encourage AI-assisted contributions — Agent Island is itself a tool for AI coding agents, so the philosophy is consistent.
+We encourage AI-assisted contributions — Vibe Board is itself a tool for AI coding agents, so the philosophy is consistent.
 
 - **Use the project-level config.** Claude Code auto-loads [`.claude/CLAUDE.md`](.claude/CLAUDE.md). Codex / Cursor / Aider / Copilot / Gemini CLI etc. read [`AGENTS.md`](AGENTS.md). Have your assistant read these *before* it starts editing — it saves a lot of misguided exploration.
 - **Create an Issue before code changes.** The assistant must create or link an Issue before editing, use a dedicated task branch, and close the loop with `Closes #<number>` in the PR. Pure questions and read-only analysis do not need an Issue.
@@ -160,7 +160,7 @@ We encourage AI-assisted contributions — Agent Island is itself a tool for AI 
 
 ## Brand & trademark
 
-Agent Island is an independent distribution based on the [Apache-2.0 code from AgentBro](UPSTREAM.md). Keep [LICENSE](LICENSE), [NOTICE](NOTICE), and [TRADEMARKS.md](TRADEMARKS.md), and use your own name, icon, and website assets when distributing builds.
+Vibe Board is an independent distribution based on the [Apache-2.0 code from AgentBro](UPSTREAM.md). Keep [LICENSE](LICENSE), [NOTICE](NOTICE), and [TRADEMARKS.md](TRADEMARKS.md), and use your own name, icon, and website assets when distributing builds.
 
 If you fork:
 - Personal use, experiments, upstream PRs — fine.

@@ -1,4 +1,4 @@
-/* ApprovalBar — Agent Island style: warning card + 4 colored buttons, plan approval bar */
+/* ApprovalBar — Vibe Board style: warning card + 4 colored buttons, plan approval bar */
 import { useEffect, useRef, useCallback, useState, type MouseEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { SessionState } from '../../types/agent'

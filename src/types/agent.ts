@@ -1,4 +1,4 @@
-/* Agent Island — Shared TypeScript Types */
+/* Vibe Board — Shared TypeScript Types */
 
 export type AgentType =
   | 'claude-code' | 'cline' | 'codex' | 'gemini-cli'
@@ -156,6 +156,7 @@ export interface RateLimitInfo {
 export interface AgentStatusSnapshot {
   agent: string
   label: string
+  primary?: boolean
   online: boolean
   lastSeenAt: number
   lastCompletedAt?: number | null

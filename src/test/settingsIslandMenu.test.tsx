@@ -156,7 +156,7 @@ describe('settings island menu', () => {
     fireEvent.click(screen.getByText('settings.remoteServers.title'))
 
     await waitFor(() => expect(screen.getByText('settings.listeningPortDesc')).toBeInTheDocument())
-    expect(screen.getByText('One server directory for Agent Island')).toBeInTheDocument()
+    expect(screen.getByText('One server directory for Vibe Board')).toBeInTheDocument()
   })
 
   it('places Remote Servers immediately after Agent management', () => {

@@ -199,7 +199,7 @@ export function getSessionExpiryAnchor(session: SessionState): number {
 }
 
 /**
- * Duration of the current trace/task shown across Agent Island task UI.
+ * Duration of the current trace/task shown across Vibe Board task UI.
  *
  * Shows the elapsed time of the current trace since its latest prompt/task start,
  * never the lifetime of a long-lived session or Codex thread.

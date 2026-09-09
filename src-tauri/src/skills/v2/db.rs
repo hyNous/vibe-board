@@ -178,9 +178,23 @@ impl Db {
             std::fs::create_dir_all(parent)
                 .map_err(|e| format!("create db dir {}: {}", parent.display(), e))?;
         }
-        // Migrate from old flat location (~/.agentbro/skill-manager.db)
-        let old_db = crate::data_dir::agentbro_home().join("skill-manager.db");
-        crate::data_dir::migrate_sqlite(&old_db, path);
+        // Migrate databases written by older AgentBro builds. The new
+        // Vibe Board location is independent, while the old files remain
+        // readable through this one-way move.
+        let old_locations = [
+            crate::data_dir::legacy_agentbro_home().join("skill-manager.db"),
+            crate::data_dir::legacy_agentbro_home()
+                .join("skill-manager")
+                .join("skill-manager.db"),
+            fsutil::legacy_agentbro_home()
+                .join("skill-manager")
+                .join("skill-manager.db"),
+        ];
+        for old_db in old_locations {
+            if !path.exists() {
+                crate::data_dir::migrate_sqlite(&old_db, path);
+            }
+        }
         // Detect incompatible legacy schema and nuke the file if needed.
         if path.exists() {
             if let Ok(probe) = Connection::open(path) {

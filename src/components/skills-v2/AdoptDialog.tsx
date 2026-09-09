@@ -422,7 +422,7 @@ function adoptOptionCopy(
       return {
         title: option.label,
         shortLabel: option.label,
-        description: '使用 Agent Island 后端建议的处理方式。',
+        description: '使用 Vibe Board 后端建议的处理方式。',
         badge: option.destructive ? '会改动' : '安全',
         impact: option.destructive ? '执行前请确认该操作会修改现有文件。' : '该操作不会删除现有文件。',
       }

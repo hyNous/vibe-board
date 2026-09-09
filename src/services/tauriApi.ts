@@ -1,4 +1,4 @@
-/* Agent Island — Tauri IPC API Service
+/* Vibe Board — Tauri IPC API Service
  * Typed wrappers for Tauri commands with graceful browser-dev-mode fallbacks.
  */
 
@@ -232,6 +232,7 @@ export interface MonitorSessionDetail {
 export interface UsageProviderStatus {
   provider: string
   label: string
+  primary: boolean
   enabled: boolean
   available: boolean
   catalogSupported: boolean
@@ -366,9 +367,13 @@ export interface BackendConfig {
   codexAppServerSyncIntervalSeconds: number
   sessionRefreshIntervalSeconds: number
   windowCloseBehavior: 'tray' | 'exit'
+  hostVisibilityMode: 'independent' | 'follow'
+  notchPositionMode: 'top' | 'left' | 'right'
+  notchVerticalOffset: number
   theme: string
   language: 'en' | 'zh' | 'ja' | 'ko' | 'tr'
   displayId: string
+  panelHorizontalOffset: number
   autoHideNoSessions: boolean
   soundEvents: Record<string, boolean>
   soundRules: Record<string, { enabled: boolean; sound: string }>
@@ -410,6 +415,10 @@ export interface BackendConfig {
   shortcutDenyEnabled: boolean
   shortcutSkip: string
   shortcutSkipEnabled: boolean
+  setupWizardCompleted: boolean
+  hostAgent: string | null
+  childAgents: string[]
+  autoStartOnHostSession: boolean
 }
 
 export interface BackendDisplayInfo {
@@ -546,7 +555,7 @@ export async function getClaudeWrapperStatus(): Promise<ClaudeWrapperStatus> {
   if (!isTauri()) {
     return {
       installed: false,
-      shimPath: '~/.agentbro/bin/claude',
+      shimPath: '~/.agent-island/bin/claude',
       pathHintInstalled: false,
       shellConfigPath: '~/.zshrc',
     }
@@ -680,9 +689,13 @@ export async function getConfig(): Promise<BackendConfig> {
       codexAppServerSyncIntervalSeconds: 30,
       sessionRefreshIntervalSeconds: 3,
       windowCloseBehavior: 'tray',
+      hostVisibilityMode: 'independent',
+      notchPositionMode: 'top',
+      notchVerticalOffset: 0,
       theme: 'midnight',
       language: 'en',
       displayId: 'primary',
+      panelHorizontalOffset: 0,
       autoHideNoSessions: false,
       soundEvents: {},
       soundRules: {},
@@ -717,6 +730,10 @@ export async function getConfig(): Promise<BackendConfig> {
       shortcutDenyEnabled: false,
       shortcutSkip: 'CommandOrControl+Shift+S',
       shortcutSkipEnabled: false,
+      setupWizardCompleted: false,
+      hostAgent: null,
+      childAgents: [],
+      autoStartOnHostSession: true,
     }
   }
   return invoke<BackendConfig>('get_config')
@@ -876,11 +893,11 @@ export async function getActiveThemeBundle(name: string): Promise<ThemeConfig> {
 
 export async function setActiveBackendTheme(name: string): Promise<void> {
   if (!isTauri()) return
-  window.dispatchEvent(new CustomEvent('agentbro-theme-sync', { detail: { status: 'pending', name } }))
+  window.dispatchEvent(new CustomEvent('agent-island-theme-sync', { detail: { status: 'pending', name } }))
   try {
     return await invoke('set_active_theme', { name })
   } catch (error) {
-    window.dispatchEvent(new CustomEvent('agentbro-theme-sync', { detail: { status: 'failed', name } }))
+    window.dispatchEvent(new CustomEvent('agent-island-theme-sync', { detail: { status: 'failed', name } }))
     throw error
   }
 }
@@ -1172,12 +1189,12 @@ function demoSubagentChatHistory(transcriptPath: string): ParsedMessage[] {
           {
             type: 'tool_result',
             toolUseId: 'demo-readme-read',
-            content: '# Agent Island\nAgent Island 是一个面向 AI 编程 Agent 的 macOS 灵动岛应用。',
+            content: '# Vibe Board\nVibe Board 是一个面向 AI 编程 Agent 的 macOS 灵动岛应用。',
             isError: false,
           },
           {
             type: 'text',
-            text: 'README 总结完成：Agent Island 面向 Claude Code、Codex 等 AI 编程 Agent，在 macOS 顶部提供灵动岛式状态、审批、提问、计划和完成提醒。',
+            text: 'README 总结完成：Vibe Board 面向 Claude Code、Codex 等 AI 编程 Agent，在 macOS 顶部提供灵动岛式状态、审批、提问、计划和完成提醒。',
           },
         ],
       },
@@ -1287,9 +1304,9 @@ export async function getCursorPosition(): Promise<[number, number]> {
 }
 
 /** Native fallback for transparent-window hover hit testing. */
-export async function isCursorOverNotch(width?: number, height?: number, anchorOffsetX?: number): Promise<boolean> {
+export async function isCursorOverNotch(width?: number, height?: number, anchorOffsetX?: number, anchorOffsetY?: number): Promise<boolean> {
   if (!isTauri()) return false
-  return invoke<boolean>('is_cursor_over_notch', { width, height, anchorOffsetX })
+  return invoke<boolean>('is_cursor_over_notch', { width, height, anchorOffsetX, anchorOffsetY })
 }
 
 // ── Display Commands ────────────────────────────────────────────
@@ -1344,9 +1361,15 @@ export async function startNotchDrag(
   return invoke<boolean>('start_notch_drag', { horizontalOffset, width, height, displayId })
 }
 
-export async function endNotchDrag(): Promise<number | null> {
+export type NotchDragResult = {
+  horizontalOffset: number
+  verticalOffset: number
+  positionMode: 'top' | 'left' | 'right'
+}
+
+export async function endNotchDrag(): Promise<NotchDragResult | null> {
   if (!isTauri()) return null
-  return invoke<number | null>('end_notch_drag')
+  return invoke<NotchDragResult | null>('end_notch_drag')
 }
 
 export async function startPetDrag(

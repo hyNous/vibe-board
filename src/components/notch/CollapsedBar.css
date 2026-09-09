@@ -144,7 +144,7 @@
   pointer-events: none;
 }
 
-/* Separator below status row — Agent Island dashed style */
+/* Separator below status row — Vibe Board dashed style */
 .collapsed-bar--expanded .collapsed-bar__status-row {
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   padding-bottom: 8px;
@@ -440,7 +440,7 @@
   }
 }
 
-/* Alert badge — Agent Island-style: gray bg + amber dot + count */
+/* Alert badge — Vibe Board-style: gray bg + amber dot + count */
 .collapsed-bar__alert-badge {
   display: inline-flex;
   align-items: center;
@@ -531,7 +531,7 @@
   100% { transform: translateX(100%); }
 }
 
-/* Tool status in collapsed bar — Agent Island accent for tool names */
+/* Tool status in collapsed bar — Vibe Board accent for tool names */
 .collapsed-bar__tool-status {
   font-size: 11px;
   font-weight: 500;
@@ -542,7 +542,7 @@
   max-width: 140px;
 }
 
-/* ALL/ACT/WAIT counter pills — Agent Island expanded header */
+/* ALL/ACT/WAIT counter pills — Vibe Board expanded header */
 .collapsed-bar__counter-pills {
   display: flex;
   height: 26px;
@@ -646,4 +646,79 @@
   padding: 1px 4px;
   border-radius: 4px;
   letter-spacing: 0.5px;
+}
+
+/* Side-mounted collapsed island: keep the small UI readable in a vertical stack. */
+.notch-panel[data-notch-position="left"] .collapsed-bar:not(.collapsed-bar--expanded),
+.notch-panel[data-notch-position="right"] .collapsed-bar:not(.collapsed-bar--expanded) {
+  width: 100%;
+  height: 100%;
+}
+
+.notch-panel[data-notch-position="left"] .collapsed-bar:not(.collapsed-bar--expanded) .collapsed-bar__main,
+.notch-panel[data-notch-position="right"] .collapsed-bar:not(.collapsed-bar--expanded) .collapsed-bar__main {
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  gap: 4px;
+  padding: 6px 4px;
+}
+
+.notch-panel[data-notch-position="left"] .collapsed-bar:not(.collapsed-bar--expanded) .collapsed-bar__left,
+.notch-panel[data-notch-position="right"] .collapsed-bar:not(.collapsed-bar--expanded) .collapsed-bar__left {
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  gap: 4px;
+  overflow: visible;
+}
+
+.notch-panel[data-notch-position="left"] .collapsed-bar:not(.collapsed-bar--expanded) .collapsed-bar__carousel,
+.notch-panel[data-notch-position="right"] .collapsed-bar:not(.collapsed-bar--expanded) .collapsed-bar__carousel {
+  display: none;
+}
+
+.notch-panel[data-notch-position="left"] .collapsed-bar:not(.collapsed-bar--expanded) .collapsed-bar__brand-empty,
+.notch-panel[data-notch-position="right"] .collapsed-bar:not(.collapsed-bar--expanded) .collapsed-bar__brand-empty {
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  width: 100%;
+}
+
+.notch-panel[data-notch-position="left"] .collapsed-bar:not(.collapsed-bar--expanded) .collapsed-bar__brand-name,
+.notch-panel[data-notch-position="right"] .collapsed-bar:not(.collapsed-bar--expanded) .collapsed-bar__brand-name,
+.notch-panel[data-notch-position="left"] .collapsed-bar:not(.collapsed-bar--expanded) .collapsed-bar__brand-slogan,
+.notch-panel[data-notch-position="right"] .collapsed-bar:not(.collapsed-bar--expanded) .collapsed-bar__brand-slogan {
+  display: none;
+}
+
+.notch-panel[data-notch-position="left"] .collapsed-bar:not(.collapsed-bar--expanded) .collapsed-bar__right,
+.notch-panel[data-notch-position="right"] .collapsed-bar:not(.collapsed-bar--expanded) .collapsed-bar__right {
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  gap: 3px;
+  margin: 0;
+}
+
+.notch-panel[data-notch-position="left"] .collapsed-bar:not(.collapsed-bar--expanded) .collapsed-bar__icon-btn,
+.notch-panel[data-notch-position="right"] .collapsed-bar:not(.collapsed-bar--expanded) .collapsed-bar__icon-btn {
+  width: 20px;
+  height: 20px;
+}
+
+.notch-panel[data-notch-position="left"] .collapsed-bar--micro .collapsed-bar__micro-main,
+.notch-panel[data-notch-position="right"] .collapsed-bar--micro .collapsed-bar__micro-main {
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  height: 100%;
+  padding: 6px 4px;
 }

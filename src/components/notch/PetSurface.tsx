@@ -111,7 +111,7 @@ function clearPermissionAfter(sessionId: string, work: Promise<void>) {
 }
 
 /**
- * Evolab-style pet companion for Agent Island's dedicated transparent Tauri window.
+ * Evolab-style pet companion for Vibe Board's dedicated transparent Tauri window.
  * The pet remains a draggable desktop sprite, while short HUD surfaces bloom
  * around it for sessions, blocking actions, and lightweight completion notices.
  */

@@ -291,7 +291,7 @@ impl NetworkMonitor {
         if !status.enabled {
             return text_response(
                 StatusCode::SERVICE_UNAVAILABLE,
-                "Agent Island network monitor is off",
+                "Vibe Board network monitor is off",
             );
         }
 
@@ -347,7 +347,7 @@ impl NetworkMonitor {
                 self.record_error(&request_id, elapsed, err.to_string());
                 return text_response(
                     StatusCode::BAD_GATEWAY,
-                    "Agent Island proxy upstream request failed",
+                    "Vibe Board proxy upstream request failed",
                 );
             }
         };
@@ -605,13 +605,13 @@ fn resolve_route(default_upstream_base_url: &str, uri: &Uri) -> Result<RouteTarg
 
     let rest = &path_and_query[ROUTE_PREFIX.len()..];
     let Some((encoded_upstream, remaining)) = rest.split_once('/') else {
-        return Err("Invalid Agent Island route URL".to_string());
+        return Err("Invalid Vibe Board route URL".to_string());
     };
     let decoded = base64::engine::general_purpose::URL_SAFE_NO_PAD
         .decode(encoded_upstream)
-        .map_err(|_| "Invalid Agent Island route upstream encoding".to_string())?;
+        .map_err(|_| "Invalid Vibe Board route upstream encoding".to_string())?;
     let upstream_base_url = String::from_utf8(decoded)
-        .map_err(|_| "Invalid Agent Island route upstream text".to_string())?;
+        .map_err(|_| "Invalid Vibe Board route upstream text".to_string())?;
     let upstream_base_url = normalize_upstream_base_url(Some(upstream_base_url))?;
     Ok(RouteTarget {
         upstream_base_url,
@@ -637,11 +637,22 @@ fn join_upstream_url(upstream_base_url: &str, path_and_query: &str) -> Result<St
 fn monitor_state_path() -> Option<PathBuf> {
     dirs::home_dir().map(|home| {
         let new_path = home
-            .join(".agentbro")
+            .join(".agent-island")
             .join("network")
             .join("monitor-state.json");
-        let old_path = home.join(".agentbro").join("network-monitor.json");
-        crate::data_dir::migrate_file(&old_path, &new_path);
+        let legacy_root = crate::data_dir::legacy_agentbro_home();
+        let old_paths = [
+            legacy_root.join("network").join("monitor-state.json"),
+            legacy_root.join("network-monitor.json"),
+        ];
+        if !new_path.exists() {
+            for old_path in old_paths {
+                crate::data_dir::migrate_file(&old_path, &new_path);
+                if new_path.exists() {
+                    break;
+                }
+            }
+        }
         new_path
     })
 }

@@ -1,6 +1,6 @@
-# Agent Island v3.1.1
+# Vibe Board v3.1.1
 
-Agent Island is a local-first desktop console for monitoring AI coding-agent sessions and managing shared Skills.
+Vibe Board is a local-first desktop console for monitoring AI coding-agent sessions and managing shared Skills.
 
 ## Highlights
 

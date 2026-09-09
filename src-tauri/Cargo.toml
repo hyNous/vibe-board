@@ -1,8 +1,8 @@
 [package]
 name = "agent-island"
 version = "3.1.1"
-description = "Your AI agents' best bro — monitor, manage, and supercharge every coding agent from one native app"
-authors = ["Agent Island"]
+description = "Monitor, manage, and coordinate coding agents from Vibe Board"
+authors = ["Vibe Board"]
 license = "Apache-2.0"
 edition = "2021"
 default-run = "agent-island"

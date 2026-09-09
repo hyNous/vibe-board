@@ -1,4 +1,4 @@
-/* Agent Island — Priority System */
+/* Vibe Board — Priority System */
 
 export const PRIORITY = {
   dormant: 0,

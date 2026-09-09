@@ -14,31 +14,31 @@ pub struct MenuBarLabels {
 pub fn labels(language: &str) -> MenuBarLabels {
     match language {
         "zh" => MenuBarLabels {
-            open: "打开 Agent Island",
+            open: "打开 Vibe Board",
             skill_packs: "技能包…",
             settings: "设置",
             quit: "退出",
         },
         "ja" => MenuBarLabels {
-            open: "Agent Island を開く",
+            open: "Vibe Board を開く",
             skill_packs: "スキルパック…",
             settings: "設定",
             quit: "終了",
         },
         "ko" => MenuBarLabels {
-            open: "Agent Island 열기",
+            open: "Vibe Board 열기",
             skill_packs: "스킬 팩…",
             settings: "설정",
             quit: "종료",
         },
         "tr" => MenuBarLabels {
-            open: "Agent Island'yu Aç",
+            open: "Vibe Board'yu Aç",
             skill_packs: "Beceri Paketleri…",
             settings: "Ayarlar",
             quit: "Çıkış",
         },
         _ => MenuBarLabels {
-            open: "Open Agent Island",
+            open: "Open Vibe Board",
             skill_packs: "Skill Packs…",
             settings: "Settings",
             quit: "Quit",

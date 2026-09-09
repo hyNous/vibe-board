@@ -47,7 +47,7 @@ describe('themeStore', () => {
     expect(setItem).not.toHaveBeenCalled()
   })
 
-  it('includes the Agent Island ink amber role theme as a built-in default', () => {
+  it('includes the Vibe Board ink amber role theme as a built-in default', () => {
     useThemeStore.getState().loadThemes([])
     useThemeStore.getState().setActiveTheme('ink-amber')
 

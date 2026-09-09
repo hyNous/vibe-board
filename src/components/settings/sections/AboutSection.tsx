@@ -84,7 +84,7 @@ export function AboutSection({
     try {
       const now = new Date()
       const pad = (n: number) => String(n).padStart(2, '0')
-      const defaultName = `Agent Island-Diagnostics-${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}.zip`
+      const defaultName = `Vibe Board-Diagnostics-${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}.zip`
       const targetPath = await save({
         defaultPath: defaultName,
         filters: [{ name: 'ZIP Archive', extensions: ['zip'] }],
@@ -134,8 +134,8 @@ export function AboutSection({
   return (
     <SettingSection title={t('settings.aboutTitle')}>
       <div className="about-header">
-        <img className="about-header__icon" src="/agent-island-logo.png" alt="" aria-hidden="true" />
-        <div className="about-header__name">Agent Island</div>
+        <img className="about-header__icon" src="/vibe-board-logo.png" alt="" aria-hidden="true" />
+        <div className="about-header__name">Vibe Board</div>
         <div className="about-header__slogan">{t('notch.slogan')}</div>
         <div className="about-header__version">Version {appVersion}</div>
       </div>
@@ -191,10 +191,10 @@ export function AboutSection({
 
       <SettingGroup label={t('settings.logoMeaning', { defaultValue: 'Logo Meaning' })}>
         <div className="about-logo-meaning">
-          <img src="/agent-island-logo.png" alt="" aria-hidden="true" />
+          <img src="/vibe-board-logo.png" alt="" aria-hidden="true" />
           <div>
             <strong>{t('settings.logoMeaningTitle', { defaultValue: 'A handshake between people and agents' })}</strong>
-            <span>{t('settings.logoMeaningDesc', { defaultValue: 'The center handshake represents collaboration between humans and AI agents. The outer A/B shape comes from Agent Island and resembles two connected agent nodes.' })}</span>
+            <span>{t('settings.logoMeaningDesc', { defaultValue: 'The center handshake represents collaboration between humans and AI agents. The outer A/B shape comes from Vibe Board and resembles two connected agent nodes.' })}</span>
           </div>
         </div>
       </SettingGroup>

@@ -960,7 +960,7 @@ fn uses_disabled_store(kind: ConfigKind) -> bool {
 }
 
 fn disabled_store_path() -> PathBuf {
-    super::v2::fsutil::agentbro_home()
+    super::v2::fsutil::agent_island_home()
         .join("mcp")
         .join("disabled.json")
 }
@@ -1250,7 +1250,7 @@ fn safe_write(
 }
 
 fn write_backup(path: &Path, content: &[u8], group: &str) -> Result<PathBuf, String> {
-    let dir = super::v2::fsutil::agentbro_home()
+    let dir = super::v2::fsutil::agent_island_home()
         .join("mcp")
         .join("backups")
         .join(sanitize_component(group));

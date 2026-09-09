@@ -18,23 +18,18 @@ interface OverlayCompletionCardProps {
 export function OverlayCompletionCard({ overlay, session, onJumpToTerminal, onShowSessions, onDismiss, onDraftStateChange, sessionCount }: OverlayCompletionCardProps) {
   const { t } = useTranslation()
   const data = overlay.data as { summary: string }
-  const dwellSeconds = useConfigStore((s) => s.taskCompleteDwellSeconds) || 6
   const completionCardHeight = useConfigStore((s) => s.completionCardHeight)
   const maxPanelHeight = useConfigStore((s) => s.maxPanelHeight)
   const readableCardHeight = getReadableNotificationHeight(completionCardHeight, maxPanelHeight, {
     text: data.summary,
     userMessage: session.lastUserMessage,
   })
-  const dwellMs = dwellSeconds * 1000
-
   return (
     <OverlayFeedbackPanel
       session={session}
       text={data.summary}
       kind="completion"
       maxHeight={readableCardHeight}
-      dwellMs={dwellMs}
-      startedAt={overlay.createdAt}
       statusLabel={t('notch.completed', { defaultValue: '完成' })}
       onJumpToTerminal={onJumpToTerminal}
       onShowSessions={onShowSessions}

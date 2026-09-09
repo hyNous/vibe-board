@@ -1,4 +1,4 @@
-// Agent Island — Rust Backend Library
+// Vibe Board — Rust Backend Library
 pub mod agents;
 pub mod commands;
 pub mod config;
@@ -42,17 +42,28 @@ use platform::display::{find_target_monitor, list_displays_inner, DisplayInfo};
 use sound::{SoundEvent, SoundPack, SoundPackImportResult};
 use telemetry::TelemetryService;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 struct NotchDragState {
-    start_x: f64,
-    start_offset: f64,
-    current_offset: f64,
-    width: f64,
-    y: f64,
-    base_center: f64,
-    min_center: f64,
-    max_center: f64,
+    start_cursor_x: f64,
+    start_cursor_y: f64,
+    start_window_x: f64,
+    start_window_y: f64,
+    min_x: f64,
+    max_x: f64,
+    min_y: f64,
+    max_y: f64,
+    base_x: f64,
+    base_y: f64,
     last_window_x: f64,
+    last_window_y: f64,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct NotchDragResult {
+    horizontal_offset: f64,
+    vertical_offset: f64,
+    position_mode: String,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -465,12 +476,20 @@ fn expand_tilde_target(target: &str) -> String {
 /// as installed — only `Unavailable` blocks.
 fn ensure_installable(adapter: &dyn AgentAdapter) -> Result<(), String> {
     match adapter.detect_status_now() {
-        AdapterStatus::Unavailable => Err(format!(
-            "{} CLI not found. Searched process PATH, login shell PATH, \
-             and common directories (homebrew, nvm, volta, mise, cargo). \
-             Confirm it is installed and try restarting Agent Island.",
-            adapter.display_name()
-        )),
+        AdapterStatus::Unavailable => {
+            let next_step = if adapter.name() == "antigravity" {
+                "Install the Antigravity CLI. On Windows run `irm https://antigravity.google/cli/install.ps1 | iex`; launch it with `agy`, then fully restart Vibe Board and retry."
+            } else if adapter.name() == "gemini" {
+                "Install it with `npm install -g @google/gemini-cli`, then fully restart Vibe Board and retry."
+            } else {
+                "Install the corresponding CLI, then fully restart Vibe Board and retry."
+            };
+            Err(format!(
+                "{} CLI not found. Searched process PATH, login shell PATH, and common directories (homebrew, nvm, volta, mise, cargo). {}",
+                adapter.display_name(),
+                next_step
+            ))
+        }
         _ => Ok(()),
     }
 }
@@ -1612,8 +1631,8 @@ async fn test_webhook(
     };
 
     let event = webhook::templates::NotificationEvent::Custom {
-        title: "Agent Island Test".to_string(),
-        body: "This is a test notification from Agent Island.".to_string(),
+        title: "Vibe Board Test".to_string(),
+        body: "This is a test notification from Vibe Board.".to_string(),
     };
     let language = state.config_store.get().language;
     let results =
@@ -1837,6 +1856,7 @@ async fn is_cursor_over_notch(
     width: Option<f64>,
     height: Option<f64>,
     anchor_offset_x: Option<f64>,
+    anchor_offset_y: Option<f64>,
 ) -> Result<bool, String> {
     let Some(window) = app.get_webview_window("notch") else {
         return Ok(false);
@@ -1872,10 +1892,11 @@ async fn is_cursor_over_notch(
             .unwrap_or(window_height_logical);
 
         let anchor_offset_x = anchor_offset_x.unwrap_or(0.0);
+        let anchor_offset_y = anchor_offset_y.unwrap_or(0.0);
         let left = window_left_logical
             + ((window_width_logical - hit_width) / 2.0).max(0.0)
             + anchor_offset_x;
-        let top = window_top_logical;
+        let top = window_top_logical + anchor_offset_y;
         let right = left + hit_width.min(window_width_logical);
         let bottom = top + hit_height.min(window_height_logical);
 
@@ -1960,7 +1981,7 @@ fn show_notch_window(app: &tauri::AppHandle) {
 
 fn menu_bar_icon() -> tauri::image::Image<'static> {
     tauri::image::Image::from_bytes(include_bytes!("../icons/tray-ink-amber.png"))
-        .expect("embedded Agent Island tray icon must be a valid PNG")
+        .expect("embedded Vibe Board tray icon must be a valid PNG")
         .to_owned()
 }
 
@@ -1972,7 +1993,7 @@ pub(crate) fn refresh_skill_pack_tray_menu(app: &tauri::AppHandle) -> Result<(),
     let menu = menu_bar::build_tray_menu(app, &language).map_err(|error| error.to_string())?;
     let tray = app
         .tray_by_id(menu_bar::TRAY_ID)
-        .ok_or_else(|| "Agent Island tray icon is unavailable".to_string())?;
+        .ok_or_else(|| "Vibe Board tray icon is unavailable".to_string())?;
     tray.set_menu(Some(menu)).map_err(|error| error.to_string())
 }
 
@@ -2006,7 +2027,7 @@ fn build_skill_pack_picker_window(app: &tauri::AppHandle) -> Result<tauri::Webvi
         menu_bar::SKILL_PACK_PICKER_ID,
         tauri::WebviewUrl::App("index.html".into()),
     )
-    .title("Agent Island Skill Packs")
+    .title("Vibe Board Skill Packs")
     .inner_size(SKILL_PACK_PICKER_WIDTH, SKILL_PACK_PICKER_HEIGHT)
     .transparent(true)
     .decorations(false)
@@ -2569,7 +2590,7 @@ fn build_settings_window(app: &tauri::AppHandle) -> Result<tauri::WebviewWindow,
         "settings",
         tauri::WebviewUrl::App("index.html".into()),
     )
-    .title("Agent Island")
+    .title("Vibe Board")
     .inner_size(SETTINGS_DEFAULT_WIDTH, SETTINGS_DEFAULT_HEIGHT)
     .min_inner_size(SETTINGS_MIN_WIDTH, SETTINGS_MIN_HEIGHT)
     .center()
@@ -2664,7 +2685,20 @@ fn custom_sounds_dir() -> PathBuf {
     let base = dirs::data_dir()
         .or_else(dirs::config_dir)
         .unwrap_or_else(std::env::temp_dir);
-    base.join("agentbro").join("sounds")
+    base.join("agent-island").join("sounds")
+}
+
+fn schedule_initial_setup(app: &tauri::AppHandle) {
+    let handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        // The settings window is created lazily. Defer the first show until
+        // Tauri has entered its event loop, otherwise the queued main-thread
+        // callback can be lost during setup on a fresh or migrated install.
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+        if let Err(error) = show_settings_window(&handle) {
+            log::warn!("Failed to open initial setup window: {error}");
+        }
+    });
 }
 
 fn supported_audio_extension(path: &Path) -> Option<&'static str> {
@@ -4449,7 +4483,8 @@ fn reposition_notch_to_display(
     };
 
     let config_store = app.state::<AppState>();
-    let configured_display_id = config_store.config_store.get().display_id;
+    let config = config_store.config_store.get();
+    let configured_display_id = config.display_id;
     let display_id = display_id
         .as_deref()
         .filter(|id| !id.is_empty())
@@ -4460,8 +4495,7 @@ fn reposition_notch_to_display(
 
     if let Some(monitor) = monitor {
         // The pet now lives in its own dedicated window (label: "pet"); the
-        // notch window always uses the standard island top-center geometry,
-        // regardless of surface mode.
+        // notch window is positioned on the selected top/left/right edge.
         let current_scale = window
             .current_monitor()
             .ok()
@@ -4472,12 +4506,19 @@ fn reposition_notch_to_display(
             .outer_size()
             .map(|size| size.width as f64 / current_scale)
             .unwrap_or(420.0);
+        let height = window
+            .outer_size()
+            .map(|size| size.height as f64 / current_scale)
+            .unwrap_or(52.0);
         position_notch_window(
             app,
             &window,
             &monitor,
             width,
-            horizontal_offset.unwrap_or(0.0),
+            height,
+            &config.notch_position_mode,
+            horizontal_offset.unwrap_or(config.panel_horizontal_offset),
+            config.notch_vertical_offset,
         );
     }
     configure_notch_window_for_spaces(app);
@@ -4490,9 +4531,19 @@ fn position_notch_window(
     window: &tauri::WebviewWindow,
     monitor: &tauri::Monitor,
     width: f64,
+    height: f64,
+    position_mode: &str,
     horizontal_offset: f64,
+    vertical_offset: f64,
 ) -> f64 {
-    let (x, y, anchor_offset_x) = notch_window_geometry(monitor, width, horizontal_offset);
+    let (x, y, anchor_offset_x) = notch_window_geometry(
+        monitor,
+        width,
+        height,
+        horizontal_offset,
+        vertical_offset,
+        position_mode,
+    );
     let _ = window.set_position(tauri::Position::Logical(tauri::LogicalPosition::new(x, y)));
     anchor_offset_x
 }
@@ -4500,23 +4551,47 @@ fn position_notch_window(
 fn notch_window_geometry(
     monitor: &tauri::Monitor,
     width: f64,
+    height: f64,
     horizontal_offset: f64,
+    vertical_offset: f64,
+    position_mode: &str,
 ) -> (f64, f64, f64) {
     let scale = monitor.scale_factor();
     let screen_width = monitor.size().width as f64 / scale;
+    let screen_height = monitor.size().height as f64 / scale;
     let monitor_x = monitor.position().x as f64 / scale;
     let monitor_y = monitor.position().y as f64 / scale;
-    let margin = 8.0;
     let base_x = monitor_x + (screen_width - width) / 2.0;
-    let desired_x = base_x + horizontal_offset;
-    let min_x = monitor_x + margin;
-    let max_x = monitor_x + screen_width - width - margin;
+    let base_y = monitor_y + (screen_height - height) / 2.0;
+    let (desired_x, desired_y, _) = match position_mode {
+        "left" => (monitor_x, base_y + vertical_offset, 0.0),
+        "right" => (
+            monitor_x + screen_width - width,
+            base_y + vertical_offset,
+            0.0,
+        ),
+        _ => (base_x + horizontal_offset, monitor_y, horizontal_offset),
+    };
+    let min_x = monitor_x;
+    let max_x = monitor_x + screen_width - width;
+    let min_y = monitor_y;
+    let max_y = monitor_y + screen_height - height;
     let x = if min_x <= max_x {
         desired_x.clamp(min_x, max_x)
     } else {
         base_x
     };
-    (x, monitor_y, desired_x - x)
+    let y = if min_y <= max_y {
+        desired_y.clamp(min_y, max_y)
+    } else {
+        desired_y
+    };
+    let anchor_offset_x = if matches!(position_mode, "left" | "right") {
+        0.0
+    } else {
+        desired_x - x
+    };
+    (x, y, anchor_offset_x)
 }
 
 #[cfg(target_os = "macos")]
@@ -4527,6 +4602,7 @@ fn set_notch_window_frame(
     top_y: f64,
     width: f64,
     height: f64,
+    _scale_factor: f64,
 ) -> Result<(), String> {
     use objc2_app_kit::NSWindow;
     use objc2_foundation::{NSPoint, NSRect, NSSize};
@@ -4579,7 +4655,28 @@ fn set_notch_window_frame(
     .map_err(|e| e.to_string())
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "windows")]
+fn notch_frame_to_physical(
+    x: f64,
+    top_y: f64,
+    width: f64,
+    height: f64,
+    scale_factor: f64,
+) -> (i32, i32, i32, i32) {
+    let scale = if scale_factor.is_finite() && scale_factor > 0.0 {
+        scale_factor
+    } else {
+        1.0
+    };
+    (
+        (x * scale).round() as i32,
+        (top_y * scale).round() as i32,
+        (width * scale).round().max(1.0) as i32,
+        (height * scale).round().max(1.0) as i32,
+    )
+}
+
+#[cfg(target_os = "windows")]
 fn set_notch_window_frame(
     _app: &tauri::AppHandle,
     window: &tauri::WebviewWindow,
@@ -4587,12 +4684,49 @@ fn set_notch_window_frame(
     top_y: f64,
     width: f64,
     height: f64,
+    scale_factor: f64,
 ) -> Result<(), String> {
-    let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize::new(width, height)));
-    let _ = window.set_position(tauri::Position::Logical(tauri::LogicalPosition::new(
-        x, top_y,
-    )));
+    use windows_sys::Win32::UI::WindowsAndMessaging::{SetWindowPos, SWP_NOACTIVATE, SWP_NOZORDER};
+
+    let hwnd =
+        window.hwnd().map_err(|error| error.to_string())?.0 as windows_sys::Win32::Foundation::HWND;
+    let (physical_x, physical_y, physical_width, physical_height) =
+        notch_frame_to_physical(x, top_y, width, height, scale_factor);
+    let result = unsafe {
+        SetWindowPos(
+            hwnd,
+            std::ptr::null_mut(),
+            physical_x,
+            physical_y,
+            physical_width,
+            physical_height,
+            SWP_NOACTIVATE | SWP_NOZORDER,
+        )
+    };
+    if result == 0 {
+        return Err(std::io::Error::last_os_error().to_string());
+    }
     Ok(())
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+fn set_notch_window_frame(
+    _app: &tauri::AppHandle,
+    window: &tauri::WebviewWindow,
+    x: f64,
+    top_y: f64,
+    width: f64,
+    height: f64,
+    _scale_factor: f64,
+) -> Result<(), String> {
+    window
+        .set_size(tauri::Size::Logical(tauri::LogicalSize::new(width, height)))
+        .map_err(|error| error.to_string())?;
+    window
+        .set_position(tauri::Position::Logical(tauri::LogicalPosition::new(
+            x, top_y,
+        )))
+        .map_err(|error| error.to_string())
 }
 
 const PET_DEFAULT_TRAILING_INSET: f64 = 24.0;
@@ -4696,7 +4830,7 @@ pub fn sync_pet_window_visibility_inner(
 /// switches into pet mode rather than parking the process idle on the notch.
 fn build_pet_window(app: &tauri::AppHandle) -> Result<tauri::WebviewWindow, String> {
     tauri::WebviewWindowBuilder::new(app, "pet", tauri::WebviewUrl::App("index.html".into()))
-        .title("Agent Island Pet")
+        .title("Vibe Board Pet")
         .inner_size(820.0, 360.0)
         .transparent(true)
         .decorations(false)
@@ -4846,9 +4980,38 @@ fn distance_point_to_rect(rect: Rect, x: f64, y: f64) -> f64 {
 
 #[cfg(test)]
 mod pet_window_tests {
+    #[cfg(target_os = "windows")]
+    use super::notch_frame_to_physical;
     use super::{
-        clamp_point_into_rect, distance_point_to_rect, pet_window_rect_has_visible_area, Rect,
+        clamp_point_into_rect, distance_point_to_rect, notch_drop_position_mode,
+        pet_window_rect_has_visible_area, Rect,
     };
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn notch_frame_uses_target_monitor_scale() {
+        assert_eq!(
+            notch_frame_to_physical(-100.0, 20.0, 816.0, 364.0, 1.25),
+            (-125, 25, 1020, 455)
+        );
+    }
+
+    #[test]
+    fn notch_drop_always_selects_an_edge() {
+        assert_eq!(
+            notch_drop_position_mode(1600.0, 0.0, 0.0, 1600.0, 0.0),
+            "right"
+        );
+        assert_eq!(notch_drop_position_mode(0.0, 0.0, 0.0, 1600.0, 0.0), "left");
+        assert_eq!(
+            notch_drop_position_mode(700.0, 20.0, 0.0, 1600.0, 0.0),
+            "top"
+        );
+        assert_eq!(
+            notch_drop_position_mode(20.0, 400.0, 0.0, 1600.0, 0.0),
+            "left"
+        );
+    }
 
     #[test]
     fn saved_pet_window_origin_must_leave_visible_area_on_screen() {
@@ -5088,26 +5251,42 @@ fn monitor_for_pet_origin(
     None
 }
 
-fn notch_drag_geometry(
+fn notch_drag_bounds(
     monitor: &tauri::Monitor,
     width: f64,
-    offset: f64,
-) -> (f64, f64, f64, f64, f64) {
+    height: f64,
+) -> (f64, f64, f64, f64, f64, f64) {
     let scale = monitor.scale_factor();
     let screen_width = monitor.size().width as f64 / scale;
+    let screen_height = monitor.size().height as f64 / scale;
     let monitor_x = monitor.position().x as f64 / scale;
     let monitor_y = monitor.position().y as f64 / scale;
-    let margin = 8.0;
-    let base_center = monitor_x + screen_width / 2.0;
-    let min_center = monitor_x + margin + width / 2.0;
-    let max_center = monitor_x + screen_width - margin - width / 2.0;
-    let clamped_offset = if min_center > max_center {
-        0.0
+    let min_x = monitor_x;
+    let max_x = (monitor_x + screen_width - width).max(min_x);
+    let min_y = monitor_y;
+    let max_y = (monitor_y + screen_height - height).max(min_y);
+    let base_x = monitor_x + (screen_width - width) / 2.0;
+    let base_y = monitor_y + (screen_height - height) / 2.0;
+    (min_x, max_x, min_y, max_y, base_x, base_y)
+}
+
+fn notch_drop_position_mode(
+    window_x: f64,
+    window_y: f64,
+    min_x: f64,
+    max_x: f64,
+    min_y: f64,
+) -> &'static str {
+    let left_distance = (window_x - min_x).abs();
+    let right_distance = (max_x - window_x).abs();
+    let top_distance = (window_y - min_y).abs();
+    if left_distance <= right_distance && left_distance <= top_distance {
+        "left"
+    } else if right_distance <= top_distance {
+        "right"
     } else {
-        (base_center + offset).clamp(min_center, max_center) - base_center
-    };
-    let window_x = base_center + clamped_offset - width / 2.0;
-    (base_center, min_center, max_center, monitor_y, window_x)
+        "top"
+    }
 }
 
 #[tauri::command]
@@ -5165,9 +5344,10 @@ async fn start_notch_drag(
     let Some(window) = app.get_webview_window("notch") else {
         return Ok(false);
     };
-    let (cursor_x, _) = get_cursor_position_sync()?;
+    let (cursor_x, cursor_y) = get_cursor_position_sync()?;
     let config_store = app.state::<AppState>();
-    let configured_display_id = config_store.config_store.get().display_id;
+    let config = config_store.config_store.get();
+    let configured_display_id = config.display_id;
     let display_id = display_id
         .as_deref()
         .filter(|id| !id.is_empty())
@@ -5178,18 +5358,20 @@ async fn start_notch_drag(
     let Some(monitor) = monitor else {
         return Ok(false);
     };
-    let (base_center, min_center, max_center, y, window_x) =
-        notch_drag_geometry(&monitor, width, horizontal_offset);
-    let start_offset = if min_center > max_center {
-        0.0
-    } else {
-        (window_x + width / 2.0) - base_center
-    };
+    let (min_x, max_x, min_y, max_y, base_x, base_y) = notch_drag_bounds(&monitor, width, height);
+    let (window_x, window_y, _) = notch_window_geometry(
+        &monitor,
+        width,
+        height,
+        horizontal_offset,
+        config.notch_vertical_offset,
+        &config.notch_position_mode,
+    );
 
     let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize::new(width, height)));
     let _ = window.set_position(tauri::Position::Logical(tauri::LogicalPosition::new(
         window_x.round(),
-        y,
+        window_y.round(),
     )));
     configure_notch_window_for_spaces(&app);
 
@@ -5198,15 +5380,18 @@ async fn start_notch_drag(
             .lock()
             .map_err(|e| format!("Drag lock error: {}", e))?;
         *drag = Some(NotchDragState {
-            start_x: cursor_x,
-            start_offset,
-            current_offset: start_offset,
-            width,
-            y,
-            base_center,
-            min_center,
-            max_center,
+            start_cursor_x: cursor_x,
+            start_cursor_y: cursor_y,
+            start_window_x: window_x,
+            start_window_y: window_y,
+            min_x,
+            max_x,
+            min_y,
+            max_y,
+            base_x,
+            base_y,
             last_window_x: window_x.round(),
+            last_window_y: window_y.round(),
         });
     }
 
@@ -5253,7 +5438,7 @@ fn update_notch_drag_position(app: &tauri::AppHandle) -> Result<bool, String> {
     let Some(window) = app.get_webview_window("notch") else {
         return Ok(false);
     };
-    let (cursor_x, _) = get_cursor_position_sync()?;
+    let (cursor_x, cursor_y) = get_cursor_position_sync()?;
 
     let next_position = {
         let mut drag = notch_drag_state()
@@ -5262,20 +5447,20 @@ fn update_notch_drag_position(app: &tauri::AppHandle) -> Result<bool, String> {
         let Some(state) = drag.as_mut() else {
             return Ok(false);
         };
-        let desired_offset = state.start_offset + cursor_x - state.start_x;
-        let next_offset = if state.min_center > state.max_center {
-            0.0
-        } else {
-            (state.base_center + desired_offset).clamp(state.min_center, state.max_center)
-                - state.base_center
-        };
-        let window_x = (state.base_center + next_offset - state.width / 2.0).round();
-        if (window_x - state.last_window_x).abs() < 1.0 {
+        let window_x = (state.start_window_x + cursor_x - state.start_cursor_x)
+            .clamp(state.min_x, state.max_x)
+            .round();
+        let window_y = (state.start_window_y + cursor_y - state.start_cursor_y)
+            .clamp(state.min_y, state.max_y)
+            .round();
+        if (window_x - state.last_window_x).abs() < 1.0
+            && (window_y - state.last_window_y).abs() < 1.0
+        {
             return Ok(true);
         }
-        state.current_offset = next_offset;
         state.last_window_x = window_x;
-        (window_x, state.y)
+        state.last_window_y = window_y;
+        (window_x, window_y)
     };
 
     let _ = window.set_position(tauri::Position::Logical(tauri::LogicalPosition::new(
@@ -5286,19 +5471,48 @@ fn update_notch_drag_position(app: &tauri::AppHandle) -> Result<bool, String> {
 }
 
 #[tauri::command]
-async fn end_notch_drag(app: tauri::AppHandle) -> Result<Option<f64>, String> {
-    let final_offset = {
+async fn end_notch_drag(app: tauri::AppHandle) -> Result<Option<NotchDragResult>, String> {
+    let final_position = {
         let mut drag = notch_drag_state()
             .lock()
             .map_err(|e| format!("Drag lock error: {}", e))?;
-        drag.take().map(|state| state.current_offset.round())
+        drag.take().map(|state| {
+            let position_mode = notch_drop_position_mode(
+                state.last_window_x,
+                state.last_window_y,
+                state.min_x,
+                state.max_x,
+                state.min_y,
+            );
+            let horizontal_offset = if matches!(position_mode, "left" | "right") {
+                0.0
+            } else {
+                (state.last_window_x - state.base_x).round()
+            };
+            let vertical_offset = if position_mode == "top" {
+                0.0
+            } else {
+                (state.last_window_y - state.base_y).round()
+            };
+            NotchDragResult {
+                horizontal_offset,
+                vertical_offset,
+                position_mode: position_mode.to_string(),
+            }
+        })
     };
 
-    if let Some(offset) = final_offset {
-        reposition_notch_to_display(&app, None, Some(offset))?;
+    if let Some(result) = &final_position {
+        let state = app.state::<AppState>();
+        let mut config = state.config_store.get();
+        config.panel_horizontal_offset = result.horizontal_offset;
+        config.notch_vertical_offset = result.vertical_offset;
+        config.notch_position_mode = result.position_mode.clone();
+        state.config_store.update(config)?;
+        reposition_notch_to_display(&app, None, Some(result.horizontal_offset))?;
     }
 
-    Ok(final_offset)
+    Ok(final_position)
 }
 
 #[tauri::command]
@@ -5570,9 +5784,15 @@ async fn resize_notch(
             // The notch window always uses standard island top-center geometry.
             // Pet placement is handled by sync_pet_window_visibility / drag commands
             // on the dedicated "pet" window.
-            let (x, y, anchor_offset_x) =
-                notch_window_geometry(&monitor, width, horizontal_offset.unwrap_or(0.0));
-            set_notch_window_frame(&app, &window, x, y, width, height)?;
+            let (x, y, anchor_offset_x) = notch_window_geometry(
+                &monitor,
+                width,
+                height,
+                horizontal_offset.unwrap_or(config.panel_horizontal_offset),
+                config.notch_vertical_offset,
+                &config.notch_position_mode,
+            );
+            set_notch_window_frame(&app, &window, x, y, width, height, monitor.scale_factor())?;
             return Ok(ResizeNotchResult { anchor_offset_x });
         }
         let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize::new(width, height)));
@@ -5607,27 +5827,40 @@ pub fn run() {
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_deep_link::init())
         .setup(|app| {
+            if let Ok(executable) = std::env::current_exe() {
+                if let Err(error) = data_dir::remember_executable(&executable) {
+                    log::warn!("Failed to remember Vibe Board executable path: {error}");
+                }
+            }
+
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
-            // Position notch window at top center
+            // Load persisted display settings before the first frame so the
+            // island does not flash at the default top-center position.
+            let mut config_store = ConfigStore::new();
+            config_store.set_app_handle(app.handle().clone());
+            let should_show_onboarding = !config_store.get().setup_wizard_completed;
+
+            // Position notch window using the saved placement and offset.
             if let Some(window) = app.get_webview_window("notch") {
-                let monitor = window
-                    .current_monitor()
-                    .ok()
-                    .flatten()
+                let config = config_store.get();
+                let monitor = find_target_monitor(app.handle(), &config.display_id)
+                    .or_else(|| window.current_monitor().ok().flatten())
                     .or_else(|| window.primary_monitor().ok().flatten());
 
                 if let Some(monitor) = monitor {
-                    let scale = monitor.scale_factor();
-                    let screen_width = monitor.size().width as f64 / scale;
-                    let monitor_x = monitor.position().x as f64 / scale;
-                    let monitor_y = monitor.position().y as f64 / scale;
                     let window_width = 420.0; // 400 panel + 20 shadow padding
-                    let x = monitor_x + (screen_width - window_width) / 2.0;
-                    let _ = window.set_position(tauri::Position::Logical(
-                        tauri::LogicalPosition::new(x, monitor_y),
-                    ));
+                    let (x, y, _) = notch_window_geometry(
+                        &monitor,
+                        window_width,
+                        52.0,
+                        config.panel_horizontal_offset,
+                        config.notch_vertical_offset,
+                        &config.notch_position_mode,
+                    );
+                    let _ = window
+                        .set_position(tauri::Position::Logical(tauri::LogicalPosition::new(x, y)));
                 }
 
                 // Set initial compact size (will be dynamically resized by frontend)
@@ -5659,11 +5892,6 @@ pub fn run() {
             let mut session_store = SessionStore::new();
             session_store.set_app_handle(app.handle().clone());
             let session_store = Arc::new(session_store);
-
-            // Initialize config store
-            let mut config_store = ConfigStore::new();
-            config_store.set_app_handle(app.handle().clone());
-            let should_show_onboarding = !config_store.get().analytics_consent_prompt_completed;
 
             // Pet window: position to the saved (or default) corner and show
             // only when pet surface mode is active. The pet lives in its own
@@ -5835,8 +6063,8 @@ pub fn run() {
                 }
             });
 
-            let task_db = Arc::new(
-                control_tower::ControlTowerDatabase::open().unwrap_or_else(|err| {
+            let task_db = Arc::new(control_tower::ControlTowerDatabase::open().unwrap_or_else(
+                |err| {
                     log::error!("Failed to open control tower database: {err}");
                     control_tower::ControlTowerDatabase::open_in_memory().unwrap_or_else(
                         |fallback_err| {
@@ -5846,15 +6074,12 @@ pub fn run() {
                             std::process::exit(1);
                         },
                     )
-                }),
-            );
+                },
+            ));
 
             // Initialize and start hook server
-            let hook_server = HookServer::new(
-                session_store.clone(),
-                adapters.clone(),
-                task_db.clone(),
-            );
+            let hook_server =
+                HookServer::new(session_store.clone(), adapters.clone(), task_db.clone());
             let hook_server = Arc::new(hook_server);
             hook_server.set_app_handle(app.handle().clone());
             hook_server.set_config_store(config_store.clone());
@@ -5887,7 +6112,7 @@ pub fn run() {
             let tray_icon = TrayIconBuilder::with_id(menu_bar::TRAY_ID)
                 .menu(&tray_menu)
                 .show_menu_on_left_click(true)
-                .tooltip("Agent Island")
+                .tooltip("Vibe Board")
                 .icon(menu_bar_icon())
                 .icon_as_template(false)
                 .on_tray_icon_event(|_tray, event| {
@@ -6017,11 +6242,19 @@ pub fn run() {
             );
             app.manage(app_state);
 
+            // Keep the desktop notch independent by default. When the user
+            // enables Codex-following in Settings, this lightweight poller
+            // mirrors Codex's minimized state without embedding into Codex.
+            platform::host_visibility::start(
+                app.handle().clone(),
+                app.state::<AppState>().config_store.clone(),
+            );
+
             if let Err(err) = register_island_global_shortcuts(app.handle()) {
                 log::warn!("Failed to register island global shortcuts: {}", err);
             }
             if should_show_onboarding {
-                let _ = show_settings_window(app.handle());
+                schedule_initial_setup(app.handle());
             }
 
             // Deep link handler
@@ -6037,7 +6270,7 @@ pub fn run() {
                 });
             }
 
-            log::info!("Agent Island started");
+            log::info!("Vibe Board started");
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -6373,5 +6606,5 @@ pub fn run() {
             skills::v2::commands::reveal_skill_path,
         ])
         .run(tauri::generate_context!())
-        .expect("error while running Agent Island");
+        .expect("error while running Vibe Board");
 }

@@ -1,6 +1,6 @@
-# 贡献 Agent Island
+# 贡献 Vibe Board
 
-感谢你愿意为 Agent Island 出一份力 🙌 不论是修 Bug、提建议、新增 Agent 适配,还是补一份翻译,我们都很欢迎。
+感谢你愿意为 Vibe Board 出一份力 🙌 不论是修 Bug、提建议、新增 Agent 适配,还是补一份翻译,我们都很欢迎。
 
 > 本文档面向**所有贡献者**(包括用 AI 协作的)。AI Agent 还请先读 [`AGENTS.md`](AGENTS.md) 或 [`.claude/CLAUDE.md`](.claude/CLAUDE.md) 拿一份项目地图。
 > English version: [`CONTRIBUTING.en.md`](CONTRIBUTING.en.md)。
@@ -147,7 +147,7 @@ chore: 升级 vitest 到 4.2
 
 ## AI 协作贡献指引
 
-我们鼓励用 AI 协作 —— Agent Island 自己就是为 AI Agent 服务的工具,理念一致。
+我们鼓励用 AI 协作 —— Vibe Board 自己就是为 AI Agent 服务的工具,理念一致。
 
 - **善用项目级配置**:Claude Code 用户进仓库就能加载 [`.claude/CLAUDE.md`](.claude/CLAUDE.md);Codex / Cursor / Aider / Copilot / Gemini CLI 等读 [`AGENTS.md`](AGENTS.md)。先让 Agent 读这两份再开始改代码,能省大量瞎猜成本。
 - **代码改动先建 Issue**:Agent 必须在写文件前创建或关联 Issue,使用独立任务分支,并在 PR 中用 `Closes #<编号>` 建立闭环。纯问答和只读分析不需要制造 Issue。
@@ -160,7 +160,7 @@ chore: 升级 vitest 到 4.2
 
 ## 品牌与商标
 
-Agent Island 是基于 [AgentBro](UPSTREAM.md) Apache-2.0 代码的独立分发版。分发时请保留 [LICENSE](LICENSE)、[NOTICE](NOTICE) 和 [TRADEMARKS.md](TRADEMARKS.md)，并使用自己的名称、图标和官网视觉。
+Vibe Board 是基于 [AgentBro](UPSTREAM.md) Apache-2.0 代码的独立分发版。分发时请保留 [LICENSE](LICENSE)、[NOTICE](NOTICE) 和 [TRADEMARKS.md](TRADEMARKS.md)，并使用自己的名称、图标和官网视觉。
 
 ---
 

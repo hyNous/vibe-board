@@ -23,6 +23,14 @@ impl ControlTowerDatabase {
         let db_dir = Self::db_dir()?;
         std::fs::create_dir_all(&db_dir)?;
         let db_path = db_dir.join("tasks.db");
+        // Move the trace database out of the retired AgentBro root before
+        // opening it. WAL/SHM sidecars are moved with the database.
+        if !db_path.exists() {
+            let legacy = crate::data_dir::legacy_agentbro_home()
+                .join("control_tower")
+                .join("tasks.db");
+            crate::data_dir::migrate_sqlite(&legacy, &db_path);
+        }
         let conn = Connection::open(&db_path)?;
         Self::init_connection(&conn, true)?;
         Ok(Self {
@@ -117,7 +125,7 @@ impl ControlTowerDatabase {
     }
 
     fn db_dir() -> anyhow::Result<PathBuf> {
-        Ok(crate::data_dir::agentbro_home().join("control_tower"))
+        Ok(crate::data_dir::agent_island_home().join("control_tower"))
     }
 
     fn get_events_for_run(conn: &Connection, run_id: &str) -> anyhow::Result<Vec<TaskEventRecord>> {
@@ -148,7 +156,10 @@ impl ControlTowerDatabase {
         Ok(rows)
     }
 
-    fn get_runs_tree_for_task(conn: &Connection, task_id: &str) -> anyhow::Result<Vec<AgentRunRecord>> {
+    fn get_runs_tree_for_task(
+        conn: &Connection,
+        task_id: &str,
+    ) -> anyhow::Result<Vec<AgentRunRecord>> {
         let mut stmt = conn.prepare(
             r#"
             SELECT id, task_id, session_id, parent_run_id, agent, role, dispatched_task, title, status, started_at, completed_at, pid, exit_code, created_at, updated_at
@@ -510,7 +521,15 @@ impl ControlTowerDatabase {
                 status = excluded.status,
                 updated_at = excluded.updated_at
             "#,
-            params![task_id, trace_id, project, "Demo: Codex Orchestration", "done", now_iso, now_iso],
+            params![
+                task_id,
+                trace_id,
+                project,
+                "Demo: Codex Orchestration",
+                "done",
+                now_iso,
+                now_iso
+            ],
         )?;
 
         tx.execute(
@@ -584,13 +603,83 @@ impl ControlTowerDatabase {
         )?;
 
         let events = [
-            ("evt-1", &root_run_id, now_ms - 60000, "session", "session.init", "Codex Session Initialized", Some("Root orchestration run started"), Some("ready"), Some(r#"{"agent":"codex","role":"orchestrator"}"#)),
-            ("evt-2", &root_run_id, now_ms - 45000, "subagent", "subagent.dispatch", "Dispatch Dummy Child", Some("Dispatched nested Dummy Child worker"), Some("processing"), Some(r#"{"targetRunId":"run-demo-dummy-child","agent":"dummy"}"#)),
-            ("evt-3", &child_run_id, now_ms - 45000, "session", "session.init", "Dummy Child Initialized", Some("Child worker started under Codex root"), Some("ready"), Some(r#"{"parentRunId":"run-demo-codex-root","agent":"dummy"}"#)),
-            ("evt-4", &child_run_id, now_ms - 30000, "tool", "tool.exec", "InspectAST: component graph", Some("Analyzed component hierarchy"), Some("done"), Some(r#"{"tool":"InspectAST","target":"src/App.tsx"}"#)),
-            ("evt-5", &child_run_id, now_ms - 15000, "session", "session.complete", "Dummy Child Complete", Some("Finished sub-routine analysis"), Some("done"), Some(r#"{"result":"success"}"#)),
-            ("evt-6", &root_run_id, now_ms - 15000, "subagent", "subagent.complete", "Dummy Child Completed", Some("Dummy Child returned verification result"), Some("done"), Some(r#"{"fromRunId":"run-demo-dummy-child","status":"success"}"#)),
-            ("evt-7", &root_run_id, now_ms, "session", "session.complete", "Codex Root Run Complete", Some("Finished orchestrating all workspace tasks"), Some("done"), Some(r#"{"status":"success"}"#)),
+            (
+                "evt-1",
+                &root_run_id,
+                now_ms - 60000,
+                "session",
+                "session.init",
+                "Codex Session Initialized",
+                Some("Root orchestration run started"),
+                Some("ready"),
+                Some(r#"{"agent":"codex","role":"orchestrator"}"#),
+            ),
+            (
+                "evt-2",
+                &root_run_id,
+                now_ms - 45000,
+                "subagent",
+                "subagent.dispatch",
+                "Dispatch Dummy Child",
+                Some("Dispatched nested Dummy Child worker"),
+                Some("processing"),
+                Some(r#"{"targetRunId":"run-demo-dummy-child","agent":"dummy"}"#),
+            ),
+            (
+                "evt-3",
+                &child_run_id,
+                now_ms - 45000,
+                "session",
+                "session.init",
+                "Dummy Child Initialized",
+                Some("Child worker started under Codex root"),
+                Some("ready"),
+                Some(r#"{"parentRunId":"run-demo-codex-root","agent":"dummy"}"#),
+            ),
+            (
+                "evt-4",
+                &child_run_id,
+                now_ms - 30000,
+                "tool",
+                "tool.exec",
+                "InspectAST: component graph",
+                Some("Analyzed component hierarchy"),
+                Some("done"),
+                Some(r#"{"tool":"InspectAST","target":"src/App.tsx"}"#),
+            ),
+            (
+                "evt-5",
+                &child_run_id,
+                now_ms - 15000,
+                "session",
+                "session.complete",
+                "Dummy Child Complete",
+                Some("Finished sub-routine analysis"),
+                Some("done"),
+                Some(r#"{"result":"success"}"#),
+            ),
+            (
+                "evt-6",
+                &root_run_id,
+                now_ms - 15000,
+                "subagent",
+                "subagent.complete",
+                "Dummy Child Completed",
+                Some("Dummy Child returned verification result"),
+                Some("done"),
+                Some(r#"{"fromRunId":"run-demo-dummy-child","status":"success"}"#),
+            ),
+            (
+                "evt-7",
+                &root_run_id,
+                now_ms,
+                "session",
+                "session.complete",
+                "Codex Root Run Complete",
+                Some("Finished orchestrating all workspace tasks"),
+                Some("done"),
+                Some(r#"{"status":"success"}"#),
+            ),
         ];
 
         for (id, run_id, ts, kind, event_type, title, detail, status, payload_json) in events {
@@ -647,7 +736,10 @@ mod tests {
         assert_eq!(child_run.id, "run-demo-dummy-child");
         assert_eq!(child_run.session_id, "session-dummy-child");
         assert_eq!(child_run.role, "worker");
-        assert_eq!(child_run.parent_run_id.as_deref(), Some("run-demo-codex-root"));
+        assert_eq!(
+            child_run.parent_run_id.as_deref(),
+            Some("run-demo-codex-root")
+        );
         assert_eq!(child_run.children.len(), 0);
         assert_eq!(child_run.events.len(), 3);
         assert_eq!(child_run.events[1].event_type, "tool.exec");

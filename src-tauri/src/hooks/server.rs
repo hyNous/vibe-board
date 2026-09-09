@@ -1116,7 +1116,7 @@ impl HookServer {
                         });
                 }
 
-                // Wait for the UI to respond. Codex uses a longer hook timeout for Agent Island
+                // Wait for the UI to respond. Codex uses a longer hook timeout for Vibe Board
                 // approvals; other agents keep the existing five-minute fallback window.
                 let response =
                     tokio::time::timeout(Self::interaction_response_timeout(&raw), rx).await;
@@ -1507,15 +1507,18 @@ impl HookServer {
                 }
             }
             Some(AgentEvent::MCPExecutionEnd { error, .. }) => {
-                if error.as_deref().is_some_and(|value| !value.trim().is_empty()) {
+                if error
+                    .as_deref()
+                    .is_some_and(|value| !value.trim().is_empty())
+                {
                     "error"
                 } else {
                     "processing"
                 }
             }
-            Some(AgentEvent::TaskComplete { .. } | AgentEvent::AssistantResponseComplete { .. }) => {
-                Self::native_status_from_raw(raw).unwrap_or("waiting_input")
-            }
+            Some(
+                AgentEvent::TaskComplete { .. } | AgentEvent::AssistantResponseComplete { .. },
+            ) => Self::native_status_from_raw(raw).unwrap_or("waiting_input"),
             Some(AgentEvent::Processing { .. } | AgentEvent::Notification { .. }) => {
                 Self::native_status_from_raw(raw).unwrap_or("processing")
             }
@@ -1537,12 +1540,15 @@ impl HookServer {
         let status = raw.get("status").and_then(|value| value.as_str())?;
         match status.trim().to_ascii_lowercase().as_str() {
             "starting" => Some("starting"),
-            "processing" | "running" | "running_tool" | "shell_starting"
-            | "shell_completed" | "mcp_starting" | "mcp_completed" | "response_received"
-            | "thought_processed" | "notification" => Some("processing"),
+            "processing" | "running" | "running_tool" | "shell_starting" | "shell_completed"
+            | "mcp_starting" | "mcp_completed" | "response_received" | "thought_processed"
+            | "notification" => Some("processing"),
             "compacting" => Some("compacting"),
-            "waiting_for_approval" | "waiting_approval" | "waiting_permission"
-            | "permission_request" | "plan_approval" => Some("waiting_approval"),
+            "waiting_for_approval"
+            | "waiting_approval"
+            | "waiting_permission"
+            | "permission_request"
+            | "plan_approval" => Some("waiting_approval"),
             "waiting_for_input" | "waiting_input" | "ask_question" | "question" => {
                 Some("waiting_input")
             }
@@ -1581,9 +1587,9 @@ impl HookServer {
                 tool_name,
                 ..
             }) => format!("Running MCP: {server_name}/{tool_name}"),
-            Some(AgentEvent::TaskComplete { .. } | AgentEvent::AssistantResponseComplete { .. }) => {
-                "Waiting for input".to_string()
-            }
+            Some(
+                AgentEvent::TaskComplete { .. } | AgentEvent::AssistantResponseComplete { .. },
+            ) => "Waiting for input".to_string(),
             Some(AgentEvent::Notification { message, .. }) => message.clone(),
             Some(AgentEvent::SubagentStart { .. } | AgentEvent::SubagentStop { .. }) => {
                 "Subagent activity".to_string()
@@ -1817,10 +1823,7 @@ impl HookServer {
         raw: &serde_json::Value,
         mut rate_limits: RateLimitInfo,
     ) -> RateLimitInfo {
-        let Some(values) = raw
-            .get("rateLimits")
-            .or_else(|| raw.get("rate_limits"))
-        else {
+        let Some(values) = raw.get("rateLimits").or_else(|| raw.get("rate_limits")) else {
             return rate_limits;
         };
 
@@ -1867,11 +1870,8 @@ impl HookServer {
             rate_limits.updated_at = Some(current_time_ms() as i64);
             if let Some(session) = store.get_session(session_id) {
                 rate_limits.provider = Some(session.agent_type);
-                rate_limits.provider_label = Some(
-                    session
-                        .engine_label
-                        .unwrap_or_else(|| "Agent".to_string()),
-                );
+                rate_limits.provider_label =
+                    Some(session.engine_label.unwrap_or_else(|| "Agent".to_string()));
             }
             rate_limits.source = Some("agent-hook".to_string());
         }
@@ -2294,7 +2294,9 @@ impl HookServer {
                 if is_suppressed || Self::is_remote_hook_event(_raw) {
                     if let Ok(guard) = app.lock() {
                         if let Some(ref handle) = *guard {
-                            crate::platform::notifications::send_error_notification(handle, message);
+                            crate::platform::notifications::send_error_notification(
+                                handle, message,
+                            );
                         }
                     }
                 }
@@ -3396,7 +3398,7 @@ impl HookServer {
             reason: if allowed {
                 None
             } else {
-                Some("Denied by user via Agent Island".to_string())
+                Some("Denied by user via Vibe Board".to_string())
             },
             always: if allowed && always { Some(true) } else { None },
         };

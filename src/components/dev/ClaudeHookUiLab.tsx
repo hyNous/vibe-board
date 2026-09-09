@@ -73,7 +73,7 @@ const REAL_TEST_PROMPTS: RealPromptItem[] = [
     id: 'setup',
     title: '基础准备',
     scenario: '建立测试语境',
-    prompt: '我们要做 Agent Island 灵动岛真实 hook UI 采样。请严格按我每一轮指令执行；除非我明确要求，不要主动继续修复或扩展。',
+    prompt: '我们要做 Vibe Board 灵动岛真实 hook UI 采样。请严格按我每一轮指令执行；除非我明确要求，不要主动继续修复或扩展。',
   },
   {
     id: 'write',
@@ -109,7 +109,7 @@ const REAL_TEST_PROMPTS: RealPromptItem[] = [
     id: 'plan',
     title: 'PlanApproval',
     scenario: 'ExitPlanMode 审批',
-    prompt: '请为“统一 Agent Island 权限详情卡、底部审批栏和浏览器 Hook UI Lab 的视觉表现”制定一个实现计划。先不要改代码，完成计划后等待我批准。',
+    prompt: '请为“统一 Vibe Board 权限详情卡、底部审批栏和浏览器 Hook UI Lab 的视觉表现”制定一个实现计划。先不要改代码，完成计划后等待我批准。',
   },
   {
     id: 'question-single',
@@ -350,7 +350,7 @@ function recordedSession(now: number, overrides: Partial<SessionState> = {}): Se
     chatHistory: [
       {
         role: 'user',
-        content: '我们要做 Agent Island Claude Code hook UI 真实采样。请严格按我每一轮指令执行。',
+        content: '我们要做 Vibe Board Claude Code hook UI 真实采样。请严格按我每一轮指令执行。',
         timestamp: now - 13 * 60_000,
       },
       {
@@ -363,7 +363,7 @@ function recordedSession(now: number, overrides: Partial<SessionState> = {}): Se
     activeTools: [],
     tasks: recordedTasks,
     lastUserMessage: '请修改 src/auth/middleware.ts：不再直接使用 getToken()，改成 await refreshToken()',
-    sessionTitle: 'Agent Island Claude Code hook UI 真实采样',
+    sessionTitle: 'Vibe Board Claude Code hook UI 真实采样',
     pid: 47839,
     tty: '/dev/ttys002',
     termBundleId: 'com.googlecode.iterm2',
@@ -620,8 +620,8 @@ function recordedPlanSession(now: number): SessionState {
   return recordedSession(now, {
     phase: 'waiting_approval',
     description: 'PlanApproval: ExitPlanMode generated a plan and is waiting for approval.',
-    planTitle: 'Agent Island Hook UI Lab — 视觉统一计划',
-    planContent: `# Agent Island Hook UI Lab — 视觉统一计划
+    planTitle: 'Vibe Board Hook UI Lab — 视觉统一计划',
+    planContent: `# Vibe Board Hook UI Lab — 视觉统一计划
 
 ## Context
 
@@ -640,7 +640,7 @@ function recordedPlanSession(now: number): SessionState {
     lastToolStatus: 'running',
     unattendedSince: now - 18_000,
     chatHistory: [
-      { role: 'user', content: '请为“统一 Agent Island 权限详情卡、底部审批栏和浏览器 Hook UI Lab 的视觉表现”制定一个实现计划。', timestamp: now - 40_000 },
+      { role: 'user', content: '请为“统一 Vibe Board 权限详情卡、底部审批栏和浏览器 Hook UI Lab 的视觉表现”制定一个实现计划。', timestamp: now - 40_000 },
       { role: 'assistant', content: '这是一个纯 Mock UI 计划，不需要探索现有代码库。直接进入设计阶段。', timestamp: now - 24_000 },
     ],
   })
@@ -1147,7 +1147,7 @@ function setupNoticeSessions(now: number): SessionState[] {
       phase: 'waiting_approval',
       project: 'codex',
       sessionTitle: 'Codex updated — confirm authorization',
-      lastUserMessage: 'Confirm Agent Island island once',
+      lastUserMessage: 'Confirm Vibe Board island once',
       description: 'Codex refreshed its security model. Confirm authorization once to keep session tracking and approvals.',
       statusLineText: 'Confirming authorization...',
       notice: {
@@ -1184,7 +1184,7 @@ function subagentTeamSession(now: number): SessionState {
         agentId: 'agent-ui-state',
         name: 'ui-state',
         agentType: 'explorer',
-        description: 'Map Agent Island island states to list cards',
+        description: 'Map Vibe Board island states to list cards',
         startedAt: now - 28_000,
         status: 'running',
         tools: ['Read', 'Grep'],

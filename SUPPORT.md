@@ -1,6 +1,6 @@
 # Support
 
-Agent Island is an open source project maintained in public. Please choose the support path that matches what you need:
+Vibe Board is an open source project maintained in public. Please choose the support path that matches what you need:
 
 - Questions, setup help, and workflow ideas: use the repository's Discussions page.
 - Reproducible bugs: open a GitHub issue from the repository page.

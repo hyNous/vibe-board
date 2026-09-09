@@ -296,8 +296,8 @@ fn rate_limit_remaining(value: &serde_json::Value) -> String {
     } else {
         reset
     };
-    let remaining_secs = ((reset_ms - chrono::Utc::now().timestamp_millis() as f64) / 1000.0)
-        .max(0.0) as i64;
+    let remaining_secs =
+        ((reset_ms - chrono::Utc::now().timestamp_millis() as f64) / 1000.0).max(0.0) as i64;
     let hours = remaining_secs / 3600;
     let minutes = (remaining_secs % 3600) / 60;
     if hours >= 24 {

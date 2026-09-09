@@ -410,6 +410,7 @@ def is_agentbro_entry(value):
         "remote-hook.py" in text
         or "remote/hook.py" in text
         or "agentbro-bridge" in text
+        or "Vibe Board managed integration" in text
         or "AgentBro managed integration" in text
     )
 
@@ -506,6 +507,7 @@ def is_agentbro_entry(value):
         "remote-hook.py" in text
         or "remote/hook.py" in text
         or "agentbro-bridge" in text
+        or "Vibe Board managed integration" in text
         or "AgentBro managed integration" in text
     )
 

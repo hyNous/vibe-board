@@ -494,7 +494,7 @@ pub fn install_plugin(request: &PluginInstallRequest) -> Result<String, String> 
         .filter(|value| !value.trim().is_empty())
         .unwrap_or("local");
     let dest = plugin_install_root(&request.agent)?
-        .join("agentbro")
+        .join("agent-island")
         .join(&plugin_id)
         .join(version);
     copy_recursive(&src, &dest)?;
@@ -530,7 +530,7 @@ fn temp_install_dir() -> Result<PathBuf, String> {
         .as_millis();
     let dir = dirs::home_dir()
         .unwrap_or_else(std::env::temp_dir)
-        .join(".agentbro")
+        .join(".agent-island")
         .join("tmp")
         .join(format!("install-{millis}"));
     fs::create_dir_all(&dir).map_err(|e| e.to_string())?;

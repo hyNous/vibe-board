@@ -106,15 +106,28 @@ pub struct AppConfig {
     #[serde(default = "default_session_refresh_interval_seconds")]
     pub session_refresh_interval_seconds: u32,
     /// Behavior for the settings window's native close button: "tray" hides
-    /// the window while keeping AgentBro alive; "exit" quits the app.
+    /// the window while keeping Vibe Board alive; "exit" quits the app.
     #[serde(default = "default_window_close_behavior")]
     pub window_close_behavior: String,
+    /// Whether the desktop notch follows the Codex window when it is minimized:
+    /// "independent" keeps it visible, "follow" hides it with Codex.
+    #[serde(default = "default_host_visibility_mode")]
+    pub host_visibility_mode: String,
+    /// Placement for the desktop notch: "top", "left", or "right".
+    #[serde(default = "default_notch_position_mode")]
+    pub notch_position_mode: String,
+    /// Vertical offset used by side notch placement.
+    #[serde(default)]
+    pub notch_vertical_offset: f64,
     pub theme: String,
     #[serde(default = "default_language")]
     pub language: String,
     /// Which display to position on: "primary" or a monitor name
     #[serde(default = "default_display_id")]
     pub display_id: String,
+    /// Horizontal offset of the notch from its selected display anchor.
+    #[serde(default)]
+    pub panel_horizontal_offset: f64,
     /// Hide the notch (via opacity) when there are no active sessions
     #[serde(default)]
     pub auto_hide_no_sessions: bool,
@@ -242,13 +255,25 @@ pub struct AppConfig {
     pub shortcut_skip_enabled: bool,
     #[serde(default)]
     pub permission_shortcut_defaults_migrated: bool,
-    /// Agents (adapter names) whose AgentBro hooks the user has enabled. This is
+    /// Agents (adapter names) whose Vibe Board hooks the user has enabled. This is
     /// the persisted *intent* that survives external tools (e.g. cc-switch)
     /// overwriting the agent's settings file: hook recovery re-installs hooks for
     /// these agents even when the on-disk config no longer contains any trace of
     /// them, so a wiped hook is restored without a manual reinstall or restart.
     #[serde(default)]
     pub enabled_agents: Vec<String>,
+    /// Whether the first-run Agent integration setup has been completed.
+    #[serde(default)]
+    pub setup_wizard_completed: bool,
+    /// Adapter name whose session starts Vibe Board when auto-start is enabled.
+    #[serde(default)]
+    pub host_agent: Option<String>,
+    /// Adapter names monitored as child agents.
+    #[serde(default)]
+    pub child_agents: Vec<String>,
+    /// Start Vibe Board when the configured host emits SessionStart.
+    #[serde(default = "default_true")]
+    pub auto_start_on_host_session: bool,
 }
 
 fn default_display_id() -> String {
@@ -334,6 +359,14 @@ fn default_window_close_behavior() -> String {
     "tray".to_string()
 }
 
+fn default_host_visibility_mode() -> String {
+    "independent".to_string()
+}
+
+fn default_notch_position_mode() -> String {
+    "top".to_string()
+}
+
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
@@ -350,9 +383,13 @@ impl Default for AppConfig {
             codex_app_server_sync_interval_seconds: DEFAULT_CODEX_APP_SERVER_SYNC_INTERVAL_SECONDS,
             session_refresh_interval_seconds: default_session_refresh_interval_seconds(),
             window_close_behavior: default_window_close_behavior(),
+            host_visibility_mode: default_host_visibility_mode(),
+            notch_position_mode: default_notch_position_mode(),
+            notch_vertical_offset: 0.0,
             theme: "midnight".to_string(),
             language: default_language(),
             display_id: "primary".to_string(),
+            panel_horizontal_offset: 0.0,
             auto_hide_no_sessions: false,
             sound_events: std::collections::HashMap::new(),
             sound_rules: std::collections::HashMap::new(),
@@ -398,6 +435,10 @@ impl Default for AppConfig {
             shortcut_skip_enabled: false,
             permission_shortcut_defaults_migrated: true,
             enabled_agents: Vec::new(),
+            setup_wizard_completed: false,
+            host_agent: None,
+            child_agents: Vec::new(),
+            auto_start_on_host_session: true,
         }
     }
 }
@@ -502,12 +543,25 @@ impl ConfigStore {
         let base = dirs::config_dir()
             .or_else(dirs::data_local_dir)
             .unwrap_or_else(std::env::temp_dir);
-        base.join("agentbro").join("config.json")
+        base.join("agent-island").join("config.json")
     }
 
     /// Load config from disk
     fn load_from_disk(path: &PathBuf) -> Option<AppConfig> {
-        let content = std::fs::read_to_string(path).ok()?;
+        // Adopt the old config once so subsequent writes stay entirely under
+        // Vibe Board. Keep the read fallback for locked/cross-volume cases.
+        if !path.exists() {
+            if let Some(base) = path.parent()?.parent() {
+                crate::data_dir::migrate_file(&base.join("agentbro").join("config.json"), path);
+            }
+        }
+        let content = match std::fs::read_to_string(path) {
+            Ok(content) => content,
+            Err(_) => {
+                let base = path.parent()?.parent()?;
+                std::fs::read_to_string(base.join("agentbro").join("config.json")).ok()?
+            }
+        };
         let mut config: AppConfig = serde_json::from_str(&content).ok()?;
         // Older Windows builds defaulted this feature off and had no setting
         // to turn it on. Treat that legacy value as an unconfigured default;
@@ -567,7 +621,7 @@ impl ConfigStore {
         Ok(())
     }
 
-    /// Record that the user has enabled AgentBro hooks for `agent`. Returns
+    /// Record that the user has enabled Vibe Board hooks for `agent`. Returns
     /// `Ok(true)` when the intent set changed (and was persisted). No-op when the
     /// agent is already present, to avoid needless writes / config-changed churn.
     pub fn mark_agent_enabled(&self, agent: &str) -> Result<bool, String> {
@@ -608,7 +662,7 @@ mod tests {
     };
 
     #[test]
-    fn defaults_match_agentbro_island_behavior() {
+    fn defaults_match_agent_island_behavior() {
         let config = AppConfig::default();
 
         assert_eq!(config.completion_timeout, 5);
@@ -623,6 +677,10 @@ mod tests {
         assert!(config.boot_sound_default_migrated);
         assert!(config.analytics_enabled);
         assert!(!config.analytics_consent_prompt_completed);
+        assert!(!config.setup_wizard_completed);
+        assert!(config.host_agent.is_none());
+        assert!(config.child_agents.is_empty());
+        assert!(config.auto_start_on_host_session);
     }
 
     #[test]
@@ -718,14 +776,14 @@ mod tests {
     #[test]
     fn window_close_behavior_defaults_when_field_is_missing() {
         let mut value = serde_json::to_value(AppConfig::default()).expect("serialize config");
-        value
-            .as_object_mut()
-            .unwrap()
-            .remove("windowCloseBehavior");
+        value.as_object_mut().unwrap().remove("windowCloseBehavior");
 
         let config: AppConfig = serde_json::from_value(value).expect("deserialize legacy config");
 
-        assert_eq!(config.window_close_behavior, default_window_close_behavior());
+        assert_eq!(
+            config.window_close_behavior,
+            default_window_close_behavior()
+        );
     }
 
     #[test]

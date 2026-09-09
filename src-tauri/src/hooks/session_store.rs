@@ -200,12 +200,14 @@ impl RateLimitInfo {
 
 /// Last known state for an agent. This is deliberately separate from live
 /// sessions so a completed/offline CLI can still show its previous quota and
-/// token counters after Agent Island restarts.
+/// token counters after Vibe Board restarts.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentStatusSnapshot {
     pub agent: String,
     pub label: String,
+    #[serde(default)]
+    pub primary: bool,
     pub online: bool,
     pub last_seen_at: i64,
     pub last_completed_at: Option<i64>,
@@ -566,7 +568,12 @@ pub struct SessionStore {
 impl SessionStore {
     pub fn new() -> Self {
         let agent_status_path = agent_status_file_path();
-        let agent_statuses = load_agent_statuses(&agent_status_path);
+        if !agent_status_path.exists() {
+            crate::data_dir::migrate_file(&legacy_agent_status_file_path(), &agent_status_path);
+        }
+        let agent_statuses = load_agent_statuses(&agent_status_path)
+            .or_else(|| load_agent_statuses(&legacy_agent_status_file_path()))
+            .unwrap_or_default();
         Self {
             sessions: Arc::new(DashMap::new()),
             agent_statuses: Arc::new(
@@ -769,7 +776,10 @@ impl SessionStore {
                 Some("Session ended".to_string()),
                 true,
             ),
-            crate::agents::AgentEvent::TaskComplete { session_id, summary } => (
+            crate::agents::AgentEvent::TaskComplete {
+                session_id,
+                summary,
+            } => (
                 session_id.as_str(),
                 None,
                 true,
@@ -785,7 +795,10 @@ impl SessionStore {
                 Some(text.clone()),
                 true,
             ),
-            crate::agents::AgentEvent::Error { session_id, message } => (
+            crate::agents::AgentEvent::Error {
+                session_id,
+                message,
+            } => (
                 session_id.as_str(),
                 None,
                 false,
@@ -839,19 +852,20 @@ impl SessionStore {
             .and_then(|value| value.engine_label.clone())
             .unwrap_or_else(|| agent_display_name(&agent));
         let now = Utc::now().timestamp_millis();
-        let mut entry = self
-            .agent_statuses
-            .entry(agent.clone())
-            .or_insert_with(|| AgentStatusSnapshot {
-                agent: agent.clone(),
-                label: label.clone(),
-                online: false,
-                last_seen_at: now,
-                last_completed_at: None,
-                tokens: TokenUsage::default(),
-                rate_limits: None,
-                detail: None,
-            });
+        let mut entry =
+            self.agent_statuses
+                .entry(agent.clone())
+                .or_insert_with(|| AgentStatusSnapshot {
+                    agent: agent.clone(),
+                    label: label.clone(),
+                    primary: false,
+                    online: false,
+                    last_seen_at: now,
+                    last_completed_at: None,
+                    tokens: TokenUsage::default(),
+                    rate_limits: None,
+                    detail: None,
+                });
         entry.label = label;
         entry.online = online;
         entry.last_seen_at = now;
@@ -934,8 +948,7 @@ impl SessionStore {
 
         self.agent_statuses.clear();
         for snapshot in next {
-            self.agent_statuses
-                .insert(snapshot.agent.clone(), snapshot);
+            self.agent_statuses.insert(snapshot.agent.clone(), snapshot);
         }
         self.save_agent_statuses();
     }
@@ -960,7 +973,9 @@ impl SessionStore {
 
     fn emit_agent_status_update(&self) {
         if let Some(ref handle) = self.app_handle {
-            if let Err(error) = handle.emit("agent-status-update", self.get_agent_status_snapshots()) {
+            if let Err(error) =
+                handle.emit("agent-status-update", self.get_agent_status_snapshots())
+            {
                 log::debug!("Failed to emit agent-status-update: {error}");
             }
         }
@@ -1261,15 +1276,21 @@ fn agent_status_file_path() -> PathBuf {
     dirs::config_dir()
         .or_else(dirs::data_local_dir)
         .unwrap_or_else(std::env::temp_dir)
+        .join("agent-island")
+        .join("agent-status.json")
+}
+
+fn legacy_agent_status_file_path() -> PathBuf {
+    dirs::config_dir()
+        .or_else(dirs::data_local_dir)
+        .unwrap_or_else(std::env::temp_dir)
         .join("agentbro")
         .join("agent-status.json")
 }
 
-fn load_agent_statuses(path: &PathBuf) -> Vec<AgentStatusSnapshot> {
-    let Ok(content) = std::fs::read_to_string(path) else {
-        return Vec::new();
-    };
-    serde_json::from_str(&content).unwrap_or_default()
+fn load_agent_statuses(path: &PathBuf) -> Option<Vec<AgentStatusSnapshot>> {
+    let content = std::fs::read_to_string(path).ok()?;
+    serde_json::from_str(&content).ok()
 }
 
 fn agent_display_name(agent: &str) -> String {
@@ -1320,7 +1341,7 @@ mod tests {
             "s1",
             "agent-1",
             Some("island-audit".to_string()),
-            "Inspect Agent Island",
+            "Inspect Vibe Board",
             Some("research".to_string()),
             Some("/tmp/main.jsonl".to_string()),
         );

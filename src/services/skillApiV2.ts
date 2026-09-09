@@ -1113,8 +1113,8 @@ export const skillApiV2 = {
     isTauriRuntime()
       ? invoke<SkillManagerSettings>('skill_manager_settings')
       : Promise.resolve({
-          centerPath: '~/.agentbro/skills',
-          sqlitePath: '~/.agentbro/skill-manager.db',
+          centerPath: '~/.agents/skills',
+          sqlitePath: '~/.agent-island/skill-manager/skill-manager.db',
           defaultDistributeMode: 'link' as const,
           linkFailPolicy: 'ask' as const,
           startupScan: true,
@@ -1393,11 +1393,11 @@ export const skillApiV2 = {
   getPluginDetail: (agentId: string, pluginId: string) =>
     isTauriRuntime()
       ? invoke<PluginDetail>('get_plugin_detail_v2', { agentId, pluginId })
-      : Promise.reject(new Error('Plugin details are only available in the Agent Island app.')),
+      : Promise.reject(new Error('Plugin details are only available in the Vibe Board app.')),
   readPluginFile: (agentId: string, pluginId: string, relativePath: string) =>
     isTauriRuntime()
       ? invoke<PluginFileContent>('read_plugin_file_v2', { agentId, pluginId, relativePath })
-      : Promise.reject(new Error('Plugin files are only available in the Agent Island app.')),
+      : Promise.reject(new Error('Plugin files are only available in the Vibe Board app.')),
   setPluginEnabled: (agentId: string, pluginId: string, revision: string, enabled: boolean) =>
     isTauriRuntime()
       ? invoke<PluginInventory>('set_plugin_enabled_v2', { agentId, pluginId, revision, enabled })
@@ -1437,7 +1437,7 @@ export const skillApiV2 = {
       : Promise.resolve({
           success: false,
           category: 'unavailable',
-          message: 'Connection testing requires the Agent Island desktop app',
+          message: 'Connection testing requires the Vibe Board desktop app',
           latencyMs: 0,
           protocolVersion: null,
           serverName: null,
@@ -1849,8 +1849,8 @@ function demoOverview(): SkillManagerOverview {
     packs: [],
     issues: [],
     settings: {
-      centerPath: '~/.agentbro/skills',
-      sqlitePath: '~/.agentbro/skill-manager.db',
+      centerPath: '~/.agents/skills',
+      sqlitePath: '~/.agent-island/skill-manager/skill-manager.db',
       defaultDistributeMode: 'link',
       linkFailPolicy: 'ask',
       startupScan: true,

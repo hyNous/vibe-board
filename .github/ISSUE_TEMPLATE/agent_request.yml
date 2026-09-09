@@ -1,5 +1,5 @@
 name: Agent 接入请求
-description: 请求 Agent Island 支持新的 AI 编程 Agent。
+description: 请求 Vibe Board 支持新的 AI 编程 Agent。
 labels: ["agent-request"]
 body:
   - type: input

@@ -5,7 +5,7 @@
 // configuration without losing anything. Strict text-only parser (no toml
 // crate) — preserves formatting and comments outside of `[[hooks]]` blocks.
 
-use super::profiles::MARKER_PREFIX;
+use super::profiles::{LEGACY_MARKER_PREFIX, MARKER_PREFIX};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TomlHookEntry {
@@ -294,6 +294,7 @@ fn strip_marker_lines(text: &str) -> String {
         let is_marker = trimmed.starts_with('#') && {
             let text = trimmed.trim_start_matches('#').trim_start();
             text.starts_with(MARKER_PREFIX)
+                || text.starts_with(LEGACY_MARKER_PREFIX)
                 || text.starts_with("--- vibe-island Kimi hooks START")
                 || text.starts_with("--- vibe-island Kimi hooks END")
                 || text.starts_with("--- vibe-island Kimi hooks removed")

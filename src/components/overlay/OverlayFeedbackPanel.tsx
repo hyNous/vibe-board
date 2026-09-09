@@ -17,8 +17,6 @@ interface OverlayFeedbackPanelProps {
   text: string
   kind?: 'completion' | 'response'
   maxHeight?: number
-  dwellMs: number
-  startedAt?: number
   statusLabel: string
   onJumpToTerminal: () => void
   onShowSessions?: () => void
@@ -39,8 +37,6 @@ export function OverlayFeedbackPanel({
   text,
   kind = 'response',
   maxHeight,
-  dwellMs,
-  startedAt,
   statusLabel,
   onJumpToTerminal,
   onShowSessions,
@@ -51,25 +47,12 @@ export function OverlayFeedbackPanel({
   const { t } = useTranslation()
   const [inputValue, setInputValue] = useState('')
   const [sending, setSending] = useState(false)
-  const [isTimerPaused, setIsTimerPaused] = useState(false)
-  const [progressRatio, setProgressRatio] = useState(1)
-  const overlayRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
-  const fallbackStartedAtRef = useRef(startedAt ?? Date.now())
   const onDismissRef = useRef(onDismiss)
-  const pointerInsideRef = useRef(false)
   const inputFocusedRef = useRef(false)
   const inputComposingRef = useRef(false)
-  const dismissPendingRef = useRef(false)
-  const remainingRef = useRef(dwellMs)
-  const startedAtRef = useRef(0)
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const progressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const blurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const dismissAfterSendTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const refocusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const countdownStartedAt = startedAt ?? fallbackStartedAtRef.current
-  const countdownDeadline = countdownStartedAt + dwellMs
   const hasInputDraft = inputValue.trim().length > 0
 
   const shownUserMessage = userMessage || session.lastUserMessage
@@ -92,78 +75,13 @@ export function OverlayFeedbackPanel({
 
   useEffect(() => () => onDraftStateChange?.(false), [onDraftStateChange])
 
-  const updateProgress = useCallback(() => {
-    if (dwellMs <= 0) {
-      setProgressRatio(0)
-      return
-    }
-    if (timerRef.current) {
-      const elapsed = Date.now() - startedAtRef.current
-      setProgressRatio(Math.max(0, (remainingRef.current - elapsed) / dwellMs))
-    } else {
-      setProgressRatio(Math.max(0, remainingRef.current / dwellMs))
-    }
-  }, [dwellMs])
-
-  const scheduleDismiss = useCallback((delayMs: number) => {
-    startedAtRef.current = Date.now()
-    timerRef.current = setTimeout(() => {
-      timerRef.current = null
-      remainingRef.current = 0
-      setProgressRatio(0)
-      if (pointerInsideRef.current || inputFocusedRef.current) {
-        setIsTimerPaused(true)
-      }
-      dismissPendingRef.current = true
-    }, Math.max(0, delayMs))
+  useEffect(() => () => {
+    if (blurTimerRef.current) clearTimeout(blurTimerRef.current)
+    if (refocusTimerRef.current) clearTimeout(refocusTimerRef.current)
   }, [])
-
-  useEffect(() => {
-    const remaining = Math.max(0, countdownDeadline - Date.now())
-    remainingRef.current = remaining
-    setProgressRatio(dwellMs <= 0 ? 0 : Math.min(1, remaining / dwellMs))
-    dismissPendingRef.current = false
-    pointerInsideRef.current = false
-    scheduleDismiss(remaining)
-    progressIntervalRef.current = setInterval(updateProgress, 100)
-    setIsTimerPaused(false)
-    inputFocusedRef.current = false
-
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current)
-      if (progressIntervalRef.current) clearInterval(progressIntervalRef.current)
-      if (blurTimerRef.current) clearTimeout(blurTimerRef.current)
-      if (dismissAfterSendTimerRef.current) clearTimeout(dismissAfterSendTimerRef.current)
-      if (refocusTimerRef.current) clearTimeout(refocusTimerRef.current)
-    }
-  }, [countdownDeadline, dwellMs, scheduleDismiss, updateProgress])
-
-  const releaseDismissHold = useCallback(() => {
-    if (inputValue.trim()) return
-    if (pointerInsideRef.current || inputFocusedRef.current) return
-    if (dismissPendingRef.current || remainingRef.current <= 0) {
-      onDismissRef.current()
-      return
-    }
-    setIsTimerPaused(false)
-  }, [inputValue])
-
-  useEffect(() => {
-    if (!isTimerPaused) return undefined
-
-    const interval = window.setInterval(() => {
-      if (inputFocusedRef.current) return
-      const isActuallyHovered = overlayRef.current?.matches(':hover') ?? false
-      pointerInsideRef.current = isActuallyHovered
-      if (!isActuallyHovered) releaseDismissHold()
-    }, 250)
-
-    return () => window.clearInterval(interval)
-  }, [isTimerPaused, releaseDismissHold])
 
   const focusInput = useCallback(() => {
     inputFocusedRef.current = true
-    setIsTimerPaused(true)
     if (blurTimerRef.current) {
       clearTimeout(blurTimerRef.current)
       blurTimerRef.current = null
@@ -195,10 +113,8 @@ export function OverlayFeedbackPanel({
       blurTimerRef.current = null
       inputFocusedRef.current = false
       setNotchFocusable(false).catch(() => {})
-      pointerInsideRef.current = overlayRef.current?.matches(':hover') ?? false
-      releaseDismissHold()
     }, 200)
-  }, [releaseDismissHold])
+  }, [])
 
   const handleSend = useCallback(async () => {
     const value = inputValue.trim()
@@ -213,17 +129,6 @@ export function OverlayFeedbackPanel({
       })
       setInputValue('')
       inputFocusedRef.current = false
-      dismissAfterSendTimerRef.current = setTimeout(() => {
-        dismissAfterSendTimerRef.current = null
-        if (pointerInsideRef.current || inputFocusedRef.current) {
-          remainingRef.current = 0
-          dismissPendingRef.current = true
-          setProgressRatio(0)
-          setIsTimerPaused(true)
-          return
-        }
-        onDismissRef.current()
-      }, 500)
     } catch (error) {
       console.warn('[OverlayFeedbackPanel] sendMessage:', error)
     } finally {
@@ -266,18 +171,9 @@ export function OverlayFeedbackPanel({
 
   return (
     <div
-      ref={overlayRef}
-      className={`overlay-feedback overlay-feedback--${kind}${isTimerPaused ? ' overlay-feedback--paused' : ''}`}
+      className={`overlay-feedback overlay-feedback--${kind}`}
       style={maxHeight ? ({ '--overlay-feedback-reader-height': `${maxHeight}px` } as CSSProperties) : undefined}
       onMouseDown={handlePanelMouseDown}
-      onMouseEnter={() => {
-        pointerInsideRef.current = true
-        setIsTimerPaused(true)
-      }}
-      onMouseLeave={() => {
-        pointerInsideRef.current = false
-        releaseDismissHold()
-      }}
     >
       <div className="overlay-feedback__session" data-no-drag>
         <div className="overlay-feedback__avatar">
@@ -409,24 +305,20 @@ export function OverlayFeedbackPanel({
             }}
           >
             <span className="overlay-card__brand-logo-stack" aria-hidden="true">
-              <img className="overlay-card__brand-logo overlay-card__brand-logo--light" src="/agent-island-logo.png" alt="" />
-              <img className="overlay-card__brand-logo overlay-card__brand-logo--dark" src="/agent-island-logo-dark.png" alt="" />
+              <img className="overlay-card__brand-logo overlay-card__brand-logo--light" src="/vibe-board-logo.png" alt="" />
+              <img className="overlay-card__brand-logo overlay-card__brand-logo--dark" src="/vibe-board-logo-dark.png" alt="" />
             </span>
             <span>{t('notch.slogan', { defaultValue: '让 Agent 更好用' })}</span>
           </button>
         ) : (
           <div className="overlay-card__show-sessions overlay-card__show-sessions--static">
             <span className="overlay-card__brand-logo-stack" aria-hidden="true">
-              <img className="overlay-card__brand-logo overlay-card__brand-logo--light" src="/agent-island-logo.png" alt="" />
-              <img className="overlay-card__brand-logo overlay-card__brand-logo--dark" src="/agent-island-logo-dark.png" alt="" />
+              <img className="overlay-card__brand-logo overlay-card__brand-logo--light" src="/vibe-board-logo.png" alt="" />
+              <img className="overlay-card__brand-logo overlay-card__brand-logo--dark" src="/vibe-board-logo-dark.png" alt="" />
             </span>
             <span>{t('notch.slogan', { defaultValue: '让 Agent 更好用' })}</span>
           </div>
         )}
-      </div>
-
-      <div className="overlay-feedback__progress" aria-hidden>
-        <div className="overlay-feedback__progress-bar" style={{ transform: `scaleX(${progressRatio})` }} />
       </div>
     </div>
   )

@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { CollapsedBar } from '../components/notch/CollapsedBar'
+import { RateLimitBar } from '../components/notch/RateLimitBar'
 import { useConfigStore } from '../stores/configStore'
 import type { SessionState } from '../types/agent'
 
@@ -81,7 +82,7 @@ describe('CollapsedBar idle tips', () => {
     const { container } = render(
       <CollapsedBar
         sessions={[session()]}
-        panelState="hover"
+        panelState="expanded"
         rateLimits={{
           fiveHourUsage: 36,
           fiveHourRemaining: '1h1m',
@@ -97,11 +98,38 @@ describe('CollapsedBar idle tips', () => {
     expect(container.querySelector('.collapsed-bar__counter-pills')).not.toBeInTheDocument()
   })
 
+  it('stacks Antigravity model quota groups into separate rows', () => {
+    const { container } = render(
+      <RateLimitBar
+        rateLimits={{
+          provider: 'antigravity',
+          providerLabel: 'Antigravity',
+          fiveHourUsage: 23,
+          fiveHourRemaining: '77%',
+          sevenDayUsage: 20,
+          sevenDayRemaining: '80%',
+          windows: [
+            { id: 'gemini-weekly', title: 'Gemini 7d', usedPercent: 20, remainingPercent: 80, remainingLabel: '80%' },
+            { id: 'gemini-5h', title: 'Gemini 5h', usedPercent: 23, remainingPercent: 77, remainingLabel: '77%' },
+            { id: 'office-weekly', title: 'Office 7d', usedPercent: 10, remainingPercent: 90, remainingLabel: '90%' },
+            { id: 'office-5h', title: 'Office 5h', usedPercent: 5, remainingPercent: 95, remainingLabel: '95%' },
+          ],
+        }}
+      />,
+    )
+
+    expect(container.querySelector('.rate-limit--stacked')).toBeInTheDocument()
+    expect(container.querySelectorAll('.rate-limit__group')).toHaveLength(2)
+    expect(container.querySelectorAll('.rate-limit__segment')).toHaveLength(4)
+    expect(container.querySelector('.rate-limit__group')?.textContent).toContain('Gemini')
+    expect(container.querySelectorAll('.rate-limit__group')[1]?.textContent).toContain('Office')
+  })
+
   it('uses the lead agent provider snapshot before the global fallback', () => {
     const { container } = render(
       <CollapsedBar
         sessions={[session({ agentType: 'codex' })]}
-        panelState="hover"
+        panelState="expanded"
         rateLimits={{
           fiveHourUsage: 5,
           fiveHourRemaining: '4h',
@@ -168,7 +196,7 @@ describe('CollapsedBar idle tips', () => {
           session({ id: 'claude', agentType: 'claude-code', phase: 'waiting_input' }),
           session({ id: 'codex', agentType: 'codex', phase: 'processing' }),
         ]}
-        panelState="hover"
+        panelState="expanded"
         usageSnapshots={{
           codex: {
             provider: 'codex',
@@ -252,106 +280,27 @@ describe('CollapsedBar idle tips', () => {
     expect(container.querySelector('.collapsed-bar__alert-badge')?.textContent).toBe('2')
   })
 
-  it('uses working text instead of internal processing prompt text', () => {
+  it('shows only the conversation title for an ordinary running session', () => {
     render(
       <CollapsedBar
         sessions={[
-          session({ project: '', phase: 'processing', description: 'Processing user input' }),
+          session({
+            project: 'vibe-board',
+            sessionTitle: '修复悬浮窗动画',
+            phase: 'processing',
+            description: 'Processing user input',
+            lastToolName: 'Edit',
+            lastToolTarget: 'OverlayFeedbackPanel.tsx +68 -41',
+          }),
         ]}
         panelState="collapsed"
         onCollapse={() => {}}
       />,
     )
 
-    expect(screen.getByText('notch.working')).toBeInTheDocument()
+    expect(screen.getByText('vibe-board · 修复悬浮窗动画')).toBeInTheDocument()
     expect(screen.queryByText('Processing user input')).not.toBeInTheDocument()
-  })
-
-  it('shows live tool status as the primary collapsed island text when enabled', () => {
-    const { container } = render(
-      <CollapsedBar
-        sessions={[
-          session({
-            phase: 'processing',
-            lastToolName: 'Edit',
-            lastToolTarget: 'OverlayFeedbackPanel.tsx +68 -41',
-          }),
-        ]}
-        panelState="collapsed"
-        onCollapse={() => {}}
-      />,
-    )
-
-    expect(screen.getByText('notch.tool.editing')).toBeInTheDocument()
-    expect(screen.getByText('project')).toBeInTheDocument()
-    expect(screen.getByText('OverlayFeedbackPanel.tsx')).toBeInTheDocument()
-    expect(screen.getByText('+68')).toHaveClass('collapsed-bar__tool-count--add')
-    expect(screen.getByText('-41')).toHaveClass('collapsed-bar__tool-count--del')
-    expect(container.querySelector('.collapsed-bar__tool-inline')).toBeInTheDocument()
-  })
-
-  it('compacts full file paths in collapsed live tool status', () => {
-    const { container } = render(
-      <CollapsedBar
-        sessions={[
-          session({
-            project: 'agentbro',
-            phase: 'processing',
-            lastToolName: 'Read',
-            lastToolTarget: '/Users/demo/projects/agentbro/src/components/notch/CollapsedBar.tsx',
-          }),
-        ]}
-        panelState="collapsed"
-        onCollapse={() => {}}
-      />,
-    )
-
-    expect(screen.getByText('agentbro')).toBeInTheDocument()
-    expect(screen.getByText('notch.tool.reading')).toBeInTheDocument()
-    expect(screen.getByText('CollapsedBar.tsx')).toBeInTheDocument()
-    expect(container.querySelector('.collapsed-bar__tool-inline')).toHaveAttribute(
-      'title',
-      'notch.tool.reading /Users/demo/projects/agentbro/src/components/notch/CollapsedBar.tsx',
-    )
-    expect(screen.queryByText('/Users/demo/projects/agentbro/src/components/notch/CollapsedBar.tsx')).not.toBeInTheDocument()
-  })
-
-  it('hides live tool status from the collapsed island when disabled', () => {
-    useConfigStore.setState({ showToolStatus: false })
-
-    render(
-      <CollapsedBar
-        sessions={[
-          session({
-            phase: 'processing',
-            lastToolName: 'Edit',
-            lastToolTarget: 'OverlayFeedbackPanel.tsx +68 -41',
-          }),
-        ]}
-        panelState="collapsed"
-        onCollapse={() => {}}
-      />,
-    )
-
     expect(screen.queryByText('notch.tool.editing')).not.toBeInTheDocument()
     expect(screen.queryByText('OverlayFeedbackPanel.tsx')).not.toBeInTheDocument()
-    expect(screen.getByText('project')).toBeInTheDocument()
-  })
-
-  it('always surfaces compacting state in the collapsed island', () => {
-    useConfigStore.setState({ showToolStatus: false })
-
-    const { container } = render(
-      <CollapsedBar
-        sessions={[session({ phase: 'compacting', project: 'agentbro' })]}
-        panelState="collapsed"
-        onCollapse={() => {}}
-      />,
-    )
-
-    expect(screen.getByText('agentbro')).toBeInTheDocument()
-    expect(screen.getByText('notch.tool.compactingContext')).toBeInTheDocument()
-    expect(container.querySelector('.collapsed-bar__compacting-inline')).toBeInTheDocument()
-    expect(container.querySelector('.collapsed-bar--compacting')).toBeInTheDocument()
   })
 })

@@ -2,14 +2,14 @@
 
 Last updated: September 3, 2026
 
-Agent Island is a local-first desktop utility for surfacing AI coding-agent
+Vibe Board is a local-first desktop utility for surfacing AI coding-agent
 events in a floating island. Coding session data and local configuration stay
 on your device unless you explicitly use a remote integration or enable the
 optional telemetry build.
 
 ## Data collection
 
-Agent Island does not sell personal information or use advertising tracking.
+Vibe Board does not sell personal information or use advertising tracking.
 
 Optional anonymous usage telemetry is disabled unless the build provides a
 complete SLS target and analytics is enabled in the app. When active, it sends
@@ -24,7 +24,7 @@ keys.
 
 ## Local processing
 
-To provide its core features, Agent Island may process local session status,
+To provide its core features, Vibe Board may process local session status,
 approvals, questions, completion notifications, supported-tool configuration,
 preferences, and integration state. This information is used to display state,
 route notifications, install or remove integrations you request, and focus
@@ -32,7 +32,7 @@ related local windows.
 
 ## Remote SSH features
 
-If you enable remote SSH support, Agent Island uses the SSH target information
+If you enable remote SSH support, Vibe Board uses the SSH target information
 you provide to connect to the selected host and forward session events back to
 the local app. Remote connection details and forwarded events are not sent to
 telemetry.
@@ -49,4 +49,4 @@ the anonymous usage events. GitHub is contacted only for release checks or
 GitHub-backed Skill synchronization that you explicitly use.
 
 For privacy questions, use the issue tracker for the repository that distributes
-your Agent Island build.
+your Vibe Board build.

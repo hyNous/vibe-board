@@ -130,8 +130,8 @@ const commandSource = read('src-tauri/src/commands/mod.rs')
 const notificationSource = read('src-tauri/src/platform/notifications.rs')
 const schemaSource = read('src-tauri/src/switch/schema.rs')
 
-requireEqual('package.json name', pkg.name, 'agent-island')
-requireEqual('Tauri productName', tauri.productName, 'Agent Island')
+requireEqual('package.json name', pkg.name, 'vibe-board')
+requireEqual('Tauri productName', tauri.productName, 'Vibe Board')
 requireEqual('Tauri identifier', tauri.identifier, 'com.agentisland.desktop')
 requireEqual('Tauri updater artifact generation', String(tauri.bundle?.createUpdaterArtifacts), 'true')
 requireEqual('Cargo package name', cargoName, 'agent-island')
@@ -234,7 +234,7 @@ if (strictRelease) {
     if (telemetryEnvCount > 0 && telemetryEnvCount < telemetryEnvNames.length) {
       errors.push('AGENT_ISLAND_TELEMETRY_SLS_HOST, AGENT_ISLAND_TELEMETRY_SLS_PROJECT, and AGENT_ISLAND_TELEMETRY_SLS_LOGSTORE must all be set together')
     } else if (telemetryEnvCount === 0) {
-      warnings.push('Agent Island anonymous telemetry SLS target is not set; release builds will not upload anonymous usage stats.')
+      warnings.push('Vibe Board anonymous telemetry SLS target is not set; release builds will not upload anonymous usage stats.')
     }
   } else {
     warnings.push('unsigned prerelease mode enabled; Apple signing and notarization are skipped.')

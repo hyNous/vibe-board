@@ -1,4 +1,4 @@
-/* Notch Panel — Agent Island-style macOS notch shell */
+/* Notch Panel — Vibe Board-style macOS notch shell */
 
 .notch-container {
   position: fixed;
@@ -11,6 +11,14 @@
   justify-content: center;
   transform: translateX(-50%);
   pointer-events: none;
+}
+
+.notch-container[data-notch-position="left"] {
+  justify-content: flex-start;
+}
+
+.notch-container[data-notch-position="right"] {
+  justify-content: flex-end;
 }
 
 .notch-hitbox {
@@ -28,6 +36,20 @@
    * stable rectangular hover surface while the visible shell stays clipped.
    */
   background: rgba(0, 0, 0, 0.001);
+}
+
+.notch-container[data-notch-position="left"] .notch-hitbox,
+.notch-container[data-notch-position="right"] .notch-hitbox {
+  margin-top: max(0px, calc((var(--notch-host-height) - var(--notch-hitbox-height)) / 2));
+  transition: margin-top var(--notch-morph-duration, 0.5s) cubic-bezier(0.2, 0, 0, 1);
+}
+
+.notch-container[data-notch-position="left"] .notch-hitbox {
+  justify-content: flex-start;
+}
+
+.notch-container[data-notch-position="right"] .notch-hitbox {
+  justify-content: flex-end;
 }
 
 .notch-hitbox[data-island-hidden="true"] .notch-panel {
@@ -153,6 +175,29 @@ html[data-island-color-theme="midnight"] .notch-panel[data-island-state="micro"]
     var(--island-shadow),
     0 0 30px rgba(74, 222, 128, 0.10),
     inset 0 -1px 0 rgba(255, 255, 255, 0.09);
+}
+
+/* Side placement keeps the outer edge flush with the monitor edge. */
+.notch-panel[data-notch-position="left"] {
+  border-top-width: 1px;
+  border-right-width: 1px;
+  border-bottom-width: 1px;
+  border-left-width: 0;
+  border-radius: 0 22px 22px 0 !important;
+  box-shadow:
+    var(--island-shadow),
+    inset -1px 0 0 rgba(255, 255, 255, 0.08);
+}
+
+.notch-panel[data-notch-position="right"] {
+  border-top-width: 1px;
+  border-right-width: 0;
+  border-bottom-width: 1px;
+  border-left-width: 1px;
+  border-radius: 22px 0 0 22px !important;
+  box-shadow:
+    var(--island-shadow),
+    inset 1px 0 0 rgba(255, 255, 255, 0.08);
 }
 
 .notch-panel[data-island-state="pet"] {

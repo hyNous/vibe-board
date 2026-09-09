@@ -1,6 +1,6 @@
 # Anonymous usage telemetry
 
-Agent Island can send one anonymous daily usage snapshot to an operator-provided
+Vibe Board can send one anonymous daily usage snapshot to an operator-provided
 Alibaba Cloud Simple Log Service (SLS) endpoint. Telemetry is disabled unless a
 complete target is supplied at build time and the user has enabled analytics.
 

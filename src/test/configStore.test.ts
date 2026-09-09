@@ -7,7 +7,7 @@ describe('configStore island defaults', () => {
     useConfigStore.getState().resetIslandDefaults()
   })
 
-  it('matches Agent Island island defaults for feedback and cache display', () => {
+  it('matches Vibe Board island defaults for feedback and cache display', () => {
     const state = useConfigStore.getState()
 
     expect(state.completionCardHeight).toBe(200)

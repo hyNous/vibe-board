@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="./assets/readme/agent-island-hero.svg" alt="Agent Island: one desktop workspace for AI coding agent sessions, approvals, traces, and usage" width="100%" />
+  <img src="./assets/readme/vibe-board-hero.svg" alt="Vibe Board: one desktop workspace for AI coding agent sessions, approvals, traces, and usage" width="100%" />
 
   <p>
     <strong>Your desktop control console for AI coding agents</strong><br />
@@ -21,7 +21,7 @@
 
 ## What it is
 
-Agent Island is a local-first Tauri desktop app that brings events from Claude Code, Codex, Gemini CLI, OpenCode, Antigravity, and other coding agents into one floating workspace.
+Vibe Board is a local-first Tauri desktop app that brings events from Claude Code, Codex, Gemini CLI, OpenCode, Antigravity, and other coding agents into one floating workspace.
 
 It helps with three everyday problems:
 
@@ -34,21 +34,21 @@ It helps with three everyday problems:
 <table>
   <tr>
     <td width="50%">
-      <img src="./docs/assets/screenshots/island-expanded.png" alt="Agent Island expanded session list with approval states" width="100%" />
+      <img src="./docs/assets/screenshots/island-expanded.png" alt="Vibe Board expanded session list with approval states" width="100%" />
       <sub>Expand the island to inspect sessions, tools, approvals, and plans.</sub>
     </td>
     <td width="50%">
-      <img src="./docs/assets/screenshots/island-detail.png" alt="Agent Island session details with trace information" width="100%" />
+      <img src="./docs/assets/screenshots/island-detail.png" alt="Vibe Board session details with trace information" width="100%" />
       <sub>Details keep trace, token, rate-limit, and raw-event context together.</sub>
     </td>
   </tr>
   <tr>
     <td width="50%">
-      <img src="./docs/assets/screenshots/island-permission.png" alt="Handling an agent permission request in Agent Island" width="100%" />
+      <img src="./docs/assets/screenshots/island-permission.png" alt="Handling an agent permission request in Vibe Board" width="100%" />
       <sub>Approve, deny, answer, or confirm directly from the floating UI.</sub>
     </td>
     <td width="50%">
-      <img src="./docs/assets/screenshots/agent-management-skill-library.png" alt="Agent Island shared Skill library" width="100%" />
+      <img src="./docs/assets/screenshots/agent-management-skill-library.png" alt="Vibe Board shared Skill library" width="100%" />
       <sub>Adopt Skills into a center library and distribute them to agents.</sub>
     </td>
   </tr>
@@ -58,8 +58,8 @@ It helps with three everyday problems:
 
 ### Windows installer
 
-1. Download the latest package from [GitHub Releases](https://github.com/hyNous/agent-island/releases), or use the checked-in [Agent Island-latest-setup.exe](./releases/Agent%20Island-latest-setup.exe).
-2. Install and launch Agent Island. The app stays in the system tray while the island appears when needed.
+1. Download the latest package from [GitHub Releases](https://github.com/hyNous/agent-island/releases), or use the checked-in [Vibe Board-latest-setup.exe](./releases/Vibe%20Board-latest-setup.exe).
+2. Install and launch Vibe Board. The app stays in the system tray while the island appears when needed.
 3. Open **Island → Integration** in Settings, run **Hook Doctor**, and install hooks for the agents you use.
 4. Restart the relevant CLI session and wait for events to appear in the island.
 
@@ -84,7 +84,7 @@ pnpm dev
 
 ## What you can do
 
-| Need | How Agent Island handles it |
+| Need | How Vibe Board handles it |
 | --- | --- |
 | Run several agents at once | Aggregate sessions, phases, tools, subagents, and completion reminders in the island. |
 | Wait for permission or input | Approve, deny, answer, or confirm plans without returning to the terminal. |
@@ -95,7 +95,7 @@ pnpm dev
 
 ## How it works
 
-Agent Island does not put session content through a hosted relay. The basic path is:
+Vibe Board does not put session content through a hosted relay. The basic path is:
 
 ```text
 Agent hooks / local app state
@@ -107,7 +107,7 @@ SessionStore / trace / usage snapshot
 Island · Agent Monitor · Skills manager
 ```
 
-Hooks are the primary real-time path. Supported agents such as Codex can add thread, approval, and quota data through a local app-server or state files. When an external agent is offline, Agent Island keeps its last successfully read state and shows the source and update time.
+Hooks are the primary real-time path. Supported agents such as Codex can add thread, approval, and quota data through a local app-server or state files. When an external agent is offline, Vibe Board keeps its last successfully read state and shows the source and update time.
 
 ## Support scope
 
@@ -122,7 +122,7 @@ Runtime hook adapters and agent-management discovery are separate layers; event 
 
 - `src/`: React island, Settings, agent/Skill management, and themes.
 - `src-tauri/src/`: Rust hook server, bridge, adapters, trace/usage, and local storage.
-- `src-tauri/icons/`, `public/agent-island-*`: current Agent Island icons and presentation assets.
+- `src-tauri/icons/`, `public/agent-island-*`: current Vibe Board icons and presentation assets.
 - `releases/`: current Windows acceptance installer; older packages live only under `releases/archive/`.
 - `UPSTREAM.md`, `LICENSE`, `NOTICE`, `TRADEMARKS.md`: provenance, license, and branding boundaries.
 
@@ -144,6 +144,6 @@ Releases are manual through GitHub Releases for now. Until signing keys and a re
 
 ## License and provenance
 
-Agent Island code is released under the [Apache License 2.0](./LICENSE), while the upstream [NOTICE](./NOTICE) and branding boundary in [TRADEMARKS.md](./TRADEMARKS.md) remain in the repository.
+Vibe Board code is released under the [Apache License 2.0](./LICENSE), while the upstream [NOTICE](./NOTICE) and branding boundary in [TRADEMARKS.md](./TRADEMARKS.md) remain in the repository.
 
 This is an independent modification based on [AgentBro](./UPSTREAM.md): the product name, icons, and release configuration have been replaced, and this repository is not an official upstream distribution.

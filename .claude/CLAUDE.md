@@ -1,4 +1,4 @@
-# Agent Island — Claude Code project guidance
+# Vibe Board — Claude Code project guidance
 
 Read this file together with [`AGENTS.md`](../AGENTS.md) before editing.
 
@@ -30,7 +30,7 @@ new abstractions or dependencies. Keep translations in all five locale files.
 
 The runtime still recognizes legacy `.agentbro` data directories, Hook markers,
 and bridge commands so existing installations can migrate safely. Do not
-remove those compatibility paths while changing the Agent Island UI or release
+remove those compatibility paths while changing the Vibe Board UI or release
 identity.
 
 ## Publishing boundary

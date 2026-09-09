@@ -493,6 +493,111 @@
   border-bottom: 1px solid var(--settings-separator);
 }
 
+.agent-monitor__live-tasks,
+.agent-monitor__task-trace-heading {
+  margin-bottom: 10px;
+  border: 1px solid var(--settings-card-border);
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.agent-monitor__live-tasks-header,
+.agent-monitor__task-trace-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+}
+
+.agent-monitor__live-tasks-header h3,
+.agent-monitor__task-trace-heading h3 {
+  margin: 0;
+  font-size: 13px;
+}
+
+.agent-monitor__live-tasks-header h3 em {
+  display: inline-block;
+  min-width: 18px;
+  margin-left: 5px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: rgba(52, 199, 89, 0.12);
+  color: #248a3d;
+  font-size: 10px;
+  font-style: normal;
+  text-align: center;
+}
+
+.agent-monitor__live-tasks-header p,
+.agent-monitor__task-trace-heading p {
+  margin: 3px 0 0;
+  color: var(--settings-text-secondary);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.agent-monitor__live-tasks-header > span {
+  flex-shrink: 0;
+  color: var(--settings-text-secondary);
+  font-size: 11px;
+}
+
+.agent-monitor__live-task-list {
+  display: grid;
+  border-top: 1px solid var(--settings-separator);
+}
+
+.agent-monitor__live-task-row {
+  display: grid;
+  grid-template-columns: minmax(72px, 0.22fr) minmax(0, 1fr) auto;
+  gap: 4px 10px;
+  align-items: center;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--settings-separator);
+}
+
+.agent-monitor__live-task-row:last-child {
+  border-bottom: 0;
+}
+
+.agent-monitor__live-task-agent,
+.agent-monitor__live-task-state {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.agent-monitor__live-task-state {
+  color: var(--settings-accent);
+}
+
+.agent-monitor__live-task-main {
+  min-width: 0;
+}
+
+.agent-monitor__live-task-main strong,
+.agent-monitor__live-task-main code {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-monitor__live-task-main strong {
+  font-size: 12px;
+}
+
+.agent-monitor__live-task-main code,
+.agent-monitor__live-task-meta {
+  color: var(--settings-text-secondary);
+  font-size: 10px;
+}
+
+.agent-monitor__live-task-meta {
+  grid-column: 2 / 4;
+}
+
 .agent-monitor__tag {
   flex-shrink: 0;
   padding: 3px 7px;

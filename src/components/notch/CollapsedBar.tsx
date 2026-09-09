@@ -1,8 +1,7 @@
 /* Collapsed Bar — Pill-shaped header with pixel art, info, and controls */
-import { useState, useEffect, useRef } from 'react'
+import { useRef } from 'react'
 import { useTranslation } from 'react-i18next'
-import { AnimatePresence, motion } from 'framer-motion'
-import type { PanelState, RateLimitInfo, SessionPhase, SessionState } from '../../types/agent'
+import type { PanelState, RateLimitInfo, SessionState } from '../../types/agent'
 import { computePriority, PRIORITY } from '../../types/priority'
 import { MascotRouter } from './mascots'
 import { TipDisplay } from './TipDisplay'
@@ -15,6 +14,7 @@ import { sessionNeedsAttention } from '../../utils/islandInteraction'
 import { getStringField, parseToolInput } from '../../utils/permissionPreview'
 import { getToolActivityLabel } from '../../utils/toolLabels'
 import { statusFromSession } from '../../utils/agentRunState'
+import { getSessionTitle } from '../../utils/sessionDisplay'
 import { RateLimitBar } from './RateLimitBar'
 import { SpriteCanvas } from './SpriteCanvas'
 import './CollapsedBar.css'
@@ -70,49 +70,8 @@ function selectEffectiveRateLimits(
   return rateLimitsForSession(fallbackSession, usageSnapshots)
 }
 
-const PHASE_LABELS: Record<SessionPhase, string> = {
-  ready: 'notch.ready',
-  idle: 'notch.idle',
-  processing: 'notch.working',
-  waiting_approval: 'notch.needsApproval',
-  waiting_input: 'notch.waitingInput',
-  compacting: 'notch.compactingShort',
-  done: 'notch.taskComplete',
-  error: 'notch.error',
-  interrupted: 'notch.interrupted',
-}
-
-const RUN_STATUS_LABELS: Partial<Record<NonNullable<SessionState['runState']>['status'], string>> = {
-  starting: 'notch.working',
-  running: 'notch.working',
-  waiting_permission: 'notch.needsApproval',
-  waiting_input: 'notch.waitingInput',
-  error: 'notch.error',
-  completed: 'notch.taskComplete',
-  cancelled: 'notch.interrupted',
-}
-
 function runStatus(session: SessionState): NonNullable<SessionState['runState']>['status'] {
   return session.runState?.status ?? statusFromSession(session)
-}
-
-function isGenericProcessingDescription(text: string | undefined): boolean {
-  const normalized = (text || '').trim().replace(/\s+/g, ' ').toLowerCase()
-  return normalized === 'processing user input' || normalized.startsWith('processing user input:')
-}
-
-function splitToolTargetChanges(target: string): { name: string; additions?: string; deletions?: string } | null {
-  const match = target.match(/^(.*?)\s+(\+\d+)(?:\s+(-\d+))?$/)
-    || target.match(/^(.*?)\s+(-\d+)$/)
-  if (!match) return null
-  const name = match[1].trim()
-  if (!name) return null
-  const firstCount = match[2]
-  return {
-    name,
-    additions: firstCount?.startsWith('+') ? firstCount : undefined,
-    deletions: firstCount?.startsWith('-') ? firstCount : match[3],
-  }
 }
 
 const PATH_TARGET_TOOLS = new Set([
@@ -141,36 +100,6 @@ function getCompactToolTarget(toolName: string, target: string): string {
     return basename(target)
   }
   return target
-}
-
-function CollapsedToolStatus({
-  label,
-  project,
-  target,
-  toolName,
-}: {
-  label: string
-  project: string
-  target?: string
-  toolName: string
-}) {
-  const changes = target ? splitToolTargetChanges(target) : null
-  const compactTarget = target ? getCompactToolTarget(toolName, target) : undefined
-  return (
-    <span className="collapsed-bar__tool-inline" title={target ? `${label} ${target}` : label}>
-      <span className="collapsed-bar__tool-project">{project}</span>
-      <span className="collapsed-bar__tool-label">{label}</span>
-      {changes ? (
-        <>
-          <span className="collapsed-bar__tool-target-name">{getCompactToolTarget(toolName, changes.name)}</span>
-          {changes.additions && <span className="collapsed-bar__tool-count collapsed-bar__tool-count--add">{changes.additions}</span>}
-          {changes.deletions && <span className="collapsed-bar__tool-count collapsed-bar__tool-count--del">{changes.deletions}</span>}
-        </>
-      ) : target ? (
-        <span className="collapsed-bar__tool-target">{compactTarget}</span>
-      ) : null}
-    </span>
-  )
 }
 
 type WaitingSummary = {
@@ -226,25 +155,6 @@ function CollapsedWaitingStatus({ summary }: { summary: WaitingSummary }) {
   )
 }
 
-function getCarouselSlides(session: SessionState, t: (key: string) => string): string[] {
-  const slides: string[] = [session.project]
-
-  if (session.runState?.currentAction && !isGenericProcessingDescription(session.runState.currentAction)) {
-    slides.push(session.runState.currentAction.split('\n')[0])
-  } else if (session.lastToolName) {
-    const target = session.lastToolTarget ? `: ${session.lastToolTarget}` : ''
-    slides.push(`${getToolActivityLabel(t, session.lastToolName)}${target}`)
-  } else if (session.description && !isGenericProcessingDescription(session.description)) {
-    slides.push(session.description.split('\n')[0])
-  }
-
-  const statusKey = RUN_STATUS_LABELS[runStatus(session)] || PHASE_LABELS[session.phase]
-  const status = statusKey ? t(statusKey) : session.phase
-  if (status && status !== slides[0]) slides.push(status)
-
-  return slides.filter(Boolean)
-}
-
 function getUnattendedLevel(unattendedSince: number | undefined): 'none' | 'amber' | 'red' {
   if (!unattendedSince) return 'none'
   const elapsed = Date.now() - unattendedSince
@@ -264,74 +174,16 @@ function formatElapsed(unattendedSince: number | undefined): string {
 
 export function CollapsedBar({ sessions, panelState, rateLimits, usageSnapshots, onCollapse, isMicro, focusFilteredEmpty = false }: CollapsedBarProps) {
   const { t } = useTranslation()
-  const showToolStatus = useConfigStore((s) => s.showToolStatus)
   const showUsageQuota = useConfigStore((s) => s.showUsageQuota)
   const usageQueryEnabled = useConfigStore((s) => s.usageQueryEnabled)
   const tipsEnabled = useConfigStore((s) => s.tipsEnabled)
   const activeTheme = useThemeStore((s) => s.activeTheme)
   const colorTheme = useThemeStore((s) => s.colorTheme)
-  const brandLogoSrc = isDarkColorTheme(colorTheme) ? '/agent-island-logo-dark.png' : '/agent-island-logo.png'
+  const brandLogoSrc = isDarkColorTheme(colorTheme) ? '/vibe-board-logo-dark.png' : '/vibe-board-logo.png'
 
   const lead = getLeadSession(sessions)
   useTick(1000, Boolean(lead?.unattendedSince))
-
-  // Linger: keep showing tool name for 2s after it clears
-  const [lingeredToolName, setLingeredToolName] = useState<string | undefined>(undefined)
-  const [lingeredToolTarget, setLingeredToolTarget] = useState<string | undefined>(undefined)
-  const lingerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const liveTool = lead?.lastToolName
-  useEffect(() => {
-    if (liveTool) {
-      if (lingerTimerRef.current) { clearTimeout(lingerTimerRef.current); lingerTimerRef.current = null }
-      const id = window.setTimeout(() => {
-        setLingeredToolName(liveTool)
-        setLingeredToolTarget(lead?.lastToolTarget)
-      }, 0)
-      return () => window.clearTimeout(id)
-    } else {
-      lingerTimerRef.current = setTimeout(() => {
-        setLingeredToolName(undefined)
-        setLingeredToolTarget(undefined)
-        lingerTimerRef.current = null
-      }, 2000)
-    }
-  }, [liveTool, lead?.lastToolTarget])
-
-  const effectiveToolName = lingeredToolName
-  const effectiveToolTarget = lingeredToolTarget
-  const liveToolName = lead?.lastToolName
-  const liveToolTarget = lead?.lastToolTarget
-
-  const getSlides = (session: SessionState) => {
-    const base = getCarouselSlides(session, t)
-    if (showToolStatus && effectiveToolName) {
-      const target = effectiveToolTarget ? `: ${effectiveToolTarget}` : ''
-      const toolSlide = `${getToolActivityLabel(t, effectiveToolName)}${target}`
-      return [session.project, toolSlide, ...base.slice(2)]
-    }
-    return base
-  }
-  const slides = lead ? getSlides(lead) : []
-  const slidesCount = slides.length
-
-  const [slideIndex, setSlideIndex] = useState(0)
-  const leadId = lead?.id
-
-  // Jump to tool slide when tool becomes active; reset on session change
-  useEffect(() => {
-    const id = window.setTimeout(() => setSlideIndex(0), 0)
-    return () => window.clearTimeout(id)
-  }, [leadId])
-  useEffect(() => {
-    if (!effectiveToolName) return
-    const id = window.setTimeout(() => setSlideIndex(1), 0)
-    return () => window.clearTimeout(id)
-  }, [effectiveToolName])
-
-  const safeIndex = slidesCount > 0 ? slideIndex % slidesCount : 0
-  const currentSlide = slides[safeIndex] ?? ''
-  const primaryToolName = showToolStatus ? (liveToolName || effectiveToolName) : undefined
-  const primaryToolTarget = liveToolName ? liveToolTarget : effectiveToolTarget
+  const currentTitle = lead ? getSessionTitle(lead) : ''
   const waitingSummary = lead ? getWaitingSummary(lead, t) : null
 
   const count = sessions.length
@@ -344,8 +196,6 @@ export function CollapsedBar({ sessions, panelState, rateLimits, usageSnapshots,
   const showTips = tipsEnabled && (sessions.length === 0 || allIdle)
   const emptyText = focusFilteredEmpty ? t('notch.noSessionInFocus') : t('notch.waitingForSessions')
   const showBrandEmpty = sessions.length === 0 && !focusFilteredEmpty && !showTips
-  const isCompacting = lead?.runState?.phase === 'compacting' || lead?.phase === 'compacting'
-  const isThinking = lead ? runStatus(lead) === 'running' && !lead.runState?.currentAction && !lead.lastToolName : false
   const isYolo = lead?.isYoloMode
   const hasError = lead ? runStatus(lead) === 'error' : false
   const effectiveRateLimits = selectEffectiveRateLimits(sessions, lead, rateLimits, usageSnapshots)
@@ -361,7 +211,7 @@ export function CollapsedBar({ sessions, panelState, rateLimits, usageSnapshots,
     if (!session || !session.agentType) {
       return (
         <span className="collapsed-bar__idle-logo-wrap" style={{ width: size, height: size }} aria-hidden="true">
-          <img className="collapsed-bar__idle-logo" src="/agent-island-app-icon.png" alt="" />
+          <img className="collapsed-bar__idle-logo" src="/vibe-board-app-icon.png" alt="" />
         </span>
       )
     }
@@ -406,7 +256,7 @@ export function CollapsedBar({ sessions, panelState, rateLimits, usageSnapshots,
   }
 
   return (
-    <div className={`collapsed-bar ${isExpanded ? 'collapsed-bar--expanded' : ''} ${isThinking ? 'collapsed-bar--shimmer' : ''} ${isCompacting ? 'collapsed-bar--compacting' : ''}`} onClick={panelState === 'expanded' ? onCollapse : undefined}>
+    <div className={`collapsed-bar ${isExpanded ? 'collapsed-bar--expanded' : ''}`} onClick={panelState === 'expanded' ? onCollapse : undefined}>
       {/* Top row: rate limits (left) + icons (right) — only in expanded */}
       {isExpanded && (
         <div className="collapsed-bar__status-row">
@@ -414,7 +264,7 @@ export function CollapsedBar({ sessions, panelState, rateLimits, usageSnapshots,
             {workingCount > 0 && lead
               ? renderMascot(lead, 20)
               : renderMascot(undefined, 20)}
-            {shouldShowUsageQuota && effectiveRateLimits ? (
+            {shouldShowUsageQuota && effectiveRateLimits && panelState !== 'hover' ? (
               <RateLimitBar rateLimits={effectiveRateLimits} />
             ) : (
               <div className="collapsed-bar__counter-pills">
@@ -475,46 +325,21 @@ export function CollapsedBar({ sessions, panelState, rateLimits, usageSnapshots,
                 ? renderMascot(lead, 22)
                 : renderMascot(undefined, 22)}
               <div className="collapsed-bar__carousel">
-                {isCompacting ? (
-                  <span className="collapsed-bar__compacting-inline" title={t('notch.compacting')}>
-                    <span className="collapsed-bar__tool-project">{lead.project}</span>
-                    <span className="collapsed-bar__compacting-dot" />
-                    <span className="collapsed-bar__compacting-label">{t('notch.tool.compactingContext')}</span>
-                  </span>
-                ) : waitingSummary ? (
+                {waitingSummary ? (
                   <CollapsedWaitingStatus summary={waitingSummary} />
-                ) : primaryToolName ? (
-                  <CollapsedToolStatus
-                    label={getToolActivityLabel(t, primaryToolName)}
-                    project={lead.project}
-                    target={primaryToolTarget}
-                    toolName={primaryToolName}
-                  />
                 ) : showTips ? (
                   <TipDisplay show />
                 ) : (
-                  <AnimatePresence mode="wait" initial={false}>
-                    <motion.span
-                      key={`${leadId}-${safeIndex}`}
-                      className="collapsed-bar__info"
-                      style={safeIndex === 1 && effectiveToolName ? { color: '#ef4444' } : undefined}
-                      initial={{ y: 8, opacity: 0 }}
-                      animate={{ y: 0, opacity: 1 }}
-                      exit={{ y: -8, opacity: 0 }}
-                      transition={{ duration: 0.18, ease: 'easeOut' }}
-                    >
-                      {currentSlide}
-                    </motion.span>
-                  </AnimatePresence>
+                  <span className="collapsed-bar__info">{currentTitle}</span>
                 )}
               </div>
             </>
           ) : (
             <>
               {showBrandEmpty ? (
-                <div className="collapsed-bar__brand-empty" aria-label={`Agent Island, ${t('notch.slogan')}`}>
+                <div className="collapsed-bar__brand-empty" aria-label={`Vibe Board, ${t('notch.slogan')}`}>
                   <img className="collapsed-bar__brand-logo" src={brandLogoSrc} alt="" aria-hidden="true" />
-                  <span className="collapsed-bar__brand-name">Agent Island</span>
+                  <span className="collapsed-bar__brand-name">Vibe Board</span>
                   <span className="collapsed-bar__brand-slogan">{t('notch.slogan')}</span>
                 </div>
               ) : (

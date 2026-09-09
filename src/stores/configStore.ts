@@ -1,4 +1,4 @@
-/* Agent Island — Configuration State Management (Zustand) */
+/* Vibe Board — Configuration State Management (Zustand) */
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { AgentType } from '../types/agent'
@@ -185,6 +185,10 @@ interface ConfigState {
   shortcutSurfaceDefaultsMigrated: boolean
   shortcutPlatformDefaultsMigrated: boolean
   customHooksPath: string
+  setupWizardCompleted: boolean
+  hostAgent: string | null
+  childAgents: string[]
+  autoStartOnHostSession: boolean
 
   // Shortcuts
   shortcuts: ShortcutBinding[]
@@ -203,6 +207,9 @@ interface ConfigState {
   codexAppServerSyncIntervalSeconds: number
   sessionRefreshIntervalSeconds: number
   windowCloseBehavior: 'tray' | 'exit'
+  hostVisibilityMode: 'independent' | 'follow'
+  notchPositionMode: 'top' | 'left' | 'right'
+  notchVerticalOffset: number
 
   // Language
   language: 'en' | 'zh' | 'ja' | 'ko' | 'tr'
@@ -260,7 +267,7 @@ interface ConfigState {
   // Display
   aiMessageLines: number
 
-  // Agent Island parity — interaction timing
+  // Vibe Board parity — interaction timing
   clickToDetail: boolean
   jumpBeforeSend: boolean
   showCacheTTL: boolean
@@ -475,6 +482,9 @@ function createIslandDefaults(): Partial<ConfigState> {
     idleTimeoutMinutes: 5,
     idleInteractionRoutingEnabled: false,
     idleInteractionRoutingMinutes: 5,
+    hostVisibilityMode: 'independent',
+    notchPositionMode: 'top',
+    notchVerticalOffset: 0,
     allowHorizontalDrag: true,
     panelHorizontalOffset: 0,
     collapsedWidthScale: 100,
@@ -580,6 +590,10 @@ export const useConfigStore = create<ConfigStore>()(
   shortcutSurfaceDefaultsMigrated: true,
   shortcutPlatformDefaultsMigrated: true,
   customHooksPath: '',
+  setupWizardCompleted: false,
+  hostAgent: null,
+  childAgents: [],
+  autoStartOnHostSession: true,
 
   // Shortcuts
   shortcuts: defaultShortcuts,
@@ -598,6 +612,9 @@ export const useConfigStore = create<ConfigStore>()(
   codexAppServerSyncIntervalSeconds: 30,
   sessionRefreshIntervalSeconds: 3,
   windowCloseBehavior: 'tray',
+  hostVisibilityMode: 'independent',
+  notchPositionMode: 'top',
+  notchVerticalOffset: 0,
 
   // Language
   language: (() => {
@@ -661,7 +678,7 @@ export const useConfigStore = create<ConfigStore>()(
   // Display
   aiMessageLines: 1,
 
-  // Agent Island parity — interaction timing
+  // Vibe Board parity — interaction timing
   clickToDetail: true,
   jumpBeforeSend: true,
   showCacheTTL: true,
@@ -807,7 +824,7 @@ export const useConfigStore = create<ConfigStore>()(
   },
     }),
     {
-      name: 'agentbro-config',
+      name: 'agent-island-config',
       merge: (persistedState, currentState) => {
         const persisted = persistedState as Partial<ConfigState> | undefined
         const migratedPermissionShortcuts = persisted?.permissionShortcutDefaultsMigrated === true

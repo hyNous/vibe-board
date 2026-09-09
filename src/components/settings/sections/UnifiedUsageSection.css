@@ -35,7 +35,7 @@
 
 .unified-usage__summary {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
   margin-bottom: 12px;
 }
@@ -133,6 +133,18 @@
   color: var(--settings-text-secondary);
   font-size: 10px;
   text-transform: uppercase;
+}
+
+.unified-usage__provider-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 2px 5px;
+  border-radius: 999px;
+  background: rgba(0, 122, 255, 0.1);
+  color: #0066cc;
+  font-size: 9px;
+  font-weight: 750;
+  vertical-align: 1px;
 }
 
 .unified-usage__provider-table td:last-child {

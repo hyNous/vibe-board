@@ -248,6 +248,28 @@ describe('AgentMonitorSection', () => {
     await waitFor(() => expect(screen.getByText('PreToolUse')).toBeInTheDocument())
   })
 
+  it('separates live sessions from persisted task traces and includes every active agent session', async () => {
+    const antigravitySummary = {
+      ...summary,
+      id: 'session-antigravity',
+      agentType: 'antigravity',
+      phase: 'processing',
+      waitingUser: false,
+      pendingKind: null,
+      title: 'Live Antigravity task',
+    }
+    monitorMocks.getMonitorSessions.mockResolvedValue([summary, antigravitySummary])
+
+    render(<AgentMonitorSection activeView="tasks" />)
+
+    await waitFor(() => expect(screen.getByTestId('live-task-list')).toBeInTheDocument())
+    expect(screen.getByTestId('live-task-session-1')).toBeInTheDocument()
+    expect(screen.getByTestId('live-task-session-antigravity')).toBeInTheDocument()
+    expect(screen.getByText('Live Antigravity task')).toBeInTheDocument()
+    expect(screen.getByText('宿主和其他 Agent 的独立 session 都会显示；嵌套 subagent 计入宿主的子任务数，不重复计数。')).toBeInTheDocument()
+    expect(monitorMocks.getTaskTraces).toHaveBeenCalled()
+  })
+
   it('keeps native request monitoring off by default until manually enabled', async () => {
     monitorMocks.setNetworkMonitorEnabled.mockResolvedValue({
       enabled: true,

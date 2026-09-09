@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""QA tests for Agent Island session state machine and event processing."""
+"""QA tests for Vibe Board session state machine and event processing."""
 
 import socket
 import json
@@ -516,7 +516,7 @@ def test_large_payload():
 # ============================================================
 def main():
     print("=" * 60)
-    print("Agent Island QA: State Machine & Event Processing Tests")
+    print("Vibe Board QA: State Machine & Event Processing Tests")
     print("=" * 60)
     print(f"Socket: {SOCKET_PATH}")
     print(f"PID: {os.getpid()}")

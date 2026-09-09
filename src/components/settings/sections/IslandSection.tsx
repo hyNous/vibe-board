@@ -277,16 +277,16 @@ function hookInstallStatusLabel(t: (key: string, options?: Record<string, unknow
 function hookDoctorSuggestion(t: (key: string, options?: Record<string, unknown>) => string, check: HookDoctorCheck): string | null {
   if (check.status === 'ok' || check.status === 'info') return null
   if (check.id === 'bridge-binary') {
-    return t('settings.hookDoctorSuggestionBridge', { defaultValue: 'Restart Agent Island. If it still fails, reinstall the app.' })
+    return t('settings.hookDoctorSuggestionBridge', { defaultValue: 'Restart Vibe Board. If it still fails, reinstall the app.' })
   }
   if (check.id === 'hook-server' || check.id === 'hook-server-tcp') {
-    return t('settings.hookDoctorSuggestionServer', { defaultValue: 'Keep Agent Island running and check again. New CLI sessions connect to the current Hook service.' })
+    return t('settings.hookDoctorSuggestionServer', { defaultValue: 'Keep Vibe Board running and check again. New CLI sessions connect to the current Hook service.' })
   }
   if (check.id === 'installed-hooks') {
     return t('settings.hookDoctorSuggestionInstall', { defaultValue: 'Click Install All Hooks, then restart the corresponding CLI sessions.' })
   }
   if (check.id === 'automation-permission') {
-    return t('settings.hookDoctorSuggestionAutomation', { defaultValue: 'Allow Agent Island to control Terminal and System Events in macOS System Settings.' })
+    return t('settings.hookDoctorSuggestionAutomation', { defaultValue: 'Allow Vibe Board to control Terminal and System Events in macOS System Settings.' })
   }
   if (check.id === 'codex-cli') {
     return t('settings.hookDoctorSuggestionCodexCli', { defaultValue: 'Install Codex CLI or expose the real codex executable. Codex Desktop / WindowsApps launchers cannot be used for hooks.' })
@@ -367,9 +367,9 @@ function OverviewTab() {
             <span className="overview-hero__stripe overview-hero__stripe--gold" />
           </div>
           <div className="overview-live-pill">
-            <img src="/agent-island-app-icon.png" className="overview-live-pill__icon" alt="Agent Island" />
+            <img src="/vibe-board-app-icon.png" className="overview-live-pill__icon" alt="Vibe Board" />
             <span className="overview-live-pill__copy">
-              <strong>Agent Island</strong>
+              <strong>Vibe Board</strong>
               <span>让Agent更好用</span>
             </span>
           </div>
@@ -419,7 +419,7 @@ function OverviewTab() {
       </SettingGroup>
 
       <SettingGroup>
-        <SettingRow label={t('settings.islandEnabled', { defaultValue: 'Enable Island' })} description={t('settings.islandEnabledDesc', { defaultValue: 'Show Agent Island status, approvals, questions, and completions in the floating island.' })}>
+        <SettingRow label={t('settings.islandEnabled', { defaultValue: 'Enable Island' })} description={t('settings.islandEnabledDesc', { defaultValue: 'Show Vibe Board status, approvals, questions, and completions in the floating island.' })}>
           <Toggle checked={config.islandEnabled} onChange={(v) => {
             config.updateConfig('islandEnabled', v)
             if (v) {
@@ -438,9 +438,6 @@ function OverviewTab() {
         </SettingRow>
         <SettingRow label={t('settings.smartSuppression')} description={t('settings.smartSuppressionDesc')}>
           <Toggle checked={config.smartSuppression} onChange={(v) => config.updateConfig('smartSuppression', v)} />
-        </SettingRow>
-        <SettingRow label={t('settings.autoCollapse')} description={t('settings.autoCollapseDesc')}>
-          <Toggle checked={config.autoCollapse} onChange={(v) => config.updateConfig('autoCollapse', v)} />
         </SettingRow>
         <SettingRow label={t('settings.autoHideNoSessions')} description={t('settings.autoHideNoSessionsDesc')}>
           <Toggle checked={config.autoHideNoSessions} onChange={(v) => config.updateConfig('autoHideNoSessions', v)} />
@@ -474,18 +471,6 @@ function BehaviorTab() {
   return (
     <>
       <SettingGroup label={t('settings.island.section.expand', { defaultValue: 'Expand' })}>
-        <SettingRow label={t('settings.hoverExpandDelay')} description={t('settings.hoverExpandDelayDesc')}>
-          <Slider value={config.hoverExpandDelay} min={0} max={1000} step={50}
-            onCommit={(v) => config.updateConfig('hoverExpandDelay', v)} unit="ms" />
-        </SettingRow>
-        <SettingRow label={t('settings.microHoverExpandDelay')} description={t('settings.microHoverExpandDelayDesc')}>
-          <Slider value={config.microHoverExpandDelay} min={0} max={1000} step={50}
-            onCommit={(v) => config.updateConfig('microHoverExpandDelay', v)} unit="ms" />
-        </SettingRow>
-        <SettingRow label={t('settings.collapseDelay')} description={t('settings.collapseDelayDesc')}>
-          <Slider value={config.collapseDelay} min={100} max={1000} step={50}
-            onCommit={(v) => config.updateConfig('collapseDelay', v)} unit="ms" />
-        </SettingRow>
         <SettingRow label={t('settings.islandAnimationScale', { defaultValue: 'Animation Scale' })} description={t('settings.islandAnimationScaleDesc', { defaultValue: 'Adjust the speed of island open, close, and content motion.' })}>
           <Slider value={config.islandAnimationScale} min={0.25} max={6} step={0.25}
             onCommit={(v) => config.updateConfig('islandAnimationScale', v)} unit="x" />
@@ -503,13 +488,6 @@ function BehaviorTab() {
         <SettingRow label={t('settings.noSessionsHideDelay')} description={t('settings.noSessionsHideDelayDesc')}>
           <Slider value={config.noSessionsHideDelay} min={1} max={30} step={1}
             onCommit={(v) => config.updateConfig('noSessionsHideDelay', v)} unit="min" />
-        </SettingRow>
-      </SettingGroup>
-
-      <SettingGroup label={t('settings.island.section.dwell', { defaultValue: 'Dwell Time' })}>
-        <SettingRow label={t('settings.taskCompleteDwell')} description={t('settings.taskCompleteDwellDesc')}>
-          <Slider value={config.taskCompleteDwellSeconds} min={1} max={30} step={1}
-            onCommit={(v) => config.updateConfig('taskCompleteDwellSeconds', v)} unit="s" />
         </SettingRow>
         <SettingRow label={t('settings.escSilenceDuration')} description={t('settings.escSilenceDurationDesc')}>
           <Slider value={config.escSilenceDuration} min={10} max={300} step={10}
@@ -646,11 +624,19 @@ function DisplayTab() {
   ]
   const displayMonitorValue = normalizeDisplayMonitorValue(config.displayMonitor, displays)
 
-  const islandPositionLabel = config.panelHorizontalOffset === 0
-    ? t('settings.islandPositionCenter', { defaultValue: 'Centered' })
-    : config.panelHorizontalOffset < 0
-      ? t('settings.islandPositionLeft', { defaultValue: '{{value}}px left', value: Math.abs(config.panelHorizontalOffset) })
-      : t('settings.islandPositionRight', { defaultValue: '{{value}}px right', value: config.panelHorizontalOffset })
+  const hostVisibilityOptions = [
+    { value: 'independent', label: t('settings.hostVisibilityIndependent', { defaultValue: 'Codex 最小化时保持显示' }) },
+    { value: 'follow', label: t('settings.hostVisibilityFollow', { defaultValue: 'Codex 最小化时一起隐藏' }) },
+  ]
+  const islandPositionLabel = config.notchPositionMode === 'left'
+    ? t('settings.notchPositionLeft', { defaultValue: '贴靠左侧' })
+    : config.notchPositionMode === 'right'
+      ? t('settings.notchPositionRight', { defaultValue: '贴靠右侧' })
+      : config.panelHorizontalOffset === 0
+        ? t('settings.islandPositionCenter', { defaultValue: 'Centered' })
+        : config.panelHorizontalOffset < 0
+          ? t('settings.islandPositionLeft', { defaultValue: '{{value}}px left', value: Math.abs(config.panelHorizontalOffset) })
+          : t('settings.islandPositionRight', { defaultValue: '{{value}}px right', value: config.panelHorizontalOffset })
 
   return (
     <>
@@ -707,12 +693,30 @@ function DisplayTab() {
                   .catch((e) => console.error('Failed to set display:', e))
               }} minWidth={180} />
           </SettingRow>
-          <SettingRow label={t('settings.allowHorizontalDrag')} description={t('settings.allowHorizontalDragDesc')}>
+          <SettingRow label={t('settings.hostVisibilityMode', { defaultValue: 'Codex 最小化行为' })} description={t('settings.hostVisibilityModeDesc', { defaultValue: '选择 Codex 桌面窗口最小化时是否同步隐藏刘海。' })}>
+            <Dropdown value={config.hostVisibilityMode} options={hostVisibilityOptions}
+              onChange={(v) => {
+                const hostVisibilityMode = v === 'follow' ? 'follow' : 'independent'
+                config.updateConfig('hostVisibilityMode', hostVisibilityMode)
+                getConfig()
+                  .then((backendConfig) => updateBackendConfig({ ...backendConfig, hostVisibilityMode }))
+                  .catch((e) => console.error('Failed to persist host visibility mode:', e))
+              }} minWidth={220} />
+          </SettingRow>
+          <SettingRow label={t('settings.allowHorizontalDrag', { defaultValue: '允许拖动位置' })} description={t('settings.allowHorizontalDragDesc', { defaultValue: '直接拖动刘海；释放后会自动贴到顶部、左侧或右侧最近的屏幕边缘。' })}>
             <Toggle checked={config.allowHorizontalDrag} onChange={(v) => config.updateConfig('allowHorizontalDrag', v)} />
           </SettingRow>
           <SettingRow label={t('settings.resetIslandPosition', { defaultValue: 'Reset Island Position' })} description={islandPositionLabel}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <button className="settings-mini-button" type="button" onClick={() => config.updateConfig('panelHorizontalOffset', 0)}>
+              <button className="settings-mini-button" type="button" onClick={() => {
+                config.updateConfig('notchPositionMode', 'top')
+                config.updateConfig('panelHorizontalOffset', 0)
+                config.updateConfig('notchVerticalOffset', 0)
+                getConfig()
+                  .then((backendConfig) => updateBackendConfig({ ...backendConfig, notchPositionMode: 'top', panelHorizontalOffset: 0, notchVerticalOffset: 0 }))
+                  .then(() => repositionNotch())
+                  .catch((e) => console.error('Failed to reset island position:', e))
+              }}>
                 {t('settings.resetCenter', { defaultValue: 'Reset to Center' })}
               </button>
             </div>
@@ -783,7 +787,7 @@ function DisplayTab() {
         </SettingRow>
         <SettingRow
           label={t('settings.windowCloseBehavior', { defaultValue: '关闭窗口时' })}
-          description={t('settings.windowCloseBehaviorDesc', { defaultValue: '点击桌面窗口右上角的叉时，选择隐藏到系统托盘或退出 Agent Island。' })}
+          description={t('settings.windowCloseBehaviorDesc', { defaultValue: '点击桌面窗口右上角的叉时，选择隐藏到系统托盘或退出 Vibe Board。' })}
         >
           <Dropdown
             value={config.windowCloseBehavior}
@@ -869,7 +873,7 @@ function ThemePicker({ themes, activeThemeName, onSelect, isZh }: ThemePickerPro
   const codexPetThemes = themes.filter((th) => th.isCodexPet)
 
   const themeLabel = (th: ThemeConfig) => {
-    if (th.name === 'ink-amber') return isZh ? 'Agent Island 经典' : 'Agent Island Classic'
+    if (th.name === 'ink-amber') return isZh ? 'Vibe Board 经典' : 'Vibe Board Classic'
     return th.displayName ?? th.name.charAt(0).toUpperCase() + th.name.slice(1).replace(/[-:]/g, ' ')
   }
 
@@ -1314,7 +1318,7 @@ function IntegrationTab() {
     }
     const confirmed = await askDialog(
       t('settings.uninstallAllConfirmMessage', {
-        defaultValue: '将清理 Agent Island 安装到所有 CLI 工具的 Hook 配置（含自定义安装），用于排错重装。继续？',
+        defaultValue: '将清理 Vibe Board 安装到所有 CLI 工具的 Hook 配置（含自定义安装），用于排错重装。继续？',
       }),
       {
         title: t('settings.uninstallAllConfirmTitle', { defaultValue: '一键卸载全部 Hook' }),
@@ -1328,7 +1332,7 @@ function IntegrationTab() {
       await fetchStatus()
       setNotice(errors.length > 0
         ? t('settings.hookUninstallAllDoneWithErrors', { defaultValue: '部分 Hook 卸载失败：{{errors}}', errors: errors.join('；') })
-        : t('settings.hookUninstallAllDone', { defaultValue: '已清理全部 Agent Island Hook，可重新安装。' }))
+        : t('settings.hookUninstallAllDone', { defaultValue: '已清理全部 Vibe Board Hook，可重新安装。' }))
     } catch (e) { setError(readableError(e)) }
     setBulkUninstalling(false)
   }
@@ -1511,7 +1515,7 @@ function IntegrationTab() {
         label={t('settings.hookDoctor', { defaultValue: 'Hook Doctor' })}
       >
         <div className="hook-doctor-intro">
-          {t('settings.hookDoctorInlineDesc', { defaultValue: 'Checks the Agent Island bridge, Hook service, installed Hooks, and platform-specific terminal integration.' })}
+          {t('settings.hookDoctorInlineDesc', { defaultValue: 'Checks the Vibe Board bridge, Hook service, installed Hooks, and platform-specific terminal integration.' })}
         </div>
         {hookDoctorReport && (
           <div className="hook-doctor-report">

@@ -346,7 +346,9 @@ impl Service {
             if fsutil::is_ignored_entry(&name) || name.starts_with('.') {
                 continue;
             }
-            if name == "agentbro-skills.snapshot.json" {
+            if name == "agent-island-skills.snapshot.json"
+                || name == "agentbro-skills.snapshot.json"
+            {
                 continue;
             }
             let path = entry.path();
@@ -405,6 +407,11 @@ impl Service {
     /// Scan all managed agents; record unmanaged items + update target statuses.
     pub fn scan_all_agents_into_db(&self) -> Result<(), String> {
         for agent_id in agent_meta::managed_agent_ids() {
+            if fsutil::unified_center_active() && agent_id == SHARED_SKILLS_AGENT_ID {
+                // In unified mode `.agents/skills` is the center itself, not a
+                // second unmanaged-agent source.
+                continue;
+            }
             self.scan_one_agent_into_db(&agent_id)?;
         }
         Ok(())
@@ -1133,13 +1140,17 @@ impl Service {
         }
         let center = Path::new(&row.center_path);
         if !center.is_dir() {
-            return Err(format!("Center Skill directory is missing: {}", center.display()));
+            return Err(format!(
+                "Center Skill directory is missing: {}",
+                center.display()
+            ));
         }
         // Compare contents rather than absolute/root directory names: a cloned
         // GitHub subdirectory lives under a temporary `repo` path while the
         // center copy is named after the Skill id.
         let local_hash = fsutil::hash_dir_contents(center);
-        let (remote, temp_root) = crate::skills::installer::resolve_external_skill_source(&source_uri)?;
+        let (remote, temp_root) =
+            crate::skills::installer::resolve_external_skill_source(&source_uri)?;
         let remote_hash = fsutil::hash_dir_contents(&remote);
         let result = GitHubSkillUpdatePreview {
             skill_id: skill_id.to_string(),
@@ -1168,7 +1179,8 @@ impl Service {
             });
         }
 
-        let (remote, temp_root) = crate::skills::installer::resolve_external_skill_source(&preview.source_uri)?;
+        let (remote, temp_root) =
+            crate::skills::installer::resolve_external_skill_source(&preview.source_uri)?;
         let import = self.execute_add_center_skill(
             AddCenterSkillInput {
                 source_path: remote.display().to_string(),
@@ -6199,7 +6211,11 @@ fn read_relative_file(root: &Path, rel: &str) -> Result<Option<Vec<u8>>, String>
 }
 
 fn fixed_center_path(home: &Path) -> PathBuf {
-    home.join(".agentbro").join("skills")
+    if fsutil::unified_center_active() {
+        home.join(".agents").join("skills")
+    } else {
+        home.join(".agentbro").join("skills")
+    }
 }
 
 fn normalize_fixed_center_path(
