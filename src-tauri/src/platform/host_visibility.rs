@@ -10,6 +10,48 @@ use tauri::{AppHandle, Manager};
 
 const POLL_INTERVAL: Duration = Duration::from_millis(500);
 
+#[cfg(target_os = "windows")]
+pub fn activate_process_window(process_id: u32) -> bool {
+    use windows_sys::core::BOOL;
+    use windows_sys::Win32::Foundation::HWND;
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        BringWindowToTop, EnumWindows, GetWindowThreadProcessId, IsWindowVisible,
+        SetForegroundWindow, ShowWindow, SW_RESTORE,
+    };
+
+    const TRUE: BOOL = 1;
+    const FALSE: BOOL = 0;
+
+    struct WindowTarget {
+        process_id: u32,
+        activated: bool,
+    }
+
+    unsafe extern "system" fn visit(hwnd: HWND, lparam: isize) -> BOOL {
+        let target = &mut *(lparam as *mut WindowTarget);
+        let mut window_process_id = 0;
+        GetWindowThreadProcessId(hwnd, &mut window_process_id);
+        if window_process_id != target.process_id || IsWindowVisible(hwnd) == 0 {
+            return TRUE;
+        }
+
+        ShowWindow(hwnd, SW_RESTORE);
+        let _ = BringWindowToTop(hwnd);
+        let _ = SetForegroundWindow(hwnd);
+        target.activated = true;
+        FALSE
+    }
+
+    let mut target = WindowTarget {
+        process_id,
+        activated: false,
+    };
+    unsafe {
+        let _ = EnumWindows(Some(visit), &mut target as *mut WindowTarget as isize);
+    }
+    target.activated
+}
+
 /// Start the idempotent host visibility poller.
 pub fn start(app: AppHandle, config_store: ConfigStore) {
     tauri::async_runtime::spawn(async move {

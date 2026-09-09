@@ -76,10 +76,18 @@ export function AgentPresenceStrip({
     return () => window.clearInterval(timer)
   }, [])
 
-  const rows = DISPLAY_ORDER
-    .map((agent) => statuses[agent])
-    .filter((status): status is AgentStatusSnapshot => Boolean(status))
-    .sort((a, b) => Number(Boolean(b.primary)) - Number(Boolean(a.primary)))
+  const rows = Object.values(statuses).sort((a, b) => {
+    const primaryOrder = Number(Boolean(b.primary)) - Number(Boolean(a.primary))
+    if (primaryOrder !== 0) return primaryOrder
+    const aIndex = DISPLAY_ORDER.indexOf(a.agent)
+    const bIndex = DISPLAY_ORDER.indexOf(b.agent)
+    if (aIndex !== bIndex) {
+      if (aIndex < 0) return 1
+      if (bIndex < 0) return -1
+      return aIndex - bIndex
+    }
+    return a.label.localeCompare(b.label)
+  })
 
   if (rows.length === 0) return null
 

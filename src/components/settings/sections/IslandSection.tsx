@@ -496,9 +496,6 @@ function BehaviorTab() {
       </SettingGroup>
 
       <SettingGroup label={t('settings.island.section.sessionHandling', { defaultValue: 'Session Handling' })}>
-        <SettingRow label={t('settings.clickToDetail')} description={t('settings.clickToDetailDesc')}>
-          <Toggle checked={config.clickToDetail} onChange={(v) => config.updateConfig('clickToDetail', v)} />
-        </SettingRow>
         <SettingRow label={t('settings.jumpBeforeSend')} description={t('settings.jumpBeforeSendDesc')}>
           <Toggle checked={config.jumpBeforeSend} onChange={(v) => config.updateConfig('jumpBeforeSend', v)} />
         </SettingRow>
@@ -598,13 +595,6 @@ function DisplayTab() {
     { value: 'instant', label: t('settings.hoverSpeedInstant') },
     { value: 'normal', label: t('settings.hoverSpeedNormal') },
     { value: 'slow', label: t('settings.hoverSpeedSlow') },
-  ]
-  const maxVisibleSessionOptions = [
-    { value: '3', label: '3' },
-    { value: '5', label: '5' },
-    { value: '8', label: '8' },
-    { value: '10', label: '10' },
-    { value: '0', label: t('settings.maxVisibleSessionsUnlimited') },
   ]
   const sessionRefreshIntervalOptions = [1, 2, 3, 5, 10, 30].map((seconds) => ({
     value: String(seconds),
@@ -724,10 +714,6 @@ function DisplayTab() {
       </SettingGroup>
 
       <SettingGroup label={t('settings.panelSize')}>
-        <SettingRow label={t('settings.maxVisibleSessions')} description={t('settings.maxVisibleSessionsDesc')}>
-          <Dropdown value={String(config.maxVisibleSessions)} options={maxVisibleSessionOptions}
-            onChange={(v) => { config.updateConfig('maxVisibleSessions', Number(v)); previewLayout('expanded') }} minWidth={120} />
-        </SettingRow>
         <SettingRow label={t('settings.notchHeightMode')} description={t('settings.notchHeightModeDesc')}>
           <Dropdown value={config.notchHeightMode}
             options={[
@@ -819,11 +805,6 @@ function DisplayTab() {
           <Slider value={config.maxPanelHeight} min={300} max={800} step={20}
             onChange={(v) => previewLayout('expanded', { maxPanelHeight: v })}
             onCommit={(v) => config.updateConfig('maxPanelHeight', v)} unit="px" />
-        </SettingRow>
-        <SettingRow label={t('settings.detailPanelMaxHeight')} description={`${config.detailPanelMaxHeight}px`}>
-          <Slider value={config.detailPanelMaxHeight} min={260} max={1200} step={20}
-            onChange={(v) => previewLayout('expanded', { detailPanelMaxHeight: v })}
-            onCommit={(v) => config.updateConfig('detailPanelMaxHeight', v)} unit="px" />
         </SettingRow>
       </SettingGroup>
 

@@ -350,25 +350,6 @@ describe('settings island menu', () => {
     }))
   })
 
-  it('previews the detail view height from display settings', async () => {
-    useConfigStore.setState({ detailPanelMaxHeight: 500 })
-    render(<SettingsApp onClose={vi.fn()} />)
-
-    fireEvent.click(screen.getByText('settings.island.title'))
-    fireEvent.click(screen.getByRole('button', { name: /Display/ }))
-
-    await waitFor(() => expect(screen.getByText('settings.detailPanelMaxHeight')).toBeInTheDocument())
-    const row = screen.getByText('settings.detailPanelMaxHeight').closest('.setting-row')
-    const slider = row!.querySelector<HTMLInputElement>('input[type="range"]')!
-    expect(slider).toHaveAttribute('max', '1200')
-
-    fireEvent.change(slider, { target: { value: '420' } })
-
-    expect(tauriMocks.previewIslandLayout).toHaveBeenCalledWith('expanded', expect.objectContaining({
-      detailPanelMaxHeight: 420,
-    }))
-  })
-
   it('records and clears in-window shortcuts from the shortcuts page', async () => {
     render(<SettingsApp onClose={vi.fn()} />)
 

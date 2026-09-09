@@ -1,7 +1,11 @@
 {
   "notch": {
     "waitingForSessions": "等待会话...",
-    "slogan": "让 Agent 更好用",
+    "slogan": "Vibe Coding看板",
+    "activeTasks": "Agent 任务",
+    "noActiveTasks": "暂无正在执行的任务",
+    "manualOpenCli": "请手动打开 CLI 查看执行进度",
+    "activateAgentFailed": "无法唤起 Agent，请手动查看执行进度",
     "noSessionInFocus": "当前焦点终端没有会话。",
     "noSessionInFocusHint": "切换到正在运行 Vibe Board 会话的终端标签页。",
     "noSessions": "暂无活跃的 Agent 会话。",
@@ -17,6 +21,8 @@
     "interrupted": "已中断",
     "ready": "空闲",
     "idle": "已过期",
+    "blocked": "已阻塞",
+    "rateLimited": "额度受限",
     "agentOnline": "在线",
     "agentOffline": "离线",
     "agentQuota": "剩余 {{value}}",

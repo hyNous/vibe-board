@@ -671,6 +671,11 @@ export async function jumpToTerminal(sessionId: string): Promise<void> {
   }
 }
 
+export async function activateSessionHost(sessionId: string): Promise<boolean> {
+  if (!isTauri()) return false
+  return invoke<boolean>('activate_session_host', { sessionId })
+}
+
 // ── Config Commands ──────────────────────────────────────────────
 
 export async function getConfig(): Promise<BackendConfig> {

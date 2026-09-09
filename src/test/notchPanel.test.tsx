@@ -176,8 +176,8 @@ describe('NotchPanel island shell', () => {
     mountIsland()
 
     expect(screen.getByRole('region', { name: 'Vibe Board' })).toHaveAttribute('data-island-state', 'hover')
-    expect(screen.getByText('agentbro · Port dynamic island')).toBeInTheDocument()
-    expect(screen.queryByText('Claude')).not.toBeInTheDocument()
+    expect(screen.getByText('Port dynamic island')).toBeInTheDocument()
+    expect(screen.getByText('Claude')).toBeInTheDocument()
   })
 
   it('collapses the island before opening settings so the transparent host cannot block it', () => {
@@ -296,7 +296,7 @@ describe('NotchPanel island shell', () => {
       expect(useSessionStore.getState().panelState).toBe('hover')
       expect(hostWidthVar()).toBe('686px')
       expect((document.querySelector('.notch-container') as HTMLElement)
-        .style.getPropertyValue('--notch-host-height')).toBe('192px')
+        .style.getPropertyValue('--notch-host-height')).toBe('332px')
       expect(tauriMocks.resizeNotch).toHaveBeenCalledTimes(2)
     } finally {
       if (scrollHeightDescriptor) {
@@ -487,7 +487,7 @@ describe('NotchPanel island shell', () => {
     await waitFor(() => {
       expect(tauriMocks.setNotchIgnoreCursorEvents).toHaveBeenCalledWith(false)
     })
-    expect(screen.getByText('agentbro · Port dynamic island')).toBeInTheDocument()
+    expect(screen.getByTestId('notch-hover-content')).toBeInTheDocument()
   })
 
   it('keeps the hidden minimal island hotspot available for native hover', async () => {
@@ -607,50 +607,16 @@ describe('NotchPanel island shell', () => {
     fireEvent.pointerMove(dragHandle, { pointerId: 7, clientX: 118, clientY: 2 })
 
     await waitFor(() => {
-      expect(tauriMocks.startNotchDrag).toHaveBeenCalledWith(0, 686, 192, 'auto')
+      expect(tauriMocks.startNotchDrag).toHaveBeenCalledWith(0, 686, 332, 'auto')
     })
     expect(screen.getByRole('region', { name: 'Vibe Board' })).toHaveAttribute('data-dragging', 'true')
-    expect(screen.getByText('agentbro · Port dynamic island')).toBeInTheDocument()
+    expect(screen.getByTestId('notch-hover-content')).toBeInTheDocument()
 
     fireEvent.pointerUp(dragHandle, { pointerId: 7 })
 
     await waitFor(() => {
       expect(tauriMocks.endNotchDrag).toHaveBeenCalled()
     })
-  })
-
-  it('keeps native interaction enabled when opening session detail', async () => {
-    tauriMocks.isTauri.mockReturnValue(true)
-    mountIsland()
-
-    fireEvent.click(screen.getByText('agentbro · Port dynamic island'))
-
-    await waitFor(() => expect(useSessionStore.getState().panelState).toBe('expanded'))
-    expect(tauriMocks.setNotchIgnoreCursorEvents).toHaveBeenCalledWith(false)
-    expect(tauriMocks.setNotchFocusable).toHaveBeenCalledWith(true)
-  })
-
-  it('does not auto-collapse while the detail input has draft text', async () => {
-    useConfigStore.setState({ autoCollapse: true, collapseDelay: 1 })
-    mountIsland(null, { phase: 'idle' })
-
-    fireEvent.click(screen.getByText('agentbro · Port dynamic island'))
-    await waitFor(() => expect(useSessionStore.getState().panelState).toBe('expanded'))
-
-    const input = await screen.findByRole('textbox') as HTMLInputElement
-    fireEvent.change(input, { target: { value: 'keep this draft' } })
-    expect(input).toHaveAttribute('data-has-draft', 'true')
-
-    fireEvent.pointerLeave(screen.getByRole('region', { name: 'Vibe Board' }).parentElement!)
-    await new Promise((resolve) => setTimeout(resolve, 20))
-    expect(useSessionStore.getState().panelState).toBe('expanded')
-    await new Promise((resolve) => setTimeout(resolve, 1200))
-
-    fireEvent.change(input, { target: { value: '' } })
-    expect(input).toHaveAttribute('data-has-draft', 'false')
-    fireEvent.pointerLeave(screen.getByRole('region', { name: 'Vibe Board' }).parentElement!)
-
-    await waitFor(() => expect(useSessionStore.getState().panelState).toBe('collapsed'))
   })
 
   it('uses Vibe Board-style progressive Escape: collapse first, then hide from compact', async () => {
@@ -673,19 +639,6 @@ describe('NotchPanel island shell', () => {
     })
   })
 
-  it('steps Escape from detail back to the hover list without silencing wakeups', async () => {
-    mountIsland()
-
-    fireEvent.click(screen.getByText('agentbro · Port dynamic island'))
-    await waitFor(() => expect(useSessionStore.getState().panelState).toBe('expanded'))
-
-    fireEvent.keyDown(document.body, { key: 'Escape' })
-
-    expect(useSessionStore.getState().panelState).toBe('hover')
-    expect(useSessionStore.getState().wakeSilencedUntil).toBe(0)
-    expect(screen.getByText('agentbro · Port dynamic island')).toBeInTheDocument()
-  })
-
   it('keeps completion and response details out of the board', () => {
     mountIsland({
       id: 'response-s1',
@@ -698,7 +651,7 @@ describe('NotchPanel island shell', () => {
       createdAt: Date.now(),
     })
 
-    expect(screen.getByText('agentbro · Port dynamic island')).toBeInTheDocument()
+    expect(screen.getByTestId('notch-hover-content')).toBeInTheDocument()
     expect(screen.queryByText('Can you continue the migration?')).not.toBeInTheDocument()
     expect(screen.queryByText('Ready for the next integration step')).not.toBeInTheDocument()
     expect(screen.queryByPlaceholderText('Send a message...')).not.toBeInTheDocument()
@@ -763,81 +716,6 @@ describe('NotchPanel island shell', () => {
 
     expect(useSessionStore.getState().activeOverlay).toBeNull()
     expect(useSessionStore.getState().panelState).toBe('collapsed')
-  })
-
-  it('can open detail again after returning to the hover list without leaving the island', async () => {
-    mountIsland()
-
-    fireEvent.click(screen.getByText('agentbro · Port dynamic island'))
-
-    await waitFor(() => expect(useSessionStore.getState().panelState).toBe('expanded'))
-    await new Promise((resolve) => setTimeout(resolve, 600))
-    tauriMocks.setNotchFocusable.mockClear()
-
-    fireEvent.click(screen.getByRole('button', { name: 'notch.back' }))
-
-    await waitFor(() => expect(useSessionStore.getState().panelState).toBe('hover'))
-
-    fireEvent.click(await screen.findByText('agentbro · Port dynamic island'))
-
-    await waitFor(() => expect(useSessionStore.getState().panelState).toBe('expanded'))
-  })
-
-  it('routes the detail jump button and message input to terminal APIs', async () => {
-    mountIsland()
-
-    fireEvent.click(screen.getByText('agentbro · Port dynamic island'))
-    await waitFor(() => expect(useSessionStore.getState().panelState).toBe('expanded'))
-
-    await screen.findByRole('button', { name: 'notch.back' })
-    fireEvent.click(document.querySelector('.chat-header__jump')!)
-    expect(tauriMocks.jumpToTerminal).toHaveBeenCalledWith('s1')
-    expect(tauriMocks.setNotchFocusable).toHaveBeenCalledWith(false)
-
-    const input = await screen.findByPlaceholderText('notch.typeMessage')
-    fireEvent.change(input, { target: { value: 'continue please' } })
-    fireEvent.mouseDown(screen.getByRole('button', { name: 'notch.send' }))
-
-    await waitFor(() => expect(tauriMocks.sendMessage).toHaveBeenCalledWith('s1', 'continue please'))
-  })
-
-  it('routes detail question input through the hook question responder', async () => {
-    mountIsland(null, {
-      phase: 'waiting_input',
-      pendingQuestion: { question: 'Need confirmation', options: [] },
-    })
-
-    fireEvent.click(screen.getByText('agentbro · Port dynamic island'))
-    await waitFor(() => expect(useSessionStore.getState().panelState).toBe('expanded'))
-
-    const input = await screen.findByPlaceholderText('notch.typeReply')
-    fireEvent.change(input, { target: { value: 'ok' } })
-    fireEvent.keyDown(input, { key: 'Enter' })
-
-    await waitFor(() => expect(tauriMocks.respondQuestion).toHaveBeenCalledWith('s1', 'ok'))
-    expect(tauriMocks.sendMessage).not.toHaveBeenCalledWith('s1', 'ok')
-    expect(useSessionStore.getState().sessions.s1.pendingQuestion).toBeUndefined()
-  })
-
-  it('routes detail approval bar actions on mouse down', async () => {
-    mountIsland(null, {
-      phase: 'waiting_approval',
-      pendingPermission: { toolName: 'Bash', toolInput: '{"command":"pnpm test"}' },
-    })
-
-    act(() => {
-      useSessionStore.getState().setPanelState('expanded')
-    })
-    await waitFor(() => expect(document.querySelector('.chat-view')).toBeInTheDocument())
-
-    const allowButton = document.querySelector('.approval-bar__btn--allow') as HTMLElement
-    expect(allowButton).toBeInTheDocument()
-    fireEvent.mouseDown(allowButton)
-
-    expect(tauriMocks.respondPermission).toHaveBeenCalledWith('s1', true, false)
-    await waitFor(() => {
-      expect(useSessionStore.getState().sessions.s1.pendingPermission).toBeUndefined()
-    })
   })
 
   it('routes permission overlay actions to permission responses and clears the pending request', async () => {
@@ -1083,7 +961,7 @@ describe('NotchPanel island shell', () => {
     expect(document.querySelector('.notch-panel__alert-content')).toBeInTheDocument()
     expect(document.querySelector('.notch-panel__overlay')).not.toBeInTheDocument()
     expect(document.querySelector('.hover-list')).not.toBeInTheDocument()
-    expect(screen.queryByText('agentbro · Port dynamic island')).not.toBeInTheDocument()
+    expect(document.querySelector('.task-board')).not.toBeInTheDocument()
 
     const scrollRegion = document.querySelector('.perm-card__scroll')
     const actions = document.querySelector('.perm-card__actions')
@@ -1092,7 +970,7 @@ describe('NotchPanel island shell', () => {
     expect(scrollRegion).not.toContainElement(actions as HTMLElement)
   })
 
-  it('renders collapsed permission inline in the hover session list', async () => {
+  it('restores a collapsed permission as the primary alert on the next hover', async () => {
     mountIsland({
       id: 'permission-s1',
       sessionId: 's1',
@@ -1110,11 +988,9 @@ describe('NotchPanel island shell', () => {
     fireEvent.pointerEnter(screen.getByRole('region', { name: 'Vibe Board' }).parentElement!)
     await waitFor(() => expect(useSessionStore.getState().panelState).toBe('hover'))
 
-    expect(screen.getByRole('region', { name: 'Vibe Board' })).toHaveAttribute('data-island-state', 'hover')
-    expect(document.querySelector('.notch-panel__alert-content')).not.toBeInTheDocument()
-    expect(document.querySelector('.hover-list')).toBeInTheDocument()
-    expect(screen.getByText('agentbro · Port dynamic island')).toBeInTheDocument()
-    expect(document.querySelector('.hover-list__inline-perm')).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Vibe Board' })).toHaveAttribute('data-island-state', 'alert_permission')
+    expect(document.querySelector('.notch-panel__alert-content')).toBeInTheDocument()
+    expect(document.querySelector('.task-board')).not.toBeInTheDocument()
   })
 
   it('keeps suppressed blocking overlays queued without auto-expanding the island', async () => {
@@ -1170,79 +1046,6 @@ describe('NotchPanel island shell', () => {
     expect(screen.getByRole('region', { name: 'Vibe Board' })).toHaveAttribute('data-island-state', 'compact')
   })
 
-  it('shows the same permission request inline in the session list after the alert is collapsed', async () => {
-    mountIsland({
-      id: 'permission-s1',
-      sessionId: 's1',
-      type: 'permission',
-      data: {
-        toolName: 'Edit',
-        toolInput: JSON.stringify({ file_path: 'src/i18n/locales/zh.json' }),
-        diff: {
-          filePath: 'src/i18n/locales/zh.json',
-          lines: [
-            { type: 'remove', lineNumber: 7, content: '"noSessionsHint": "在终端中启动 Claude Code。"' },
-            { type: 'add', lineNumber: 7, content: '"noSessionsHint": "在终端中启动 AI Agent。"' },
-          ],
-        },
-      },
-      createdAt: Date.now(),
-    }, {
-      phase: 'waiting_approval',
-      pendingPermission: {
-        toolName: 'Edit',
-        toolInput: JSON.stringify({ file_path: 'src/i18n/locales/zh.json' }),
-        diff: {
-          filePath: 'src/i18n/locales/zh.json',
-          lines: [
-            { type: 'remove', lineNumber: 7, content: '"noSessionsHint": "在终端中启动 Claude Code。"' },
-            { type: 'add', lineNumber: 7, content: '"noSessionsHint": "在终端中启动 AI Agent。"' },
-          ],
-        },
-      },
-    })
-
-    fireEvent.keyDown(document.body, { key: 'Escape' })
-    fireEvent.pointerEnter(screen.getByRole('region', { name: 'Vibe Board' }).parentElement!)
-
-    await waitFor(() => expect(document.querySelector('.hover-list')).toBeInTheDocument())
-    expect(document.querySelector('.notch-panel__alert-content')).not.toBeInTheDocument()
-    expect(screen.getByText('agentbro · Port dynamic island')).toBeInTheDocument()
-    expect(screen.getByText('Edit')).toBeInTheDocument()
-    expect(screen.getByText('src/i18n/locales/zh.json')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '允许一次' })).toBeInTheDocument()
-  })
-
-  it('shows the same plan request inline in the session list after the alert is collapsed', async () => {
-    mountIsland({
-      id: 'plan-s1',
-      sessionId: 's1',
-      type: 'plan',
-      data: {
-        planTitle: 'Implementation plan',
-        planContent: '1. Preserve session list hover',
-        requestedPermissions: ['Bash: run tests'],
-      },
-      createdAt: Date.now(),
-    }, {
-      phase: 'waiting_approval',
-      planTitle: 'Implementation plan',
-      planContent: '1. Preserve session list hover',
-      planPermissions: ['Bash: run tests'],
-    })
-
-    fireEvent.keyDown(document.body, { key: 'Escape' })
-    fireEvent.pointerEnter(screen.getByRole('region', { name: 'Vibe Board' }).parentElement!)
-
-    await waitFor(() => expect(document.querySelector('.hover-list')).toBeInTheDocument())
-    expect(document.querySelector('.notch-panel__alert-content')).not.toBeInTheDocument()
-    expect(document.querySelector('.plan-approval__content')).not.toBeInTheDocument()
-    expect(document.querySelector('.hover-list__inline-plan')?.textContent).toContain('Implementation plan')
-    expect(document.querySelector('.hover-list__inline-plan')?.textContent).toContain('Preserve session list hover')
-    expect(screen.getByText('Bash')).toHaveClass('hover-list__inline-plan-perm-tool')
-    expect(screen.getByRole('button', { name: 'Accept Edits' })).toBeInTheDocument()
-  })
-
   it('routes question overlay answers to respondQuestion and clears the pending question', () => {
     mountIsland({
       id: 'question-s1',
@@ -1255,7 +1058,7 @@ describe('NotchPanel island shell', () => {
       pendingQuestion: { question: 'Pick one', options: ['Ship it', 'Revise'] },
     })
 
-    expect(screen.getByText('让 Agent 更好用')).toBeInTheDocument()
+    expect(screen.getByText('Vibe Coding看板')).toBeInTheDocument()
     fireEvent.mouseDown(screen.getByText('Ship it').closest('.question-card__option-row')!)
 
     expect(tauriMocks.respondQuestion).toHaveBeenCalledWith('s1', 'Ship it')
@@ -1418,7 +1221,7 @@ describe('NotchPanel island shell', () => {
     expect(screen.getByText('请求的权限:')).toHaveClass('plan-approval__perms-label')
     expect(screen.getByText('Bash')).toHaveClass('plan-approval__perm-tool')
     expect(screen.getByText('Edit')).toHaveClass('plan-approval__perm-tool')
-    expect(screen.getByText('让 Agent 更好用')).toBeInTheDocument()
+    expect(screen.getByText('Vibe Coding看板')).toBeInTheDocument()
 
     fireEvent.click(document.querySelector('.plan-approval__content')!)
     expect(tauriMocks.jumpToTerminal).toHaveBeenCalledWith('s1')
@@ -1509,12 +1312,9 @@ describe('NotchPanel island shell', () => {
     expect(tauriMocks.jumpToTerminal).not.toHaveBeenCalled()
   })
 
-  it('auto-collapses after the cursor leaves the detail view', async () => {
+  it('auto-collapses after the cursor leaves the task board', () => {
     useConfigStore.setState({ autoCollapse: true, collapseDelay: 1 })
     mountIsland()
-
-    fireEvent.click(screen.getByText('agentbro · Port dynamic island'))
-    await waitFor(() => expect(useSessionStore.getState().panelState).toBe('expanded'))
 
     fireEvent.pointerLeave(screen.getByRole('region', { name: 'Vibe Board' }).parentElement!)
 
@@ -1614,7 +1414,7 @@ describe('NotchPanel island shell', () => {
     expect(tauriMocks.setNotchFocusable).toHaveBeenCalledWith(true)
   })
 
-  it('filters the session list to focused terminal sessions when follow focus is enabled', async () => {
+  it('keeps all Agent tasks in the board when follow focus is enabled', async () => {
     useConfigStore.setState({ followFocus: true })
     tauriMocks.isTerminalFocused.mockImplementation((sessionId?: string) => Promise.resolve(sessionId === 's2'))
     const focused = session({ id: 's2', sessionTitle: 'Focused terminal', project: 'focused', pid: 2222, terminal: 'iTerm' })
@@ -1634,7 +1434,8 @@ describe('NotchPanel island shell', () => {
 
     render(<NotchPanel />)
 
-    await waitFor(() => expect(screen.queryByText('background · Background terminal')).not.toBeInTheDocument())
-    expect(screen.getByText('focused · Focused terminal')).toBeInTheDocument()
+    await waitFor(() => expect(tauriMocks.isTerminalFocused).toHaveBeenCalled())
+    expect(screen.getByText('Background terminal')).toBeInTheDocument()
+    expect(screen.getByText('Focused terminal')).toBeInTheDocument()
   })
 })

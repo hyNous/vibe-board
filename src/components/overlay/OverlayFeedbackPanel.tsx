@@ -308,7 +308,7 @@ export function OverlayFeedbackPanel({
               <img className="overlay-card__brand-logo overlay-card__brand-logo--light" src="/vibe-board-logo.png" alt="" />
               <img className="overlay-card__brand-logo overlay-card__brand-logo--dark" src="/vibe-board-logo-dark.png" alt="" />
             </span>
-            <span>{t('notch.slogan', { defaultValue: '让 Agent 更好用' })}</span>
+            <span>{t('notch.slogan', { defaultValue: 'Vibe Coding看板' })}</span>
           </button>
         ) : (
           <div className="overlay-card__show-sessions overlay-card__show-sessions--static">
@@ -316,7 +316,7 @@ export function OverlayFeedbackPanel({
               <img className="overlay-card__brand-logo overlay-card__brand-logo--light" src="/vibe-board-logo.png" alt="" />
               <img className="overlay-card__brand-logo overlay-card__brand-logo--dark" src="/vibe-board-logo-dark.png" alt="" />
             </span>
-            <span>{t('notch.slogan', { defaultValue: '让 Agent 更好用' })}</span>
+            <span>{t('notch.slogan', { defaultValue: 'Vibe Coding看板' })}</span>
           </div>
         )}
       </div>

@@ -6291,6 +6291,7 @@ pub fn run() {
             commands::respond_plan,
             commands::send_message,
             commands::jump_to_terminal,
+            commands::activate_session_host,
             commands::get_config,
             commands::update_config,
             commands::set_language,

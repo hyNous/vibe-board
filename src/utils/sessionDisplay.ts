@@ -159,12 +159,17 @@ export function getSessionTerminalLabel(session: SessionState): string | null {
 }
 
 export function getSessionTitle(session: SessionState): string {
-  const title = isInternalCodexTitle(session.sessionTitle) ? '' : (session.sessionTitle || '').trim()
+  const title = getSessionConversationTitle(session)
   const project = (session.project || '').trim()
   if (title && project && title !== project && !title.startsWith(`${project} ·`)) {
     return `${project} · ${title}`
   }
   return title || project || 'Session'
+}
+
+export function getSessionConversationTitle(session: SessionState): string {
+  const title = isInternalCodexTitle(session.sessionTitle) ? '' : (session.sessionTitle || '').trim()
+  return title || (session.project || '').trim() || 'Session'
 }
 
 function isInternalCodexTitle(title: string | undefined | null): boolean {

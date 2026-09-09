@@ -1,7 +1,11 @@
 {
   "notch": {
     "waitingForSessions": "세션을 기다리는 중...",
-    "slogan": "Agent를 더 쓰기 쉽게",
+    "slogan": "Vibe Coding Board",
+    "activeTasks": "Agent 작업",
+    "noActiveTasks": "실행 중인 작업이 없습니다",
+    "manualOpenCli": "CLI를 직접 열어 진행 상황을 확인하세요",
+    "activateAgentFailed": "Agent를 표시할 수 없습니다. 진행 상황을 직접 확인하세요.",
     "noSessionInFocus": "포커스된 터미널에 세션이 없습니다.",
     "noSessionInFocusHint": "Vibe Board 세션이 있는 터미널 탭으로 전환하세요.",
     "noSessions": "활성 에이전트 세션이 없습니다.",
@@ -17,6 +21,8 @@
     "interrupted": "중단됨",
     "ready": "유휴",
     "idle": "만료됨",
+    "blocked": "차단됨",
+    "rateLimited": "사용량 제한",
     "agentOnline": "온라인",
     "agentOffline": "오프라인",
     "agentQuota": "잔여 {{value}}",

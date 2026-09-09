@@ -1,7 +1,11 @@
 {
   "notch": {
     "waitingForSessions": "Oturumlar bekleniyor...",
-    "slogan": "Agentleri daha kullanışlı yap",
+    "slogan": "Vibe Coding Board",
+    "activeTasks": "Agent görevleri",
+    "noActiveTasks": "Çalışan görev yok",
+    "manualOpenCli": "İlerlemeyi görmek için CLI'ı elle açın",
+    "activateAgentFailed": "Agent açılamadı. İlerlemeyi elle kontrol edin.",
     "noSessionInFocus": "Odaktaki terminalde oturum yok.",
     "noSessionInFocusHint": "Etkin Vibe Board oturumu olan bir terminal sekmesine odaklanın.",
     "noSessions": "Aktif ajan oturumu yok.",
@@ -17,6 +21,8 @@
     "interrupted": "Kesildi",
     "ready": "Boşta",
     "idle": "Süresi doldu",
+    "blocked": "Engellendi",
+    "rateLimited": "Kullanım sınırlandı",
     "agentOnline": "Çevrimiçi",
     "agentOffline": "Çevrimdışı",
     "agentQuota": "Kalan {{value}}",

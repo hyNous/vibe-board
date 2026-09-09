@@ -4236,6 +4236,32 @@ fn open_codex_desktop_session_windows(session: &SessionState) -> Result<(), Stri
 }
 
 #[cfg(target_os = "windows")]
+fn activate_codex_desktop_windows() -> Result<(), String> {
+    let mut errors = Vec::new();
+    for app_id in crate::agents::executable::codex_desktop_app_user_model_ids() {
+        match open_windows_app_user_model_id(&app_id) {
+            Ok(()) => return Ok(()),
+            Err(err) => errors.push(format!("{app_id}: {err}")),
+        }
+    }
+    for path in crate::agents::executable::codex_desktop_app_candidates()
+        .into_iter()
+        .filter(|path| path.exists())
+    {
+        let target = path.to_string_lossy().to_string();
+        match open_windows_shell_target(&target) {
+            Ok(()) => return Ok(()),
+            Err(err) => errors.push(format!("{target}: {err}")),
+        }
+    }
+    Err(if errors.is_empty() {
+        "Codex Desktop was not found. Install or launch Codex Desktop, then try again.".to_string()
+    } else {
+        format!("Failed to activate Codex Desktop: {}", errors.join("; "))
+    })
+}
+
+#[cfg(target_os = "windows")]
 fn open_windows_app_user_model_id(app_id: &str) -> Result<(), String> {
     let app_id = clean_windows_app_user_model_id(app_id)
         .ok_or_else(|| format!("Invalid Windows app id: {app_id}"))?;
@@ -5514,6 +5540,82 @@ pub async fn simulate_hook_event(
 /// concurrently (e.g. from a user rage-clicking a stale "jump" button) can
 /// stack into a system-wide stall. We serialize and silently drop overlap.
 static JUMP_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+
+fn session_has_desktop_host(session: &SessionState) -> bool {
+    is_codex_desktop_session(session) || app_host_bundle_id(session).is_some()
+}
+
+#[cfg(target_os = "windows")]
+fn activate_session_process_window(process_id: u32) -> bool {
+    let tree = crate::terminal::process_tree::build_tree();
+    let mut current = process_id;
+    while current != 0 {
+        if crate::platform::host_visibility::activate_process_window(current) {
+            return true;
+        }
+        let Some(parent) = tree.get(&current).map(|process| process.ppid) else {
+            break;
+        };
+        if parent == current {
+            break;
+        }
+        current = parent;
+    }
+    false
+}
+
+#[tauri::command]
+pub async fn activate_session_host(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    session_id: String,
+) -> Result<bool, String> {
+    release_notch_keyboard_focus(&app);
+    let session = state
+        .session_store
+        .get_session(&session_id)
+        .ok_or_else(|| format!("Session {} not found", session_id))?;
+
+    if !session_has_desktop_host(&session) {
+        return Ok(false);
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        if session.pid.is_some_and(activate_session_process_window) {
+            return Ok(true);
+        }
+        if is_codex_desktop_session(&session) {
+            activate_codex_desktop_windows()?;
+            return Ok(true);
+        }
+        return Err(format!(
+            "Failed to activate the desktop window for {}",
+            session.agent_type
+        ));
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        if is_codex_desktop_session(&session) {
+            return if activate_codex_desktop_app(session.pid) {
+                Ok(true)
+            } else {
+                Err("Failed to activate Codex Desktop".to_string())
+            };
+        }
+        let bundle_id = app_host_bundle_id(&session)
+            .ok_or_else(|| "Session has no desktop app metadata".to_string())?;
+        open_bundle_id(bundle_id)?;
+        return Ok(true);
+    }
+
+    #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
+    {
+        let _ = session;
+        Ok(false)
+    }
+}
 
 #[tauri::command]
 pub async fn jump_to_terminal(
@@ -8260,7 +8362,7 @@ mod tests {
         parse_opencode_usage_payload, parse_subagent_chat_history_for_session,
         qoder_app_send_message_script, read_codex_session_meta_from_path,
         read_local_codex_rollout_state, redact_sensitive_hook_config, remote_session_chat_history,
-        resolve_session_tty, sync_codex_app_server_thread_to_store,
+        resolve_session_tty, session_has_desktop_host, sync_codex_app_server_thread_to_store,
         sync_remote_codex_thread_to_store, terminal_hint_for_fallback, CodexAppServerPendingKind,
         CodexAppServerPendingRequest, CODEX_TOKEN_SOURCE_LABEL,
     };
@@ -8855,6 +8957,19 @@ mod tests {
             "claude-code",
             "Codex",
             None
+        )));
+    }
+
+    #[test]
+    fn task_activation_distinguishes_desktop_hosts_from_cli_sessions() {
+        let mut desktop = session("opencode", "OpenCode", None);
+        desktop.term_bundle_id = Some("ai.opencode.desktop".to_string());
+        assert!(session_has_desktop_host(&desktop));
+
+        assert!(!session_has_desktop_host(&session(
+            "antigravity",
+            "Windows Terminal",
+            Some("CONPTY")
         )));
     }
 

@@ -1,7 +1,11 @@
 {
   "notch": {
     "waitingForSessions": "Waiting for sessions...",
-    "slogan": "Make agents easier to use",
+    "slogan": "Vibe Coding Board",
+    "activeTasks": "Agent tasks",
+    "noActiveTasks": "No tasks are running",
+    "manualOpenCli": "Open the CLI manually to view progress",
+    "activateAgentFailed": "Could not activate the Agent. View progress manually.",
     "noSessionInFocus": "No session in focused terminal.",
     "noSessionInFocusHint": "Focus a terminal tab with an active Vibe Board session.",
     "noSessions": "No active agent sessions.",
@@ -17,6 +21,8 @@
     "interrupted": "Interrupted",
     "ready": "Ready",
     "idle": "Expired",
+    "blocked": "Blocked",
+    "rateLimited": "Rate limited",
     "agentOnline": "Online",
     "agentOffline": "Offline",
     "agentQuota": "Remaining {{value}}",
