@@ -27,20 +27,26 @@ describe('collapsed bar update dot', () => {
     useUpdateStore.setState({ availableVersion: null })
   })
 
-  it('shows no update dot on the gear when no version is available', () => {
+  it('shows no update dot on the expanded gear when no version is available and omits gear in collapsed state', () => {
     useUpdateStore.setState({ availableVersion: null })
-    const { container } = render(
+    const { container: expandedContainer } = render(
+      <CollapsedBar sessions={[]} panelState="expanded" onCollapse={vi.fn()} />,
+    )
+    expect(expandedContainer.querySelector('.collapsed-bar__update-dot')).toBeNull()
+    const expandedGear = expandedContainer.querySelector('.collapsed-bar__icon-btn')
+    expect(expandedGear).toHaveAttribute('title', 'Settings')
+
+    const { container: collapsedContainer } = render(
       <CollapsedBar sessions={[]} panelState="collapsed" onCollapse={vi.fn()} />,
     )
-    expect(container.querySelector('.collapsed-bar__update-dot')).toBeNull()
-    const gear = container.querySelector('.collapsed-bar__icon-btn')
-    expect(gear).toHaveAttribute('title', 'Settings')
+    expect(collapsedContainer.querySelector('.collapsed-bar__icon-btn')).toBeNull()
+    expect(collapsedContainer.querySelector('.collapsed-bar__update-dot')).toBeNull()
   })
 
-  it('shows the update dot and version tooltip when a newer version is available', () => {
+  it('shows the update dot and version tooltip on the expanded gear when a newer version is available', () => {
     useUpdateStore.setState({ availableVersion: '0.3.0' })
     const { container } = render(
-      <CollapsedBar sessions={[]} panelState="collapsed" onCollapse={vi.fn()} />,
+      <CollapsedBar sessions={[]} panelState="expanded" onCollapse={vi.fn()} />,
     )
     expect(container.querySelector('.collapsed-bar__update-dot')).toBeInTheDocument()
     const gear = container.querySelector('.collapsed-bar__icon-btn')

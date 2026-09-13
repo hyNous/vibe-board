@@ -9,13 +9,28 @@ use chrono::Utc;
 use tauri::{AppHandle, Emitter};
 
 use super::conversation_parser::{
-    ChatRole, ConversationParser, IncrementalParseResult, MessageBlock, ParsedMessage,
+    all_projects_dirs, discover_session_file_in_dirs, ChatRole, ConversationParser,
+    IncrementalParseResult, MessageBlock, ParsedMessage,
 };
 use super::file_watcher::{ConversationUpdatePayload, CONVERSATION_UPDATE_EVENT};
 use super::session_store::{SessionPhase, SessionStore};
 
 const ACTIVE_WINDOW_SECS: i64 = 4 * 60 * 60;
 const DISCOVERY_INTERVAL: Duration = Duration::from_secs(2);
+const TRANSCRIPT_TAIL_BYTES: u64 = 256 * 1024;
+
+/// Last known activity for a Claude Code transcript. `Finished` means the last
+/// recorded turn ended; `Active` means a prompt or tool result is still waiting
+/// for the assistant. `WaitingApproval`/`WaitingInput` are inferred when the
+/// transcript stops on an interactive tool call.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TranscriptActivity {
+    Active,
+    WaitingApproval,
+    WaitingInput,
+    Finished,
+    Interrupted,
+}
 
 #[derive(Debug, Clone)]
 struct ClaudeDesktopSessionMetadata {
@@ -45,34 +60,35 @@ struct WatchState {
 }
 
 pub fn start(session_store: Arc<SessionStore>, app_handle: AppHandle) {
-    let Some(root) = sessions_root() else {
-        log::info!("Claude Desktop watcher disabled: home directory unavailable");
-        return;
-    };
-
     tauri::async_runtime::spawn(async move {
-        run_loop(root, session_store, app_handle).await;
+        run_loop(session_store, app_handle).await;
     });
 }
 
 pub fn find_audit_file_for_cli_session(session_id: &str) -> Option<PathBuf> {
-    let root = sessions_root()?;
-    for metadata_path in metadata_files(&root) {
-        let metadata = read_metadata(&metadata_path)?;
-        if metadata.cli_session_id == session_id {
-            let audit_path = audit_path_for_metadata(&metadata_path)?;
-            if audit_path.is_file() {
-                return Some(audit_path);
+    for root in sessions_roots() {
+        for metadata_path in metadata_files(&root) {
+            let Some(metadata) = read_metadata(&metadata_path) else {
+                continue;
+            };
+            if metadata.cli_session_id == session_id {
+                if let Some(audit_path) = transcript_path_for_metadata(&metadata_path, &metadata) {
+                    return Some(audit_path);
+                }
             }
         }
     }
     None
 }
 
-async fn run_loop(root: PathBuf, session_store: Arc<SessionStore>, app_handle: AppHandle) {
+async fn run_loop(session_store: Arc<SessionStore>, app_handle: AppHandle) {
     let mut state = WatchState::default();
     loop {
-        scan_for_sessions(&root, &mut state, &session_store);
+        // Re-resolve every tick so roots that appear after Vibe Board starts
+        // (or a second Claude install) are picked up without a restart.
+        for root in sessions_roots() {
+            scan_for_sessions(&root, &mut state, &session_store);
+        }
         poll_sessions(&mut state, &session_store, &app_handle);
         tokio::time::sleep(DISCOVERY_INTERVAL).await;
     }
@@ -95,19 +111,22 @@ fn scan_for_sessions(root: &Path, state: &mut WatchState, session_store: &Sessio
         let Some(metadata) = read_metadata(&metadata_path) else {
             continue;
         };
-        if metadata.is_archived || is_stale(&metadata) {
+        if metadata.is_archived {
             state
                 .known_local_session_ids
                 .insert(metadata.local_session_id);
             continue;
         }
-
-        let Some(audit_path) = audit_path_for_metadata(&metadata_path) else {
-            continue;
-        };
-        if !audit_path.is_file() {
+        // Stale sessions stay eligible for later scans: resuming one keeps the
+        // same metadata file and bumps `lastActivityAt`, so permanently
+        // remembering the id here would hide the resumed transcript.
+        if is_stale(&metadata) {
             continue;
         }
+
+        let Some(audit_path) = transcript_path_for_metadata(&metadata_path, &metadata) else {
+            continue;
+        };
 
         register_session(state, session_store, metadata_path, audit_path, metadata);
     }
@@ -142,6 +161,12 @@ fn register_session(
         session.started_at = metadata.created_at;
         session.duration = Utc::now().timestamp().saturating_sub(metadata.created_at);
     });
+
+    // A session that is already mid-turn when the watcher starts must be
+    // surfaced immediately instead of waiting for the next file append.
+    if let Some(activity) = read_transcript_activity(&audit_path) {
+        apply_activity(session_store, &metadata.cli_session_id, activity);
+    }
 
     state
         .known_local_session_ids
@@ -211,6 +236,13 @@ fn poll_sessions(state: &mut WatchState, session_store: &SessionStore, app_handl
             emit_conversation_update(app_handle, &session.cli_session_id, result);
         }
 
+        // The transcript tail is authoritative for turn completion: it knows
+        // whether the last assistant turn ended while the incremental parser
+        // only sees that lines were appended.
+        if let Some(activity) = read_transcript_activity(&session.audit_path) {
+            apply_activity(session_store, &session.cli_session_id, activity);
+        }
+
         if let Some(result) = completed {
             apply_result_entry(session_store, &session.cli_session_id, result);
         }
@@ -240,11 +272,126 @@ fn apply_parse_result(
 
     let latest_user = latest_text_for_role(&result.new_messages, ChatRole::User);
     session_store.update_session(session_id, |session| {
-        session.phase = SessionPhase::Processing;
+        session.phase = if session.pending_permission.is_some() || session.pending_plan.is_some() {
+            SessionPhase::WaitingApproval
+        } else if session.pending_question.is_some() {
+            SessionPhase::WaitingInput
+        } else {
+            SessionPhase::Processing
+        };
         if let Some(text) = latest_user {
             session.last_user_message = Some(text);
         }
     });
+}
+
+fn apply_activity(session_store: &SessionStore, session_id: &str, activity: TranscriptActivity) {
+    session_store.update_session(session_id, |session| {
+        session.phase = if session.pending_permission.is_some() || session.pending_plan.is_some() {
+            SessionPhase::WaitingApproval
+        } else if session.pending_question.is_some() {
+            SessionPhase::WaitingInput
+        } else {
+            match activity {
+                TranscriptActivity::Active => SessionPhase::Processing,
+                TranscriptActivity::WaitingApproval => SessionPhase::WaitingApproval,
+                TranscriptActivity::WaitingInput => SessionPhase::WaitingInput,
+                TranscriptActivity::Finished => SessionPhase::Done,
+                TranscriptActivity::Interrupted => SessionPhase::Interrupted,
+            }
+        };
+    });
+}
+
+fn read_transcript_activity(path: &Path) -> Option<TranscriptActivity> {
+    let mut file = File::open(path).ok()?;
+    let size = file.metadata().ok()?.len();
+    file.seek(SeekFrom::Start(size.saturating_sub(TRANSCRIPT_TAIL_BYTES)))
+        .ok()?;
+    let mut data = Vec::new();
+    file.read_to_end(&mut data).ok()?;
+    let text = String::from_utf8_lossy(&data);
+
+    let mut activity = None;
+    for line in text.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let Ok(json) = serde_json::from_str::<serde_json::Value>(line) else {
+            continue;
+        };
+        if let Some(next) = transcript_activity_for_line(&json) {
+            activity = Some(next);
+        }
+    }
+    activity
+}
+
+fn transcript_activity_for_line(json: &serde_json::Value) -> Option<TranscriptActivity> {
+    match json.get("type").and_then(|value| value.as_str())? {
+        "result" => Some(TranscriptActivity::Finished),
+        "assistant" => {
+            if json
+                .get("isSidechain")
+                .and_then(|value| value.as_bool())
+                .unwrap_or(false)
+            {
+                return None;
+            }
+            let message = json.get("message")?;
+            if let Some(tool) = interactive_tool_name(message) {
+                return Some(if tool == "ExitPlanMode" {
+                    TranscriptActivity::WaitingApproval
+                } else {
+                    TranscriptActivity::WaitingInput
+                });
+            }
+            match message.get("stop_reason").and_then(|value| value.as_str()) {
+                Some("end_turn") | Some("max_tokens") | Some("stop_sequence") => {
+                    Some(TranscriptActivity::Finished)
+                }
+                _ => Some(TranscriptActivity::Active),
+            }
+        }
+        "user" => {
+            if json
+                .get("isSidechain")
+                .and_then(|value| value.as_bool())
+                .unwrap_or(false)
+                || json
+                    .get("isMeta")
+                    .and_then(|value| value.as_bool())
+                    .unwrap_or(false)
+            {
+                return None;
+            }
+            let content = json
+                .get("message")
+                .and_then(|message| message.get("content"));
+            if content
+                .and_then(|value| value.as_str())
+                .is_some_and(|text| text.starts_with("[Request interrupted by user"))
+            {
+                Some(TranscriptActivity::Interrupted)
+            } else {
+                Some(TranscriptActivity::Active)
+            }
+        }
+        _ => None,
+    }
+}
+
+fn interactive_tool_name(message: &serde_json::Value) -> Option<String> {
+    let blocks = message.get("content")?.as_array()?;
+    blocks.iter().find_map(|block| {
+        let block_type = block.get("type").and_then(|value| value.as_str())?;
+        if block_type != "tool_use" {
+            return None;
+        }
+        let name = block.get("name").and_then(|value| value.as_str())?;
+        matches!(name, "AskUserQuestion" | "ExitPlanMode").then(|| name.to_string())
+    })
 }
 
 fn emit_conversation_update(
@@ -350,13 +497,78 @@ fn scan_for_result_entry(path: &Path, from: u64, to: u64) -> Option<ResultEntry>
     None
 }
 
-fn sessions_root() -> Option<PathBuf> {
-    dirs::home_dir().map(|home| {
-        home.join("Library")
-            .join("Application Support")
-            .join("Claude")
-            .join("local-agent-mode-sessions")
-    })
+/// Claude Desktop stores local-agent metadata under the Electron user-data
+/// directory. On macOS that is `~/Library/Application Support/Claude`; on
+/// Windows the store build redirects `%APPDATA%\Claude` into the MSIX package
+/// `LocalCache\Roaming\Claude`, and recent builds renamed the metadata folder
+/// from `local-agent-mode-sessions` to `claude-code-sessions`.
+fn sessions_roots() -> Vec<PathBuf> {
+    let mut bases = Vec::new();
+    if let Some(config_dir) = dirs::config_dir() {
+        bases.push(config_dir.join("Claude"));
+    }
+    if let Some(local_dir) = dirs::data_local_dir() {
+        bases.push(local_dir.join("Claude"));
+        #[cfg(target_os = "windows")]
+        bases.extend(store_claude_dirs_from(&local_dir.join("Packages")));
+    }
+    roots_from_bases(&bases)
+}
+
+fn roots_from_bases(bases: &[PathBuf]) -> Vec<PathBuf> {
+    let mut roots = Vec::new();
+    for base in bases {
+        for name in ["local-agent-mode-sessions", "claude-code-sessions"] {
+            let candidate = base.join(name);
+            if candidate.is_dir() && !roots.contains(&candidate) {
+                roots.push(candidate);
+            }
+        }
+    }
+    roots
+}
+
+#[cfg(target_os = "windows")]
+fn store_claude_dirs_from(packages_dir: &Path) -> Vec<PathBuf> {
+    let Ok(entries) = fs::read_dir(packages_dir) else {
+        return Vec::new();
+    };
+
+    entries
+        .flatten()
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.starts_with("Claude_"))
+        })
+        .map(|path| path.join("LocalCache").join("Roaming").join("Claude"))
+        .filter(|path| path.is_dir())
+        .collect()
+}
+
+fn transcript_path_for_metadata(
+    metadata_path: &Path,
+    metadata: &ClaudeDesktopSessionMetadata,
+) -> Option<PathBuf> {
+    transcript_path_for_metadata_in_dirs(metadata_path, metadata, &all_projects_dirs())
+}
+
+fn transcript_path_for_metadata_in_dirs(
+    metadata_path: &Path,
+    metadata: &ClaudeDesktopSessionMetadata,
+    projects_dirs: &[PathBuf],
+) -> Option<PathBuf> {
+    if let Some(audit_path) = audit_path_for_metadata(metadata_path) {
+        if audit_path.is_file() {
+            return Some(audit_path);
+        }
+    }
+
+    // The macOS watcher used a per-session `audit.jsonl`. The Windows build
+    // keeps the metadata in `claude-code-sessions` but writes the live
+    // transcript to the regular Claude Code projects tree.
+    discover_session_file_in_dirs(&metadata.cli_session_id, &metadata.cwd, projects_dirs)
 }
 
 fn metadata_files(root: &Path) -> Vec<PathBuf> {
@@ -526,5 +738,271 @@ mod tests {
             audit_path_for_metadata(&path),
             Some(PathBuf::from("/tmp/root/org/user/local_abc/audit.jsonl"))
         );
+    }
+
+    fn temp_watcher_dir(tag: &str) -> PathBuf {
+        let dir =
+            std::env::temp_dir().join(format!("vibe-board-claude-{tag}-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&dir).expect("create temp dir");
+        dir
+    }
+
+    fn metadata_for(cli_session_id: &str, cwd: &str) -> ClaudeDesktopSessionMetadata {
+        let now = Utc::now().timestamp();
+        ClaudeDesktopSessionMetadata {
+            local_session_id: format!("local_{cli_session_id}"),
+            cli_session_id: cli_session_id.to_string(),
+            cwd: cwd.to_string(),
+            title: Some("Fixture".to_string()),
+            is_archived: false,
+            created_at: now,
+            last_activity_at: now,
+        }
+    }
+
+    fn write_transcript(tag: &str, lines: &str) -> PathBuf {
+        let path = std::env::temp_dir().join(format!(
+            "vibe-board-transcript-{tag}-{}.jsonl",
+            uuid::Uuid::new_v4()
+        ));
+        fs::write(&path, lines).expect("write transcript fixture");
+        path
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn discovers_store_package_claude_data_dir() {
+        let root = temp_watcher_dir("store");
+        let packages = root.join("Packages");
+        let package = packages
+            .join("Claude_pzs8sxrjxfjjc")
+            .join("LocalCache")
+            .join("Roaming")
+            .join("Claude");
+        fs::create_dir_all(&package).expect("create package claude dir");
+        fs::create_dir_all(packages.join("OtherApp").join("LocalCache"))
+            .expect("create other package");
+
+        let dirs = store_claude_dirs_from(&packages);
+
+        assert_eq!(dirs, vec![package]);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn discovers_both_session_folder_names_per_base() {
+        let root = temp_watcher_dir("roots");
+        let app_base = root.join("Claude");
+        fs::create_dir_all(app_base.join("claude-code-sessions")).expect("create app root");
+        fs::create_dir_all(app_base.join("local-agent-mode-sessions")).expect("create app root");
+        let package_base = root
+            .join("Packages")
+            .join("Claude_abc")
+            .join("LocalCache")
+            .join("Roaming")
+            .join("Claude");
+        fs::create_dir_all(package_base.join("claude-code-sessions")).expect("create package root");
+
+        let roots = roots_from_bases(&[app_base.clone(), package_base.clone()]);
+
+        assert!(roots.contains(&app_base.join("local-agent-mode-sessions")));
+        assert!(roots.contains(&app_base.join("claude-code-sessions")));
+        assert!(roots.contains(&package_base.join("claude-code-sessions")));
+        assert!(!roots.contains(&package_base.join("local-agent-mode-sessions")));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn metadata_transcript_prefers_sibling_audit() {
+        let root = temp_watcher_dir("audit");
+        let metadata_path = root.join("local_abc.json");
+        let audit_dir = root.join("local_abc");
+        fs::create_dir_all(&audit_dir).expect("create audit dir");
+        let audit = audit_dir.join("audit.jsonl");
+        fs::write(&audit, "").expect("write audit fixture");
+
+        let resolved = transcript_path_for_metadata_in_dirs(
+            &metadata_path,
+            &metadata_for("cli-123", "/tmp/project"),
+            &[],
+        );
+
+        assert_eq!(resolved, Some(audit));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn metadata_transcript_falls_back_to_projects_tree() {
+        let root = temp_watcher_dir("transcript");
+        let projects = root.join("projects");
+        let project_dir = projects.join("D--Sample-Warehouse");
+        fs::create_dir_all(&project_dir).expect("create project dir");
+        let transcript = project_dir.join("cli-123.jsonl");
+        fs::write(&transcript, "{}").expect("write transcript fixture");
+        let metadata_path = root
+            .join("claude-code-sessions")
+            .join("org")
+            .join("user")
+            .join("local_cli-123.json");
+
+        let resolved = transcript_path_for_metadata_in_dirs(
+            &metadata_path,
+            &metadata_for("cli-123", "D:\\Sample\\Warehouse"),
+            &[projects],
+        );
+
+        assert_eq!(resolved, Some(transcript));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn transcript_activity_tracks_turn_lifecycle() {
+        let finished = write_transcript(
+            "finished",
+            r#"{"type":"user","message":{"role":"user","content":"do it"}}
+{"type":"assistant","message":{"role":"assistant","stop_reason":"end_turn","content":[{"type":"text","text":"done"}]}}
+"#,
+        );
+        let active = write_transcript(
+            "active",
+            r#"{"type":"user","message":{"role":"user","content":"do it"}}
+{"type":"assistant","message":{"role":"assistant","stop_reason":"tool_use","content":[{"type":"tool_use","name":"Bash","id":"1","input":{}}]}}
+"#,
+        );
+        let plan = write_transcript(
+            "plan",
+            r#"{"type":"assistant","message":{"role":"assistant","stop_reason":"tool_use","content":[{"type":"tool_use","name":"ExitPlanMode","id":"2","input":{}}]}}
+"#,
+        );
+        let question = write_transcript(
+            "question",
+            r#"{"type":"assistant","message":{"role":"assistant","stop_reason":"tool_use","content":[{"type":"tool_use","name":"AskUserQuestion","id":"3","input":{}}]}}
+"#,
+        );
+
+        assert_eq!(
+            read_transcript_activity(&finished),
+            Some(TranscriptActivity::Finished)
+        );
+        assert_eq!(
+            read_transcript_activity(&active),
+            Some(TranscriptActivity::Active)
+        );
+        assert_eq!(
+            read_transcript_activity(&plan),
+            Some(TranscriptActivity::WaitingApproval)
+        );
+        assert_eq!(
+            read_transcript_activity(&question),
+            Some(TranscriptActivity::WaitingInput)
+        );
+
+        let _ = fs::remove_file(finished);
+        let _ = fs::remove_file(active);
+        let _ = fs::remove_file(plan);
+        let _ = fs::remove_file(question);
+    }
+
+    #[test]
+    fn transcript_activity_ignores_subagent_lines() {
+        let path = write_transcript(
+            "sidechain",
+            r#"{"type":"user","message":{"role":"user","content":"main prompt"}}
+{"type":"assistant","isSidechain":true,"message":{"role":"assistant","stop_reason":"end_turn","content":[]}}
+"#,
+        );
+
+        assert_eq!(
+            read_transcript_activity(&path),
+            Some(TranscriptActivity::Active)
+        );
+
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn register_session_marks_existing_active_turn_processing() {
+        let store = SessionStore::new();
+        let root = temp_watcher_dir("register");
+        let metadata_path = root.join("local_cli-123.json");
+        let transcript_dir = root.join("local_cli-123");
+        fs::create_dir_all(&transcript_dir).expect("create transcript dir");
+        let transcript = transcript_dir.join("audit.jsonl");
+        fs::write(
+            &transcript,
+            r#"{"type":"user","message":{"role":"user","content":"do it"}}
+{"type":"assistant","message":{"role":"assistant","stop_reason":"tool_use","content":[{"type":"tool_use","name":"Bash","id":"1","input":{}}]}}
+"#,
+        )
+        .expect("write transcript fixture");
+
+        let mut state = WatchState::default();
+        register_session(
+            &mut state,
+            &store,
+            metadata_path,
+            transcript,
+            metadata_for("cli-123", "/tmp/project"),
+        );
+
+        let session = store.get_session("cli-123").expect("session");
+        assert_eq!(session.phase, SessionPhase::Processing);
+        assert_eq!(session.engine_label.as_deref(), Some("Claude Desktop"));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    fn write_metadata_fixture(path: &Path, last_activity_at: i64) {
+        fs::write(
+            path,
+            serde_json::json!({
+                "sessionId": "local_cli-123",
+                "cliSessionId": "cli-123",
+                "cwd": "/tmp/project",
+                "title": "Fixture",
+                "isArchived": false,
+                "createdAt": (last_activity_at - 60) * 1000,
+                "lastActivityAt": last_activity_at * 1000,
+            })
+            .to_string(),
+        )
+        .expect("write metadata fixture");
+    }
+
+    #[test]
+    fn stale_session_is_rediscovered_after_resume() {
+        let store = SessionStore::new();
+        let root = temp_watcher_dir("resume");
+        let user_dir = root.join("org").join("user");
+        fs::create_dir_all(&user_dir).expect("create metadata dir");
+        let metadata_path = user_dir.join("local_cli-123.json");
+        let transcript_dir = user_dir.join("local_cli-123");
+        fs::create_dir_all(&transcript_dir).expect("create transcript dir");
+        fs::write(
+            transcript_dir.join("audit.jsonl"),
+            r#"{"type":"user","message":{"role":"user","content":"do it"}}
+"#,
+        )
+        .expect("write transcript fixture");
+
+        write_metadata_fixture(
+            &metadata_path,
+            Utc::now().timestamp() - ACTIVE_WINDOW_SECS - 60,
+        );
+
+        let mut state = WatchState::default();
+        scan_for_sessions(&root, &mut state, &store);
+        assert!(store.get_session("cli-123").is_none());
+        assert!(state.sessions.is_empty());
+
+        write_metadata_fixture(&metadata_path, Utc::now().timestamp());
+        scan_for_sessions(&root, &mut state, &store);
+
+        let session = store.get_session("cli-123").expect("resumed session");
+        assert_eq!(session.engine_label.as_deref(), Some("Claude Desktop"));
+        assert_eq!(state.sessions.len(), 1);
+
+        let _ = fs::remove_dir_all(root);
     }
 }

@@ -70,8 +70,8 @@ describe('collapsed bar settings button', () => {
     await waitFor(() => expect(tauriMocks.openSettingsWindow).toHaveBeenCalledTimes(1))
   })
 
-  it('shows which session is waiting for approval in the collapsed island', () => {
-    render(
+  it('omits waiting details and collapsed gear in the collapsed island when waiting for approval', () => {
+    const { container } = render(
       <CollapsedBar
         sessions={[session({
           phase: 'waiting_approval',
@@ -85,13 +85,15 @@ describe('collapsed bar settings button', () => {
       />,
     )
 
-    expect(screen.getByText('agentbro')).toHaveClass('collapsed-bar__waiting-project')
-    expect(screen.getByText('Needs approval: Writing')).toHaveClass('collapsed-bar__waiting-label')
-    expect(screen.getByText('auth.ts')).toHaveClass('collapsed-bar__waiting-target')
+    expect(screen.queryByText('agentbro')).not.toBeInTheDocument()
+    expect(screen.queryByText('Needs approval: Writing')).not.toBeInTheDocument()
+    expect(screen.queryByText('auth.ts')).not.toBeInTheDocument()
+    expect(container.querySelector('.collapsed-bar__icon-btn')).toBeNull()
+    expect(screen.getByLabelText('Vibe Board')).toBeInTheDocument()
   })
 
-  it('shows which session is waiting for input in the collapsed island', () => {
-    render(
+  it('omits waiting details and collapsed gear in the collapsed island when waiting for input', () => {
+    const { container } = render(
       <CollapsedBar
         sessions={[session({
           phase: 'waiting_input',
@@ -105,8 +107,10 @@ describe('collapsed bar settings button', () => {
       />,
     )
 
-    expect(screen.getByText('agentbro')).toHaveClass('collapsed-bar__waiting-project')
-    expect(screen.getByText('Waiting for input')).toHaveClass('collapsed-bar__waiting-label')
-    expect(screen.getByText('Which implementation should I use?')).toHaveClass('collapsed-bar__waiting-target')
+    expect(screen.queryByText('agentbro')).not.toBeInTheDocument()
+    expect(screen.queryByText('Waiting for input')).not.toBeInTheDocument()
+    expect(screen.queryByText('Which implementation should I use?')).not.toBeInTheDocument()
+    expect(container.querySelector('.collapsed-bar__icon-btn')).toBeNull()
+    expect(screen.getByLabelText('Vibe Board')).toBeInTheDocument()
   })
 })

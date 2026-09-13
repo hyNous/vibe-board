@@ -43,8 +43,8 @@ describe('CollapsedBar idle tips', () => {
     useConfigStore.setState({ tipsEnabled: true, showToolStatus: true, showUsageQuota: true, usageQueryEnabled: true })
   })
 
-  it('shows tips when there are no sessions', () => {
-    render(<CollapsedBar sessions={[]} panelState="collapsed" onCollapse={() => {}} />)
+  it('shows tips in the expanded header when idle', () => {
+    render(<CollapsedBar sessions={[]} panelState="expanded" onCollapse={() => {}} />)
 
     expect(screen.getByText('Tips:')).toBeInTheDocument()
   })
@@ -52,16 +52,26 @@ describe('CollapsedBar idle tips', () => {
   it('hides tips when the setting is disabled', () => {
     useConfigStore.setState({ tipsEnabled: false })
 
-    render(<CollapsedBar sessions={[session()]} panelState="collapsed" onCollapse={() => {}} />)
+    render(<CollapsedBar sessions={[session()]} panelState="expanded" onCollapse={() => {}} />)
 
     expect(screen.queryByText('Tips:')).not.toBeInTheDocument()
   })
 
-  it('shows follow-focus empty text instead of idle tips', () => {
-    render(<CollapsedBar sessions={[]} panelState="collapsed" onCollapse={() => {}} focusFilteredEmpty />)
-
-    expect(screen.getByText('notch.noSessionInFocus')).toBeInTheDocument()
+  it('shows only the Vibe Board icon and omits tips/empty text in closed collapsed and micro states when idle', () => {
+    const { container: collapsedContainer } = render(
+      <CollapsedBar sessions={[]} panelState="collapsed" onCollapse={() => {}} focusFilteredEmpty />,
+    )
+    expect(collapsedContainer.querySelector('.collapsed-bar__idle-logo')).toBeInTheDocument()
     expect(screen.queryByText('Tips:')).not.toBeInTheDocument()
+    expect(screen.queryByText('notch.noSessionInFocus')).not.toBeInTheDocument()
+    expect(collapsedContainer.querySelector('.collapsed-bar__count')).toBeNull()
+    expect(collapsedContainer.querySelector('.collapsed-bar__icon-btn')).toBeNull()
+
+    const { container: microContainer } = render(
+      <CollapsedBar sessions={[]} panelState="collapsed" isMicro onCollapse={() => {}} focusFilteredEmpty />,
+    )
+    expect(microContainer.querySelector('.collapsed-bar__idle-logo')).toBeInTheDocument()
+    expect(microContainer.querySelector('.collapsed-bar__micro-count')).toBeNull()
   })
 
   it('counts unfinished task sessions in WAIT', () => {
@@ -265,7 +275,7 @@ describe('CollapsedBar idle tips', () => {
     expect(screen.queryByText('5h 36% 1h1m')).not.toBeInTheDocument()
   })
 
-  it('counts error sessions as alerts above ordinary attention sessions', () => {
+  it('omits alerts, error badges, and counts in the collapsed bar when idle or erroring', () => {
     const { container } = render(
       <CollapsedBar
         sessions={[
@@ -277,14 +287,18 @@ describe('CollapsedBar idle tips', () => {
       />,
     )
 
-    expect(container.querySelector('.collapsed-bar__alert-badge')?.textContent).toBe('2')
+    expect(container.querySelector('.collapsed-bar__alert-badge')).toBeNull()
+    expect(container.querySelector('.collapsed-bar__error-badge')).toBeNull()
+    expect(container.querySelector('.collapsed-bar__count')).toBeNull()
+    expect(screen.getByLabelText('Vibe Board')).toBeInTheDocument()
   })
 
-  it('shows only the conversation title for an ordinary running session', () => {
-    render(
+  it('identifies the executing Agent and omits task titles in collapsed and micro states during active work', () => {
+    const { unmount } = render(
       <CollapsedBar
         sessions={[
           session({
+            agentType: 'claude-code',
             project: 'vibe-board',
             sessionTitle: '修复悬浮窗动画',
             phase: 'processing',
@@ -298,9 +312,31 @@ describe('CollapsedBar idle tips', () => {
       />,
     )
 
-    expect(screen.getByText('vibe-board · 修复悬浮窗动画')).toBeInTheDocument()
+    expect(screen.getByLabelText('Claude')).toBeInTheDocument()
+    expect(screen.queryByText('vibe-board · 修复悬浮窗动画')).not.toBeInTheDocument()
     expect(screen.queryByText('Processing user input')).not.toBeInTheDocument()
     expect(screen.queryByText('notch.tool.editing')).not.toBeInTheDocument()
     expect(screen.queryByText('OverlayFeedbackPanel.tsx')).not.toBeInTheDocument()
+
+    unmount()
+
+    render(
+      <CollapsedBar
+        sessions={[
+          session({
+            agentType: 'codex',
+            project: 'vibe-board',
+            sessionTitle: 'Fix desktop activation',
+            phase: 'processing',
+          }),
+        ]}
+        panelState="collapsed"
+        isMicro
+        onCollapse={() => {}}
+      />,
+    )
+
+    expect(screen.getByLabelText('Codex')).toBeInTheDocument()
+    expect(screen.queryByText('vibe-board · Fix desktop activation')).not.toBeInTheDocument()
   })
 })

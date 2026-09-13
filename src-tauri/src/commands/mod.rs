@@ -2513,7 +2513,22 @@ fn sync_codex_app_server_thread_to_store(
         .map(str::to_string);
     let updated_at = codex_timestamp(thread.get("updatedAt").or_else(|| thread.get("updated_at")));
     let created_at = codex_timestamp(thread.get("createdAt").or_else(|| thread.get("created_at")));
-    if codex_app_server_idle_thread_is_stale(&phase, updated_at) {
+
+    // Once local rollout sync has claimed a thread, its lifecycle is the
+    // ground truth for that thread. The app-server can only list a Desktop
+    // thread as a `notLoaded`/idle placeholder because the Desktop runs its
+    // own app-server; a placeholder must not downgrade or evict an in-flight
+    // local task.
+    let existing = store.get_session(&thread_id);
+    let local_owns_lifecycle = existing
+        .as_ref()
+        .is_some_and(|session| session.engine_label.as_deref() == Some("Codex Desktop"));
+    if codex_app_server_idle_thread_is_stale(&phase, updated_at)
+        && !(local_owns_lifecycle
+            && existing
+                .as_ref()
+                .is_some_and(|session| session.phase.is_active()))
+    {
         store.remove_session(&thread_id);
         return None;
     }
@@ -2539,7 +2554,9 @@ fn sync_codex_app_server_thread_to_store(
     store.get_or_create_session(&thread_id, "codex", &project, &cwd, "Codex");
     store.update_session(&thread_id, |session| {
         session.agent_type = "codex".to_string();
-        session.engine_label = Some("Codex App".to_string());
+        if !local_owns_lifecycle {
+            session.engine_label = Some("Codex App".to_string());
+        }
         session.codex_app_server_thread_id = Some(thread_id.clone());
         session.project = project.clone();
         session.cwd = cwd.clone();
@@ -2549,14 +2566,20 @@ fn sync_codex_app_server_thread_to_store(
             SessionPhase::WaitingApproval
         } else if session.pending_question.is_some() {
             SessionPhase::WaitingInput
-        } else {
+        } else if !matches!(phase, SessionPhase::Idle) || !local_owns_lifecycle {
             phase.clone()
+        } else {
+            session.phase.clone()
         };
         session.session_title = name.clone().or_else(|| preview.clone());
         session.description = preview.clone();
-        session.started_at = trace_started_at;
+        if !local_owns_lifecycle {
+            session.started_at = trace_started_at;
+        }
         if let Some(updated_at) = updated_at {
-            session.last_main_agent_at = Some(updated_at);
+            if !local_owns_lifecycle {
+                session.last_main_agent_at = Some(updated_at);
+            }
         }
         if last_user_message.is_some() {
             session.last_user_message = last_user_message.clone();
@@ -3007,8 +3030,12 @@ fn sync_local_codex_rollouts_to_store(store: &SessionStore) {
     let Some(home) = dirs::home_dir() else {
         return;
     };
+    sync_local_codex_rollouts_from_root(store, &home.join(".codex").join("sessions"));
+}
+
+fn sync_local_codex_rollouts_from_root(store: &SessionStore, root: &Path) {
     let mut candidates = Vec::new();
-    collect_codex_rollout_files(&home.join(".codex").join("sessions"), &mut candidates);
+    collect_codex_rollout_files(root, &mut candidates);
     candidates.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| b.0.cmp(&a.0)));
 
     let cutoff = chrono::Utc::now().timestamp() - CODEX_LOCAL_ROLLOUT_MAX_AGE_SECONDS;
@@ -3047,26 +3074,36 @@ fn sync_local_codex_rollouts_to_store(store: &SessionStore) {
         };
         let existing = store.get_session(&session_id);
 
-        // The app-server snapshot is authoritative when it already sees this
-        // thread. Local rollout sync only fills the Desktop/CLI visibility gap.
-        if existing
-            .as_ref()
-            .and_then(|session| session.engine_label.as_deref())
-            == Some("Codex App")
-        {
-            continue;
-        }
-
+        // The app-server only knows a Desktop-owned thread as a `notLoaded`
+        // placeholder and reports it idle. The local rollout is written by the
+        // process that actually runs the turn, so it owns the lifecycle; the
+        // app-server still contributes live status and pending interactions.
         let updated_at = snapshot.updated_at.or(Some(fallback_updated_at));
         let last_response = snapshot.last_response.clone().or_else(|| {
             (!snapshot.active)
                 .then(|| extract_latest_assistant_text(&path))
                 .flatten()
         });
+        // The app-server can relay an interactive wait as an `activeFlags`
+        // phase without creating a pending object. Keep that wait while the
+        // local rollout still reports the turn active; turn completion or a
+        // newer app-server phase clears it.
+        let preserve_waiting = snapshot.active
+            && existing.as_ref().is_some_and(|session| {
+                matches!(
+                    session.phase,
+                    SessionPhase::WaitingApproval | SessionPhase::WaitingInput
+                )
+            });
+        let next_phase = match (preserve_waiting, existing.as_ref()) {
+            (true, Some(session)) => session.phase.clone(),
+            _ => phase.clone(),
+        };
         let changed = existing
             .as_ref()
             .map(|session| {
-                session.phase != phase
+                session.phase != next_phase
+                    || session.engine_label.as_deref() != Some("Codex Desktop")
                     || session.cwd != cwd
                     || session.project != project
                     || session.session_title != title
@@ -3094,6 +3131,13 @@ fn sync_local_codex_rollouts_to_store(store: &SessionStore) {
                     SessionPhase::WaitingApproval
                 } else if session.pending_question.is_some() {
                     SessionPhase::WaitingInput
+                } else if snapshot.active
+                    && matches!(
+                        session.phase,
+                        SessionPhase::WaitingApproval | SessionPhase::WaitingInput
+                    )
+                {
+                    session.phase.clone()
                 } else {
                     phase.clone()
                 };
@@ -4309,17 +4353,19 @@ fn clean_windows_app_user_model_id(value: &str) -> Option<String> {
 
 #[cfg(target_os = "windows")]
 fn run_windows_powershell(script: &str) -> Result<(), String> {
-    let output = std::process::Command::new(crate::agents::executable::command_path("powershell"))
-        .args([
-            "-NoProfile",
-            "-NonInteractive",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-Command",
-            script,
-        ])
-        .output()
-        .map_err(|err| format!("Failed to run PowerShell app activation: {err}"))?;
+    let output = crate::platform::process::background_command(
+        crate::agents::executable::command_path("powershell"),
+    )
+    .args([
+        "-NoProfile",
+        "-NonInteractive",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        script,
+    ])
+    .output()
+    .map_err(|err| format!("Failed to run PowerShell app activation: {err}"))?;
 
     if output.status.success() {
         Ok(())
@@ -4343,10 +4389,12 @@ fn powershell_string_literal(value: &str) -> String {
 
 #[cfg(target_os = "windows")]
 fn open_windows_explorer_target(target: &str) -> Result<(), String> {
-    let output = std::process::Command::new(crate::agents::executable::command_path("explorer"))
-        .arg(target)
-        .output()
-        .map_err(|err| format!("Failed to open {target}: {err}"))?;
+    let output = crate::platform::process::background_command(
+        crate::agents::executable::command_path("explorer"),
+    )
+    .arg(target)
+    .output()
+    .map_err(|err| format!("Failed to open {target}: {err}"))?;
 
     if output.status.success() {
         Ok(())
@@ -4372,15 +4420,17 @@ fn open_windows_shell_target(target: &str) -> Result<(), String> {
 
     let path = Path::new(target);
     let mut command = if is_windows_protocol_target(target) {
-        let mut command =
-            std::process::Command::new(crate::agents::executable::command_path("rundll32"));
+        let mut command = crate::platform::process::background_command(
+            crate::agents::executable::command_path("rundll32"),
+        );
         command.args(["url.dll,FileProtocolHandler", target]);
         command
     } else if path.exists() && path.is_file() {
-        std::process::Command::new(path)
+        crate::platform::process::background_command(path)
     } else {
-        let mut command =
-            std::process::Command::new(crate::agents::executable::command_path("explorer"));
+        let mut command = crate::platform::process::background_command(
+            crate::agents::executable::command_path("explorer"),
+        );
         command.arg(target);
         command
     };
@@ -5582,11 +5632,11 @@ pub async fn activate_session_host(
 
     #[cfg(target_os = "windows")]
     {
-        if session.pid.is_some_and(activate_session_process_window) {
-            return Ok(true);
-        }
         if is_codex_desktop_session(&session) {
             activate_codex_desktop_windows()?;
+            return Ok(true);
+        }
+        if session.pid.is_some_and(activate_session_process_window) {
             return Ok(true);
         }
         return Err(format!(
@@ -8363,8 +8413,9 @@ mod tests {
         qoder_app_send_message_script, read_codex_session_meta_from_path,
         read_local_codex_rollout_state, redact_sensitive_hook_config, remote_session_chat_history,
         resolve_session_tty, session_has_desktop_host, sync_codex_app_server_thread_to_store,
-        sync_remote_codex_thread_to_store, terminal_hint_for_fallback, CodexAppServerPendingKind,
-        CodexAppServerPendingRequest, CODEX_TOKEN_SOURCE_LABEL,
+        sync_local_codex_rollouts_from_root, sync_remote_codex_thread_to_store,
+        terminal_hint_for_fallback, CodexAppServerPendingKind, CodexAppServerPendingRequest,
+        CODEX_TOKEN_SOURCE_LABEL,
     };
     #[cfg(target_os = "windows")]
     use super::{
@@ -8376,12 +8427,12 @@ mod tests {
     use crate::hooks::conversation_parser::{ChatRole, MessageBlock};
     use crate::hooks::server::RawHookEvent;
     use crate::hooks::session_store::{
-        PendingQuestion, QuestionItem, QuestionOption, SessionPhase, SessionState, SessionStore,
-        SubagentInfo,
+        PendingPermission, PendingQuestion, QuestionItem, QuestionOption, SessionPhase,
+        SessionState, SessionStore, SubagentInfo,
     };
     use crate::remote::installer::RemoteCodexThreadSnapshot;
     use crate::remote::RemoteHost;
-    use std::{collections::HashMap, fs};
+    use std::{collections::HashMap, fs, path::PathBuf};
 
     fn session(agent_type: &str, terminal: &str, tty: Option<&str>) -> SessionState {
         let mut session = SessionState::new(
@@ -8499,6 +8550,256 @@ mod tests {
         assert_eq!(state.updated_at, Some(1788825660));
 
         let _ = fs::remove_file(path);
+    }
+
+    fn write_active_codex_rollout(root: &std::path::Path, session_id: &str) -> PathBuf {
+        let started_at = chrono::Utc::now().timestamp();
+        let path = root.join(format!("rollout-{session_id}.jsonl"));
+        fs::write(
+            &path,
+            format!(
+                r#"{{"type":"session_meta","payload":{{"session_id":"{session_id}","cwd":"C:\\work"}}}}
+{{"timestamp":"{}","type":"event_msg","payload":{{"type":"task_started","started_at":{started_at}}}}}
+"#,
+                chrono::Utc::now().to_rfc3339(),
+            ),
+        )
+        .expect("write rollout fixture");
+        path
+    }
+
+    fn temp_codex_rollout_root(tag: &str) -> PathBuf {
+        let root =
+            std::env::temp_dir().join(format!("vibe-board-codex-{tag}-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&root).expect("create rollout root");
+        root
+    }
+
+    #[test]
+    fn local_codex_rollout_sync_recovers_app_server_idle_session() {
+        let store = SessionStore::new();
+        store.get_or_create_session("desktop-thread", "codex", "Codex", "/", "Codex");
+        store.update_session("desktop-thread", |session| {
+            session.engine_label = Some("Codex App".to_string());
+            session.phase = SessionPhase::Idle;
+            session.last_main_agent_at = Some(1);
+        });
+
+        let root = temp_codex_rollout_root("takeover");
+        write_active_codex_rollout(&root, "desktop-thread");
+        sync_local_codex_rollouts_from_root(&store, &root);
+
+        let session = store.get_session("desktop-thread").expect("session");
+        assert_eq!(session.phase, SessionPhase::Processing);
+        assert_eq!(session.engine_label.as_deref(), Some("Codex Desktop"));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn local_codex_rollout_sync_discovers_running_task_on_empty_store() {
+        let store = SessionStore::new();
+        let root = temp_codex_rollout_root("discover");
+        write_active_codex_rollout(&root, "desktop-thread");
+        sync_local_codex_rollouts_from_root(&store, &root);
+
+        let session = store.get_session("desktop-thread").expect("session");
+        assert_eq!(session.phase, SessionPhase::Processing);
+        assert_eq!(session.agent_type, "codex");
+        assert_eq!(session.engine_label.as_deref(), Some("Codex Desktop"));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn local_codex_rollout_sync_preserves_pending_approval() {
+        let store = SessionStore::new();
+        store.get_or_create_session("desktop-thread", "codex", "Codex", "/", "Codex");
+        store.set_pending_permission(
+            "desktop-thread",
+            Some(PendingPermission {
+                tool_use_id: Some("approval-1".to_string()),
+                tool_name: "exec_command".to_string(),
+                tool_input: "pnpm test".to_string(),
+                diff: None,
+                options: None,
+            }),
+        );
+
+        let root = temp_codex_rollout_root("pending");
+        write_active_codex_rollout(&root, "desktop-thread");
+        sync_local_codex_rollouts_from_root(&store, &root);
+
+        let session = store.get_session("desktop-thread").expect("session");
+        assert_eq!(session.phase, SessionPhase::WaitingApproval);
+        assert!(session.pending_permission.is_some());
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn local_codex_rollout_sync_restores_ownership_label() {
+        let store = SessionStore::new();
+        let root = temp_codex_rollout_root("relabel");
+        let path = write_active_codex_rollout(&root, "desktop-thread");
+        let snapshot = read_local_codex_rollout_state(&path, 0).expect("rollout state");
+
+        store.get_or_create_session("desktop-thread", "codex", "work", "C:\\work", "Codex");
+        store.update_session("desktop-thread", |session| {
+            session.engine_label = Some("Codex App".to_string());
+            session.phase = SessionPhase::Processing;
+            session.last_main_agent_at = snapshot.updated_at;
+            session.session_title = None;
+            session.last_response = None;
+        });
+
+        sync_local_codex_rollouts_from_root(&store, &root);
+
+        assert_eq!(
+            store
+                .get_session("desktop-thread")
+                .expect("session")
+                .engine_label
+                .as_deref(),
+            Some("Codex Desktop")
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn local_codex_rollout_sync_preserves_app_server_waiting_phase() {
+        let store = SessionStore::new();
+        let local_at = chrono::Utc::now().timestamp();
+        store.get_or_create_session("desktop-thread", "codex", "work", "C:\\work", "Codex");
+        store.update_session("desktop-thread", |session| {
+            session.engine_label = Some("Codex Desktop".to_string());
+            session.phase = SessionPhase::Processing;
+            session.last_main_agent_at = Some(local_at);
+        });
+
+        // The app-server relays the wait through `activeFlags` only, so no
+        // pending permission object exists in the store.
+        let thread = serde_json::json!({
+            "id": "desktop-thread",
+            "name": "work",
+            "cwd": "C:\\work",
+            "updatedAt": local_at,
+            "status": { "type": "active", "activeFlags": ["waitingOnApproval"] }
+        });
+        sync_codex_app_server_thread_to_store(&store, &thread).expect("thread sync");
+        assert_eq!(
+            store.get_session("desktop-thread").expect("session").phase,
+            SessionPhase::WaitingApproval
+        );
+
+        let root = temp_codex_rollout_root("waiting");
+        let path = write_active_codex_rollout(&root, "desktop-thread");
+        sync_local_codex_rollouts_from_root(&store, &root);
+
+        let session = store.get_session("desktop-thread").expect("session");
+        assert_eq!(session.phase, SessionPhase::WaitingApproval);
+        assert!(session.pending_permission.is_none());
+
+        // The completed rollout releases the wait instead of keeping it stuck.
+        let mut content = fs::read_to_string(&path).expect("read rollout");
+        content.push_str(&format!(
+            "{{\"timestamp\":\"{}\",\"type\":\"event_msg\",\"payload\":{{\"type\":\"task_complete\"}}}}\n",
+            chrono::Utc::now().to_rfc3339(),
+        ));
+        fs::write(&path, content).expect("append task_complete");
+        sync_local_codex_rollouts_from_root(&store, &root);
+
+        assert_eq!(
+            store.get_session("desktop-thread").expect("session").phase,
+            SessionPhase::Idle
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn consecutive_idle_codex_snapshots_keep_local_rollout_ownership() {
+        let store = SessionStore::new();
+        let local_at = chrono::Utc::now().timestamp();
+        let stale_at = local_at - 31 * 60;
+        store.get_or_create_session("thread-local", "codex", "Project", "/tmp/project", "Codex");
+        store.update_session("thread-local", |session| {
+            session.engine_label = Some("Codex Desktop".to_string());
+            session.phase = SessionPhase::Processing;
+            session.last_main_agent_at = Some(local_at);
+        });
+
+        let thread = serde_json::json!({
+            "id": "thread-local",
+            "name": "Project",
+            "cwd": "/tmp/project",
+            "updatedAt": stale_at,
+            "status": { "type": "idle" }
+        });
+
+        assert!(sync_codex_app_server_thread_to_store(&store, &thread).is_some());
+        let session = store.get_session("thread-local").expect("session");
+        assert_eq!(session.engine_label.as_deref(), Some("Codex Desktop"));
+        assert_eq!(session.phase, SessionPhase::Processing);
+
+        assert!(sync_codex_app_server_thread_to_store(&store, &thread).is_some());
+        let session = store.get_session("thread-local").expect("session");
+        assert_eq!(session.engine_label.as_deref(), Some("Codex Desktop"));
+        assert_eq!(session.phase, SessionPhase::Processing);
+    }
+
+    #[test]
+    fn codex_app_server_idle_snapshot_keeps_local_rollout_task() {
+        let store = SessionStore::new();
+        let local_at = chrono::Utc::now().timestamp();
+        store.get_or_create_session("thread-local", "codex", "Project", "/tmp/project", "Codex");
+        store.update_session("thread-local", |session| {
+            session.engine_label = Some("Codex Desktop".to_string());
+            session.phase = SessionPhase::Processing;
+            session.last_main_agent_at = Some(local_at);
+        });
+
+        let thread = serde_json::json!({
+            "id": "thread-local",
+            "name": "Project",
+            "cwd": "/tmp/project",
+            "updatedAt": local_at - 5,
+            "status": { "type": "idle" }
+        });
+        let summary = sync_codex_app_server_thread_to_store(&store, &thread).expect("thread sync");
+
+        assert_eq!(summary.phase, "Idle");
+        assert_eq!(
+            store.get_session("thread-local").expect("session").phase,
+            SessionPhase::Processing
+        );
+    }
+
+    #[test]
+    fn codex_app_server_live_status_overrides_local_rollout_task() {
+        let store = SessionStore::new();
+        let local_at = chrono::Utc::now().timestamp();
+        store.get_or_create_session("thread-local", "codex", "Project", "/tmp/project", "Codex");
+        store.update_session("thread-local", |session| {
+            session.engine_label = Some("Codex Desktop".to_string());
+            session.phase = SessionPhase::Processing;
+            session.last_main_agent_at = Some(local_at);
+        });
+
+        let thread = serde_json::json!({
+            "id": "thread-local",
+            "name": "Project",
+            "cwd": "/tmp/project",
+            "updatedAt": local_at,
+            "status": { "type": "active", "activeFlags": ["waitingOnApproval"] }
+        });
+        sync_codex_app_server_thread_to_store(&store, &thread).expect("thread sync");
+
+        assert_eq!(
+            store.get_session("thread-local").expect("session").phase,
+            SessionPhase::WaitingApproval
+        );
     }
 
     #[test]

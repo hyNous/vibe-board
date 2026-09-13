@@ -12,10 +12,10 @@
 .collapsed-bar__micro-main {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
   width: 100%;
   height: 32px;
-  padding: 4px 12px;
+  padding: 4px;
 }
 
 .collapsed-bar__micro-count {
@@ -161,6 +161,11 @@
   min-height: 32px;
 }
 
+.collapsed-bar__main--closed {
+  justify-content: center;
+  padding: 0;
+}
+
 .collapsed-bar__left {
   display: flex;
   align-items: center;
@@ -186,7 +191,8 @@
   display: block;
 }
 
-.collapsed-bar__idle-logo-wrap {
+.collapsed-bar__idle-logo-wrap,
+.collapsed-bar__agent-wrap {
   display: inline-grid;
   flex: 0 0 auto;
   place-items: center;
