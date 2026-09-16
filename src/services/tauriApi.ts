@@ -5,6 +5,7 @@
 import type { AgentRunState, AgentStatusSnapshot, RateLimitInfo, SessionNotice, SessionState } from '../types/agent'
 import type { ThemeConfig } from '../types/theme'
 import type { PetMetadata } from '../types/pet'
+import type { SideIslandSize, IslandDragAnchor } from '../utils/islandLayout'
 import { useConfigStore } from '../stores/configStore'
 
 declare const __APP_VERSION__: string
@@ -1344,6 +1345,7 @@ export interface IslandLayoutPreviewOptions {
   completionCardHeight?: number
   maxPanelHeight?: number
   detailPanelMaxHeight?: number
+  sideIslandSize?: SideIslandSize
 }
 
 export async function previewIslandLayout(mode: IslandLayoutPreviewMode, options?: IslandLayoutPreviewOptions): Promise<void> {
@@ -1361,9 +1363,19 @@ export async function startNotchDrag(
   width: number,
   height: number,
   displayId?: string,
+  anchor?: IslandDragAnchor,
 ): Promise<boolean> {
   if (!isTauri()) return false
-  return invoke<boolean>('start_notch_drag', { horizontalOffset, width, height, displayId })
+  return invoke<boolean>('start_notch_drag', {
+    horizontalOffset,
+    width,
+    height,
+    displayId,
+    visibleWidth: anchor?.visibleWidth,
+    visibleHeight: anchor?.visibleHeight,
+    visibleOffsetX: anchor?.offsetX,
+    visibleOffsetY: anchor?.offsetY,
+  })
 }
 
 export type NotchDragResult = {

@@ -4,11 +4,18 @@
 
 ## 最新进度（优先于下方历史记录）
 
-- 当前功能检查点：`7afb9e2 fix: preserve Codex hook state and refresh board settings`。已提交设置页重设计、Agent 检测总览、Codex hooks.state 语义去重与安全备份、黑色/磨砂两种效果以及侧边竖长条。
-- 验证：前端 56 文件 626 测试通过；Codex 定向 Rust 30 项通过；lint 通过。全量 Rust 存在 35 个既有失败，详细证据及真实重启未验收边界见 `docs/codex-hooks-state-2026-09-15.md`。
-- 当前安装包：`releases/Vibe Board-test-2026-09-16-hooks-agent-appearance-setup.exe`，15,615,923 字节；`Vibe Board-latest-setup.exe` 同步为该版本。已删除 9 月 13 日两份、9 月 14 日一份过时测试 EXE；没有删除源码、历史设计文档、用户录屏或 Codex 备份。下文旧安装包 hash 和旧测试数量仅为历史记录，不适用于最新包。
-- 新需求待完成：侧边岛宽度/大小可在设置中按档位即时调整并持久化（默认更窄）；从侧边拖回顶部时存在空气墙感，需建立实际拖拽回归并修复。录屏位于仓库父目录 `屏幕录制 2026-09-16 112225.mp4`，时长约 6.23 秒。
-- 本轮尚未改动上述新需求代码。指定 OpenCode 启动失败：`opencode` 命令 ENOENT；现有 npm shim `C:/Users/27312/AppData/Roaming/npm/opencode.cmd` 指向的 `node_modules/opencode-ai/bin/opencode.exe` 不存在，未启动模型进程。没有更换 Agent 或擅自安装 CLI，需恢复 OpenCode 可执行文件后继续。任务包在仓库父目录 `.tmp/side-dock-fix.json`。
+- 当前功能检查点仍为 `7afb9e2 fix: preserve Codex hook state and refresh board settings`；工作树另含本轮未提交的侧边尺寸档位和拖拽修复，未 commit、未构建安装包。
+- 侧边尺寸档位已完成在代码中：`sideIslandSize` 三档 `narrow / standard / wide`，实际壳尺寸分别为 64×132、72×148、80×168 逻辑像素（默认窄档，原版为 72×148）；设置页 Display 下拉即时预览并持久化；档位同时驱动收起竖条尺寸、圆角和悬停命中框；五套 i18n 已同步；单测覆盖档位顺序、默认值、顶部不受影响和设置页预览。
+- 拖拽缺陷根因已复现并修复（Windows 侧边拖回顶部“空气墙/停滞/跳变”）：
+  1. 原生拖拽的边界和落点判定此前使用整块透明宿主窗口，而不是可见岛壳。侧边常态宿主是 658×612 的稳定画布，收起竖条只有 64×132 且垂直居中（偏移 240px），所以可见竖条最多升到距顶 240px 就被宿主边界卡住；落点又要求“看不见的宿主顶”贴到屏幕上缘，随后释放才跳到顶部并收起。
+  2. Windows 的 `GetCursorPos` 返回物理像素，而拖拽窗口位置是逻辑像素，未做 DPI 换算时指针位移会按缩放倍率放大。
+  - 修复链路：前端在 `startNotchDrag` 时经 `getIslandDragAnchor` 上报可见岛壳的宽高及它在宿主内的偏移；Rust 用该可见矩形计算 `min/max` 钳制与 `notch_drop_position_mode` 落点，宿主允许挂到屏幕外；拖拽期间光标位移按目标显示器 scale 归一化后再叠加；落点判定给新边缘 16px 触达区，当前停靠边只有在严格更近时才保留，保证“右侧竖条上拖到顶部”能真正落到顶部。
+- 回归证据：`src/test/notchPanel.test.tsx` 两条拖拽用例在修复前失败（`startNotchDrag` 只收到 658×612 宿主尺寸，没有可见矩形），修复后通过，并断言可见矩形与偏移（侧边 658×320 @ y140，顶部 658×320 @ x14）；Rust 新增 4 条纯函数测试覆盖可见矩形边界、旧宿主行为兼容、落点脱离停靠边和 Windows 光标单位，`cargo test --manifest-path src-tauri/Cargo.toml pet_window_tests` 11/11 通过。
+- 本轮验证：`pnpm test:run` 56 文件 634 项通过；`pnpm lint`、`pnpm build` 通过；`cargo check --all-targets`、`cargo fmt --check` 通过；`cargo test --lib` 为 566 通过 / 35 失败 / 5 忽略，35 项与既有记录一致，无新增失败；`cargo clippy --all-targets -- -D warnings` 仍有既有报错（38 项编译错误来自其他模块的 `field_reassign_with_default` 等；`lib.rs` 另有 410 行 `unneeded return`、4532 行参数数量两项既有告警），本轮新增代码未引入告警。
+- 未进行真实桌面验收的边界：本轮没有安装或启动应用，没有用真实鼠标做侧边↔顶部拖拽、HiDPI（150%/200%）缩放、多显示器或落点手感验证；主审已抽帧检查用户录屏，OpenCode 未直接读取视频。修复验证来自单元/组件级回归与代码链路推演。真实验收至少需要覆盖：右侧窄档上拖到顶、150% 缩放下 1:1 跟随、顶部左右拖动切换挂靠、释放前距离边缘 10–20px 的落点。
+- 主审独立验收：前端 56 文件 634 项通过，Rust `pet_window_tests::notch` 6 项通过，lint、前端 build、`git diff --check` 通过。完整 Rust 35 项既有失败及 clippy 边界来自 OpenCode 本轮验证，不宣称全仓库检查全部通过。
+- 当前安装包仍为 `releases/Vibe Board-test-2026-09-16-hooks-agent-appearance-setup.exe`（15,615,923 字节），本轮没有重新打包，也未安装；旧安装包 hash 与旧测试数量仅为历史记录。
+- OpenCode 启动阻塞已解除，本轮通过工具的 Windows 用户进程模式使用 DeepSeek V4.1 Flash max 完成两个任务。最初合并任务触发 Runner 10MB 输出保护，检查确认无代码修改后，拆分尺寸/拖拽并复用会话完成；未降低输出安全限制。
 
 ## 1. 当前基线
 

@@ -416,6 +416,26 @@ describe('settings island menu', () => {
     }))
   })
 
+  it('applies and previews the side island size tier from display settings', async () => {
+    useConfigStore.setState({ sideIslandSize: 'narrow' })
+    render(<SettingsApp onClose={vi.fn()} />)
+
+    fireEvent.click(screen.getByText('外观设置'))
+    fireEvent.click(await screen.findByRole('button', { name: /Display/ }))
+
+    await waitFor(() => expect(screen.getByText('Side Island Size')).toBeInTheDocument())
+    const row = screen.getByText('Side Island Size').closest('.setting-row')!
+    expect(row).toHaveTextContent('Narrow')
+
+    fireEvent.click(row.querySelector('.glass-dropdown__trigger')!)
+    fireEvent.click(screen.getByText('Wide'))
+
+    expect(useConfigStore.getState().sideIslandSize).toBe('wide')
+    expect(tauriMocks.previewIslandLayout).toHaveBeenCalledWith('compact', expect.objectContaining({
+      sideIslandSize: 'wide',
+    }))
+  })
+
   it('records and clears in-window shortcuts from the shortcuts page', async () => {
     render(<SettingsApp onClose={vi.fn()} />)
 

@@ -8,7 +8,7 @@ import { respondPermission, respondQuestion, respondPlan, respondAutoApprove, se
 import { computePriority } from '../../types/priority'
 import type { OverlayItem, PanelState } from '../../types/agent'
 import { deriveIslandInteraction, getFollowFocusVisibleSessions, isBlockingOverlay, isNonBlockingOverlay, sessionHasVisibleActivity, sessionNeedsAttention } from '../../utils/islandInteraction'
-import { getCollapsedIslandHeight } from '../../utils/islandLayout'
+import { getCollapsedIslandHeight, getIslandDragAnchor, getSideIslandDimensions, NOTCH_SHELL_SIDE_EXTENSION, type SideIslandSize } from '../../utils/islandLayout'
 import { getBlockingOverlayPanelHeight, getReadableNotificationHeight, isCompactPermissionPrompt } from '../../utils/notificationLayout'
 import { shortcutMatchesEvent } from '../../utils/keyboardShortcuts'
 import { primaryModifierPressed } from '../../utils/platform'
@@ -49,7 +49,6 @@ function clearPermissionAfter(sessionId: string, work: Promise<void>) {
     .catch((error) => console.warn('[notch] permission response failed:', error))
 }
 
-const NOTCH_SHELL_SIDE_EXTENSION = 14
 const NOTCH_HIT_SLOP_X_COLLAPSED = 48
 const NOTCH_HIT_SLOP_Y_COLLAPSED = 24
 const NOTCH_HIT_SLOP_X_EXPANDED = 14
@@ -61,8 +60,6 @@ const NATIVE_CURSOR_PASSTHROUGH_DELAY_MS = 120
 const HOVER_PANEL_MIN_HEIGHT = 180
 const HOVER_PANEL_HEIGHT = 320
 const EXPANDED_PREVIEW_SESSION_COUNT = 4
-const SIDE_COLLAPSED_CONTENT_WIDTH = 44
-const SIDE_COLLAPSED_PANEL_HEIGHT = 148
 const PET_SURFACE_WIDTH = 820
 const PET_SURFACE_HEIGHT = 360
 function nativeHostResizeKey(
@@ -187,6 +184,7 @@ type IslandLayoutPreview = {
   completionCardHeight?: number
   maxPanelHeight?: number
   detailPanelMaxHeight?: number
+  sideIslandSize?: SideIslandSize
 }
 
 function LayoutPreviewBody({ mode }: { mode: IslandLayoutPreview['mode'] }) {
@@ -423,6 +421,9 @@ export function NotchPanel() {
         if (typeof next.completionCardHeight === 'number') store.updateConfig('completionCardHeight', next.completionCardHeight)
         if (typeof next.maxPanelHeight === 'number') store.updateConfig('maxPanelHeight', next.maxPanelHeight)
         if (typeof next.detailPanelMaxHeight === 'number') store.updateConfig('detailPanelMaxHeight', next.detailPanelMaxHeight)
+        if (next.sideIslandSize === 'narrow' || next.sideIslandSize === 'standard' || next.sideIslandSize === 'wide') {
+          store.updateConfig('sideIslandSize', next.sideIslandSize)
+        }
         setLayoutPreview(event.payload)
         setNotchOpacity(1).catch(() => {})
       }).then((fn) => { unlistenPreview = fn }).catch(() => {})
@@ -1054,6 +1055,7 @@ export function NotchPanel() {
   const panelMaxWidth = useConfigStore((s) => s.panelMaxWidth)
   const completionCardHeight = useConfigStore((s) => s.completionCardHeight)
   const detailPanelMaxHeight = useConfigStore((s) => s.detailPanelMaxHeight)
+  const sideIslandSize = useConfigStore((s) => s.sideIslandSize)
   const allowHorizontalDrag = useConfigStore((s) => s.allowHorizontalDrag)
   const panelHorizontalOffset = useConfigStore((s) => s.panelHorizontalOffset)
   const notchPositionMode = useConfigStore((s) => s.notchPositionMode)
@@ -1076,6 +1078,7 @@ export function NotchPanel() {
         : panelState
   const isSideNotch = notchPositionMode === 'left' || notchPositionMode === 'right'
   const sideCollapsed = isSideNotch && effectivePanelState === 'collapsed'
+  const sideIslandDimensions = getSideIslandDimensions(layoutPreview?.sideIslandSize ?? sideIslandSize)
   const hasBlockingOverlayContent = Boolean(
     !layoutPreview
     && activeOverlay
@@ -1111,7 +1114,7 @@ export function NotchPanel() {
             : usesWideApprovalOverlay
               ? approvalPanelWidth
               : expandedPanelContentWidth
-  const contentWidth = sideCollapsed ? SIDE_COLLAPSED_CONTENT_WIDTH : regularContentWidth
+  const contentWidth = sideCollapsed ? sideIslandDimensions.contentWidth : regularContentWidth
 
   const statusBarHeight = effectivePanelState !== 'collapsed' ? 32 : 0
   const readableCompletionCardHeight = getReadableNotificationHeight(completionCardHeight, maxPanelHeight || 600)
@@ -1144,7 +1147,7 @@ export function NotchPanel() {
                 : effectivePanelState === 'hover'
                   ? Math.min(Math.max(HOVER_PANEL_HEIGHT, HOVER_PANEL_MIN_HEIGHT), maxPanelHeight || 600)
                   : (effectiveDetailPanelMaxHeight || 500)
-  const panelHeight = sideCollapsed ? SIDE_COLLAPSED_PANEL_HEIGHT : regularPanelHeight
+  const panelHeight = sideCollapsed ? sideIslandDimensions.panelHeight : regularPanelHeight
 
   const visualState = isPetMode
     ? 'pet'
@@ -1494,7 +1497,16 @@ export function NotchPanel() {
     setIsDragging(true)
     const dragWindowWidth = hostHitboxSizeRef.current.width
     const dragWindowHeight = hostHitboxSizeRef.current.height
-    startNotchDrag(panelHorizontalOffset, dragWindowWidth, dragWindowHeight, displayMonitor).then((started) => {
+    const dragAnchor = getIslandDragAnchor({
+      positionMode: notchPositionMode,
+      hostWidth: dragWindowWidth,
+      hostHeight: dragWindowHeight,
+      shellWidth,
+      shellHeight: panelHeight,
+      hitboxHeight,
+      shellAnchorOffsetX: effectiveShellAnchorOffsetX,
+    })
+    startNotchDrag(panelHorizontalOffset, dragWindowWidth, dragWindowHeight, displayMonitor, dragAnchor).then((started) => {
       if (!started && dragPointerIdRef.current === event.pointerId) {
         dragPointerIdRef.current = null
         setIsDragging(false)
@@ -1536,6 +1548,7 @@ export function NotchPanel() {
         '--notch-hitbox-width': `${hitboxWidth}px`,
         '--notch-hitbox-height': `${hitboxHeight}px`,
         '--notch-hitbox-pad-x': `${hitboxPadX}px`,
+        '--notch-side-radius': `${Math.min(shellWidth / 2, panelHeight / 2)}px`,
         '--notch-morph-duration': `${morphTransition.duration ?? 0.5}s`,
         pointerEvents: !islandEnabled ? 'none' : undefined,
       } as CSSProperties}

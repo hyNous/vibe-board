@@ -2,7 +2,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { AgentType } from '../types/agent'
-import { CUSTOM_NOTCH_HEIGHT_DEFAULT } from '../utils/islandLayout'
+import { CUSTOM_NOTCH_HEIGHT_DEFAULT, SIDE_ISLAND_SIZE_DEFAULT, type SideIslandSize } from '../utils/islandLayout'
 
 export interface AgentHook {
   agentType: AgentType
@@ -251,6 +251,7 @@ interface ConfigState {
   panelMaxWidth: number
   notchHeightMode: 'matchNotch' | 'matchMenuBar' | 'custom'
   customNotchHeight: number
+  sideIslandSize: SideIslandSize
 
   // Behavior
   excludedHookCwdSubstrings: string
@@ -493,6 +494,7 @@ function createIslandDefaults(): Partial<ConfigState> {
     panelMaxWidth: 630,
     notchHeightMode: 'matchNotch',
     customNotchHeight: CUSTOM_NOTCH_HEIGHT_DEFAULT,
+    sideIslandSize: SIDE_ISLAND_SIZE_DEFAULT,
     excludedHookCwdSubstrings: '',
     sessionSilenceRules: [],
     autoApproveTools: [
@@ -659,6 +661,7 @@ export const useConfigStore = create<ConfigStore>()(
   panelMaxWidth: 630,
   notchHeightMode: 'matchNotch',
   customNotchHeight: CUSTOM_NOTCH_HEIGHT_DEFAULT,
+  sideIslandSize: SIDE_ISLAND_SIZE_DEFAULT,
 
   // Behavior
   excludedHookCwdSubstrings: '',

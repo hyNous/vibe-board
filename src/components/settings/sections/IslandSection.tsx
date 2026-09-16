@@ -7,7 +7,7 @@ import { useThemeStore, COLOR_THEMES } from '../../../stores/themeStore'
 import type { ThemeConfig } from '../../../types/theme'
 import { SpriteCanvas } from '../../notch/SpriteCanvas'
 import { PRIORITY } from '../../../types/priority'
-import { CUSTOM_NOTCH_HEIGHT_MAX, CUSTOM_NOTCH_HEIGHT_MIN } from '../../../utils/islandLayout'
+import { CUSTOM_NOTCH_HEIGHT_MAX, CUSTOM_NOTCH_HEIGHT_MIN, getSideIslandDimensions, type SideIslandSize } from '../../../utils/islandLayout'
 import {
   formatShortcutKeyEvent,
   isRecordableShortcutEvent,
@@ -632,6 +632,7 @@ function DisplayTab() {
       completionCardHeight: state.completionCardHeight,
       maxPanelHeight: state.maxPanelHeight,
       detailPanelMaxHeight: state.detailPanelMaxHeight,
+      sideIslandSize: state.sideIslandSize,
       ...overrides,
     }).catch((e) => console.error('Failed to preview island layout:', e))
     if (previewTimerRef.current) clearTimeout(previewTimerRef.current)
@@ -662,6 +663,12 @@ function DisplayTab() {
     value: String(seconds),
     label: `${seconds}s`,
   }))
+  const sideIslandSizeOptions = [
+    { value: 'narrow', label: t('settings.sideIslandSizeNarrow', { defaultValue: 'Narrow' }) },
+    { value: 'standard', label: t('settings.sideIslandSizeStandard', { defaultValue: 'Standard' }) },
+    { value: 'wide', label: t('settings.sideIslandSizeWide', { defaultValue: 'Wide' }) },
+  ]
+  const sideIslandSizeDimensions = getSideIslandDimensions(config.sideIslandSize)
   const monitorOptions = [
     {
       value: 'primary',
@@ -788,6 +795,24 @@ function DisplayTab() {
           <Slider value={config.panelMaxWidth} min={480} max={760} step={10}
             onChange={(v) => previewLayout('expanded', { panelMaxWidth: v })}
             onCommit={(v) => config.updateConfig('panelMaxWidth', v)} unit="px" />
+        </SettingRow>
+        <SettingRow
+          label={t('settings.sideIslandSize', { defaultValue: 'Side Island Size' })}
+          description={t('settings.sideIslandSizeDesc', {
+            defaultValue: 'Size of the vertical strip docked to the left or right edge: {{value}}px. The top style is unchanged.',
+            value: `${sideIslandSizeDimensions.shellWidth} × ${sideIslandSizeDimensions.panelHeight}`,
+          })}
+        >
+          <Dropdown
+            value={config.sideIslandSize}
+            options={sideIslandSizeOptions}
+            onChange={(v) => {
+              const sideIslandSize = v as SideIslandSize
+              config.updateConfig('sideIslandSize', sideIslandSize)
+              previewLayout('compact', { sideIslandSize })
+            }}
+            minWidth={140}
+          />
         </SettingRow>
         <SettingRow label={t('settings.hoverSpeed')} description={t('settings.hoverSpeedDesc')}>
           <Dropdown value={config.hoverSpeed} options={hoverSpeedOptions}

@@ -164,6 +164,7 @@ describe('NotchPanel island shell', () => {
       notchVerticalOffset: 0,
       panelMaxWidth: 630,
       panelHorizontalOffset: 0,
+      sideIslandSize: 'narrow',
       pixelCursorEnabled: false,
       showCacheTTL: false,
       taskCompleteDwellSeconds: 3,
@@ -375,15 +376,68 @@ describe('NotchPanel island shell', () => {
     // 侧边收起态是竖向长条圆角胶囊：高度大于宽度，且自由边使用半宽圆角。
     const region = screen.getByRole('region', { name: 'Vibe Board' })
     expect(Number.parseFloat(region.style.height)).toBeGreaterThan(Number.parseFloat(hitboxWidthVar()))
-    expect(region.style.clipPath).toContain('36px')
+    expect(region.style.clipPath).toContain('32px')
     await waitFor(() => {
       expect(tauriMocks.isCursorOverNotch).toHaveBeenCalledWith(
         expect.any(Number),
-        148,
+        132,
         expect.any(Number),
         expect.any(Number),
       )
     })
+  })
+
+  it('applies the configured side island size tier to the collapsed vertical strip', () => {
+    tauriMocks.isTauri.mockReturnValue(true)
+    tauriMocks.resizeNotch.mockImplementation(() => new Promise(() => {}))
+    useConfigStore.setState({ notchPositionMode: 'right', sideIslandSize: 'wide' })
+    const currentSession = session({ phase: 'idle' })
+    useSessionStore.setState({
+      sessions: { [currentSession.id]: currentSession },
+      sessionList: [currentSession],
+      activeSessionId: currentSession.id,
+      panelState: 'collapsed',
+      activeOverlay: null,
+      overlayQueue: [],
+      rateLimits: undefined,
+      hookNotification: null,
+      wakeSilencedUntil: 0,
+      focusedTerminal: null,
+    })
+
+    render(<NotchPanel />)
+
+    expect(hitboxWidthVar()).toBe('80px')
+    const region = screen.getByRole('region', { name: 'Vibe Board' })
+    expect(Number.parseFloat(region.style.width)).toBe(80)
+    expect(Number.parseFloat(region.style.height)).toBe(168)
+    expect(region.style.clipPath).toContain('40px')
+  })
+
+  it('keeps the top island sizing independent from the side island size tier', () => {
+    tauriMocks.resizeNotch.mockImplementation(() => new Promise(() => {}))
+    useConfigStore.setState({ notchPositionMode: 'top', sideIslandSize: 'wide' })
+    const currentSession = session({ phase: 'idle' })
+    useSessionStore.setState({
+      sessions: { [currentSession.id]: currentSession },
+      sessionList: [currentSession],
+      activeSessionId: currentSession.id,
+      panelState: 'collapsed',
+      activeOverlay: null,
+      overlayQueue: [],
+      rateLimits: undefined,
+      hookNotification: null,
+      wakeSilencedUntil: 0,
+      focusedTerminal: null,
+    })
+
+    render(<NotchPanel />)
+
+    expect(document.querySelector('.notch-container')).toHaveAttribute('data-notch-position', 'top')
+    expect(hitboxWidthVar()).toBe('140px')
+    const region = screen.getByRole('region', { name: 'Vibe Board' })
+    expect(Number.parseFloat(region.style.width)).toBe(140)
+    expect(Number.parseFloat(region.style.height)).toBe(MATCH_NOTCH_HEIGHT)
   })
 
   it('does not resize the native side canvas again after hover opens', () => {
@@ -611,7 +665,12 @@ describe('NotchPanel island shell', () => {
     fireEvent.pointerMove(dragHandle, { pointerId: 7, clientX: 118, clientY: 2 })
 
     await waitFor(() => {
-      expect(tauriMocks.startNotchDrag).toHaveBeenCalledWith(0, 686, 332, 'auto')
+      expect(tauriMocks.startNotchDrag).toHaveBeenCalledWith(0, 686, 332, 'auto', {
+        visibleWidth: 658,
+        visibleHeight: 320,
+        offsetX: 14,
+        offsetY: 0,
+      })
     })
     expect(screen.getByRole('region', { name: 'Vibe Board' })).toHaveAttribute('data-dragging', 'true')
     expect(screen.getByTestId('notch-hover-content')).toBeInTheDocument()
@@ -620,6 +679,25 @@ describe('NotchPanel island shell', () => {
 
     await waitFor(() => {
       expect(tauriMocks.endNotchDrag).toHaveBeenCalled()
+    })
+  })
+
+  it('drags the visible side strip instead of the oversized transparent host', async () => {
+    tauriMocks.resizeNotch.mockImplementation(() => new Promise(() => {}))
+    useConfigStore.setState({ allowHorizontalDrag: true, notchPositionMode: 'right' })
+    mountIsland()
+
+    const region = screen.getByRole('region', { name: 'Vibe Board' })
+    fireEvent.pointerDown(region, { button: 0, pointerId: 9, clientX: 60, clientY: 260 })
+    fireEvent.pointerMove(region, { pointerId: 9, clientX: 60, clientY: 240 })
+
+    await waitFor(() => {
+      expect(tauriMocks.startNotchDrag).toHaveBeenCalledWith(0, 658, 612, 'auto', {
+        visibleWidth: 658,
+        visibleHeight: 320,
+        offsetX: 0,
+        offsetY: 140,
+      })
     })
   })
 

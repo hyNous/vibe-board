@@ -46,6 +46,7 @@ use telemetry::TelemetryService;
 struct NotchDragState {
     start_cursor_x: f64,
     start_cursor_y: f64,
+    cursor_scale: f64,
     start_window_x: f64,
     start_window_y: f64,
     min_x: f64,
@@ -54,6 +55,8 @@ struct NotchDragState {
     max_y: f64,
     base_x: f64,
     base_y: f64,
+    visible_offset_x: f64,
+    visible_offset_y: f64,
     last_window_x: f64,
     last_window_y: f64,
 }
@@ -4983,8 +4986,8 @@ mod pet_window_tests {
     #[cfg(target_os = "windows")]
     use super::notch_frame_to_physical;
     use super::{
-        clamp_point_into_rect, distance_point_to_rect, notch_drop_position_mode,
-        pet_window_rect_has_visible_area, Rect,
+        clamp_point_into_rect, distance_point_to_rect, notch_cursor_scale,
+        notch_drag_window_bounds, notch_drop_position_mode, pet_window_rect_has_visible_area, Rect,
     };
 
     #[cfg(target_os = "windows")]
@@ -4999,18 +5002,102 @@ mod pet_window_tests {
     #[test]
     fn notch_drop_always_selects_an_edge() {
         assert_eq!(
-            notch_drop_position_mode(1600.0, 0.0, 0.0, 1600.0, 0.0),
+            notch_drop_position_mode(1600.0, 0.0, 0.0, 1600.0, 0.0, "top"),
             "right"
         );
-        assert_eq!(notch_drop_position_mode(0.0, 0.0, 0.0, 1600.0, 0.0), "left");
         assert_eq!(
-            notch_drop_position_mode(700.0, 20.0, 0.0, 1600.0, 0.0),
+            notch_drop_position_mode(0.0, 0.0, 0.0, 1600.0, 0.0, "top"),
+            "left"
+        );
+        assert_eq!(
+            notch_drop_position_mode(700.0, 20.0, 0.0, 1600.0, 0.0, "right"),
             "top"
         );
         assert_eq!(
-            notch_drop_position_mode(20.0, 400.0, 0.0, 1600.0, 0.0),
+            notch_drop_position_mode(20.0, 400.0, 0.0, 1600.0, 0.0, "top"),
             "left"
         );
+    }
+
+    #[test]
+    fn notch_drop_can_leave_the_docked_edge_when_the_new_edge_is_touched() {
+        // Coordinates here are the visible-rect ones end_notch_drag passes.
+        // Right-docked strip dragged straight up until its visible top touches
+        // the monitor top: the right edge is still flush (distance 0) and must
+        // not win the tie, otherwise the island can never dock top from a side.
+        assert_eq!(
+            notch_drop_position_mode(1262.0, 0.0, 0.0, 1262.0, 0.0, "right"),
+            "top"
+        );
+        assert_eq!(
+            notch_drop_position_mode(0.0, 0.0, 0.0, 1262.0, 0.0, "left"),
+            "top"
+        );
+        // Top-docked pill keeps top until it actually reaches the left edge...
+        assert_eq!(
+            notch_drop_position_mode(300.0, 0.0, 0.0, 1600.0, 0.0, "top"),
+            "top"
+        );
+        // ...then docks left at the edge.
+        assert_eq!(
+            notch_drop_position_mode(0.0, 0.0, 0.0, 1600.0, 0.0, "top"),
+            "left"
+        );
+        // A drag that never leaves the docked side keeps it.
+        assert_eq!(
+            notch_drop_position_mode(1262.0, 400.0, 0.0, 1262.0, 0.0, "right"),
+            "right"
+        );
+        // Releasing inside the touch zone of the new edge already docks there.
+        assert_eq!(
+            notch_drop_position_mode(1254.0, 0.0, 0.0, 1262.0, 0.0, "right"),
+            "top"
+        );
+        assert_eq!(
+            notch_drop_position_mode(10.0, 0.0, 0.0, 1600.0, 0.0, "top"),
+            "left"
+        );
+    }
+
+    #[test]
+    fn notch_drag_bounds_follow_the_visible_island_not_the_host() {
+        // Windows regression: a 658x612 transparent side host held a 64x132
+        // strip vertically centered (offset y=240). The old clamp used the host
+        // rect, so the visible strip could not rise above y=240.
+        let (min_x, max_x, min_y, max_y, base_x, base_y) = notch_drag_window_bounds(
+            0.0, 0.0, 1920.0, 1080.0, 658.0, 612.0, 64.0, 132.0, 594.0, 240.0,
+        );
+
+        assert_eq!(min_y, -240.0);
+        assert_eq!(min_x, -594.0);
+        assert_eq!(max_x, 1262.0);
+        assert_eq!(max_y, 708.0);
+        assert_eq!(base_x, (1920.0 - 658.0) / 2.0);
+        assert_eq!(base_y, (1080.0 - 612.0) / 2.0);
+        // The visible strip can touch every monitor edge even though the host
+        // hangs off-screen.
+        assert_eq!(min_x + 594.0, 0.0);
+        assert_eq!(max_x + 594.0 + 64.0, 1920.0);
+        assert_eq!(min_y + 240.0, 0.0);
+        assert_eq!(max_y + 240.0 + 132.0, 1080.0);
+    }
+
+    #[test]
+    fn notch_drag_bounds_without_visible_rect_match_the_host() {
+        let (min_x, max_x, min_y, max_y, _, _) = notch_drag_window_bounds(
+            0.0, 0.0, 1920.0, 1080.0, 658.0, 612.0, 658.0, 612.0, 0.0, 0.0,
+        );
+        assert_eq!((min_x, max_x, min_y, max_y), (0.0, 1262.0, 0.0, 468.0));
+    }
+
+    #[test]
+    fn notch_cursor_scale_matches_cursor_units() {
+        // Windows reports physical cursor pixels while macOS reports logical
+        // points; notch drag math runs in logical units.
+        #[cfg(target_os = "windows")]
+        assert_eq!(notch_cursor_scale(1.5), 1.5);
+        #[cfg(not(target_os = "windows"))]
+        assert_eq!(notch_cursor_scale(1.5), 1.0);
     }
 
     #[test]
@@ -5255,31 +5342,104 @@ fn notch_drag_bounds(
     monitor: &tauri::Monitor,
     width: f64,
     height: f64,
+    visible_width: f64,
+    visible_height: f64,
+    visible_offset_x: f64,
+    visible_offset_y: f64,
 ) -> (f64, f64, f64, f64, f64, f64) {
     let scale = monitor.scale_factor();
     let screen_width = monitor.size().width as f64 / scale;
     let screen_height = monitor.size().height as f64 / scale;
     let monitor_x = monitor.position().x as f64 / scale;
     let monitor_y = monitor.position().y as f64 / scale;
-    let min_x = monitor_x;
-    let max_x = (monitor_x + screen_width - width).max(min_x);
-    let min_y = monitor_y;
-    let max_y = (monitor_y + screen_height - height).max(min_y);
+    notch_drag_window_bounds(
+        monitor_x,
+        monitor_y,
+        screen_width,
+        screen_height,
+        width,
+        height,
+        visible_width,
+        visible_height,
+        visible_offset_x,
+        visible_offset_y,
+    )
+}
+
+/// Window-position bounds for dragging the island. The clamp follows the
+/// *visible* shell rect (window position + its offset inside the transparent
+/// host), not the host itself: the host is much larger than the collapsed
+/// strip, and clamping the host parked the visible strip far below the top
+/// edge until it snapped. The host may hang off-screen.
+#[allow(clippy::too_many_arguments)]
+fn notch_drag_window_bounds(
+    monitor_x: f64,
+    monitor_y: f64,
+    screen_width: f64,
+    screen_height: f64,
+    width: f64,
+    height: f64,
+    visible_width: f64,
+    visible_height: f64,
+    visible_offset_x: f64,
+    visible_offset_y: f64,
+) -> (f64, f64, f64, f64, f64, f64) {
+    let min_x = monitor_x - visible_offset_x;
+    let max_x = (monitor_x + screen_width - visible_offset_x - visible_width).max(min_x);
+    let min_y = monitor_y - visible_offset_y;
+    let max_y = (monitor_y + screen_height - visible_offset_y - visible_height).max(min_y);
     let base_x = monitor_x + (screen_width - width) / 2.0;
     let base_y = monitor_y + (screen_height - height) / 2.0;
     (min_x, max_x, min_y, max_y, base_x, base_y)
 }
 
+/// `get_cursor_position_sync` reports physical pixels on Windows but logical
+/// points on macOS; notch drag math runs in logical window units.
+fn notch_cursor_scale(monitor_scale: f64) -> f64 {
+    #[cfg(target_os = "windows")]
+    {
+        monitor_scale.max(1.0)
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = monitor_scale;
+        1.0
+    }
+}
+
+/// The edge the island is already docked to only wins when it is strictly the
+/// closest one, so a drag that reaches a new edge can actually leave the
+/// current dock (right-strip dragged up still docks top while flush right).
+/// Releasing inside the touch zone of another edge counts as reaching it.
 fn notch_drop_position_mode(
     window_x: f64,
     window_y: f64,
     min_x: f64,
     max_x: f64,
     min_y: f64,
+    docked_mode: &str,
 ) -> &'static str {
-    let left_distance = (window_x - min_x).abs();
-    let right_distance = (max_x - window_x).abs();
-    let top_distance = (window_y - min_y).abs();
+    const DOCK_TOUCH_SLOP: f64 = 16.0;
+    let mut left_distance = (window_x - min_x).abs();
+    let mut right_distance = (max_x - window_x).abs();
+    let mut top_distance = (window_y - min_y).abs();
+    match docked_mode {
+        "left" => {
+            if left_distance < DOCK_TOUCH_SLOP {
+                left_distance = DOCK_TOUCH_SLOP;
+            }
+        }
+        "right" => {
+            if right_distance < DOCK_TOUCH_SLOP {
+                right_distance = DOCK_TOUCH_SLOP;
+            }
+        }
+        _ => {
+            if top_distance < DOCK_TOUCH_SLOP {
+                top_distance = DOCK_TOUCH_SLOP;
+            }
+        }
+    }
     if left_distance <= right_distance && left_distance <= top_distance {
         "left"
     } else if right_distance <= top_distance {
@@ -5334,17 +5494,21 @@ async fn clear_island_layout_preview(app: tauri::AppHandle) -> Result<(), String
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 async fn start_notch_drag(
     app: tauri::AppHandle,
     horizontal_offset: f64,
     width: f64,
     height: f64,
     display_id: Option<String>,
+    visible_width: Option<f64>,
+    visible_height: Option<f64>,
+    visible_offset_x: Option<f64>,
+    visible_offset_y: Option<f64>,
 ) -> Result<bool, String> {
     let Some(window) = app.get_webview_window("notch") else {
         return Ok(false);
     };
-    let (cursor_x, cursor_y) = get_cursor_position_sync()?;
     let config_store = app.state::<AppState>();
     let config = config_store.config_store.get();
     let configured_display_id = config.display_id;
@@ -5358,7 +5522,31 @@ async fn start_notch_drag(
     let Some(monitor) = monitor else {
         return Ok(false);
     };
-    let (min_x, max_x, min_y, max_y, base_x, base_y) = notch_drag_bounds(&monitor, width, height);
+    let cursor_scale = notch_cursor_scale(monitor.scale_factor());
+    let (cursor_x, cursor_y) = get_cursor_position_sync()?;
+    let cursor_x = cursor_x / cursor_scale;
+    let cursor_y = cursor_y / cursor_scale;
+    let visible_width = visible_width
+        .filter(|value| *value > 0.0 && *value <= width)
+        .unwrap_or(width);
+    let visible_height = visible_height
+        .filter(|value| *value > 0.0 && *value <= height)
+        .unwrap_or(height);
+    let visible_offset_x = visible_offset_x
+        .unwrap_or(0.0)
+        .clamp(0.0, (width - visible_width).max(0.0));
+    let visible_offset_y = visible_offset_y
+        .unwrap_or(0.0)
+        .clamp(0.0, (height - visible_height).max(0.0));
+    let (min_x, max_x, min_y, max_y, base_x, base_y) = notch_drag_bounds(
+        &monitor,
+        width,
+        height,
+        visible_width,
+        visible_height,
+        visible_offset_x,
+        visible_offset_y,
+    );
     let (window_x, window_y, _) = notch_window_geometry(
         &monitor,
         width,
@@ -5382,6 +5570,7 @@ async fn start_notch_drag(
         *drag = Some(NotchDragState {
             start_cursor_x: cursor_x,
             start_cursor_y: cursor_y,
+            cursor_scale,
             start_window_x: window_x,
             start_window_y: window_y,
             min_x,
@@ -5390,6 +5579,8 @@ async fn start_notch_drag(
             max_y,
             base_x,
             base_y,
+            visible_offset_x,
+            visible_offset_y,
             last_window_x: window_x.round(),
             last_window_y: window_y.round(),
         });
@@ -5447,6 +5638,8 @@ fn update_notch_drag_position(app: &tauri::AppHandle) -> Result<bool, String> {
         let Some(state) = drag.as_mut() else {
             return Ok(false);
         };
+        let cursor_x = cursor_x / state.cursor_scale;
+        let cursor_y = cursor_y / state.cursor_scale;
         let window_x = (state.start_window_x + cursor_x - state.start_cursor_x)
             .clamp(state.min_x, state.max_x)
             .round();
@@ -5472,17 +5665,23 @@ fn update_notch_drag_position(app: &tauri::AppHandle) -> Result<bool, String> {
 
 #[tauri::command]
 async fn end_notch_drag(app: tauri::AppHandle) -> Result<Option<NotchDragResult>, String> {
+    let docked_mode = app
+        .state::<AppState>()
+        .config_store
+        .get()
+        .notch_position_mode;
     let final_position = {
         let mut drag = notch_drag_state()
             .lock()
             .map_err(|e| format!("Drag lock error: {}", e))?;
         drag.take().map(|state| {
             let position_mode = notch_drop_position_mode(
-                state.last_window_x,
-                state.last_window_y,
-                state.min_x,
-                state.max_x,
-                state.min_y,
+                state.last_window_x + state.visible_offset_x,
+                state.last_window_y + state.visible_offset_y,
+                state.min_x + state.visible_offset_x,
+                state.max_x + state.visible_offset_x,
+                state.min_y + state.visible_offset_y,
+                &docked_mode,
             );
             let horizontal_offset = if matches!(position_mode, "left" | "right") {
                 0.0

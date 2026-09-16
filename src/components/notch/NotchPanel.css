@@ -203,12 +203,12 @@ html[data-island-color-theme="midnight"] .notch-panel[data-island-state="micro"]
 /* 侧边收起态：竖向长条圆角胶囊，自由边半径取壳宽的一半（与顶部横向长条对应）。 */
 .notch-panel[data-notch-position="left"][data-island-state="micro"],
 .notch-panel[data-notch-position="left"][data-island-state="compact"] {
-  border-radius: 0 36px 36px 0 !important;
+  border-radius: 0 var(--notch-side-radius, 36px) var(--notch-side-radius, 36px) 0 !important;
 }
 
 .notch-panel[data-notch-position="right"][data-island-state="micro"],
 .notch-panel[data-notch-position="right"][data-island-state="compact"] {
-  border-radius: 36px 0 0 36px !important;
+  border-radius: var(--notch-side-radius, 36px) 0 0 var(--notch-side-radius, 36px) !important;
 }
 
 .notch-panel[data-island-state="pet"] {
