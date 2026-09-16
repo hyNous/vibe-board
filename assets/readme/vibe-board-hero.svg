@@ -1,58 +1,66 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="360" viewBox="0 0 1200 360" role="img" aria-labelledby="title desc">
-  <title id="title">Vibe Board desktop control console</title>
-  <desc id="desc">Vibe Board collects AI coding agent sessions, approvals, traces, token usage, quota snapshots, and shared skills in one floating desktop workspace.</desc>
+  <title id="title">Vibe Board — a screen-edge task board for AI coding agents</title>
+  <desc id="desc">Vibe Board docks a compact island to the screen edge and shows task status, approvals, and usage for AI coding agents such as Claude Code, Codex, and OpenCode, alongside agent and Skill management.</desc>
 
-  <rect width="1200" height="360" rx="28" fill="#111827"/>
-  <path d="M56 296H1144" stroke="#2A3446" stroke-width="2"/>
+  <defs>
+    <clipPath id="frame"><rect width="1200" height="360" rx="28" /></clipPath>
+  </defs>
 
-  <g id="title-block" transform="translate(64 52)">
-    <text x="0" y="0" fill="#71E0C3" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif" font-size="18" font-weight="700" letter-spacing="3">DESKTOP AGENT CONSOLE</text>
-    <text x="0" y="72" fill="#F7F9FC" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif" font-size="62" font-weight="800" letter-spacing="-2">Vibe Board</text>
-    <text x="0" y="116" fill="#C8D0DE" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif" font-size="24">See every coding agent clearly, without chasing terminals.</text>
-    <text x="0" y="151" fill="#8793A8" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif" font-size="20">Sessions · approvals · trace time · token/quota · shared Skills</text>
+  <g clip-path="url(#frame)">
+    <rect width="1200" height="360" fill="#FBF4E6" />
+    <circle cx="70" cy="372" r="150" fill="#F4E7D1" />
+    <path d="M1140 0 L1172 0 A28 28 0 0 1 1200 28 L1200 332 A28 28 0 0 1 1172 360 L1140 360 Z" fill="#EFE2CB" />
+    <path d="M1140 0 L1140 360" stroke="#D8CBB2" stroke-width="2" />
+  </g>
 
-    <g transform="translate(0 199)">
-      <rect width="124" height="40" rx="20" fill="#1B2E37" stroke="#2C665D"/>
-      <circle cx="23" cy="20" r="6" fill="#71E0C3"/>
-      <text x="39" y="27" fill="#DDFBF2" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="18">Hooks</text>
-      <rect x="136" width="124" height="40" rx="20" fill="#25283A" stroke="#4C5270"/>
-      <circle cx="159" cy="20" r="6" fill="#9E9BFF"/>
-      <text x="175" y="27" fill="#E9E7FF" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="18">Trace</text>
-      <rect x="272" width="170" height="40" rx="20" fill="#3A3020" stroke="#8E6E39"/>
-      <circle cx="295" cy="20" r="6" fill="#F3C567"/>
-      <text x="311" y="27" fill="#FFF0C7" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="18">Token / quota</text>
+  <g transform="translate(72 62)">
+    <text x="0" y="0" fill="#0C6B63" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif" font-size="17" font-weight="700" letter-spacing="2.6">SCREEN-EDGE TASK BOARD</text>
+    <text x="0" y="74" fill="#0F3B36" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif" font-size="64" font-weight="800" letter-spacing="-2">Vibe Board</text>
+    <text x="0" y="120" fill="#2C4A46" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif" font-size="27">Your AI coding agents, at the screen edge.</text>
+    <text x="0" y="154" fill="#6A7A75" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif" font-size="20">Task status · approvals · usage · Agents + Skills</text>
+
+    <g transform="translate(0 190)">
+      <rect width="162" height="42" rx="21" fill="#E1F0EA" stroke="#9FCFC0" />
+      <circle cx="24" cy="21" r="6" fill="#0C6B63" />
+      <text x="42" y="28" fill="#0B4F4A" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="17">Local-only</text>
+
+      <rect x="174" width="172" height="42" rx="21" fill="#FBE8D2" stroke="#EDBF90" />
+      <circle cx="198" cy="21" r="6" fill="#D9772A" />
+      <text x="216" y="28" fill="#8A4A12" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="17">Windows x64</text>
+
+      <rect x="358" width="222" height="42" rx="21" fill="#EFE8D8" stroke="#DBCDB1" />
+      <circle cx="382" cy="21" r="6" fill="#7A8A84" />
+      <text x="400" y="28" fill="#41544E" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="17">Best-effort sync</text>
     </g>
   </g>
 
-  <g id="session-proof" transform="translate(714 40)">
-    <rect x="0" y="0" width="422" height="270" rx="24" fill="#0B101A" stroke="#334158" stroke-width="2"/>
-    <rect x="24" y="22" width="374" height="50" rx="25" fill="#182333"/>
-    <circle cx="52" cy="47" r="8" fill="#71E0C3"/>
-    <text x="72" y="54" fill="#F7F9FC" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif" font-size="21" font-weight="700">3 sessions in view</text>
-    <text x="310" y="53" fill="#8793A8" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="16">LOCAL</text>
+  <g transform="translate(680 42)">
+    <rect x="0" y="0" width="460" height="276" rx="24" fill="#FFFFFF" stroke="#E7DBC3" stroke-width="2" />
+    <text x="28" y="36" fill="#6A7A75" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif" font-size="21">3 tasks in view</text>
 
-    <g transform="translate(24 92)">
-      <rect width="374" height="48" rx="14" fill="#182333"/>
-      <circle cx="22" cy="24" r="6" fill="#71E0C3"/>
-      <text x="40" y="30" fill="#DCE5F1" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif" font-size="18">Claude Code</text>
-      <text x="286" y="30" fill="#71E0C3" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="16">RUNNING</text>
+    <g transform="translate(28 56)">
+      <rect width="352" height="56" rx="14" fill="#F7F1E4" />
+      <circle cx="26" cy="28" r="7" fill="#0C6B63" />
+      <text x="48" y="36" fill="#153D39" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif" font-size="21">Claude Code</text>
+      <text x="326" y="35" text-anchor="end" fill="#0C6B63" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="16">RUNNING</text>
     </g>
-    <g transform="translate(24 148)">
-      <rect width="374" height="48" rx="14" fill="#182333"/>
-      <circle cx="22" cy="24" r="6" fill="#F3C567"/>
-      <text x="40" y="30" fill="#DCE5F1" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif" font-size="18">Codex</text>
-      <text x="292" y="30" fill="#F3C567" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="16">WAITING</text>
+    <g transform="translate(28 120)">
+      <rect width="352" height="56" rx="14" fill="#F7F1E4" />
+      <circle cx="26" cy="28" r="7" fill="#D9772A" />
+      <text x="48" y="36" fill="#153D39" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif" font-size="21">Codex</text>
+      <text x="326" y="35" text-anchor="end" fill="#C96A1E" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="16">WAITING</text>
     </g>
-    <g transform="translate(24 204)">
-      <rect width="374" height="48" rx="14" fill="#182333"/>
-      <circle cx="22" cy="24" r="6" fill="#9E9BFF"/>
-      <text x="40" y="30" fill="#DCE5F1" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif" font-size="18">OpenCode</text>
-      <text x="310" y="30" fill="#9E9BFF" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="16">TRACE</text>
+    <g transform="translate(28 184)">
+      <rect width="352" height="56" rx="14" fill="#F7F1E4" />
+      <circle cx="26" cy="28" r="7" fill="#7A8A84" />
+      <text x="48" y="36" fill="#153D39" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif" font-size="21">OpenCode</text>
+      <text x="326" y="35" text-anchor="end" fill="#5E7A73" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="16">DONE</text>
     </g>
-  </g>
 
-  <g id="island-mark" transform="translate(1070 314)">
-    <rect width="66" height="26" rx="13" fill="#71E0C3"/>
-    <text x="33" y="19" text-anchor="middle" fill="#111827" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="14" font-weight="700">AI</text>
+    <rect x="436" y="70" width="52" height="150" rx="26" fill="#0B1017" />
+    <circle cx="462" cy="100" r="7" fill="#2FD3A8" />
+    <circle cx="462" cy="130" r="7" fill="#F0A24B" />
+    <circle cx="462" cy="160" r="7" fill="#6E8290" />
+    <rect x="452" y="182" width="20" height="7" rx="3.5" fill="#3A4854" />
   </g>
 </svg>
