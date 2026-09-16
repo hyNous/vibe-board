@@ -122,12 +122,10 @@ describe('runtime environment switcher', () => {
     render(
       <SettingsSidebar
         activeSection="skill-manager-v2"
-        activeIslandView="overview"
         activeMonitorView="overview"
         collapsed={false}
         onCollapsedChange={() => {}}
         onSelect={onSelect}
-        onIslandViewChange={() => {}}
         onMonitorViewChange={() => {}}
       />,
     )
@@ -156,7 +154,7 @@ describe('runtime environment switcher', () => {
 
     expect(screen.queryByRole('status', { name: 'Current runtime environment: GPU Box' })).not.toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Agent 管理' })).toBeInTheDocument()
-    expect(screen.getByText('查看每个 Agent 的 Skills、技能包与 Hook 状态。')).toBeInTheDocument()
+    expect(screen.getByText('检测本机可管理的 Agent，并维护每个 Agent 的 Skills、技能包、Hook 与配置。')).toBeInTheDocument()
   })
 
   it('keeps the original Skill library interface for a remote server', async () => {

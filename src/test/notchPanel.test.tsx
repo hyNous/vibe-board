@@ -372,10 +372,14 @@ describe('NotchPanel island shell', () => {
     const container = document.querySelector('.notch-container') as HTMLElement
     expect(container).toHaveAttribute('data-notch-position', 'right')
     expect(Number.parseFloat(hostWidthVar())).toBeGreaterThan(Number.parseFloat(hitboxWidthVar()))
+    // 侧边收起态是竖向长条圆角胶囊：高度大于宽度，且自由边使用半宽圆角。
+    const region = screen.getByRole('region', { name: 'Vibe Board' })
+    expect(Number.parseFloat(region.style.height)).toBeGreaterThan(Number.parseFloat(hitboxWidthVar()))
+    expect(region.style.clipPath).toContain('36px')
     await waitFor(() => {
       expect(tauriMocks.isCursorOverNotch).toHaveBeenCalledWith(
         expect.any(Number),
-        92,
+        148,
         expect.any(Number),
         expect.any(Number),
       )

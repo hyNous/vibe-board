@@ -70,6 +70,27 @@ describe('collapsed bar settings button', () => {
     await waitFor(() => expect(tauriMocks.openSettingsWindow).toHaveBeenCalledTimes(1))
   })
 
+  it('shows only the executing Agent name in the collapsed island without quota, counters, or gear', () => {
+    const { container } = render(
+      <CollapsedBar sessions={[session()]} panelState="collapsed" onCollapse={vi.fn()} />,
+    )
+
+    expect(container.querySelector('.collapsed-bar__agent-name')).toHaveTextContent('Codex')
+    expect(container.querySelector('.collapsed-bar__icon-btn')).toBeNull()
+    expect(container.querySelector('.collapsed-bar__counter-pill')).toBeNull()
+    expect(container.querySelector('.collapsed-bar__status-row')).toBeNull()
+  })
+
+  it('keeps the collapsed island as icon-only when no session is executing', () => {
+    const { container } = render(
+      <CollapsedBar sessions={[]} panelState="collapsed" onCollapse={vi.fn()} />,
+    )
+
+    expect(container.querySelector('.collapsed-bar__agent-name')).toBeNull()
+    expect(screen.getByLabelText('Vibe Board')).toBeInTheDocument()
+    expect(container.querySelector('.collapsed-bar__icon-btn')).toBeNull()
+  })
+
   it('omits waiting details and collapsed gear in the collapsed island when waiting for approval', () => {
     const { container } = render(
       <CollapsedBar

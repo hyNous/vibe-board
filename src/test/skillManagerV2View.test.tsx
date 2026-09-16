@@ -936,12 +936,10 @@ describe('Marketplace install flow', () => {
     render(
       <SettingsSidebar
         activeSection="skill-manager-v2"
-        activeIslandView="overview"
         activeMonitorView="overview"
         collapsed={false}
         onCollapsedChange={() => {}}
         onSelect={() => {}}
-        onIslandViewChange={() => {}}
         onMonitorViewChange={() => {}}
       />,
     )
@@ -3125,7 +3123,9 @@ describe('Skill detail slider + agent page render without crashing', () => {
     expect(container.querySelector('.sm2__rail')).toBeNull()
     expect(container.querySelector('.sm2__agent-picker')).toBeNull()
     expect(container.querySelector('.sm2__main--full')).not.toBeNull()
-    expect(screen.getByText('Claude Code')).toBeInTheDocument()
+    // 内容区展示本机 Agent 检测总览，但仍是详情主画布，不恢复旧 picker。
+    expect(container.querySelector('.sm2-agent-inventory')).not.toBeNull()
+    expect(screen.getAllByText('Claude Code').length).toBeGreaterThan(0)
   })
 
   it('summarizes Agent health and opens capability details from the overview', async () => {
@@ -3274,12 +3274,10 @@ describe('Skill detail slider + agent page render without crashing', () => {
     render(
       <SettingsSidebar
         activeSection="skill-manager-v2"
-        activeIslandView="overview"
         activeMonitorView="overview"
         collapsed={false}
         onCollapsedChange={() => {}}
         onSelect={() => {}}
-        onIslandViewChange={() => {}}
         onMonitorViewChange={() => {}}
       />,
     )
@@ -3323,12 +3321,10 @@ describe('Skill detail slider + agent page render without crashing', () => {
     const { container } = render(
       <SettingsSidebar
         activeSection="skill-manager-v2"
-        activeIslandView="overview"
         activeMonitorView="overview"
         collapsed={false}
         onCollapsedChange={() => {}}
         onSelect={() => {}}
-        onIslandViewChange={() => {}}
         onMonitorViewChange={() => {}}
       />,
     )
@@ -6275,12 +6271,10 @@ describe('Skill detail slider + agent page render without crashing', () => {
       <>
         <SettingsSidebar
           activeSection="skill-manager-v2"
-          activeIslandView="overview"
           activeMonitorView="overview"
           collapsed={false}
           onCollapsedChange={() => {}}
           onSelect={() => {}}
-          onIslandViewChange={() => {}}
           onMonitorViewChange={() => {}}
         />
         <AgentManagementPage />

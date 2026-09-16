@@ -163,7 +163,20 @@
 
 .collapsed-bar__main--closed {
   justify-content: center;
-  padding: 0;
+  padding: 0 10px;
+  gap: 7px;
+}
+
+/* 收起态运行中：只显示正在工作的 Agent 名称，不显示额度 / 计数 / 齿轮 */
+.collapsed-bar__agent-name {
+  max-width: 168px;
+  overflow: hidden;
+  color: var(--island-text);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .collapsed-bar__left {
@@ -718,6 +731,15 @@
 .notch-panel[data-notch-position="right"] .collapsed-bar:not(.collapsed-bar--expanded) .collapsed-bar__icon-btn {
   width: 20px;
   height: 20px;
+}
+
+/* 侧边收起态是窄长胶囊：运行中的 Agent 名竖排显示，避免被横向裁切。 */
+.notch-panel[data-notch-position="left"] .collapsed-bar:not(.collapsed-bar--expanded) .collapsed-bar__agent-name,
+.notch-panel[data-notch-position="right"] .collapsed-bar:not(.collapsed-bar--expanded) .collapsed-bar__agent-name {
+  max-width: none;
+  max-height: 88px;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
 }
 
 .notch-panel[data-notch-position="left"] .collapsed-bar--micro .collapsed-bar__micro-main,

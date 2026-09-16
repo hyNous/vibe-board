@@ -358,6 +358,7 @@ impl CodexAdapter {
         config_toml_path: &Path,
         settings: &serde_json::Value,
         hook_command: &str,
+        backup_root: &Path,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let source_path = hooks_path
             .canonicalize()
@@ -431,7 +432,7 @@ impl CodexAdapter {
         if states.is_empty() {
             return Ok(());
         }
-        upsert_codex_trust_state(config_toml_path, &states)?;
+        upsert_codex_trust_state(config_toml_path, &states, backup_root)?;
         Ok(())
     }
 }
@@ -460,6 +461,7 @@ impl AgentAdapter for CodexAdapter {
             &self.config_toml_path(),
             &settings,
             &hook_command,
+            &codex_trust_backup_root(),
         )?;
         log::info!("Codex hooks installed");
         Ok(())
@@ -1046,92 +1048,465 @@ fn canonical_json(value: &serde_json::Value) -> String {
     }
 }
 
+fn codex_trust_backup_root() -> PathBuf {
+    crate::data_dir::agent_island_home()
+        .join("hooks")
+        .join("backups")
+}
+
+/// Add or refresh the `hooks.state.<key>` entries in the Codex `config.toml`.
+///
+/// The candidate is written only after a standard TOML parser accepts it, a
+/// backup of the previous revision exists, and the file still matches what was
+/// read. Conflicting duplicate states abort the write and keep the original.
 fn upsert_codex_trust_state(
     config_path: &Path,
     states: &BTreeMap<String, String>,
+    backup_root: &Path,
 ) -> Result<(), Box<dyn std::error::Error>> {
     if let Some(parent) = config_path.parent() {
         std::fs::create_dir_all(parent)?;
     }
 
-    let existing = std::fs::read_to_string(config_path).unwrap_or_default();
-    let mut content = ensure_codex_hooks_feature(&existing);
-    let headers = states
-        .keys()
-        .map(|key| format!("[hooks.state.\"{}\"]", toml_basic_string(key)))
-        .collect::<BTreeSet<_>>();
-    content = remove_toml_tables(&content, &headers)
-        .trim_end()
-        .to_string();
+    let original = match std::fs::read(config_path) {
+        Ok(bytes) => Some(bytes),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(error) => {
+            return Err(format!(
+                "Failed to read Codex config {}: {error}",
+                config_path.display()
+            )
+            .into())
+        }
+    };
+    let original_text = original
+        .as_deref()
+        .map(std::str::from_utf8)
+        .transpose()
+        .map_err(|error| {
+            format!(
+                "Refusing to rewrite Codex config {}: it is not valid UTF-8: {error}",
+                config_path.display()
+            )
+        })?;
 
-    for (key, trusted_hash) in states {
-        content.push_str("\n\n");
-        content.push_str(&format!(
-            "[hooks.state.\"{}\"]\ntrusted_hash = \"{}\"",
-            toml_basic_string(key),
-            toml_basic_string(trusted_hash)
-        ));
+    let candidate = build_codex_trust_candidate(original_text.unwrap_or_default(), states)?;
+
+    // The standard parser rejects both malformed TOML and duplicate keys, so a
+    // candidate it accepts cannot leave Codex with an unreadable config.
+    if let Err(error) = candidate.parse::<toml_edit::DocumentMut>() {
+        return Err(format!("Refusing to write invalid Codex config: {error}").into());
     }
-    content.push('\n');
-    std::fs::write(config_path, content)?;
+
+    if original_text == Some(candidate.as_str()) {
+        return Ok(());
+    }
+
+    if let Some(bytes) = original.as_deref() {
+        write_codex_config_backup(config_path, bytes, backup_root)?;
+    }
+    write_codex_config_file(config_path, original.as_deref(), candidate.as_bytes())
+}
+
+fn build_codex_trust_candidate(
+    content: &str,
+    states: &BTreeMap<String, String>,
+) -> Result<String, Box<dyn std::error::Error>> {
+    match content.parse::<toml_edit::DocumentMut>() {
+        Ok(mut document) => {
+            apply_codex_trust_states(&mut document, states)?;
+            Ok(document.to_string())
+        }
+        // A config that already contains two spellings of the same state cannot
+        // be parsed as a whole. Repair it only when every copy of the state
+        // agrees on the trusted hash and no field would be dropped; otherwise
+        // the original file is kept.
+        Err(_) => merge_codex_trust_duplicates(content, states),
+    }
+}
+
+fn apply_codex_trust_states(
+    document: &mut toml_edit::DocumentMut,
+    states: &BTreeMap<String, String>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    ensure_codex_hooks_feature(document)?;
+    let state = codex_trust_state_table(document, true)?;
+    for (key, trusted_hash) in states {
+        match state.entry(key) {
+            toml_edit::Entry::Occupied(mut entry) => {
+                let table = entry
+                    .get_mut()
+                    .as_table_like_mut()
+                    .ok_or_else(|| format!("Codex trust state for {key} is not a table"))?;
+                let current = table
+                    .get("trusted_hash")
+                    .and_then(|item| item.as_str())
+                    .ok_or_else(|| {
+                        format!("Codex trust state for {key} has no string trusted_hash")
+                    })?;
+                if current != trusted_hash {
+                    table.insert("trusted_hash", toml_edit::value(trusted_hash));
+                }
+            }
+            toml_edit::Entry::Vacant(entry) => {
+                let mut table = toml_edit::Table::new();
+                table.insert("trusted_hash", toml_edit::value(trusted_hash));
+                entry.insert(toml_edit::Item::Table(table));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn codex_trust_state_table(
+    document: &mut toml_edit::DocumentMut,
+    create: bool,
+) -> Result<&mut dyn toml_edit::TableLike, Box<dyn std::error::Error>> {
+    let hooks = match document.as_table_mut().entry("hooks") {
+        toml_edit::Entry::Occupied(entry) => entry.into_mut(),
+        toml_edit::Entry::Vacant(_) if !create => {
+            return Err("Codex config has no hooks table".to_string().into())
+        }
+        toml_edit::Entry::Vacant(entry) => entry.insert({
+            let mut table = toml_edit::Table::new();
+            table.set_implicit(true);
+            toml_edit::Item::Table(table)
+        }),
+    };
+    let hooks = hooks
+        .as_table_like_mut()
+        .ok_or_else(|| "Codex config key `hooks` is not a table".to_string())?;
+    let state = match hooks.entry("state") {
+        toml_edit::Entry::Occupied(entry) => entry.into_mut(),
+        toml_edit::Entry::Vacant(_) if !create => {
+            return Err("Codex config has no hooks.state table".to_string().into())
+        }
+        toml_edit::Entry::Vacant(entry) => entry.insert({
+            let mut table = toml_edit::Table::new();
+            table.set_implicit(true);
+            toml_edit::Item::Table(table)
+        }),
+    };
+    state.as_table_like_mut().ok_or_else(|| {
+        "Codex config key `hooks.state` is not a table"
+            .to_string()
+            .into()
+    })
+}
+
+struct CodexTrustSection {
+    index: usize,
+    key: String,
+    trusted_hash: String,
+    literal_key: bool,
+    extras: BTreeMap<String, String>,
+}
+
+fn merge_codex_trust_duplicates(
+    content: &str,
+    states: &BTreeMap<String, String>,
+) -> Result<String, Box<dyn std::error::Error>> {
+    let sections = split_codex_config_sections(content);
+    let mut documents = Vec::with_capacity(sections.len());
+    for section in &sections {
+        let document = section.parse::<toml_edit::DocumentMut>().map_err(|error| {
+            format!("Refusing to rewrite Codex config: cannot parse a section: {error}")
+        })?;
+        documents.push(document);
+    }
+
+    let keys = states.keys().cloned().collect::<BTreeSet<_>>();
+    let mut features_section = None;
+    let mut trust_sections = Vec::new();
+    for (index, document) in documents.iter().enumerate() {
+        if document.len() == 1
+            && document
+                .get("features")
+                .is_some_and(|item| item.is_table_like())
+        {
+            features_section.get_or_insert(index);
+            continue;
+        }
+        let Some(state) = document
+            .get("hooks")
+            .and_then(|item| item.as_table())
+            .and_then(|table| table.get("state"))
+            .and_then(|item| item.as_table())
+        else {
+            continue;
+        };
+        let mut entries = state.iter();
+        let Some((key, value)) = entries.next() else {
+            continue;
+        };
+        if entries.next().is_some() {
+            continue;
+        }
+        let key_value = key.to_string();
+        if !keys.contains(&key_value) {
+            continue;
+        }
+        let Some(table) = value.as_table_like() else {
+            continue;
+        };
+        let Some(trusted_hash) = table.get("trusted_hash").and_then(|item| item.as_str()) else {
+            return Err(format!(
+                "Refusing to rewrite Codex config: hooks.state.{key_value} has no string trusted_hash"
+            )
+            .into());
+        };
+        let mut extras = BTreeMap::new();
+        for (extra_key, extra_item) in table.iter() {
+            if extra_key == "trusted_hash" || extra_item.is_none() {
+                continue;
+            }
+            extras.insert(
+                extra_key.to_string(),
+                extra_item.to_string().trim().to_string(),
+            );
+        }
+        trust_sections.push(CodexTrustSection {
+            index,
+            key: key_value,
+            trusted_hash: trusted_hash.to_string(),
+            literal_key: state
+                .key(key)
+                .is_some_and(|state_key| state_key.display_repr().starts_with('\'')),
+            extras,
+        });
+    }
+
+    let mut removed = BTreeSet::new();
+    let mut rewritten = BTreeSet::new();
+    for (key, trusted_hash) in states {
+        let matching = trust_sections
+            .iter()
+            .filter(|section| &section.key == key)
+            .collect::<Vec<_>>();
+        if matching.is_empty() {
+            continue;
+        }
+        let distinct = matching
+            .iter()
+            .map(|section| section.trusted_hash.as_str())
+            .collect::<BTreeSet<_>>();
+        if distinct.len() > 1 {
+            return Err(format!(
+                "Refusing to rewrite Codex config: duplicate hooks.state.{key} tables disagree on trusted_hash ({})",
+                distinct.into_iter().collect::<Vec<_>>().join(", ")
+            )
+            .into());
+        }
+        // Prefer the spelling the user already had, keeping literal keys.
+        let keeper = matching
+            .iter()
+            .find(|section| section.literal_key)
+            .copied()
+            .unwrap_or(matching[0]);
+        for section in &matching {
+            if section.index == keeper.index {
+                continue;
+            }
+            // A duplicate may only be dropped when every field it carries also
+            // survives in the keeper; unknown fields are never discarded.
+            for (extra_key, extra_value) in &section.extras {
+                if keeper.extras.get(extra_key) != Some(extra_value) {
+                    return Err(format!(
+                        "Refusing to rewrite Codex config: duplicate hooks.state.{key} tables contain different fields ({extra_key})"
+                    )
+                    .into());
+                }
+            }
+            removed.insert(section.index);
+        }
+        if keeper.trusted_hash != *trusted_hash {
+            set_codex_trust_hash(&mut documents[keeper.index], key, trusted_hash)?;
+            rewritten.insert(keeper.index);
+        }
+    }
+
+    if let Some(index) = features_section {
+        set_codex_hooks_feature(&mut documents[index])?;
+        rewritten.insert(index);
+    }
+
+    let mut output = String::with_capacity(content.len() + 256);
+    for (index, section) in sections.iter().enumerate() {
+        if removed.contains(&index) {
+            continue;
+        }
+        if rewritten.contains(&index) {
+            output.push_str(&documents[index].to_string());
+        } else {
+            output.push_str(section);
+        }
+    }
+
+    if features_section.is_none() {
+        output.push_str("\n[features]\nhooks = true\n");
+    }
+    for (key, trusted_hash) in states {
+        if trust_sections.iter().any(|section| &section.key == key) {
+            continue;
+        }
+        output.push_str("\n[hooks.state.\"");
+        output.push_str(&toml_basic_string(key));
+        output.push_str("\"]\ntrusted_hash = \"");
+        output.push_str(&toml_basic_string(trusted_hash));
+        output.push_str("\"\n");
+    }
+    Ok(output)
+}
+
+fn set_codex_trust_hash(
+    document: &mut toml_edit::DocumentMut,
+    key: &str,
+    trusted_hash: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let state = codex_trust_state_table(document, false)?;
+    let table = state
+        .get_mut(key)
+        .and_then(|item| item.as_table_like_mut())
+        .ok_or_else(|| {
+            format!("Refusing to rewrite Codex config: hooks.state.{key} is not a table")
+        })?;
+    table.insert("trusted_hash", toml_edit::value(trusted_hash));
+    Ok(())
+}
+
+fn set_codex_hooks_feature(
+    document: &mut toml_edit::DocumentMut,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let features = document
+        .get_mut("features")
+        .and_then(|item| item.as_table_like_mut())
+        .ok_or_else(|| "Refusing to rewrite Codex config: features is not a table".to_string())?;
+    features.insert("hooks", toml_edit::value(true));
+    Ok(())
+}
+
+/// Split a config into sections that each start at a table header. This only
+/// locates section boundaries; every section is validated with the real parser
+/// and the assembled file is re-validated before it is written.
+fn split_codex_config_sections(content: &str) -> Vec<&str> {
+    let mut sections = Vec::new();
+    let mut section_start = 0;
+    let mut line_start = 0;
+    while line_start < content.len() {
+        let line_end = content[line_start..]
+            .find('\n')
+            .map(|offset| line_start + offset + 1)
+            .unwrap_or(content.len());
+        if content[line_start..line_end].trim_start().starts_with('[') && section_start < line_start
+        {
+            sections.push(&content[section_start..line_start]);
+            section_start = line_start;
+        }
+        line_start = line_end;
+    }
+    sections.push(&content[section_start..]);
+    sections
+}
+
+fn ensure_codex_hooks_feature(
+    document: &mut toml_edit::DocumentMut,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let features = document
+        .as_table_mut()
+        .entry("features")
+        .or_insert_with(|| toml_edit::Item::Table(toml_edit::Table::new()));
+    let features = features
+        .as_table_like_mut()
+        .ok_or_else(|| "Codex config key `features` is not a table".to_string())?;
+    features.insert("hooks", toml_edit::value(true));
+    Ok(())
+}
+
+fn write_codex_config_backup(
+    config_path: &Path,
+    content: &[u8],
+    backup_root: &Path,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let dir = backup_root.join("codex");
+    std::fs::create_dir_all(&dir)?;
+    let timestamp = chrono::Utc::now().format("%Y%m%dT%H%M%S%.3fZ");
+    let filename = config_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("config.toml");
+    let path = dir.join(format!("{timestamp}-{}-{filename}", uuid::Uuid::new_v4()));
+    // `create_new` keeps an earlier backup from ever being overwritten.
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&path)?;
+    std::io::Write::write_all(&mut file, content)?;
+    file.sync_all()?;
+    Ok(())
+}
+
+fn write_codex_config_file(
+    config_path: &Path,
+    original: Option<&[u8]>,
+    candidate: &[u8],
+) -> Result<(), Box<dyn std::error::Error>> {
+    let parent = config_path
+        .parent()
+        .ok_or_else(|| format!("Invalid Codex config path: {}", config_path.display()))?;
+    let temp = parent.join(format!(
+        ".{}.agent-island-{}.tmp",
+        config_path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("config"),
+        uuid::Uuid::new_v4()
+    ));
+    let write = (|| -> std::io::Result<()> {
+        let mut file = std::fs::File::create(&temp)?;
+        std::io::Write::write_all(&mut file, candidate)?;
+        file.sync_all()
+    })();
+    if let Err(error) = write {
+        let _ = std::fs::remove_file(&temp);
+        return Err(format!("Failed to write temporary Codex config: {error}").into());
+    }
+
+    // An external edit between the initial read and this point would otherwise
+    // be silently replaced, so re-read before renaming over the original.
+    let current = match std::fs::read(config_path) {
+        Ok(bytes) => Some(bytes),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(error) => {
+            let _ = std::fs::remove_file(&temp);
+            return Err(format!(
+                "Failed to re-read Codex config {}: {error}",
+                config_path.display()
+            )
+            .into());
+        }
+    };
+    if current.as_deref() != original {
+        let _ = std::fs::remove_file(&temp);
+        return Err(format!(
+            "Refusing to overwrite Codex config {}: it changed while the update was prepared",
+            config_path.display()
+        )
+        .into());
+    }
+
+    if let Err(error) = std::fs::rename(&temp, config_path) {
+        let _ = std::fs::remove_file(&temp);
+        return Err(format!(
+            "Failed to replace Codex config {}: {error}",
+            config_path.display()
+        )
+        .into());
+    }
     Ok(())
 }
 
 fn toml_basic_string(value: &str) -> String {
     value.replace('\\', "\\\\").replace('"', "\\\"")
-}
-
-fn remove_toml_tables(content: &str, table_headers: &BTreeSet<String>) -> String {
-    let mut result = Vec::new();
-    let mut skipping = false;
-    for line in content.lines() {
-        let trimmed = line.trim();
-        if trimmed.starts_with('[') && trimmed.ends_with(']') {
-            skipping = table_headers.contains(trimmed);
-        }
-        if !skipping {
-            result.push(line);
-        }
-    }
-    result.join("\n").replace("\n\n\n", "\n\n")
-}
-
-fn ensure_codex_hooks_feature(content: &str) -> String {
-    let mut lines = content
-        .lines()
-        .map(|line| line.to_string())
-        .collect::<Vec<_>>();
-    let Some(features_index) = lines.iter().position(|line| line.trim() == "[features]") else {
-        let prefix = content.trim_end();
-        return format!(
-            "{prefix}{}[features]\nhooks = true\n",
-            if prefix.is_empty() { "" } else { "\n\n" }
-        );
-    };
-
-    let next_section_index = lines
-        .iter()
-        .enumerate()
-        .skip(features_index + 1)
-        .find_map(|(index, line)| {
-            let trimmed = line.trim();
-            (trimmed.starts_with('[') && trimmed.ends_with(']')).then_some(index)
-        })
-        .unwrap_or(lines.len());
-
-    let hook_line_index = lines
-        .iter()
-        .enumerate()
-        .skip(features_index + 1)
-        .take(next_section_index.saturating_sub(features_index + 1))
-        .find_map(|(index, line)| line.trim_start().starts_with("hooks").then_some(index));
-
-    if let Some(index) = hook_line_index {
-        lines[index] = "hooks = true".to_string();
-    } else {
-        lines.insert(next_section_index, "hooks = true".to_string());
-    }
-    lines.join("\n")
 }
 
 #[cfg(test)]
@@ -1151,6 +1526,54 @@ mod tests {
 
     fn success_status() -> std::process::ExitStatus {
         std::process::ExitStatus::from_raw(0)
+    }
+
+    fn trust_test_dir(label: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "agent-island-codex-{label}-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    fn trust_test_settings(hooks_path: &Path, command: &str) -> serde_json::Value {
+        let mut settings = serde_json::json!({});
+        CodexAdapter::inject_hooks_json(&mut settings, command);
+        std::fs::write(hooks_path, serde_json::to_string_pretty(&settings).unwrap()).unwrap();
+        settings
+    }
+
+    fn trust_key(hooks_path: &Path, event_key: &str) -> String {
+        let source = hooks_path
+            .canonicalize()
+            .unwrap_or_else(|_| hooks_path.to_path_buf());
+        format!("{}:{event_key}:0:0", source.to_string_lossy())
+    }
+
+    fn trust_state_hash(content: &str, key: &str) -> Option<String> {
+        let document = content.parse::<toml_edit::DocumentMut>().ok()?;
+        document
+            .get("hooks")?
+            .as_table_like()?
+            .get("state")?
+            .as_table_like()?
+            .get(key)?
+            .as_table_like()?
+            .get("trusted_hash")?
+            .as_str()
+            .map(str::to_string)
+    }
+
+    fn run_codex_trust(
+        hooks_path: &Path,
+        config_path: &Path,
+        settings: &serde_json::Value,
+        command: &str,
+        backup_root: &Path,
+    ) {
+        CodexAdapter::trust_codex_hooks(hooks_path, config_path, settings, command, backup_root)
+            .unwrap();
     }
 
     #[test]
@@ -1208,8 +1631,10 @@ goals = true
 [projects."/tmp/example"]
 trust_level = "trusted"
 "#;
+        let mut document = content.parse::<toml_edit::DocumentMut>().unwrap();
 
-        let updated = ensure_codex_hooks_feature(content);
+        apply_codex_trust_states(&mut document, &BTreeMap::new()).unwrap();
+        let updated = document.to_string();
 
         assert!(updated.contains("[features]"));
         assert!(updated.contains("goals = true"));
@@ -1410,6 +1835,489 @@ trust_level = "trusted"
             }
             other => panic!("unexpected event: {other:?}"),
         }
+    }
+
+    #[test]
+    fn keeps_literal_quoted_trust_state_and_updates_only_the_hash() {
+        let dir = trust_test_dir("trust-literal");
+        let hooks_path = dir.join("hooks.json");
+        let config_path = dir.join("config.toml");
+        let backup_root = dir.join("backups");
+        let command = "C:\\Users\\me\\.agent-island\\bin\\agent-island-bridge.exe --source codex";
+        let settings = trust_test_settings(&hooks_path, command);
+        let key = trust_key(&hooks_path, "session_start");
+        let third_party = "C:\\Other\\hooks.json:stop:0:0";
+        std::fs::write(
+            &config_path,
+            format!(
+                "model = \"gpt-5\"\n\n[hooks.state.'{key}']\ntrusted_hash = \"sha256:stale\"\n\n[hooks.state.'{third_party}']\ntrusted_hash = \"sha256:third-party\"\n"
+            ),
+        )
+        .unwrap();
+
+        run_codex_trust(&hooks_path, &config_path, &settings, command, &backup_root);
+
+        let content = std::fs::read_to_string(&config_path).unwrap();
+        assert!(
+            content.contains(&format!("[hooks.state.'{key}']")),
+            "{content}"
+        );
+        assert!(
+            !content.contains(&format!("[hooks.state.\"{}\"]", toml_basic_string(&key))),
+            "{content}"
+        );
+        let hash = trust_state_hash(&content, &key).expect("state must be present exactly once");
+        assert_ne!(hash, "sha256:stale");
+        assert!(content.contains(&format!(
+            "[hooks.state.'{third_party}']\ntrusted_hash = \"sha256:third-party\""
+        )));
+        assert!(content.contains("model = \"gpt-5\""));
+        assert!(content.contains("[features]\nhooks = true"));
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn codex_trust_state_dedupes_duplicate_quote_styles_and_stays_idempotent() {
+        let dir = trust_test_dir("trust-idempotent");
+        let hooks_path = dir.join("hooks.json");
+        let config_path = dir.join("config.toml");
+        let backup_root = dir.join("backups");
+        let command = "C:\\Users\\me\\.agent-island\\bin\\agent-island-bridge.exe --source codex";
+        let settings = trust_test_settings(&hooks_path, command);
+        let key = trust_key(&hooks_path, "session_start");
+        std::fs::write(
+            &config_path,
+            format!(
+                "[features]\nhooks = true\n\n[hooks.state.'{key}']\ntrusted_hash = \"sha256:same\"\n\n[hooks.state.\"{}\"]\ntrusted_hash = \"sha256:same\"\n",
+                toml_basic_string(&key)
+            ),
+        )
+        .unwrap();
+
+        run_codex_trust(&hooks_path, &config_path, &settings, command, &backup_root);
+        let first = std::fs::read_to_string(&config_path).unwrap();
+        assert!(first.contains(&format!("[hooks.state.'{key}']")), "{first}");
+        assert!(
+            !first.contains(&format!("[hooks.state.\"{}\"]", toml_basic_string(&key))),
+            "{first}"
+        );
+        assert!(trust_state_hash(&first, &key).is_some(), "{first}");
+        let backups_after_first = std::fs::read_dir(backup_root.join("codex"))
+            .unwrap()
+            .count();
+        assert_eq!(backups_after_first, 1);
+
+        run_codex_trust(&hooks_path, &config_path, &settings, command, &backup_root);
+        let second = std::fs::read_to_string(&config_path).unwrap();
+        assert_eq!(first, second);
+        assert_eq!(
+            std::fs::read_dir(backup_root.join("codex"))
+                .unwrap()
+                .count(),
+            backups_after_first
+        );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn codex_trust_state_prefers_literal_key_when_the_basic_spelling_comes_first() {
+        let dir = trust_test_dir("trust-literal-second");
+        let hooks_path = dir.join("hooks.json");
+        let config_path = dir.join("config.toml");
+        let backup_root = dir.join("backups");
+        let command = "C:\\Users\\me\\.agent-island\\bin\\agent-island-bridge.exe --source codex";
+        let settings = trust_test_settings(&hooks_path, command);
+        let key = trust_key(&hooks_path, "session_start");
+        std::fs::write(
+            &config_path,
+            format!(
+                "[features]\nhooks = true\n\n[hooks.state.\"{}\"]\ntrusted_hash = \"sha256:same\"\nnote = \"keep-me\"\n\n[hooks.state.'{key}']\ntrusted_hash = \"sha256:same\"\nnote = \"keep-me\"\n",
+                toml_basic_string(&key)
+            ),
+        )
+        .unwrap();
+
+        run_codex_trust(&hooks_path, &config_path, &settings, command, &backup_root);
+
+        let first = std::fs::read_to_string(&config_path).unwrap();
+        first
+            .parse::<toml_edit::DocumentMut>()
+            .expect("merged config must parse");
+        assert!(first.contains(&format!("[hooks.state.'{key}']")), "{first}");
+        assert!(
+            !first.contains(&format!("[hooks.state.\"{}\"]", toml_basic_string(&key))),
+            "{first}"
+        );
+        assert_eq!(
+            first.matches("note = \"keep-me\"").count(),
+            1,
+            "the unknown field must survive exactly once:\n{first}"
+        );
+        assert_ne!(trust_state_hash(&first, &key).unwrap(), "sha256:same");
+
+        run_codex_trust(&hooks_path, &config_path, &settings, command, &backup_root);
+        let second = std::fs::read_to_string(&config_path).unwrap();
+        assert_eq!(first, second);
+        assert_eq!(
+            std::fs::read_dir(backup_root.join("codex"))
+                .unwrap()
+                .count(),
+            1
+        );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn codex_trust_state_conflicting_duplicate_hashes_abort_without_writing() {
+        let dir = trust_test_dir("trust-conflict");
+        let hooks_path = dir.join("hooks.json");
+        let config_path = dir.join("config.toml");
+        let backup_root = dir.join("backups");
+        let command = "C:\\Users\\me\\.agent-island\\bin\\agent-island-bridge.exe --source codex";
+        let settings = trust_test_settings(&hooks_path, command);
+        let key = trust_key(&hooks_path, "session_start");
+        let original = format!(
+            "[hooks.state.'{key}']\ntrusted_hash = \"sha256:first\"\n\n[hooks.state.\"{}\"]\ntrusted_hash = \"sha256:second\"\n",
+            toml_basic_string(&key)
+        );
+        std::fs::write(&config_path, &original).unwrap();
+
+        let error = CodexAdapter::trust_codex_hooks(
+            &hooks_path,
+            &config_path,
+            &settings,
+            command,
+            &backup_root,
+        )
+        .unwrap_err();
+
+        assert!(error.to_string().contains("trusted_hash"), "{error}");
+        assert_eq!(std::fs::read_to_string(&config_path).unwrap(), original);
+        assert!(
+            !backup_root.exists(),
+            "a rejected write must not leave a backup behind"
+        );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn codex_trust_state_refuses_duplicates_that_carry_unmergeable_fields() {
+        let dir = trust_test_dir("trust-extra-refuse");
+        let hooks_path = dir.join("hooks.json");
+        let config_path = dir.join("config.toml");
+        let backup_root = dir.join("backups");
+        let command = "C:\\Users\\me\\.agent-island\\bin\\agent-island-bridge.exe --source codex";
+        let settings = trust_test_settings(&hooks_path, command);
+        let key = trust_key(&hooks_path, "session_start");
+        let original = format!(
+            "[hooks.state.'{key}']\ntrusted_hash = \"sha256:same\"\nnote = \"literal\"\n\n[hooks.state.\"{}\"]\ntrusted_hash = \"sha256:same\"\nnote = \"basic\"\n",
+            toml_basic_string(&key)
+        );
+        std::fs::write(&config_path, &original).unwrap();
+
+        let error = CodexAdapter::trust_codex_hooks(
+            &hooks_path,
+            &config_path,
+            &settings,
+            command,
+            &backup_root,
+        )
+        .unwrap_err();
+
+        assert!(error.to_string().contains("different fields"), "{error}");
+        assert_eq!(std::fs::read_to_string(&config_path).unwrap(), original);
+        assert!(!backup_root.exists());
+
+        let removed_field_only = format!(
+            "[hooks.state.'{key}']\ntrusted_hash = \"sha256:same\"\n\n[hooks.state.\"{}\"]\ntrusted_hash = \"sha256:same\"\nnote = \"keep-me\"\n",
+            toml_basic_string(&key)
+        );
+        std::fs::write(&config_path, &removed_field_only).unwrap();
+
+        let error = CodexAdapter::trust_codex_hooks(
+            &hooks_path,
+            &config_path,
+            &settings,
+            command,
+            &backup_root,
+        )
+        .unwrap_err();
+
+        assert!(error.to_string().contains("different fields"), "{error}");
+        assert_eq!(
+            std::fs::read_to_string(&config_path).unwrap(),
+            removed_field_only
+        );
+        assert!(!backup_root.exists());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn codex_trust_state_preserves_unknown_fields_while_deduping() {
+        let dir = trust_test_dir("trust-extra-keep");
+        let hooks_path = dir.join("hooks.json");
+        let config_path = dir.join("config.toml");
+        let backup_root = dir.join("backups");
+        let command = "C:\\Users\\me\\.agent-island\\bin\\agent-island-bridge.exe --source codex";
+        let settings = trust_test_settings(&hooks_path, command);
+        let first = trust_key(&hooks_path, "session_start");
+        let second = trust_key(&hooks_path, "stop");
+        std::fs::write(
+            &config_path,
+            format!(
+                "[hooks.state.'{first}']\ntrusted_hash = \"sha256:same\"\nnote = \"keep-me\"\n\n[hooks.state.\"{}\"]\ntrusted_hash = \"sha256:same\"\nnote = \"keep-me\"\n\n[hooks.state.'{second}']\ntrusted_hash = \"sha256:same\"\nnote = \"keeper-only\"\n\n[hooks.state.\"{}\"]\ntrusted_hash = \"sha256:same\"\n",
+                toml_basic_string(&first),
+                toml_basic_string(&second),
+            ),
+        )
+        .unwrap();
+
+        run_codex_trust(&hooks_path, &config_path, &settings, command, &backup_root);
+
+        let content = std::fs::read_to_string(&config_path).unwrap();
+        content
+            .parse::<toml_edit::DocumentMut>()
+            .expect("merged config must parse");
+        for key in [&first, &second] {
+            assert_eq!(
+                content.matches(&format!("[hooks.state.'{key}']")).count(),
+                1,
+                "key {key} was not deduped:\n{content}"
+            );
+            assert!(
+                !content.contains(&format!("[hooks.state.\"{}\"]", toml_basic_string(key))),
+                "key {key} kept a basic duplicate:\n{content}"
+            );
+        }
+        assert_eq!(
+            content.matches("note = \"keep-me\"").count(),
+            1,
+            "{content}"
+        );
+        assert!(content.contains("note = \"keeper-only\""), "{content}");
+        assert_ne!(trust_state_hash(&content, &first).unwrap(), "sha256:same");
+        assert_ne!(trust_state_hash(&content, &second).unwrap(), "sha256:same");
+
+        run_codex_trust(&hooks_path, &config_path, &settings, command, &backup_root);
+        assert_eq!(std::fs::read_to_string(&config_path).unwrap(), content);
+        assert_eq!(
+            std::fs::read_dir(backup_root.join("codex"))
+                .unwrap()
+                .count(),
+            1
+        );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn codex_trust_state_repairs_duplicates_for_every_managed_event() {
+        let dir = trust_test_dir("trust-all-events");
+        let hooks_path = dir.join("hooks.json");
+        let config_path = dir.join("config.toml");
+        let backup_root = dir.join("backups");
+        let command = "C:\\Users\\me\\.agent-island\\bin\\agent-island-bridge.exe --source codex";
+        let settings = trust_test_settings(&hooks_path, command);
+        let keys = HOOK_EVENTS
+            .iter()
+            .map(|(_, event_key, _)| trust_key(&hooks_path, event_key))
+            .collect::<Vec<_>>();
+        let mut seeded = String::from("[features]\nhooks = true\n");
+        for key in &keys {
+            seeded.push_str(&format!(
+                "\n[hooks.state.'{key}']\ntrusted_hash = \"sha256:same\"\n\n[hooks.state.\"{}\"]\ntrusted_hash = \"sha256:same\"\n",
+                toml_basic_string(key)
+            ));
+        }
+        std::fs::write(&config_path, &seeded).unwrap();
+
+        run_codex_trust(&hooks_path, &config_path, &settings, command, &backup_root);
+
+        let content = std::fs::read_to_string(&config_path).unwrap();
+        content
+            .parse::<toml_edit::DocumentMut>()
+            .expect("repaired config must parse");
+        for key in &keys {
+            assert!(
+                trust_state_hash(&content, key).is_some(),
+                "key {key} was not kept:\n{content}"
+            );
+            assert_eq!(
+                content.matches(&format!("[hooks.state.'{key}']")).count(),
+                1,
+                "key {key} was not deduped:\n{content}"
+            );
+            assert!(
+                !content.contains(&format!("[hooks.state.\"{}\"]", toml_basic_string(key))),
+                "key {key} kept a basic duplicate:\n{content}"
+            );
+        }
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn keeps_array_of_tables_after_a_repaired_trust_state() {
+        let dir = trust_test_dir("trust-aot");
+        let hooks_path = dir.join("hooks.json");
+        let config_path = dir.join("config.toml");
+        let backup_root = dir.join("backups");
+        let command = "C:\\Users\\me\\.agent-island\\bin\\agent-island-bridge.exe --source codex";
+        let settings = trust_test_settings(&hooks_path, command);
+        let key = trust_key(&hooks_path, "session_start");
+        std::fs::write(
+            &config_path,
+            format!(
+                "[hooks.state.'{key}']\ntrusted_hash = \"sha256:same\"\n\n[hooks.state.\"{}\"]\ntrusted_hash = \"sha256:same\"\n\n[[projects]]\nname = \"one\"\n\n[[projects]]\nname = \"two\"\n",
+                toml_basic_string(&key)
+            ),
+        )
+        .unwrap();
+
+        run_codex_trust(&hooks_path, &config_path, &settings, command, &backup_root);
+
+        let content = std::fs::read_to_string(&config_path).unwrap();
+        let document = content
+            .parse::<toml_edit::DocumentMut>()
+            .expect("config must parse after merge");
+        let projects = document
+            .get("projects")
+            .and_then(|item| item.as_array_of_tables())
+            .expect("[[projects]] must survive the rewrite");
+        assert_eq!(projects.iter().count(), 2);
+        assert!(content.contains("name = \"one\""), "{content}");
+        assert!(content.contains("name = \"two\""), "{content}");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn refuses_to_write_when_the_candidate_stays_invalid() {
+        let dir = trust_test_dir("trust-invalid");
+        let hooks_path = dir.join("hooks.json");
+        let config_path = dir.join("config.toml");
+        let backup_root = dir.join("backups");
+        let command = "C:\\Users\\me\\.agent-island\\bin\\agent-island-bridge.exe --source codex";
+        let settings = trust_test_settings(&hooks_path, command);
+        let original = "root.value = 1\n\n[root]\nother = 2\n";
+        std::fs::write(&config_path, original).unwrap();
+
+        let error = CodexAdapter::trust_codex_hooks(
+            &hooks_path,
+            &config_path,
+            &settings,
+            command,
+            &backup_root,
+        )
+        .unwrap_err();
+
+        assert!(
+            error.to_string().contains("invalid Codex config"),
+            "{error}"
+        );
+        assert_eq!(std::fs::read_to_string(&config_path).unwrap(), original);
+        assert!(!backup_root.exists());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn read_failure_is_not_treated_as_an_empty_config() {
+        let dir = trust_test_dir("trust-read-failure");
+        let hooks_path = dir.join("hooks.json");
+        let config_path = dir.join("config.toml");
+        let backup_root = dir.join("backups");
+        let command = "C:\\Users\\me\\.agent-island\\bin\\agent-island-bridge.exe --source codex";
+        let settings = trust_test_settings(&hooks_path, command);
+        std::fs::create_dir_all(&config_path).unwrap();
+
+        let error = CodexAdapter::trust_codex_hooks(
+            &hooks_path,
+            &config_path,
+            &settings,
+            command,
+            &backup_root,
+        )
+        .unwrap_err();
+
+        assert!(
+            error.to_string().contains("Failed to read Codex config"),
+            "{error}"
+        );
+        assert!(
+            config_path.is_dir(),
+            "the unreadable path must be untouched"
+        );
+        assert!(!backup_root.exists());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn codex_config_write_aborts_when_the_file_changed_underneath() {
+        let dir = trust_test_dir("trust-concurrent");
+        let config_path = dir.join("config.toml");
+        std::fs::write(&config_path, "external = true\n").unwrap();
+
+        let error = write_codex_config_file(
+            &config_path,
+            Some(b"stale revision\n"),
+            b"candidate = true\n",
+        )
+        .unwrap_err();
+
+        assert!(
+            error.to_string().contains("changed while the update"),
+            "{error}"
+        );
+        assert_eq!(
+            std::fs::read_to_string(&config_path).unwrap(),
+            "external = true\n"
+        );
+        assert!(
+            std::fs::read_dir(&dir).unwrap().all(|entry| !entry
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .ends_with(".tmp")),
+            "temporary file must be cleaned up"
+        );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn codex_trust_backups_never_overwrite_an_existing_backup() {
+        let dir = trust_test_dir("trust-backup");
+        let config_path = dir.join("config.toml");
+        let backup_root = dir.join("backups");
+
+        write_codex_config_backup(&config_path, b"first revision", &backup_root).unwrap();
+        write_codex_config_backup(&config_path, b"second revision", &backup_root).unwrap();
+
+        let mut backups = std::fs::read_dir(backup_root.join("codex"))
+            .unwrap()
+            .map(|entry| std::fs::read_to_string(entry.unwrap().path()).unwrap())
+            .collect::<Vec<_>>();
+        backups.sort();
+        assert_eq!(
+            backups,
+            vec!["first revision".to_string(), "second revision".to_string()]
+        );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn creates_a_missing_codex_config_without_a_backup() {
+        let dir = trust_test_dir("trust-missing");
+        let hooks_path = dir.join("hooks.json");
+        let config_path = dir.join("config.toml");
+        let backup_root = dir.join("backups");
+        let command = "C:\\Users\\me\\.agent-island\\bin\\agent-island-bridge.exe --source codex";
+        let settings = trust_test_settings(&hooks_path, command);
+        let key = trust_key(&hooks_path, "session_start");
+
+        run_codex_trust(&hooks_path, &config_path, &settings, command, &backup_root);
+
+        let content = std::fs::read_to_string(&config_path).unwrap();
+        assert!(content.contains("[features]\nhooks = true"), "{content}");
+        assert!(trust_state_hash(&content, &key).is_some(), "{content}");
+        assert!(!backup_root.exists());
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]

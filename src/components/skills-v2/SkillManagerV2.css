@@ -11571,6 +11571,139 @@
   gap: 10px;
 }
 
+/* ── Agent 管理：本机 Agent 真实检测总览 ── */
+.sm2-agent-inventory {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--sm2-agent-border);
+  border-radius: 14px;
+  background: var(--sm2-agent-surface);
+  box-shadow: 0 1px 2px rgba(31, 41, 71, 0.04);
+}
+
+.sm2-agent-inventory__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.sm2-agent-inventory__head h3 {
+  margin: 0;
+  color: var(--sm2-agent-text);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.sm2-agent-inventory__head p {
+  margin: 4px 0 0;
+  max-width: 720px;
+  color: var(--sm2-agent-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.sm2-agent-inventory__count {
+  flex: 0 0 auto;
+  padding: 3px 10px;
+  border: 1px solid rgba(10, 132, 255, 0.18);
+  border-radius: 999px;
+  background: var(--sm2-agent-blue-soft);
+  color: var(--sm2-agent-blue);
+  font-size: 11.5px;
+  font-weight: 760;
+  white-space: nowrap;
+}
+
+.sm2-agent-inventory__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(212px, 1fr));
+  gap: 8px;
+}
+
+.sm2-agent-inventory__card {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid rgba(40, 51, 77, 0.10);
+  border-radius: 10px;
+  background: var(--sm2-agent-card);
+  color: var(--sm2-agent-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.sm2-agent-inventory__card:hover {
+  border-color: rgba(10, 132, 255, 0.36);
+  background: var(--sm2-agent-card-hover);
+}
+
+.sm2-agent-inventory__card.is--selected {
+  border-color: var(--sm2-agent-blue);
+  box-shadow: inset 0 0 0 1px var(--sm2-agent-blue);
+}
+
+.sm2-agent-inventory__copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.sm2-agent-inventory__name {
+  overflow: hidden;
+  font-size: 12.5px;
+  font-weight: 720;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sm2-agent-inventory__meta {
+  overflow: hidden;
+  color: var(--sm2-agent-muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sm2-agent-inventory__status {
+  flex: 0 0 auto;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(40, 51, 77, 0.06);
+  color: var(--sm2-agent-muted);
+  font-size: 10.5px;
+  font-weight: 760;
+  white-space: nowrap;
+}
+
+.sm2-agent-inventory__status--installed {
+  background: var(--sm2-agent-green-soft);
+  color: var(--sm2-agent-green);
+}
+
+.sm2-agent-inventory__status--update-available {
+  background: var(--sm2-agent-amber-soft);
+  color: var(--sm2-agent-amber);
+}
+
+.sm2-agent-inventory__status--config-only {
+  background: var(--sm2-agent-blue-soft);
+  color: var(--sm2-agent-blue);
+}
+
+.sm2-agent-inventory__status--unavailable,
+.sm2-agent-inventory__status--undetected {
+  background: rgba(40, 51, 77, 0.05);
+  color: var(--sm2-agent-muted);
+}
+
 .sm2--agents .sm2__btn {
   min-height: 36px;
   border-color: var(--sm2-agent-border);

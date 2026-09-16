@@ -711,28 +711,32 @@ export const useSkillStoreV2 = create<SkillV2State & SkillV2Actions>((set, get) 
 
 export function filteredSkills(state: SkillV2State): SkillSummary[] {
   const { skills, filters } = state
-  const q = filters.query.trim().toLowerCase()
-  return skills.filter((s) => {
-    if (q) {
-      const haystack = [
-        s.name,
-        s.description,
-        s.sourceType,
-        s.status,
-        skillStatusSearchLabel(s.status),
-        s.installedAgents.map((a) => a.displayName).join(' '),
-        s.installedAgents.map((a) => a.status).join(' '),
-        s.installedAgents.map((a) => targetStatusSearchLabel(a.status)).join(' '),
-        hasChangedCopyInstall(s) ? 'diff 副本分叉 副本变更 副本已修改 已修改' : '',
-      ]
-        .join(' ')
-        .toLowerCase()
-      if (!haystack.includes(q)) return false
-    }
+  return filterSkillsByQuery(skills, filters.query).filter((s) => {
     if (filters.status && s.status !== filters.status) return false
     if (filters.source && s.sourceType !== filters.source) return false
     if (filters.type && s.skillType !== filters.type) return false
     return true
+  })
+}
+
+export function filterSkillsByQuery(skills: SkillSummary[], query: string): SkillSummary[] {
+  const q = query.trim().toLowerCase()
+  if (!q) return skills
+  return skills.filter((s) => {
+    const haystack = [
+      s.name,
+      s.description,
+      s.sourceType,
+      s.status,
+      skillStatusSearchLabel(s.status),
+      s.installedAgents.map((a) => a.displayName).join(' '),
+      s.installedAgents.map((a) => a.status).join(' '),
+      s.installedAgents.map((a) => targetStatusSearchLabel(a.status)).join(' '),
+      hasChangedCopyInstall(s) ? 'diff 副本分叉 副本变更 副本已修改 已修改' : '',
+    ]
+      .join(' ')
+      .toLowerCase()
+    return haystack.includes(q)
   })
 }
 

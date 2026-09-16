@@ -61,8 +61,8 @@ const NATIVE_CURSOR_PASSTHROUGH_DELAY_MS = 120
 const HOVER_PANEL_MIN_HEIGHT = 180
 const HOVER_PANEL_HEIGHT = 320
 const EXPANDED_PREVIEW_SESSION_COUNT = 4
-const SIDE_COLLAPSED_CONTENT_WIDTH = 58
-const SIDE_COLLAPSED_PANEL_HEIGHT = 92
+const SIDE_COLLAPSED_CONTENT_WIDTH = 44
+const SIDE_COLLAPSED_PANEL_HEIGHT = 148
 const PET_SURFACE_WIDTH = 820
 const PET_SURFACE_HEIGHT = 360
 function nativeHostResizeKey(
@@ -103,10 +103,13 @@ function getInputFocusTarget(target: EventTarget | null): HTMLElement | null {
   return focusTarget
 }
 
-function buildNotchShellClipPath(_width: number, _height: number, state: string, _sideExtension: number, positionMode: string): string {
-  const micro = state === 'micro'
-  const compact = state === 'compact'
-  const baseRadius = micro ? 14 : compact ? 14 : 22
+function buildNotchShellClipPath(width: number, height: number, state: string, positionMode: string): string {
+  const collapsed = state === 'micro' || state === 'compact'
+  const sideDocked = positionMode === 'left' || positionMode === 'right'
+  // 侧边收起态做成竖向长条胶囊：自由边圆角取整壳宽度的一半；顶部保持原有圆角。
+  const baseRadius = collapsed
+    ? sideDocked ? Math.min(width / 2, height / 2) : 14
+    : 22
   if (positionMode === 'left') return `inset(0 round 0 ${baseRadius}px ${baseRadius}px 0)`
   if (positionMode === 'right') return `inset(0 round ${baseRadius}px 0 0 ${baseRadius}px)`
   return `inset(0 round 0 0 ${baseRadius}px ${baseRadius}px)`
@@ -1171,7 +1174,6 @@ export function NotchPanel() {
     shellWidth,
     panelHeight,
     visualState,
-    shellSideExtension,
     notchPositionMode,
   )
   const hitSlopX = effectivePanelState === 'collapsed'

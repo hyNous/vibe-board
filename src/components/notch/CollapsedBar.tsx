@@ -215,10 +215,15 @@ export function CollapsedBar({ sessions, panelState, rateLimits, usageSnapshots,
         </div>
       )}
 
-      {/* Main row: only in collapsed state — show only the Vibe Board icon when no task is in progress, or identify the executing agent */}
+      {/* Main row: only in collapsed state — show only the Vibe Board icon when no task is in progress, or the executing Agent name */}
       {!isExpanded && (
         <div className="collapsed-bar__main collapsed-bar__main--closed">
           {renderMascot(executingSession, 22)}
+          {executingSession && (
+            <span className="collapsed-bar__agent-name" title={getAgentDisplayName(executingSession)}>
+              {getAgentDisplayName(executingSession)}
+            </span>
+          )}
         </div>
       )}
     </div>

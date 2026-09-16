@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { SettingsApp } from '../components/settings'
 import type { BackendDisplayInfo } from '../services/tauriApi'
 import { useConfigStore } from '../stores/configStore'
+import { useThemeStore } from '../stores/themeStore'
 import { isApplePlatform } from '../utils/platform'
 
 const tauriMocks = vi.hoisted(() => ({
@@ -82,25 +83,24 @@ describe('settings island menu', () => {
     })
   })
 
-  it('shows only the Control Tower primary navigation', () => {
+  it('shows the six Chinese primary navigation entries and keeps legacy entries hidden', () => {
     const { container } = render(<SettingsApp onClose={vi.fn()} />)
     const visibleLabels = Array.from(
       container.querySelectorAll('.settings-sidebar__item:not([hidden]) .settings-sidebar__label-text'),
     ).map((item) => item.textContent?.trim())
 
-    expect(visibleLabels).toEqual(['Tasks', 'Usage', 'Settings'])
-    expect(screen.getByText('settings.skillManager')).not.toBeVisible()
-    expect(screen.getByText('settings.remoteServers.title')).not.toBeVisible()
-    expect(screen.getByText('settings.island.title')).not.toBeVisible()
+    expect(visibleLabels).toEqual(['任务看板', '使用额度', 'Skill管理', 'Agent管理', '外观设置', '通用设置'])
+    expect(screen.getByText('远程服务器')).not.toBeVisible()
+    expect(screen.getByText('关于')).not.toBeVisible()
   })
 
   it('switches between Tasks, Usage, and Settings', async () => {
     render(<SettingsApp onClose={vi.fn()} />)
 
     expect(screen.getByRole('heading', { name: 'Tasks' })).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Usage' }))
+    fireEvent.click(screen.getByRole('button', { name: '使用额度' }))
     expect(await screen.findByRole('heading', { name: 'Usage' })).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
+    fireEvent.click(screen.getByRole('button', { name: '通用设置' }))
     await waitFor(() => expect(screen.getByText('settings.language')).toBeInTheDocument())
   })
 
@@ -121,7 +121,7 @@ describe('settings island menu', () => {
   it('uses the left settings menu for island pages instead of top tabs', async () => {
     const { container } = render(<SettingsApp onClose={vi.fn()} />)
 
-    fireEvent.click(screen.getByText('settings.island.title'))
+    fireEvent.click(screen.getByText('外观设置'))
 
     await waitFor(() => expect(screen.getByRole('button', { name: /Overview/ })).toHaveClass('active'))
     expect(screen.getByRole('button', { name: /Display/ })).toBeInTheDocument()
@@ -131,7 +131,10 @@ describe('settings island menu', () => {
     fireEvent.click(screen.getByRole('button', { name: /Display/ }))
 
     await waitFor(() => expect(screen.getByRole('button', { name: /Display/ })).toHaveClass('active'))
-    await waitFor(() => expect(screen.getByText('settings.colorTheme')).toBeInTheDocument())
+    // 灵动岛效果只在总览页提供单一入口，Display 页不再重复配色卡与效果单选项。
+    expect(screen.queryByText('settings.colorTheme')).not.toBeInTheDocument()
+    expect(container.querySelectorAll('.color-theme-cards')).toHaveLength(0)
+    expect(screen.queryByRole('radio', { name: /磨砂玻璃/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('radiogroup', { name: '展示模式' })).not.toBeInTheDocument()
     expect(screen.queryByRole('radio', { name: '灵动岛' })).not.toBeInTheDocument()
     expect(container.querySelector('.island-tabs')).not.toBeInTheDocument()
@@ -140,11 +143,11 @@ describe('settings island menu', () => {
   it('keeps SSH server management out of the Dynamic Island menu', async () => {
     const { container } = render(<SettingsApp onClose={vi.fn()} />)
 
-    fireEvent.click(screen.getByText('settings.island.title'))
+    fireEvent.click(screen.getByText('外观设置'))
 
     await waitFor(() => expect(screen.getByRole('button', { name: /Overview/ })).toHaveClass('active'))
-    const islandMenuLabels = Array.from(container.querySelectorAll('.settings-capability-nav button'))
-      .map((button) => button.getAttribute('aria-label'))
+    const islandMenuLabels = Array.from(container.querySelectorAll('.island-view-tabs button'))
+      .map((button) => button.textContent?.trim())
     expect(islandMenuLabels).toContain('Integration')
     expect(islandMenuLabels).not.toContain('SSH Remote')
     expect(screen.queryByText('settings.sshDescription')).not.toBeInTheDocument()
@@ -153,25 +156,25 @@ describe('settings island menu', () => {
   it('opens Remote Servers as an independent settings section', async () => {
     render(<SettingsApp onClose={vi.fn()} />)
 
-    fireEvent.click(screen.getByText('settings.remoteServers.title'))
+    fireEvent.click(screen.getByText('远程服务器'))
 
     await waitFor(() => expect(screen.getByText('settings.listeningPortDesc')).toBeInTheDocument())
     expect(screen.getByText('One server directory for Vibe Board')).toBeInTheDocument()
   })
 
-  it('places Remote Servers immediately after Agent management', () => {
+  it('orders Skill and Agent management in the primary navigation', () => {
     const { container } = render(<SettingsApp onClose={vi.fn()} />)
     const labels = Array.from(container.querySelectorAll('.settings-sidebar__item .settings-sidebar__label-text'))
       .map((item) => item.textContent?.trim())
 
-    expect(labels.indexOf('settings.skillManager')).toBeLessThan(labels.indexOf('settings.remoteServers.title'))
-    expect(labels.indexOf('settings.remoteServers.title')).toBe(labels.indexOf('settings.skillManager') + 1)
+    expect(labels.indexOf('Skill管理')).toBeLessThan(labels.indexOf('Agent管理'))
+    expect(labels.indexOf('Agent管理')).toBeLessThan(labels.indexOf('远程服务器'))
   })
 
   it('keeps the independent Remote Servers host fallback working outside Tauri', async () => {
     render(<SettingsApp onClose={vi.fn()} />)
 
-    fireEvent.click(screen.getByText('settings.remoteServers.title'))
+    fireEvent.click(screen.getByText('远程服务器'))
 
     fireEvent.change(await screen.findByPlaceholderText('settings.name'), { target: { value: 'Dev Box' } })
     fireEvent.change(screen.getByPlaceholderText('user@host'), { target: { value: 'dev.example.com:2222' } })
@@ -186,8 +189,8 @@ describe('settings island menu', () => {
   it('places Hook diagnostics under Integration instead of Advanced', async () => {
     render(<SettingsApp onClose={vi.fn()} />)
 
-    fireEvent.click(screen.getByText('settings.island.title'))
-    fireEvent.click(screen.getByRole('button', { name: /Integration/ }))
+    fireEvent.click(screen.getByText('外观设置'))
+    fireEvent.click(await screen.findByRole('button', { name: /Integration/ }))
 
     await waitFor(() => expect(screen.getByText('Hook Doctor')).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: 'Run diagnostics' }))
@@ -204,8 +207,8 @@ describe('settings island menu', () => {
   it('renders Advanced without removed debug and launcher controls', async () => {
     render(<SettingsApp onClose={vi.fn()} />)
 
-    fireEvent.click(screen.getByText('settings.island.title'))
-    fireEvent.click(screen.getByRole('button', { name: /Advanced/ }))
+    fireEvent.click(screen.getByText('外观设置'))
+    fireEvent.click(await screen.findByRole('button', { name: /Advanced/ }))
 
     await waitFor(() => expect(screen.getByText('Visual Signals')).toBeInTheDocument())
     expect(screen.getByText('settings.agentActivity')).toBeInTheDocument()
@@ -217,25 +220,88 @@ describe('settings island menu', () => {
     expect(screen.queryByText('settings.remoteHosts')).not.toBeInTheDocument()
   })
 
-  it('keeps the island page active when collapsing the capability sidebar', async () => {
+  it('saves the island effect choice from the appearance page', async () => {
+    useThemeStore.setState({ colorTheme: 'midnight' })
     render(<SettingsApp onClose={vi.fn()} />)
 
-    fireEvent.click(screen.getByText('settings.island.title'))
+    fireEvent.click(screen.getByRole('button', { name: '外观设置' }))
 
-    await waitFor(() => expect(screen.getByText('settings.tipsEnabled')).toBeInTheDocument())
-    fireEvent.click(screen.getByRole('button', { name: 'Collapse sidebar' }))
+    const frosted = await screen.findByRole('radio', { name: /磨砂玻璃/ })
+    expect(screen.getByRole('radio', { name: /纯黑/ })).toHaveAttribute('aria-checked', 'true')
 
-    expect(screen.getByRole('button', { name: 'Expand sidebar' })).toBeInTheDocument()
-    expect(screen.getByText('settings.tipsEnabled')).toBeInTheDocument()
+    fireEvent.click(frosted)
+
+    expect(useThemeStore.getState().colorTheme).toBe('frosted-glass')
+    expect(document.documentElement.getAttribute('data-island-color-theme')).toBe('frosted-glass')
+    expect(frosted).toHaveAttribute('aria-checked', 'true')
+
+    fireEvent.click(screen.getByRole('radio', { name: /纯黑/ }))
+    expect(useThemeStore.getState().colorTheme).toBe('midnight')
   })
 
-  it('uses the capability brand area to return to general settings', async () => {
+  it('does not report midnight selected when another color theme is saved', async () => {
+    useThemeStore.setState({ colorTheme: 'warm-paper' })
     render(<SettingsApp onClose={vi.fn()} />)
 
-    fireEvent.click(screen.getByText('settings.island.title'))
+    fireEvent.click(screen.getByRole('button', { name: '外观设置' }))
+
+    const midnight = await screen.findByRole('radio', { name: /纯黑/ })
+    expect(midnight).toHaveAttribute('aria-checked', 'false')
+    expect(screen.getByRole('radio', { name: /磨砂玻璃/ })).toHaveAttribute('aria-checked', 'false')
+    expect(screen.getByText(/当前使用其他配色主题/)).toBeInTheDocument()
+
+    fireEvent.click(midnight)
+    expect(useThemeStore.getState().colorTheme).toBe('midnight')
+    await waitFor(() => expect(midnight).toHaveAttribute('aria-checked', 'true'))
+  })
+
+  it('removes the large island preview while keeping both effect choices', async () => {
+    render(<SettingsApp onClose={vi.fn()} />)
+
+    fireEvent.click(screen.getByRole('button', { name: '外观设置' }))
+
+    expect(await screen.findByRole('radio', { name: /纯黑/ })).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: /磨砂玻璃/ })).toBeInTheDocument()
+    expect(screen.getByText(/选择一种外观效果/)).toBeInTheDocument()
+    expect(document.querySelector('.island-effect-picker')).not.toBeNull()
+    expect(document.querySelector('.island-effect-preview')).toBeNull()
+  })
+
+  it('opens the user-level Skills overview with honest distribution categories', async () => {
+    render(<SettingsApp onClose={vi.fn()} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Skill管理' }))
+
+    expect(await screen.findByRole('heading', { name: 'Skills' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /全部（中心库）/ })).toBeInTheDocument()
+    expect(screen.getByText(/仅用户级 Skills/)).toBeInTheDocument()
+    expect(screen.getByText(/没有「通用 \/ 专属」自动分配能力/)).toBeInTheDocument()
+    expect(screen.queryByText(/通用分类来自中心库/)).not.toBeInTheDocument()
+  })
+
+  it('keeps the six primary navigation entries on the island page', async () => {
+    const { container } = render(<SettingsApp onClose={vi.fn()} />)
+
+    fireEvent.click(screen.getByText('外观设置'))
 
     await waitFor(() => expect(screen.getByText('settings.tipsEnabled')).toBeInTheDocument())
-    fireEvent.click(screen.getByRole('button', { name: 'Back to Settings' }))
+    const labels = Array.from(
+      container.querySelectorAll('.settings-sidebar__item:not([hidden]) .settings-sidebar__label-text'),
+    ).map((item) => item.textContent?.trim())
+    expect(labels).toEqual(['任务看板', '使用额度', 'Skill管理', 'Agent管理', '外观设置', '通用设置'])
+    expect(container.querySelector('.settings-capability-nav')).not.toBeInTheDocument()
+    const islandTabs = Array.from(container.querySelectorAll('.island-view-tabs button'))
+      .map((button) => button.textContent?.trim())
+    expect(islandTabs).toEqual(['Overview', 'Display', 'Behavior', 'Integration', 'Shortcuts', 'Advanced'])
+  })
+
+  it('returns to general settings from the island page via the primary navigation', async () => {
+    render(<SettingsApp onClose={vi.fn()} />)
+
+    fireEvent.click(screen.getByText('外观设置'))
+
+    await waitFor(() => expect(screen.getByText('settings.tipsEnabled')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: '通用设置' }))
 
     await waitFor(() => expect(screen.getByText('settings.language')).toBeInTheDocument())
     expect(screen.queryByText('settings.tipsEnabled')).not.toBeInTheDocument()
@@ -246,7 +312,7 @@ describe('settings island menu', () => {
 
     render(<SettingsApp onClose={vi.fn()} />)
 
-    fireEvent.click(screen.getByText('settings.island.title'))
+    fireEvent.click(screen.getByText('外观设置'))
 
     await waitFor(() => expect(screen.getByText('settings.tipsEnabled')).toBeInTheDocument())
     const tipsRow = screen.getByText('settings.tipsEnabled').closest('.setting-row')
@@ -269,7 +335,7 @@ describe('settings island menu', () => {
 
     render(<SettingsApp onClose={vi.fn()} />)
 
-    fireEvent.click(screen.getByText('settings.island.title'))
+    fireEvent.click(screen.getByText('外观设置'))
     fireEvent.click(await screen.findByText('Quiet Assistant'))
 
     expect(useConfigStore.getState()).toEqual(expect.objectContaining({
@@ -303,8 +369,8 @@ describe('settings island menu', () => {
 
     render(<SettingsApp onClose={vi.fn()} />)
 
-    fireEvent.click(screen.getByText('settings.island.title'))
-    fireEvent.click(screen.getByRole('button', { name: /Display/ }))
+    fireEvent.click(screen.getByText('外观设置'))
+    fireEvent.click(await screen.findByRole('button', { name: /Display/ }))
 
     await waitFor(() => {
       expect(screen.getByText('settings.mainDisplay · Color LCD (1728x1117)')).toBeInTheDocument()
@@ -316,8 +382,8 @@ describe('settings island menu', () => {
     useConfigStore.setState({ notchHeightMode: 'custom', customNotchHeight: 40 })
     const { container } = render(<SettingsApp onClose={vi.fn()} />)
 
-    fireEvent.click(screen.getByText('settings.island.title'))
-    fireEvent.click(screen.getByRole('button', { name: /Display/ }))
+    fireEvent.click(screen.getByText('外观设置'))
+    fireEvent.click(await screen.findByRole('button', { name: /Display/ }))
 
     await waitFor(() => expect(screen.getByText('settings.customNotchHeight')).toBeInTheDocument())
     const customRow = screen.getByText('settings.customNotchHeight').closest('.setting-row')
@@ -335,8 +401,8 @@ describe('settings island menu', () => {
     useConfigStore.setState({ completionCardHeight: 200 })
     render(<SettingsApp onClose={vi.fn()} />)
 
-    fireEvent.click(screen.getByText('settings.island.title'))
-    fireEvent.click(screen.getByRole('button', { name: /Display/ }))
+    fireEvent.click(screen.getByText('外观设置'))
+    fireEvent.click(await screen.findByRole('button', { name: /Display/ }))
 
     await waitFor(() => expect(screen.getByText('settings.completionCardHeight')).toBeInTheDocument())
     const row = screen.getByText('settings.completionCardHeight').closest('.setting-row')
@@ -353,8 +419,8 @@ describe('settings island menu', () => {
   it('records and clears in-window shortcuts from the shortcuts page', async () => {
     render(<SettingsApp onClose={vi.fn()} />)
 
-    fireEvent.click(screen.getByText('settings.island.title'))
-    fireEvent.click(screen.getByRole('button', { name: /Shortcuts/ }))
+    fireEvent.click(screen.getByText('外观设置'))
+    fireEvent.click(await screen.findByRole('button', { name: /Shortcuts/ }))
 
     await waitFor(() => expect(screen.getByText('Toggle Panel')).toBeInTheDocument())
     expect(screen.getByText('Collapse Panel')).toBeInTheDocument()
@@ -383,8 +449,8 @@ describe('settings island menu', () => {
     tauriMocks.setGlobalActionShortcuts.mockRejectedValueOnce(new Error('already registered'))
     render(<SettingsApp onClose={vi.fn()} />)
 
-    fireEvent.click(screen.getByText('settings.island.title'))
-    fireEvent.click(screen.getByRole('button', { name: /Shortcuts/ }))
+    fireEvent.click(screen.getByText('外观设置'))
+    fireEvent.click(await screen.findByRole('button', { name: /Shortcuts/ }))
 
     await waitFor(() => expect(screen.getByText('Approve current permission')).toBeInTheDocument())
     const row = screen.getByText('Approve current permission').closest('.setting-row')!

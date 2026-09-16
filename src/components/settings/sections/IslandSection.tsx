@@ -306,13 +306,38 @@ function hookDoctorSuggestion(t: (key: string, options?: Record<string, unknown>
 
 interface IslandSectionProps {
   activeView: IslandSettingsView
+  onViewChange: (view: IslandSettingsView) => void
 }
 
-export function IslandSection({ activeView }: IslandSectionProps) {
+// 旧二级侧栏的能力入口移入右侧内容区，主侧栏保持固定六项导航。
+const ISLAND_VIEWS: Array<{ id: IslandSettingsView; labelKey: string; labelDefault: string }> = [
+  { id: 'overview', labelKey: 'settings.island.tabs.overview', labelDefault: 'Overview' },
+  { id: 'display', labelKey: 'settings.island.tabs.display', labelDefault: 'Display' },
+  { id: 'behavior', labelKey: 'settings.island.tabs.behavior', labelDefault: 'Behavior' },
+  { id: 'integration', labelKey: 'settings.island.tabs.integration', labelDefault: 'Integration' },
+  { id: 'keys', labelKey: 'settings.island.tabs.keys', labelDefault: 'Shortcuts' },
+  { id: 'advanced', labelKey: 'settings.island.tabs.advanced', labelDefault: 'Advanced' },
+]
+
+export function IslandSection({ activeView, onViewChange }: IslandSectionProps) {
   const { t } = useTranslation()
 
   return (
     <SettingSection className="setting-section--compact island-settings-section" title={t('settings.island.title')} description={t('settings.island.desc')}>
+      <div className="island-view-tabs" role="tablist" aria-label={t('settings.island.title')}>
+        {ISLAND_VIEWS.map((view) => (
+          <button
+            key={view.id}
+            type="button"
+            className={`island-view-tab${activeView === view.id ? ' active' : ''}`}
+            aria-pressed={activeView === view.id}
+            title={t(view.labelKey, { defaultValue: view.labelDefault })}
+            onClick={() => onViewChange(view.id)}
+          >
+            {t(view.labelKey, { defaultValue: view.labelDefault })}
+          </button>
+        ))}
+      </div>
       {activeView === 'overview' && <OverviewTab />}
       {activeView === 'display' && <DisplayTab />}
       {activeView === 'behavior' && <BehaviorTab />}
@@ -325,8 +350,15 @@ export function IslandSection({ activeView }: IslandSectionProps) {
 
 // ── Overview Tab ──
 function OverviewTab() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const config = useConfigStore()
+  const { colorTheme, setColorTheme } = useThemeStore()
+  const isZh = i18n.language?.startsWith('zh')
+  // Only midnight / frosted-glass are real choices on this page. Any other
+  // persisted theme must not be reported as "midnight selected".
+  const activeEffect = colorTheme === 'midnight' || colorTheme === 'frosted-glass' ? colorTheme : null
+  const currentTheme = COLOR_THEMES.find((theme) => theme.id === colorTheme)
+  const currentThemeLabel = currentTheme ? (isZh ? currentTheme.labelZh : currentTheme.label) : colorTheme
   const activeInteractionPreset = (
     config.interactionMode === QUIET_ASSISTANT_PRESET.interactionMode
     && config.smartSuppression === QUIET_ASSISTANT_PRESET.smartSuppression
@@ -358,56 +390,85 @@ function OverviewTab() {
 
   return (
     <>
-      <div className="overview-showcase">
-        <div className="overview-hero" aria-hidden="true">
-          <div className="overview-hero__wallpaper">
-            <span className="overview-hero__stripe overview-hero__stripe--blue" />
-            <span className="overview-hero__stripe overview-hero__stripe--cyan" />
-            <span className="overview-hero__stripe overview-hero__stripe--warm" />
-            <span className="overview-hero__stripe overview-hero__stripe--gold" />
-          </div>
-          <div className="overview-live-pill">
-            <img src="/vibe-board-app-icon.png" className="overview-live-pill__icon" alt="Vibe Board" />
-            <span className="overview-live-pill__copy">
-              <strong>Vibe Board</strong>
-              <span>让Agent更好用</span>
-            </span>
-          </div>
+      <div className="island-effect-picker">
+        <div className="island-effect-picker__head">
+          <h3>{t('settings.island.effects.title', { defaultValue: '灵动岛外观效果' })}</h3>
+          <p>{t('settings.island.effects.desc', { defaultValue: '选择一种外观效果，立即保存并应用到桌面灵动岛。空闲时只保留图标；运行时只显示正在工作的 Agent，不显示任务名，也不显示额度、数量或齿轮。' })}</p>
         </div>
 
-        <div className="overview-mode-grid">
+        <div className="island-effect-cards" role="radiogroup" aria-label={t('settings.island.effects.groupLabel', { defaultValue: '灵动岛外观效果' })}>
           <button
-            aria-pressed={activeInteractionPreset === 'quiet'}
-            className={`overview-mode-card ${activeInteractionPreset === 'quiet' ? 'overview-mode-card--active' : ''}`}
             type="button"
-            onClick={() => applyInteractionPreset(QUIET_ASSISTANT_PRESET)}
+            role="radio"
+            aria-checked={activeEffect === 'midnight'}
+            className={`island-effect-card${activeEffect === 'midnight' ? ' is--active' : ''}`}
+            onClick={() => setColorTheme('midnight')}
           >
-            <span className="overview-mode-card__island" />
-            <strong>{t('settings.island.overview.quietAssistant', { defaultValue: 'Quiet Assistant' })}</strong>
-            <span className="overview-mode-card__description">{t('settings.island.overview.quietAssistantDesc', { defaultValue: 'Hidden while agents run; appears for approvals, questions, failures, and completion notifications.' })}</span>
+            <span className="island-effect-card__thumb island-effect-card__thumb--midnight" aria-hidden="true" />
+            <span className="island-effect-card__text">
+              <strong>{t('settings.island.effects.midnight', { defaultValue: '纯黑' })}</strong>
+              <span>{t('settings.island.effects.midnightDesc', { defaultValue: '不透明黑色底，贴近屏幕边缘的默认效果。' })}</span>
+            </span>
+            <span className="island-effect-card__check" aria-hidden="true">✓</span>
           </button>
           <button
-            aria-pressed={activeInteractionPreset === 'persistent'}
-            className={`overview-mode-card ${activeInteractionPreset === 'persistent' ? 'overview-mode-card--active' : ''}`}
             type="button"
-            onClick={() => applyInteractionPreset(PERSISTENT_MONITOR_PRESET)}
+            role="radio"
+            aria-checked={activeEffect === 'frosted-glass'}
+            className={`island-effect-card${activeEffect === 'frosted-glass' ? ' is--active' : ''}`}
+            onClick={() => setColorTheme('frosted-glass')}
           >
-            <span className="overview-mode-card__island" />
-            <strong>{t('settings.island.overview.persistentMonitor', { defaultValue: 'Persistent Monitor' })}</strong>
-            <span className="overview-mode-card__description">{t('settings.island.overview.persistentMonitorDesc', { defaultValue: 'Keeps the island visible while agents run, then returns to a mini island when idle.' })}</span>
+            <span className="island-effect-card__thumb island-effect-card__thumb--frosted-glass" aria-hidden="true" />
+            <span className="island-effect-card__text">
+              <strong>{t('settings.island.effects.frostedGlass', { defaultValue: '磨砂玻璃' })}</strong>
+              <span>{t('settings.island.effects.frostedGlassDesc', { defaultValue: '半透明浅色玻璃，透出虚化的桌面背景。' })}</span>
+            </span>
+            <span className="island-effect-card__check" aria-hidden="true">✓</span>
           </button>
-          {activeInteractionPreset === 'custom' && (
-            <div className="overview-mode-custom" role="status">
-              <strong>{t('settings.island.overview.customPreset', { defaultValue: 'Custom visibility' })}</strong>
-              <span>{t('settings.island.overview.customPresetDesc', { defaultValue: 'One or more visibility timing settings differ from the presets below.' })}</span>
-            </div>
-          )}
         </div>
+
+        {!activeEffect && (
+          <p className="island-effect-current" role="status">
+            {t('settings.island.effects.currentOther', {
+              name: currentThemeLabel,
+              defaultValue: '当前使用其他配色主题「{{name}}」，不属于纯黑或磨砂玻璃；选择下方效果会立即切换。',
+            })}
+          </p>
+        )}
       </div>
 
       <div className="overview-section-heading">
         <h3>{t('settings.island.overview.coreSwitches', { defaultValue: 'Core Switches' })}</h3>
         <p>{t('settings.island.overview.coreSwitchesDesc', { defaultValue: 'Primary controls for visibility, focus behavior, and suppression.' })}</p>
+      </div>
+
+      <div className="overview-mode-grid">
+        <button
+          aria-pressed={activeInteractionPreset === 'quiet'}
+          className={`overview-mode-card ${activeInteractionPreset === 'quiet' ? 'overview-mode-card--active' : ''}`}
+          type="button"
+          onClick={() => applyInteractionPreset(QUIET_ASSISTANT_PRESET)}
+        >
+          <span className="overview-mode-card__island" />
+          <strong>{t('settings.island.overview.quietAssistant', { defaultValue: 'Quiet Assistant' })}</strong>
+          <span className="overview-mode-card__description">{t('settings.island.overview.quietAssistantDesc', { defaultValue: 'Hidden while agents run; appears for approvals, questions, failures, and completion notifications.' })}</span>
+        </button>
+        <button
+          aria-pressed={activeInteractionPreset === 'persistent'}
+          className={`overview-mode-card ${activeInteractionPreset === 'persistent' ? 'overview-mode-card--active' : ''}`}
+          type="button"
+          onClick={() => applyInteractionPreset(PERSISTENT_MONITOR_PRESET)}
+        >
+          <span className="overview-mode-card__island" />
+          <strong>{t('settings.island.overview.persistentMonitor', { defaultValue: 'Persistent Monitor' })}</strong>
+          <span className="overview-mode-card__description">{t('settings.island.overview.persistentMonitorDesc', { defaultValue: 'Keeps the island visible while agents run, then returns to a mini island when idle.' })}</span>
+        </button>
+        {activeInteractionPreset === 'custom' && (
+          <div className="overview-mode-custom" role="status">
+            <strong>{t('settings.island.overview.customPreset', { defaultValue: 'Custom visibility' })}</strong>
+            <span>{t('settings.island.overview.customPresetDesc', { defaultValue: 'One or more visibility timing settings differ from the presets below.' })}</span>
+          </div>
+        )}
       </div>
 
       <SettingGroup>
@@ -540,7 +601,8 @@ function BehaviorTab() {
 function DisplayTab() {
   const { t, i18n } = useTranslation()
   const config = useConfigStore()
-  const { themes, activeThemeName, setActiveTheme, colorTheme, setColorTheme } = useThemeStore()
+  // 灵动岛配色只在总览页的两种效果中切换，Display 页不再重复提供配色入口。
+  const { themes, activeThemeName, setActiveTheme } = useThemeStore()
   const isZh = i18n.language?.startsWith('zh')
   const [displays, setDisplays] = useState<BackendDisplayInfo[]>([])
   const previewTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
@@ -645,31 +707,6 @@ function DisplayTab() {
             }}
             isZh={isZh}
           />
-        </div>
-      </SettingGroup>
-
-      <SettingGroup label={t('settings.colorTheme')}>
-        <div className="color-theme-cards">
-          {COLOR_THEMES.map((ct) => (
-            <button
-              key={ct.id}
-              type="button"
-              className={`color-theme-card ${colorTheme === ct.id ? 'color-theme-card--active' : ''}`}
-              onClick={() => {
-                setColorTheme(ct.id)
-                previewLayout('compact')
-              }}
-            >
-              <div className="color-theme-card__preview">
-                <div className="color-theme-card__swatch" style={{ background: ct.bg }}>
-                  <div className="color-theme-card__swatch-card" style={{ background: ct.card }} />
-                  <div className="color-theme-card__swatch-dot" style={{ background: ct.accent }} />
-                </div>
-              </div>
-              <div className="color-theme-card__label">{isZh ? ct.labelZh : ct.label}</div>
-              <div className="color-theme-card__tag">{ct.tag}</div>
-            </button>
-          ))}
         </div>
       </SettingGroup>
 

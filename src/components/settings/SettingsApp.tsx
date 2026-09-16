@@ -13,9 +13,11 @@ import { AboutSection } from './sections/AboutSection'
 import { SwitchSection } from './sections/SwitchSection'
 import { RemoteServersSection } from './sections/RemoteServersSection'
 import { SkillManagerSection } from '../skills-v2/SkillManagerSection'
+import { SkillOverviewPage } from '../skills-v2/SkillOverviewPage'
 import { SetupWizard } from './SetupWizard'
 import { useUpdater } from '../../hooks/useUpdater'
 import { useConfigStore } from '../../stores/configStore'
+import { useSkillStoreV2 } from '../../stores/skillStoreV2'
 import { getConfig, isTauri } from '../../services/tauriApi'
 import type { IslandSettingsView, MonitorSettingsView } from '../../types/capability'
 import '../../styles/settings.css'
@@ -42,7 +44,7 @@ export function SettingsApp({ onClose }: SettingsAppProps) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [updateMinimized, setUpdateMinimized] = useState(false)
   const SectionComponent = sections[activeSection] ?? GeneralSection
-  const isSkillManager = activeSection === 'skill-manager-v2'
+  const isSkillManager = activeSection === 'skill-manager-v2' || activeSection === 'agents'
   const contentClassName = `settings-content settings-scroll${isSkillManager ? ' settings-content--skill-manager' : ''}`
   // Guard both the in-app close button and the native close event while an
   // update is downloading. The native handler applies tray/exit behavior.
@@ -132,16 +134,14 @@ export function SettingsApp({ onClose }: SettingsAppProps) {
     <div className="settings-app">
       <SettingsSidebar
         activeSection={activeSection}
-        activeIslandView={activeIslandView}
         activeMonitorView={activeMonitorView}
         collapsed={sidebarCollapsed}
         onCollapsedChange={setSidebarCollapsed}
         onSelect={setActiveSection}
-        onIslandViewChange={setActiveIslandView}
         onMonitorViewChange={setActiveMonitorView}
       />
       <div className={contentClassName}>
-        {activeSection !== 'skill-manager-v2' && (
+        {activeSection !== 'skill-manager-v2' && activeSection !== 'agents' && (
           <div className="settings-window-brand" aria-hidden="true">
             <span className="settings-window-brand__mark">
               <img src="/vibe-board-app-icon.png" alt="" />
@@ -182,8 +182,17 @@ export function SettingsApp({ onClose }: SettingsAppProps) {
               <AgentMonitorSection activeView="tasks" />
             ) : activeSection === 'usage' ? (
               <UnifiedUsageSection />
+            ) : activeSection === 'skills' ? (
+              <SkillOverviewPage
+                onOpenAdvanced={() => {
+                  useSkillStoreV2.getState().setTab('library')
+                  setActiveSection('skill-manager-v2')
+                }}
+              />
+            ) : activeSection === 'agents' ? (
+              <SkillManagerSection />
             ) : activeSection === 'island' ? (
-              <IslandSection activeView={activeIslandView} />
+              <IslandSection activeView={activeIslandView} onViewChange={setActiveIslandView} />
             ) : activeSection === 'monitor' ? (
               <AgentMonitorSection activeView={activeMonitorView} />
             ) : activeSection === 'switch' ? (

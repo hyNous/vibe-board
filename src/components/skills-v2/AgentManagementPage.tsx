@@ -65,6 +65,85 @@ const PAGE_SIZE = 28
 const SHARED_SKILLS_AGENT_ID = 'agents'
 const NOTICE_DISMISS_MS = 3200
 const PACK_PROGRESS_DONE_DISMISS_MS = 2400
+const AGENT_DETECTION_LABELS = {
+  installed: '已安装',
+  updateAvailable: '可更新',
+  configOnly: '仅发现配置',
+  notInstalled: '未安装',
+  unavailable: '不可用',
+  undetected: '未检测到',
+} as const
+
+const AGENT_DETECTION_CLASSES = {
+  installed: 'installed',
+  updateAvailable: 'update-available',
+  configOnly: 'config-only',
+  notInstalled: 'not-installed',
+  unavailable: 'unavailable',
+  undetected: 'undetected',
+} as const
+
+type AgentDetectionStatus = keyof typeof AGENT_DETECTION_LABELS
+
+interface AgentInventoryEntry {
+  id: string
+  displayName: string
+  iconKey: string
+  installed: boolean
+  status: AgentDetectionStatus
+  programDetected: boolean
+  detectedByInventory: boolean
+  version: string | null
+  hooksInstalled: boolean
+  managedSkillCount: number
+  unmanagedSkillCount: number
+}
+
+// 技能库存（skills/配置文件）只能证明本机发现过该 Agent 的配置；程序是否真的
+// 安装以 agent_refresh 的二进制/应用检测为准。installed 必须来自程序检测，
+// 库存命中只用于区分「仅发现配置/Skills」，绝不把库存当成程序已安装。
+function agentDetection(
+  program: AgentProgramInfo | null | undefined,
+  detectedByInventory: boolean,
+): { status: AgentDetectionStatus; installed: boolean } {
+  if (program?.status === 'updateAvailable') {
+    return { status: 'updateAvailable', installed: true }
+  }
+  if (program?.status === 'installed') {
+    return { status: 'installed', installed: true }
+  }
+  if (detectedByInventory) {
+    return { status: 'configOnly', installed: false }
+  }
+  if (program?.status === 'unavailable') {
+    return { status: 'unavailable', installed: false }
+  }
+  return { status: program ? 'notInstalled' : 'undetected', installed: false }
+}
+
+function inventoryMetaLabel(agent: AgentInventoryEntry): string {
+  const skillCount = agent.managedSkillCount + agent.unmanagedSkillCount
+  if (agent.installed) {
+    return [
+      agent.version ? `v${agent.version}` : '已安装',
+      agent.hooksInstalled ? 'Hook 已装' : '',
+      skillCount > 0 ? `Skills ${skillCount}` : '',
+    ].filter(Boolean).join(' · ')
+  }
+  if (agent.status === 'configOnly') {
+    const programLabel = agent.programDetected ? '程序未安装' : '未检测到程序'
+    return skillCount > 0
+      ? `${programLabel} · 发现 Skills ${skillCount}`
+      : `${programLabel} · 仅发现配置`
+  }
+  if (agent.status === 'unavailable') {
+    return '本机未安装，且没有可用的安装方式'
+  }
+  if (agent.status === 'notInstalled') {
+    return '程序未安装'
+  }
+  return '未检测到本机程序'
+}
 
 function assertRuntimeEnvironment(expectedId: string, message: string) {
   if (
@@ -118,6 +197,27 @@ export function AgentManagementPage() {
   const selectedAgentIdRef = useRef<string | null>(null)
   const packApplyResolverRef = useRef<((applied: boolean) => void) | null>(null)
   const actionBusy = busy || refreshingOverview || refreshingAll || scanningAgentId !== null || updatingAgentId !== null || installingAgentId !== null || uninstallingAgentId !== null || openingAgentId !== null || deletingAgentId !== null
+  const inventory = useMemo<AgentInventoryEntry[]>(() => (
+    agents.map((agent) => {
+      const program = programs[agent.id] ?? null
+      const detection = agentDetection(program, agent.installed)
+      return {
+        id: agent.id,
+        displayName: agent.displayName,
+        iconKey: agent.iconKey,
+        installed: detection.installed,
+        status: detection.status,
+        programDetected: program !== null,
+        detectedByInventory: agent.installed,
+        version: program?.installedVersion ?? agent.version,
+        hooksInstalled: Boolean(program?.hooksInstalled),
+        managedSkillCount: agent.managedSkillCount,
+        unmanagedSkillCount: agent.unmanagedSkillCount,
+      }
+    }).sort((a, b) => Number(b.installed) - Number(a.installed))
+  ), [agents, programs])
+  const installedProgramCount = inventory.filter((agent) => agent.installed).length
+  const configOnlyCount = inventory.filter((agent) => agent.status === 'configOnly').length
 
   const loadPrograms = useCallback(async () => {
     setProgramLoading(true)
@@ -167,15 +267,15 @@ export function AgentManagementPage() {
   }, [])
 
   useEffect(() => {
-    if (agents.length === 0) {
+    if (inventory.length === 0) {
       if (state.selectedAgentId === SHARED_SKILLS_AGENT_ID) state.selectAgent(null)
       return
     }
-    if (state.selectedAgentId && agents.some((agent) => agent.id === state.selectedAgentId)) return
-    const first = agents.find((a) => a.installed) || agents[0]
+    if (state.selectedAgentId && inventory.some((agent) => agent.id === state.selectedAgentId)) return
+    const first = inventory.find((agent) => agent.installed) || inventory[0]
     if (first) state.selectAgent(first.id)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [agents, state.selectedAgentId])
+  }, [inventory, state.selectedAgentId])
 
   useEffect(() => {
     setTab('overview')
@@ -575,7 +675,7 @@ export function AgentManagementPage() {
       <div className="sm2__header sm2__header--stacked">
         <div>
           <h2 className="sm2__title">Agent 管理</h2>
-          <p className="sm2__header-subtitle">查看每个 Agent 的 Skills、技能包与 Hook 状态。</p>
+          <p className="sm2__header-subtitle">检测本机可管理的 Agent，并维护每个 Agent 的 Skills、技能包、Hook 与配置。</p>
         </div>
         <div className="sm2__tabs">
           {detail && canUninstallSelectedAgent && (
@@ -606,9 +706,45 @@ export function AgentManagementPage() {
       />
 
       <div className="sm2__main sm2__main--full settings-scroll">
+        <section className="sm2-agent-inventory" aria-label="本机 Agent 检测总览">
+          <div className="sm2-agent-inventory__head">
+            <div>
+              <h3>本机 Agent</h3>
+              <p>
+                这里汇总 Vibe Board 支持的 Agent，并给出本机真实检测结果：程序、版本与 Hook 是否就绪。
+                「仅发现配置」表示只找到该 Agent 的本机配置或 Skills 目录，不代表程序已安装；「未安装 / 不可用 / 未检测到」只代表本机没有检测到对应程序，不是在线状态。
+              </p>
+            </div>
+            <span className="sm2-agent-inventory__count">
+              程序已安装 {installedProgramCount} / {inventory.length}
+              {configOnlyCount > 0 ? ` · 仅发现配置 ${configOnlyCount}` : ''}
+            </span>
+          </div>
+          <div className="sm2-agent-inventory__grid">
+            {inventory.map((agent) => (
+              <button
+                key={agent.id}
+                type="button"
+                className={`sm2-agent-inventory__card${detail?.id === agent.id ? ' is--selected' : ''}`}
+                aria-pressed={detail?.id === agent.id}
+                title={`${agent.displayName} · ${AGENT_DETECTION_LABELS[agent.status]}`}
+                onClick={() => state.selectAgent(agent.id)}
+              >
+                <AgentIconBadge iconKey={agent.iconKey} title={agent.displayName} size={22} />
+                <span className="sm2-agent-inventory__copy">
+                  <span className="sm2-agent-inventory__name">{agent.displayName}</span>
+                  <span className="sm2-agent-inventory__meta">{inventoryMetaLabel(agent)}</span>
+                </span>
+                <span className={`sm2-agent-inventory__status sm2-agent-inventory__status--${AGENT_DETECTION_CLASSES[agent.status]}`}>
+                  {AGENT_DETECTION_LABELS[agent.status]}
+                </span>
+              </button>
+            ))}
+          </div>
+        </section>
         {!detail ? (
           <div className="sm2__empty">
-            {state.agentDetailLoading ? '加载 Agent 详情…' : '选择一个已安装 Agent 查看详情'}
+            {state.agentDetailLoading ? '加载 Agent 详情…' : '从上方选择一个 Agent 查看详情'}
           </div>
         ) : (
           <AgentDetailView
@@ -622,7 +758,8 @@ export function AgentManagementPage() {
             opening={openingAgentId === detail.id}
             adoptingUnmanagedId={adoptingUnmanagedId}
             program={programs[detail.id] || null}
-            agentInstalled={agents.find((agent) => agent.id === detail.id)?.installed ?? Boolean(detail.version || detail.skillsDir)}
+            agentInstalled={inventory.find((agent) => agent.id === detail.id)?.installed ?? false}
+            agentDetected={inventory.find((agent) => agent.id === detail.id)?.detectedByInventory ?? false}
             programLoading={programLoading}
             agentOutput={agentOutput}
             onAdopt={openAdopt}
@@ -1032,6 +1169,7 @@ function AgentDetailView({
   adoptingUnmanagedId,
   program,
   agentInstalled,
+  agentDetected,
   programLoading,
   agentOutput,
   onAdopt,
@@ -1056,6 +1194,7 @@ function AgentDetailView({
   adoptingUnmanagedId: string | null
   program: AgentProgramInfo | null
   agentInstalled: boolean
+  agentDetected: boolean
   programLoading: boolean
   agentOutput: string[]
   onAdopt: (agentId: string, unmanagedId: string) => void
@@ -1079,6 +1218,8 @@ function AgentDetailView({
   const inheritedSkillCount = inheritedManagedSkills.length + inheritedUnmanagedSkills.length
   const inheritsSharedSkills = detail.inheritsSharedSkills ?? inheritedSkillCount > 0
   const installed = program ? program.status === 'installed' || program.status === 'updateAvailable' : agentInstalled
+  // 扫描针对本机 Skills/配置，即使程序未安装，只要库存发现过配置就仍可扫描。
+  const canScan = installed || agentDetected
   const canInstall = Boolean(program?.installCommand)
   const canOpenDownload = Boolean(program?.downloadUrl)
   const canDeleteCustom = program?.isCustom === true
@@ -1134,7 +1275,7 @@ function AgentDetailView({
           <ActionButton className="sm2__btn sm2__btn--primary" disabled={primaryAction.disabled} onClick={primaryAction.onClick} busy={primaryAction.busy} busyLabel={primaryAction.label}>
             {primaryAction.label}
           </ActionButton>
-          <ActionButton className="sm2__btn" disabled={busy || scanning || updating || installing || !installed} onClick={() => onScan(detail.id)} busy={scanning} busyLabel="正在扫描">
+          <ActionButton className="sm2__btn" disabled={busy || scanning || updating || installing || !canScan} onClick={() => onScan(detail.id)} busy={scanning} busyLabel="正在扫描">
             {scanning ? '正在扫描' : '重新扫描此 Agent'}
           </ActionButton>
           {canDeleteCustom && (

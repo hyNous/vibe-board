@@ -503,10 +503,10 @@ html[data-island-color-theme="frosted-glass"] .claude-hook-lab__island-theme-tag
 html[data-island-color-theme="frosted-glass"] .notch-panel {
   background:
     radial-gradient(115% 82% at 50% -34%, rgba(255, 255, 255, 0.52), transparent 56%),
-    linear-gradient(180deg, rgba(251, 252, 255, 0.58) 0%, rgba(238, 242, 248, 0.34) 100%);
-  -webkit-backdrop-filter: blur(24px) saturate(1.35);
-  backdrop-filter: blur(24px) saturate(1.35);
-  border-color: rgba(255, 255, 255, 0.46);
+    linear-gradient(180deg, rgba(251, 252, 255, 0.86) 0%, rgba(238, 242, 248, 0.68) 100%);
+  -webkit-backdrop-filter: blur(40px) saturate(1.2);
+  backdrop-filter: blur(40px) saturate(1.2);
+  border-color: rgba(255, 255, 255, 0.7);
   box-shadow:
     var(--island-shadow),
     inset 0 -1px 0 rgba(52, 62, 82, 0.08);
@@ -517,7 +517,42 @@ html[data-island-color-theme="frosted-glass"] .notch-panel::after {
 }
 
 html[data-island-color-theme="frosted-glass"] .notch-panel[data-island-state="micro"] {
-  background: linear-gradient(180deg, rgba(251, 252, 255, 0.64), rgba(238, 242, 248, 0.40));
+  background: linear-gradient(180deg, rgba(251, 252, 255, 0.9), rgba(238, 242, 248, 0.74));
+}
+
+/* 磨砂玻璃降低透明度后，正文字重整体加粗一档，保证浅色玻璃上的可读性 */
+html[data-island-color-theme="frosted-glass"] .notch-panel {
+  font-weight: 600;
+}
+
+html[data-island-color-theme="frosted-glass"] :is(
+  .collapsed-bar__agent-name,
+  .collapsed-bar__brand-name,
+  .collapsed-bar__brand-slogan,
+  .collapsed-bar__info,
+  .collapsed-bar__tool-label,
+  .collapsed-bar__tool-project,
+  .collapsed-bar__tool-target,
+  .collapsed-bar__tool-target-name,
+  .collapsed-bar__tool-status,
+  .collapsed-bar__waiting-project,
+  .collapsed-bar__waiting-label,
+  .collapsed-bar__waiting-target,
+  .collapsed-bar__compacting-label,
+  .collapsed-bar__count,
+  .task-board__agent,
+  .task-board__title,
+  .task-board__state,
+  .task-board__empty,
+  .task-board__brand-slogan,
+  .hover-list__task-subject,
+  .hover-list__notice-title,
+  .hover-list__notice-detail,
+  .hover-list__subagent-type,
+  .hover-list__subagent-desc,
+  .hover-list__empty-agents span
+) {
+  font-weight: 720;
 }
 
 html[data-island-color-theme="frosted-glass"] .collapsed-bar__icon-btn,

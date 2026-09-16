@@ -5,20 +5,21 @@ import { useSkillStoreV2 } from '../../stores/skillStoreV2'
 import { useSessionStore } from '../../stores/sessionStore'
 import type { SkillManagerTab } from '../../stores/skillStoreV2'
 import { AgentIconBadge } from '../skills-v2/AgentIconBadge'
-import type { IslandSettingsView, MonitorSettingsView } from '../../types/capability'
+import type { MonitorSettingsView } from '../../types/capability'
+import { getCurrentAppVersion } from '../../services/tauriApi'
 import { buildAgentUsageScores, readStoredAgentOrder, sortAgentSummaries, writeStoredAgentOrder } from '../../utils/agentOrdering'
 
 interface SidebarItem {
   id: string
   labelKey: string
-  defaultLabel?: string
+  labelDefault: string
   icon: string
-  iconBg: string
   hidden?: boolean
 }
 
 interface SidebarGroup {
   labelKey?: string
+  labelDefault?: string
   items: SidebarItem[]
 }
 
@@ -29,44 +30,63 @@ interface AgentDropTarget {
   edge: 'before' | 'after'
 }
 
+// 左侧导航固定六项功能名（任务看板 / 使用额度 / Skill管理 / Agent管理 / 外观设置 / 通用设置），
+// 文案走 i18n；窄窗口只收窄侧栏宽度，不隐藏标签文字。
 const sidebarGroups: SidebarGroup[] = [
   {
+    labelKey: 'settings.nav.groups.run',
+    labelDefault: '运行',
     items: [
-      { id: 'tasks', labelKey: 'settings.tasks', defaultLabel: 'Tasks', icon: '✓', iconBg: '#34C759' },
-      { id: 'usage', labelKey: 'settings.usage', defaultLabel: 'Usage', icon: '▥', iconBg: '#007AFF' },
-      { id: 'general', labelKey: 'settings.controlTowerSettings', defaultLabel: 'Settings', icon: '⚙', iconBg: '#8E8E93' },
-      { id: 'island', labelKey: 'settings.island.title', icon: '🏝', iconBg: '#5856D6', hidden: true },
-      { id: 'skill-manager-v2', labelKey: 'settings.skillManager', icon: '🧩', iconBg: '#34C759', hidden: true },
-      { id: 'remote-servers', labelKey: 'settings.remoteServers.title', icon: '>_', iconBg: '#009C95', hidden: true },
+      { id: 'tasks', labelKey: 'settings.nav.tasks', labelDefault: '任务看板', icon: '✓' },
+      { id: 'usage', labelKey: 'settings.nav.usage', labelDefault: '使用额度', icon: '▥' },
     ],
   },
   {
-    labelKey: 'settings.agentIsland',
+    labelKey: 'settings.nav.groups.manage',
+    labelDefault: '管理',
     items: [
-      { id: 'about', labelKey: 'settings.about', icon: 'ℹ', iconBg: '#007AFF', hidden: true },
+      { id: 'skills', labelKey: 'settings.nav.skills', labelDefault: 'Skill管理', icon: '🧩' },
+      { id: 'agents', labelKey: 'settings.nav.agents', labelDefault: 'Agent管理', icon: '🤖' },
+    ],
+  },
+  {
+    labelKey: 'settings.nav.groups.appearance',
+    labelDefault: '外观',
+    items: [
+      { id: 'island', labelKey: 'settings.nav.island', labelDefault: '外观设置', icon: '🏝' },
+    ],
+  },
+  {
+    labelKey: 'settings.nav.groups.system',
+    labelDefault: '系统',
+    items: [
+      { id: 'general', labelKey: 'settings.nav.general', labelDefault: '通用设置', icon: '⚙' },
+    ],
+  },
+  {
+    items: [
+      { id: 'remote-servers', labelKey: 'settings.nav.remoteServers', labelDefault: '远程服务器', icon: '>_', hidden: true },
+      { id: 'about', labelKey: 'settings.nav.about', labelDefault: '关于', icon: 'ℹ', hidden: true },
+      { id: 'switch', labelKey: 'settings.nav.switch', labelDefault: 'Agent Switch', icon: '⇄', hidden: true },
     ],
   },
 ]
 
 interface SettingsSidebarProps {
   activeSection: string
-  activeIslandView: IslandSettingsView
   activeMonitorView: MonitorSettingsView
   collapsed: boolean
   onCollapsedChange: (collapsed: boolean) => void
   onSelect: (section: string) => void
-  onIslandViewChange: (view: IslandSettingsView) => void
   onMonitorViewChange: (view: MonitorSettingsView) => void
 }
 
 export function SettingsSidebar({
   activeSection,
-  activeIslandView,
   activeMonitorView,
   collapsed,
   onCollapsedChange,
   onSelect,
-  onIslandViewChange,
   onMonitorViewChange,
 }: SettingsSidebarProps) {
   const { t } = useTranslation()
@@ -82,6 +102,7 @@ export function SettingsSidebar({
   const [manualAgentOrder, setManualAgentOrder] = useState<string[]>(() => readStoredAgentOrder())
   const [draggedAgentId, setDraggedAgentId] = useState<string | null>(null)
   const [agentDropTarget, setAgentDropTarget] = useState<AgentDropTarget | null>(null)
+  const [appVersion, setAppVersion] = useState<string | null>(null)
   const agentMouseCleanupRef = useRef<(() => void) | null>(null)
   const suppressAgentClickRef = useRef(false)
   const agentUsageScores = useMemo(() => buildAgentUsageScores(sessionList, activeSessionId), [sessionList, activeSessionId])
@@ -172,22 +193,33 @@ export function SettingsSidebar({
     agentMouseCleanupRef.current = cleanup
   }
   useEffect(() => () => agentMouseCleanupRef.current?.(), [])
-  const sidebarClassName = `settings-sidebar settings-scroll${collapsed ? ' settings-sidebar--collapsed' : ''}`
+  useEffect(() => {
+    let cancelled = false
+    getCurrentAppVersion()
+      .then((version) => {
+        if (!cancelled) setAppVersion(version)
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [])
+  const sidebarClassName = 'settings-sidebar settings-scroll'
   const capabilitySidebarClassName = `settings-sidebar settings-sidebar--capability settings-scroll${collapsed ? ' settings-sidebar--collapsed' : ''}`
   const toggleLabel = collapsed ? t('settings.expandSidebar', { defaultValue: 'Expand sidebar' }) : t('settings.collapseSidebar', { defaultValue: 'Collapse sidebar' })
   const sectionTitleById: Record<string, string> = {
-    island: t('settings.island.title'),
-    'remote-servers': t('settings.remoteServers.title', { defaultValue: 'Remote Servers' }),
     monitor: t('settings.agentMonitor'),
-    agents: t('settings.agents'),
     switch: t('settings.switch'),
     'skill-manager-v2': t('settings.skillManager', { defaultValue: 'Agent管理' }),
   }
-  const isCapabilitySection = activeSection === 'island' || activeSection === 'monitor' || activeSection === 'agents' || activeSection === 'switch' || activeSection === 'skill-manager-v2'
+  const isCapabilitySection = activeSection === 'monitor' || activeSection === 'switch' || activeSection === 'skill-manager-v2'
   const brandTitle = isCapabilitySection ? sectionTitleById[activeSection] : t('settings.title')
   const backToSettingsLabel = t('settings.backToSettings', { defaultValue: 'Back to Settings' })
   const openSkillTab = (tab: SkillManagerTab) => {
     setSkillTab(tab)
+  }
+  const selectMainNavItem = (item: SidebarItem) => {
+    // Agent管理直接复用现有真实 Agent 管理页（技能库的 agents 标签页）。
+    if (item.id === 'agents') openSkillTab('agents')
+    onSelect(item.id)
   }
   const toggleSidebar = (
     <div className={`settings-sidebar__brand${isCapabilitySection ? ' settings-sidebar__brand--contextual' : ''}`}>
@@ -218,43 +250,6 @@ export function SettingsSidebar({
       </button>
     </div>
   )
-
-  if (activeSection === 'island') {
-    const navItems: Array<{ id: IslandSettingsView; label: string; icon: string; iconBg: string }> = [
-      { id: 'overview', label: t('settings.island.tabs.overview', { defaultValue: 'Overview' }), icon: '✦', iconBg: '#5856D6' },
-      { id: 'display', label: t('settings.island.tabs.display', { defaultValue: 'Display' }), icon: '◉', iconBg: '#007AFF' },
-      { id: 'behavior', label: t('settings.island.tabs.behavior', { defaultValue: 'Behavior' }), icon: '⚡', iconBg: '#FF9500' },
-      { id: 'integration', label: t('settings.island.tabs.integration', { defaultValue: 'Integration' }), icon: '⚙', iconBg: '#34C759' },
-      { id: 'keys', label: t('settings.island.tabs.keys', { defaultValue: 'Shortcuts' }), icon: '⌨', iconBg: '#8E8E93' },
-      { id: 'advanced', label: t('settings.island.tabs.advanced', { defaultValue: 'Advanced' }), icon: '⚒', iconBg: '#636366' },
-    ]
-
-    return (
-      <nav className={capabilitySidebarClassName}>
-        {toggleSidebar}
-        <div className="settings-capability-nav">
-          {navItems.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              className={activeIslandView === item.id ? 'active' : ''}
-              aria-label={item.label}
-              title={item.label}
-              onClick={() => onIslandViewChange(item.id)}
-            >
-              <span
-                className="settings-sidebar__icon settings-capability-nav__icon--colored"
-                style={{ background: activeIslandView === item.id ? 'rgba(255,255,255,0.25)' : item.iconBg, color: '#fff' }}
-              >
-                {item.icon}
-              </span>
-              <span className="settings-sidebar__label-text">{item.label}</span>
-            </button>
-          ))}
-        </div>
-      </nav>
-    )
-  }
 
   if (activeSection === 'monitor') {
     const navItems: Array<{ id: MonitorSettingsView; label: string; icon: string; iconBg: string }> = [
@@ -410,46 +405,65 @@ export function SettingsSidebar({
 
   return (
     <nav className={sidebarClassName}>
-      {toggleSidebar}
-      {sidebarGroups.map((group, gi) => (
-        <div key={gi} hidden={group.items.every((item) => item.hidden)}>
-          {gi > 0 && <div className="settings-sidebar__separator" />}
-          {group.labelKey && <div className="settings-sidebar__group-label">{t(group.labelKey)}</div>}
-          <div className="settings-sidebar__group">
-            {group.items.map((item) => {
-              const isActive = activeSection === item.id
-              const label = t(item.labelKey, { defaultValue: item.defaultLabel ?? item.labelKey })
-              return (
-                <div
-                  key={item.id}
-                  role="button"
-                  tabIndex={0}
-                  hidden={item.hidden}
-                  className={`settings-sidebar__item ${isActive ? 'settings-sidebar__item--active' : ''}`}
-                  aria-label={label}
-                  title={label}
-                  onClick={() => {
-                    onSelect(item.id)
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key !== 'Enter' && e.key !== ' ') return
-                    e.preventDefault()
-                    onSelect(item.id)
-                  }}
-                >
-                  <span
-                    className="settings-sidebar__icon"
-                    style={{ background: isActive ? 'rgba(255,255,255,0.25)' : item.iconBg, color: '#ffffff' }}
-                  >
-                    {item.icon}
-                  </span>
-                  <span className="settings-sidebar__label-text">{label}</span>
-                </div>
-              )
-            })}
-          </div>
+      <div className="settings-sidebar__brand">
+        <div className="settings-sidebar__brand-home settings-sidebar__brand-home--static">
+          <span className="settings-sidebar__brand-mark" aria-hidden="true">
+            <img className="settings-sidebar__collapse-logo" src="/vibe-board-logo.png" alt="" />
+          </span>
+          <span className="settings-sidebar__brand-copy">
+            <span className="settings-sidebar__brand-title">Vibe Board</span>
+            <span className="settings-sidebar__brand-sub">{t('settings.title')}</span>
+          </span>
         </div>
-      ))}
+      </div>
+      <div className="settings-sidebar__nav">
+        {sidebarGroups.map((group, gi) => (
+          <div key={gi} hidden={group.items.every((item) => item.hidden)}>
+            {group.labelKey && (
+              <div className="settings-sidebar__group-label settings-sidebar__group-label--nav">
+                {t(group.labelKey, { defaultValue: group.labelDefault })}
+              </div>
+            )}
+            <div className="settings-sidebar__group">
+              {group.items.map((item) => {
+                const isActive = activeSection === item.id
+                const label = t(item.labelKey, { defaultValue: item.labelDefault })
+                return (
+                  <div
+                    key={item.id}
+                    role="button"
+                    tabIndex={0}
+                    hidden={item.hidden}
+                    className={`settings-sidebar__item ${isActive ? 'settings-sidebar__item--active' : ''}`}
+                    aria-label={label}
+                    title={label}
+                    onClick={() => {
+                      selectMainNavItem(item)
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key !== 'Enter' && e.key !== ' ') return
+                      e.preventDefault()
+                      selectMainNavItem(item)
+                    }}
+                  >
+                    <span
+                      className="settings-sidebar__icon"
+                      style={{ background: isActive ? 'var(--settings-sidebar-active)' : 'rgba(0, 140, 141, 0.10)', color: isActive ? 'var(--settings-accent)' : 'var(--settings-text-secondary)' }}
+                    >
+                      {item.icon}
+                    </span>
+                    <span className="settings-sidebar__label-text">{label}</span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="settings-sidebar__foot">
+        <span className="settings-sidebar__version">{appVersion ? `Vibe Board v${appVersion}` : 'Vibe Board'}</span>
+        <span className="settings-sidebar__note">{t('settings.nav.autoSave', { defaultValue: '设置更改会自动保存' })}</span>
+      </div>
     </nav>
   )
 }
