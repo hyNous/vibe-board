@@ -1,6 +1,14 @@
 # Vibe Board 开发交接
 
-更新时间：2026-09-09
+更新时间：2026-09-16
+
+## 最新进度（优先于下方历史记录）
+
+- 当前功能检查点：`7afb9e2 fix: preserve Codex hook state and refresh board settings`。已提交设置页重设计、Agent 检测总览、Codex hooks.state 语义去重与安全备份、黑色/磨砂两种效果以及侧边竖长条。
+- 验证：前端 56 文件 626 测试通过；Codex 定向 Rust 30 项通过；lint 通过。全量 Rust 存在 35 个既有失败，详细证据及真实重启未验收边界见 `docs/codex-hooks-state-2026-09-15.md`。
+- 当前安装包：`releases/Vibe Board-test-2026-09-16-hooks-agent-appearance-setup.exe`，15,615,923 字节；`Vibe Board-latest-setup.exe` 同步为该版本。已删除 9 月 13 日两份、9 月 14 日一份过时测试 EXE；没有删除源码、历史设计文档、用户录屏或 Codex 备份。下文旧安装包 hash 和旧测试数量仅为历史记录，不适用于最新包。
+- 新需求待完成：侧边岛宽度/大小可在设置中按档位即时调整并持久化（默认更窄）；从侧边拖回顶部时存在空气墙感，需建立实际拖拽回归并修复。录屏位于仓库父目录 `屏幕录制 2026-09-16 112225.mp4`，时长约 6.23 秒。
+- 本轮尚未改动上述新需求代码。指定 OpenCode 启动失败：`opencode` 命令 ENOENT；现有 npm shim `C:/Users/27312/AppData/Roaming/npm/opencode.cmd` 指向的 `node_modules/opencode-ai/bin/opencode.exe` 不存在，未启动模型进程。没有更换 Agent 或擅自安装 CLI，需恢复 OpenCode 可执行文件后继续。任务包在仓库父目录 `.tmp/side-dock-fix.json`。
 
 ## 1. 当前基线
 
