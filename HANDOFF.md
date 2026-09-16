@@ -4,7 +4,7 @@
 
 ## 最新进度（优先于下方历史记录）
 
-- 当前功能检查点为 `ba90a36 fix: add side island size tiers and remove drag boundary barrier`；此前 `7afb9e2` 保存 hook 修复和设置页，`43b1e69` 保存上一版安装包及交接记录。
+- 当前功能检查点为 `7457315 docs: refresh GitHub project presentation`；此前 `ba90a36` 保存侧边尺寸档位与拖拽修复，`7afb9e2` 保存 hook 修复和设置页，`43b1e69` 保存上一版安装包及交接记录。
 - 侧边尺寸档位已完成在代码中：`sideIslandSize` 三档 `narrow / standard / wide`，实际壳尺寸分别为 64×132、72×148、80×168 逻辑像素（默认窄档，原版为 72×148）；设置页 Display 下拉即时预览并持久化；档位同时驱动收起竖条尺寸、圆角和悬停命中框；五套 i18n 已同步；单测覆盖档位顺序、默认值、顶部不受影响和设置页预览。
 - 拖拽缺陷根因已复现并修复（Windows 侧边拖回顶部“空气墙/停滞/跳变”）：
   1. 原生拖拽的边界和落点判定此前使用整块透明宿主窗口，而不是可见岛壳。侧边常态宿主是 658×612 的稳定画布，收起竖条只有 64×132 且垂直居中（偏移 240px），所以可见竖条最多升到距顶 240px 就被宿主边界卡住；落点又要求“看不见的宿主顶”贴到屏幕上缘，随后释放才跳到顶部并收起。
@@ -15,6 +15,7 @@
 - 未进行真实桌面验收的边界：本轮没有安装或启动应用，没有用真实鼠标做侧边↔顶部拖拽、HiDPI（150%/200%）缩放、多显示器或落点手感验证；主审已抽帧检查用户录屏，OpenCode 未直接读取视频。修复验证来自单元/组件级回归与代码链路推演。真实验收至少需要覆盖：右侧窄档上拖到顶、150% 缩放下 1:1 跟随、顶部左右拖动切换挂靠、释放前距离边缘 10–20px 的落点。
 - 主审独立验收：前端 56 文件 634 项通过，Rust `pet_window_tests::notch` 6 项通过，lint、前端 build、`git diff --check` 通过。完整 Rust 35 项既有失败及 clippy 边界来自 OpenCode 本轮验证，不宣称全仓库检查全部通过。
 - 当前安装包为 `releases/Vibe Board-test-2026-09-16-side-size-drag-setup.exe`（15,620,460 字节，2026-09-16 16:56:45），`Vibe Board-latest-setup.exe` 已同步，两个副本均与构建产物逐字节一致。旧 hooks-agent-appearance 测试包已删除，其同内容 latest 可从 `43b1e69` 恢复。应用未安装或启动。
+- GitHub `hyNous/agent-island` 的 `main` 已推送至 `74573155989fbaf03f04e8161dfead9ee57c98f4`；预发布 `v3.1.1-preview.20260916` 已上传同一份 EXE，地址为 `https://github.com/hyNous/agent-island/releases/tag/v3.1.1-preview.20260916`。
 - 打包：组合 nsis/msi 命令在 MSI 的 WiX `light.exe` 阶段失败；随后仅构建 NSIS（复用已完成的 Bridge 和前端构建）成功，退出码 0，交付仅 EXE，不交付旧 MSI。本轮临时任务 JSON、状态文件和抽帧图片已清理，原始用户录屏和配置备份保留。
 - OpenCode 启动阻塞已解除，本轮通过工具的 Windows 用户进程模式使用 DeepSeek V4.1 Flash max 完成两个任务。最初合并任务触发 Runner 10MB 输出保护，检查确认无代码修改后，拆分尺寸/拖拽并复用会话完成；未降低输出安全限制。
 
@@ -98,7 +99,7 @@
 仓库和 NSIS 输出目录现在各只保留一个当前 Windows 安装包：
 
 - `releases/Vibe Board-latest-setup.exe`
-- SHA-256：`484C7070B1CFA179A112EEA4DEE853761B202ACDDF6F3ECCEC9B51A81B6E63EF`
+- SHA-256：`D6FCAD97EF6A9C262159CDC18EEBB42B823E22CC162C3E379A5F06F091BB89FC`
 
 本轮未安装这个新包，也未覆盖用户机器上当前已安装的版本。
 
@@ -108,6 +109,7 @@
 - `pnpm build`：通过，873 个模块。
 - `cargo check --manifest-path src-tauri/Cargo.toml --all-targets`：通过；只有仓库既有 dead-code 警告。
 - `git diff --check`：通过；仅有既有的 LF/CRLF 提示。
+- 中英文 README 链接/图片审查、Hero SVG XML 解析和 `git diff --check`：通过。
 - `cargo tauri build --bundles nsis --ci --config '{"bundle":{"createUpdaterArtifacts":false}}'`：通过。
 
 ## 7. 已知边界与下一步
