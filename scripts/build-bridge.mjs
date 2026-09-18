@@ -7,11 +7,11 @@ const scriptDir = dirname(fileURLToPath(import.meta.url))
 const rootDir = resolve(scriptDir, '..')
 const tauriDir = join(rootDir, 'src-tauri')
 const targetDir = join(tauriDir, 'target')
-const resourceDir = join(targetDir, 'agent-island-bridge-resource')
-const resourcePath = join(resourceDir, 'agent-island-bridge')
+const resourceDir = join(targetDir, 'vibe-board-bridge-resource')
+const resourcePath = join(resourceDir, 'vibe-board-bridge')
 const release = process.argv.includes('--release')
 const profile = release ? 'release' : 'debug'
-const binaryName = process.platform === 'win32' ? 'agent-island-bridge.exe' : 'agent-island-bridge'
+const binaryName = process.platform === 'win32' ? 'vibe-board-bridge.exe' : 'vibe-board-bridge'
 const binaryPath = join(targetDir, profile, binaryName)
 
 function cargoCommand() {
@@ -37,7 +37,7 @@ function cargoCommand() {
 mkdirSync(resourceDir, { recursive: true })
 writeFileSync(resourcePath, '')
 
-const args = ['build', '--manifest-path', join(tauriDir, 'Cargo.toml'), '--bin', 'agent-island-bridge']
+const args = ['build', '--manifest-path', join(tauriDir, 'Cargo.toml'), '--bin', 'vibe-board-bridge']
 if (release) {
   args.push('--release')
 }

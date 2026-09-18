@@ -5,7 +5,6 @@
   "windows": [
     "notch",
     "settings",
-    "pet",
     "skill-pack-picker"
   ],
   "permissions": [

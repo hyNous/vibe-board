@@ -666,7 +666,7 @@ fn ensure_revision(agent_id: &str, path: &Path, expected: &str) -> Result<(), St
     let current = revision_for(agent_id, Some(path))?;
     if current != expected {
         return Err(
-            "Plugin configuration changed outside AgentBro. Reload before saving.".to_string(),
+            "Plugin configuration changed outside Vibe Board. Reload before saving.".to_string(),
         );
     }
     Ok(())
@@ -689,7 +689,7 @@ fn safe_write(
         write_backup(path, bytes, agent_id)?;
     }
     let temp = parent.join(format!(
-        ".{}.agentbro-{}.tmp",
+        ".{}.vibeboard-{}.tmp",
         path.file_name()
             .and_then(|name| name.to_str())
             .unwrap_or("plugins"),
@@ -716,7 +716,7 @@ fn safe_write(
 }
 
 fn write_backup(path: &Path, content: &[u8], agent_id: &str) -> Result<(), String> {
-    let dir = super::v2::fsutil::agent_island_home()
+    let dir = super::v2::fsutil::vibeboard_home()
         .join("plugins")
         .join("backups")
         .join(agent_id);

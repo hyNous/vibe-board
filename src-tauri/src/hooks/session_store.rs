@@ -372,8 +372,6 @@ pub struct SessionState {
     pub last_tool_status: Option<String>,
     pub description: Option<String>,
     pub session_title: Option<String>,
-    pub remote_host_id: Option<String>,
-    pub remote_host_name: Option<String>,
     pub pid: Option<u32>,
     pub tty: Option<String>,
     pub term_program: Option<String>,
@@ -429,8 +427,6 @@ impl SessionState {
             last_tool_status: None,
             description: None,
             session_title: None,
-            remote_host_id: None,
-            remote_host_name: None,
             pid: None,
             tty: None,
             term_program: None,
@@ -569,10 +565,19 @@ impl SessionStore {
     pub fn new() -> Self {
         let agent_status_path = agent_status_file_path();
         if !agent_status_path.exists() {
-            crate::data_dir::migrate_file(&legacy_agent_status_file_path(), &agent_status_path);
+            for legacy_path in legacy_agent_status_file_paths() {
+                let _ = crate::data_dir::migrate_file(&legacy_path, &agent_status_path);
+                if agent_status_path.exists() {
+                    break;
+                }
+            }
         }
         let agent_statuses = load_agent_statuses(&agent_status_path)
-            .or_else(|| load_agent_statuses(&legacy_agent_status_file_path()))
+            .or_else(|| {
+                legacy_agent_status_file_paths()
+                    .into_iter()
+                    .find_map(|path| load_agent_statuses(&path))
+            })
             .unwrap_or_default();
         Self {
             sessions: Arc::new(DashMap::new()),
@@ -1276,16 +1281,18 @@ fn agent_status_file_path() -> PathBuf {
     dirs::config_dir()
         .or_else(dirs::data_local_dir)
         .unwrap_or_else(std::env::temp_dir)
-        .join("agent-island")
+        .join("vibeboard")
         .join("agent-status.json")
 }
 
-fn legacy_agent_status_file_path() -> PathBuf {
-    dirs::config_dir()
+fn legacy_agent_status_file_paths() -> [PathBuf; 2] {
+    let base = dirs::config_dir()
         .or_else(dirs::data_local_dir)
-        .unwrap_or_else(std::env::temp_dir)
-        .join("agentbro")
-        .join("agent-status.json")
+        .unwrap_or_else(std::env::temp_dir);
+    [
+        base.join("agent-island").join("agent-status.json"),
+        base.join("agentbro").join("agent-status.json"),
+    ]
 }
 
 fn load_agent_statuses(path: &PathBuf) -> Option<Vec<AgentStatusSnapshot>> {

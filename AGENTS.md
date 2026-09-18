@@ -50,7 +50,7 @@ Detailed extension recipes: see [`.claude/CLAUDE.md`](.claude/CLAUDE.md) and [`C
 
 ## Do NOT touch
 
-- Brand assets: `public/agent-island-*.{png,jpg}`, `src-tauri/icons/`
+- Brand assets: `public/vibe-board-*.png`, `src-tauri/icons/`
 - Legal / trademark: `LICENSE`, `NOTICE`, `TRADEMARKS.md`
 - Signing / release: `src-tauri/Entitlements.plist`, any `*.key`/`*.p12`/`*.pem`/`*.mobileprovision`
 - Generated: `src-tauri/target/`, `dist/`, `output/`, `node_modules/`

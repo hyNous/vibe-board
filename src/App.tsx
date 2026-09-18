@@ -2,7 +2,6 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { COLOR_THEMES, useThemeStore } from './stores/themeStore'
 import { useConfigStore } from './stores/configStore'
-import { usePetStore } from './stores/petStore'
 import { BackgroundUpdater } from './components/BackgroundUpdater'
 import { useTauriInit } from './hooks/useTauri'
 import { useAutoHide } from './hooks/useAutoHide'
@@ -16,9 +15,9 @@ const SettingsApp = lazy(() => import('./components/settings/SettingsApp').then(
 
 // Fields whose source of truth lives in the Rust backend and is broadcast via
 // the `config-changed` event. We must NOT replay stale values from another
-// window's `storage` snapshot, or a notch window writing localStorage during a
+// window's `storage` snapshot, or a notch window writing localStorage during an
 // `island-layout-preview` race can clobber the settings window's just-changed
-// `islandSurfaceMode`, causing the surface mode toggle to flip-flop.
+// value.
 const BACKEND_MANAGED_CONFIG_KEYS = new Set<keyof ReturnType<typeof useConfigStore.getState>>([
   'soundEnabled', 'volume', 'launchAtLogin', 'autoHide', 'smartSuppression',
   'showUsageQuota', 'usageQueryEnabled', 'language', 'autoHideNoSessions', 'displayMonitor',
@@ -33,18 +32,23 @@ const BACKEND_MANAGED_CONFIG_KEYS = new Set<keyof ReturnType<typeof useConfigSto
   'excludedHookCwdSubstrings', 'sessionSilenceRules',
   'tipsEnabled', 'pixelCursorEnabled', 'confettiEnabled',
   'analyticsEnabled', 'analyticsConsentPromptCompleted',
-  'islandSurfaceMode', 'islandPetScale', 'islandPetWindowOrigin', 'islandPetWindowAnchor', 'islandActivePetId', 'islandAgentPetMap',
   'followFocus', 'quietHours', 'idleTimeoutMinutes',
   'idleInteractionRoutingEnabled', 'idleInteractionRoutingMinutes',
   'setupWizardCompleted', 'hostAgent', 'childAgents', 'autoStartOnHostSession',
 ])
 
-const CONFIG_STORAGE_KEY = 'agent-island-config'
-const LEGACY_CONFIG_STORAGE_KEY = 'agentbro-config'
-const THEME_STORAGE_KEY = 'agent-island-theme'
-const LEGACY_THEME_STORAGE_KEY = 'agentbro-theme'
-const PET_STORAGE_KEY = 'agent-island-pet'
-const LEGACY_PET_STORAGE_KEY = 'agentbro-pet'
+const CONFIG_STORAGE_KEY = 'vibeboard-config'
+const LEGACY_CONFIG_STORAGE_KEYS = ['agent-island-config', 'agentbro-config'] as const
+const THEME_STORAGE_KEY = 'vibeboard-theme'
+const LEGACY_THEME_STORAGE_KEYS = ['agent-island-theme', 'agentbro-theme'] as const
+
+function readPersistedValue(keys: readonly string[]): string | null {
+  for (const key of keys) {
+    const value = window.localStorage.getItem(key)
+    if (value) return value
+  }
+  return null
+}
 
 function applyPersistedConfig(raw: string | null) {
   if (!raw) return
@@ -68,7 +72,6 @@ function applyPersistedConfig(raw: string | null) {
 async function detectWindowLabel(): Promise<string> {
   // Check URL hash first (works in both Tauri and browser)
   if (window.location.hash === '#settings') return 'settings'
-  if (window.location.hash === '#pet') return 'pet'
   if (window.location.hash === '#skill-pack-picker') return 'skill-pack-picker'
 
   // In Tauri, use the real window label
@@ -137,10 +140,10 @@ function App() {
     }
 
     const handleStorage = (event: StorageEvent) => {
-      if (event.key === THEME_STORAGE_KEY || event.key === LEGACY_THEME_STORAGE_KEY) applyPersistedTheme(event.newValue)
+      if (event.key !== null && (event.key === THEME_STORAGE_KEY || LEGACY_THEME_STORAGE_KEYS.includes(event.key as typeof LEGACY_THEME_STORAGE_KEYS[number]))) applyPersistedTheme(event.newValue)
     }
     const handleFocus = () => applyPersistedTheme(
-      window.localStorage.getItem(THEME_STORAGE_KEY) ?? window.localStorage.getItem(LEGACY_THEME_STORAGE_KEY),
+      readPersistedValue([THEME_STORAGE_KEY, ...LEGACY_THEME_STORAGE_KEYS]),
     )
 
     handleFocus()
@@ -154,34 +157,10 @@ function App() {
 
   useEffect(() => {
     const handleStorage = (event: StorageEvent) => {
-      if (event.key === CONFIG_STORAGE_KEY || event.key === LEGACY_CONFIG_STORAGE_KEY) applyPersistedConfig(event.newValue)
+      if (event.key !== null && (event.key === CONFIG_STORAGE_KEY || LEGACY_CONFIG_STORAGE_KEYS.includes(event.key as typeof LEGACY_CONFIG_STORAGE_KEYS[number]))) applyPersistedConfig(event.newValue)
     }
     const handleFocus = () => applyPersistedConfig(
-      window.localStorage.getItem(CONFIG_STORAGE_KEY) ?? window.localStorage.getItem(LEGACY_CONFIG_STORAGE_KEY),
-    )
-
-    handleFocus()
-    window.addEventListener('storage', handleStorage)
-    window.addEventListener('focus', handleFocus)
-    return () => {
-      window.removeEventListener('storage', handleStorage)
-      window.removeEventListener('focus', handleFocus)
-    }
-  }, [])
-
-  useEffect(() => {
-    function applyPersistedPet(raw: string | null) {
-      if (!raw) return
-      try {
-        const persisted = JSON.parse(raw) as { state?: { activePetId?: string | null } }
-        usePetStore.getState().hydrateFromConfig(persisted.state?.activePetId ?? null)
-      } catch { /* ignore */ }
-    }
-    const handleStorage = (event: StorageEvent) => {
-      if (event.key === PET_STORAGE_KEY || event.key === LEGACY_PET_STORAGE_KEY) applyPersistedPet(event.newValue)
-    }
-    const handleFocus = () => applyPersistedPet(
-      window.localStorage.getItem(PET_STORAGE_KEY) ?? window.localStorage.getItem(LEGACY_PET_STORAGE_KEY),
+      readPersistedValue([CONFIG_STORAGE_KEY, ...LEGACY_CONFIG_STORAGE_KEYS]),
     )
 
     handleFocus()
@@ -214,9 +193,9 @@ function App() {
   // Wait for detection
   if (windowLabel === null) return null
 
-  // Product slimming keeps legacy windows available for compatibility, but
-  // the active shell no longer exposes the removed Pet surface or picker.
-  if (windowLabel === 'pet' || windowLabel === 'skill-pack-picker') return null
+  // The tray skill pack picker window is kept as a compatibility surface but
+  // is not rendered.
+  if (windowLabel === 'skill-pack-picker') return null
 
   // Settings window
   if (windowLabel === 'settings') {

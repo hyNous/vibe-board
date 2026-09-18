@@ -117,6 +117,7 @@ fn unmanaged_center_dirs(svc: &Service) -> Result<Vec<DiagnosisIssue>, String> {
         let name = entry.file_name().to_string_lossy().to_string();
         if fsutil::is_ignored_entry(&name)
             || name.starts_with('.')
+            || name == "vibeboard-skills.snapshot.json"
             || name == "agent-island-skills.snapshot.json"
             || name == "agentbro-skills.snapshot.json"
         {

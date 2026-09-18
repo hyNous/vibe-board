@@ -24,7 +24,7 @@ impl KiroAdapter {
     }
 
     fn agent_file_path(&self) -> PathBuf {
-        self.config_root.join("agents").join("agentbro.json")
+        self.config_root.join("agents").join("vibe-board.json")
     }
 }
 

@@ -1,7 +1,14 @@
 fn main() {
-    println!("cargo:rerun-if-env-changed=AGENTBRO_TELEMETRY_SLS_HOST");
-    println!("cargo:rerun-if-env-changed=AGENTBRO_TELEMETRY_SLS_PROJECT");
-    println!("cargo:rerun-if-env-changed=AGENTBRO_TELEMETRY_SLS_LOGSTORE");
+    for name in [
+        "VIBEBOARD_TELEMETRY_SLS_HOST",
+        "VIBEBOARD_TELEMETRY_SLS_PROJECT",
+        "VIBEBOARD_TELEMETRY_SLS_LOGSTORE",
+        "AGENT_ISLAND_TELEMETRY_SLS_HOST",
+        "AGENT_ISLAND_TELEMETRY_SLS_PROJECT",
+        "AGENT_ISLAND_TELEMETRY_SLS_LOGSTORE",
+    ] {
+        println!("cargo:rerun-if-env-changed={name}");
+    }
     ensure_bridge_resource_placeholder();
     ensure_common_controls_v6_for_tests();
     tauri_build::build()
@@ -27,8 +34,8 @@ fn ensure_bridge_resource_placeholder() {
     let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let resource_dir = manifest_dir
         .join("target")
-        .join("agent-island-bridge-resource");
-    let resource_path = resource_dir.join("agent-island-bridge");
+        .join("vibe-board-bridge-resource");
+    let resource_path = resource_dir.join("vibe-board-bridge");
     if resource_path.exists() {
         return;
     }

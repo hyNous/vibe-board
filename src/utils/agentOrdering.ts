@@ -1,7 +1,8 @@
 import type { AgentSummary } from '../services/skillApiV2'
 import type { SessionState } from '../types/agent'
 
-export const AGENT_ORDER_STORAGE_KEY = 'agentbro.agentManagement.agentOrder.v1'
+export const AGENT_ORDER_STORAGE_KEY = 'vibeboard.agentManagement.agentOrder.v1'
+const LEGACY_AGENT_ORDER_STORAGE_KEYS = ['agentbro.agentManagement.agentOrder.v1']
 
 const RECENT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
 
@@ -9,6 +10,7 @@ export function readStoredAgentOrder(): string[] {
   if (typeof window === 'undefined') return []
   try {
     const raw = window.localStorage.getItem(AGENT_ORDER_STORAGE_KEY)
+      ?? LEGACY_AGENT_ORDER_STORAGE_KEYS.map((key) => window.localStorage.getItem(key)).find(Boolean)
     const parsed = raw ? JSON.parse(raw) : []
     return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === 'string' && id.length > 0) : []
   } catch {

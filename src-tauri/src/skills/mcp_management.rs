@@ -863,7 +863,7 @@ fn validate_mcp_server_draft_inner(
             let command = nonempty(draft.command.as_deref());
             if let Some(command) = command {
                 if !command_available(command) {
-                    warnings.push(format!("Command not found in AgentBro's PATH: {command}"));
+                    warnings.push(format!("Command not found in Vibe Board's PATH: {command}"));
                 }
             } else {
                 errors.push("A command is required for stdio MCP servers".to_string());
@@ -960,7 +960,7 @@ fn uses_disabled_store(kind: ConfigKind) -> bool {
 }
 
 fn disabled_store_path() -> PathBuf {
-    super::v2::fsutil::agent_island_home()
+    super::v2::fsutil::vibeboard_home()
         .join("mcp")
         .join("disabled.json")
 }
@@ -996,7 +996,7 @@ fn write_disabled_servers(
     let mut root = read_disabled_root()?;
     let object = root
         .as_object_mut()
-        .ok_or("AgentBro disabled MCP store must be an object")?;
+        .ok_or("Vibe Board disabled MCP store must be an object")?;
     if servers.is_empty() {
         object.remove(agent_id);
     } else {
@@ -1010,7 +1010,7 @@ fn write_disabled_servers(
             ),
         );
     }
-    safe_write_json(&path, &root, "agentbro-disabled")?;
+    safe_write_json(&path, &root, "vibeboard-disabled")?;
     Ok(())
 }
 
@@ -1221,7 +1221,7 @@ fn safe_write(
         None
     };
     let temp = parent.join(format!(
-        ".{}.agentbro-{}.tmp",
+        ".{}.vibeboard-{}.tmp",
         path.file_name()
             .and_then(|name| name.to_str())
             .unwrap_or("mcp"),
@@ -1250,7 +1250,7 @@ fn safe_write(
 }
 
 fn write_backup(path: &Path, content: &[u8], group: &str) -> Result<PathBuf, String> {
-    let dir = super::v2::fsutil::agent_island_home()
+    let dir = super::v2::fsutil::vibeboard_home()
         .join("mcp")
         .join("backups")
         .join(sanitize_component(group));
@@ -1330,7 +1330,7 @@ fn ensure_revision(
     let current = revision_for(agent_id, config_path)?;
     if current != expected {
         return Err(
-            "MCP configuration changed outside AgentBro. Reload before saving.".to_string(),
+            "MCP configuration changed outside Vibe Board. Reload before saving.".to_string(),
         );
     }
     Ok(())
@@ -4298,7 +4298,7 @@ command = "two"
 
         let error = ensure_revision("revision-test", Some(&path), &revision).unwrap_err();
 
-        assert!(error.contains("changed outside AgentBro"));
+        assert!(error.contains("changed outside Vibe Board"));
         let _ = fs::remove_file(path);
     }
 

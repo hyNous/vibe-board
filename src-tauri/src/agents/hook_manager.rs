@@ -3,12 +3,16 @@
 
 use std::path::{Path, PathBuf};
 
-const AGENT_ISLAND_MARKER: &str = "agent-island";
+const VIBEBOARD_MARKER: &str = "vibeboard";
+const VIBEBOARD_BRIDGE_MARKER: &str = "vibe-board-bridge";
+const LEGACY_AGENT_ISLAND_MARKER: &str = "agent-island";
+const LEGACY_AGENT_ISLAND_BRIDGE_MARKER: &str = "agent-island-bridge";
 const LEGACY_AGENTBRO_MARKER: &str = "agentbro";
-const AGENT_ISLAND_BRIDGE_MARKER: &str = "agent-island-bridge";
 const LEGACY_AGENTBRO_BRIDGE_MARKER: &str = "agentbro-bridge";
-const BLOCK_START: &str = "# [AGENTBRO-START]";
-const BLOCK_END: &str = "# [AGENTBRO-END]";
+const BLOCK_START: &str = "# [VIBEBOARD-START]";
+const BLOCK_END: &str = "# [VIBEBOARD-END]";
+const LEGACY_BLOCK_STARTS: [&str; 1] = ["# [AGENTBRO-START]"];
+const LEGACY_BLOCK_ENDS: [&str; 1] = ["# [AGENTBRO-END]"];
 
 // ── JSON ─────────────────────────────────────────────────────────────────────
 
@@ -197,11 +201,11 @@ fn strip_sentinel_block(content: &str) -> String {
     let mut inside = false;
     for line in content.lines() {
         let trimmed = line.trim();
-        if trimmed == BLOCK_START {
+        if trimmed == BLOCK_START || LEGACY_BLOCK_STARTS.contains(&trimmed) {
             inside = true;
             continue;
         }
-        if trimmed == BLOCK_END {
+        if trimmed == BLOCK_END || LEGACY_BLOCK_ENDS.contains(&trimmed) {
             inside = false;
             continue;
         }
@@ -227,7 +231,7 @@ pub fn has_agentbro_hooks(path: &Path) -> bool {
         for name in ["plugin.yaml", "__init__.py"] {
             let candidate = path.join(name);
             if std::fs::read_to_string(candidate)
-                .map(|s| is_managed_hook_command(&s) || s.contains(BLOCK_START))
+                .map(|s| is_managed_hook_command(&s) || contains_managed_block(&s))
                 .unwrap_or(false)
             {
                 return true;
@@ -237,14 +241,23 @@ pub fn has_agentbro_hooks(path: &Path) -> bool {
     }
 
     std::fs::read_to_string(path)
-        .map(|s| is_managed_hook_command(&s) || s.contains(BLOCK_START))
+        .map(|s| is_managed_hook_command(&s) || contains_managed_block(&s))
         .unwrap_or(false)
 }
 
+fn contains_managed_block(content: &str) -> bool {
+    content.contains(BLOCK_START)
+        || LEGACY_BLOCK_STARTS
+            .iter()
+            .any(|marker| content.contains(marker))
+}
+
 fn is_managed_hook_command(value: &str) -> bool {
-    value.contains(AGENT_ISLAND_MARKER)
+    value.contains(VIBEBOARD_MARKER)
+        || value.contains(VIBEBOARD_BRIDGE_MARKER)
+        || value.contains(LEGACY_AGENT_ISLAND_MARKER)
         || value.contains(LEGACY_AGENTBRO_MARKER)
-        || value.contains(AGENT_ISLAND_BRIDGE_MARKER)
+        || value.contains(LEGACY_AGENT_ISLAND_BRIDGE_MARKER)
         || value.contains(LEGACY_AGENTBRO_BRIDGE_MARKER)
 }
 
@@ -274,17 +287,16 @@ fn bridge_binary_is_current_at(dest: &Path, source: Option<&Path>) -> bool {
 }
 
 fn raw_bridge_binary_path() -> PathBuf {
-    let home = dirs::home_dir().unwrap_or_else(std::env::temp_dir);
-    home.join(".agent-island")
+    crate::data_dir::vibeboard_home()
         .join("bin")
         .join(bridge_binary_name())
 }
 
 fn bridge_binary_name() -> &'static str {
     if cfg!(target_os = "windows") {
-        "agent-island-bridge.exe"
+        "vibe-board-bridge.exe"
     } else {
-        "agent-island-bridge"
+        "vibe-board-bridge"
     }
 }
 
@@ -320,7 +332,7 @@ pub fn bridge_command_parts(bridge: &Path, args: &[String]) -> Vec<String> {
     parts
 }
 
-/// Ensure the bridge binary is deployed to ~/.agent-island/bin.
+/// Ensure the bridge binary is deployed to ~/.vibeboard/bin.
 pub fn ensure_bridge_binary() -> Result<PathBuf, Box<dyn std::error::Error>> {
     let dest = raw_bridge_binary_path();
     if let Some(parent) = dest.parent() {
@@ -409,64 +421,66 @@ fn bridge_is_newer_than_source(bridge: &Path, source: &Path) -> bool {
 }
 
 fn bridge_source_candidates() -> Vec<PathBuf> {
+    let binary_names = [
+        bridge_binary_name(),
+        previous_bridge_binary_name(),
+        legacy_bridge_binary_name(),
+    ];
+    let resource_dirs = [
+        "vibe-board-bridge-resource",
+        "agent-island-bridge-resource",
+        "agentbro-bridge-resource",
+    ];
     let mut candidates = Vec::new();
     if let Ok(exe) = std::env::current_exe() {
         if let Some(exe_dir) = exe.parent() {
-            candidates.push(exe_dir.join(bridge_binary_name()));
-            candidates.push(exe_dir.join(legacy_bridge_binary_name()));
+            for binary_name in binary_names {
+                candidates.push(exe_dir.join(binary_name));
+            }
             if let Some(contents_dir) = exe_dir.parent() {
-                candidates.push(contents_dir.join("Resources").join(bridge_binary_name()));
-                candidates.push(
-                    contents_dir
-                        .join("Resources")
-                        .join(legacy_bridge_binary_name()),
-                );
+                for binary_name in binary_names {
+                    candidates.push(contents_dir.join("Resources").join(binary_name));
+                }
                 if let Some(app_dir) = contents_dir.parent() {
-                    candidates.push(
-                        app_dir
-                            .join("Contents")
-                            .join("Resources")
-                            .join(bridge_binary_name()),
-                    );
-                    candidates.push(
-                        app_dir
-                            .join("Contents")
-                            .join("Resources")
-                            .join(legacy_bridge_binary_name()),
-                    );
+                    for binary_name in binary_names {
+                        candidates
+                            .push(app_dir.join("Contents").join("Resources").join(binary_name));
+                    }
                 }
             }
         }
     }
-    candidates.push(
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join(format!("target/debug/{}", bridge_binary_name())),
-    );
-    candidates.push(
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("target/debug")
-            .join(legacy_bridge_binary_name()),
-    );
-    candidates.push(
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join(format!("target/release/{}", bridge_binary_name())),
-    );
-    candidates.push(
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("target/release")
-            .join(legacy_bridge_binary_name()),
-    );
-    candidates.push(
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("target/agent-island-bridge-resource")
-            .join(bridge_binary_name()),
-    );
-    candidates.push(
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("target/agentbro-bridge-resource")
-            .join(legacy_bridge_binary_name()),
-    );
+    for profile in ["debug", "release"] {
+        for binary_name in binary_names {
+            candidates.push(
+                PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                    .join("target")
+                    .join(profile)
+                    .join(binary_name),
+            );
+        }
+    }
+    for (resource_dir, binary_name) in resource_dirs.into_iter().zip([
+        bridge_binary_name(),
+        previous_bridge_binary_name(),
+        legacy_bridge_binary_name(),
+    ]) {
+        candidates.push(
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("target")
+                .join(resource_dir)
+                .join(binary_name),
+        );
+    }
     candidates
+}
+
+fn previous_bridge_binary_name() -> &'static str {
+    if cfg!(target_os = "windows") {
+        "agent-island-bridge.exe"
+    } else {
+        "agent-island-bridge"
+    }
 }
 
 fn legacy_bridge_binary_name() -> &'static str {

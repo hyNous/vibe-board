@@ -6,7 +6,7 @@ use std::path::PathBuf;
 
 const SCHEMA_VERSION: &str = "1";
 const DEFAULT_TOPIC: &str = "product-telemetry";
-const DEFAULT_SOURCE: &str = "agent-island";
+const DEFAULT_SOURCE: &str = "vibeboard";
 
 #[derive(Debug, Clone)]
 pub struct TelemetryConfiguration {
@@ -21,9 +21,15 @@ pub struct TelemetryConfiguration {
 impl TelemetryConfiguration {
     pub fn from_build_env() -> Self {
         Self::new(
-            option_env!("AGENT_ISLAND_TELEMETRY_SLS_HOST").unwrap_or(""),
-            option_env!("AGENT_ISLAND_TELEMETRY_SLS_PROJECT").unwrap_or(""),
-            option_env!("AGENT_ISLAND_TELEMETRY_SLS_LOGSTORE").unwrap_or(""),
+            option_env!("VIBEBOARD_TELEMETRY_SLS_HOST")
+                .or(option_env!("AGENT_ISLAND_TELEMETRY_SLS_HOST"))
+                .unwrap_or(""),
+            option_env!("VIBEBOARD_TELEMETRY_SLS_PROJECT")
+                .or(option_env!("AGENT_ISLAND_TELEMETRY_SLS_PROJECT"))
+                .unwrap_or(""),
+            option_env!("VIBEBOARD_TELEMETRY_SLS_LOGSTORE")
+                .or(option_env!("AGENT_ISLAND_TELEMETRY_SLS_LOGSTORE"))
+                .unwrap_or(""),
         )
     }
 
@@ -114,11 +120,19 @@ impl TelemetryService {
     }
 
     fn with_configuration(configuration: TelemetryConfiguration) -> Self {
-        let state_dir = dirs::config_dir()
+        let base = dirs::config_dir()
             .or_else(dirs::data_local_dir)
-            .unwrap_or_else(std::env::temp_dir)
-            .join("agent-island")
-            .join("telemetry");
+            .unwrap_or_else(std::env::temp_dir);
+        let state_dir = base.join("vibeboard").join("telemetry");
+        if !state_dir.exists() {
+            for legacy in ["agent-island", "agentbro"] {
+                let old_dir = base.join(legacy).join("telemetry");
+                let _ = crate::data_dir::migrate_dir(&old_dir, &state_dir);
+                if state_dir.exists() {
+                    break;
+                }
+            }
+        }
         Self {
             configuration,
             state_dir,
@@ -202,7 +216,7 @@ impl TelemetryService {
             .into_iter()
             .take(self.configuration.daily_event_limit)
         {
-            let Some(record) = self.daily_usage_record(config, &bucket) else {
+            let Some(record) = self.daily_usage_record(&bucket) else {
                 self.mark_snapshot_uploaded(&bucket);
                 self.remove_aggregate(&bucket);
                 continue;
@@ -229,7 +243,7 @@ impl TelemetryService {
         }
 
         let mut tags = BTreeMap::new();
-        tags.insert("app".to_string(), "agent-island".to_string());
+        tags.insert("app".to_string(), "vibeboard".to_string());
         tags.insert("schema".to_string(), SCHEMA_VERSION.to_string());
 
         let payload = SlsPayload {
@@ -257,13 +271,13 @@ impl TelemetryService {
         }
     }
 
-    fn daily_usage_record(&self, config: &AppConfig, bucket: &str) -> Option<TelemetryRecord> {
+    fn daily_usage_record(&self, bucket: &str) -> Option<TelemetryRecord> {
         let aggregate = self.read_aggregate(bucket);
         if !aggregate.has_activity() {
             return None;
         }
 
-        let mut fields = common_fields(config);
+        let mut fields = common_fields();
         fields.insert("event".to_string(), "daily_usage_snapshot".to_string());
         fields.insert("schema_version".to_string(), SCHEMA_VERSION.to_string());
         fields.insert("report_date".to_string(), sanitized_value(bucket));
@@ -415,7 +429,7 @@ impl Default for TelemetryService {
     }
 }
 
-fn common_fields(config: &AppConfig) -> BTreeMap<String, String> {
+fn common_fields() -> BTreeMap<String, String> {
     let mut fields = BTreeMap::new();
     fields.insert(
         "app_version".to_string(),
@@ -424,10 +438,6 @@ fn common_fields(config: &AppConfig) -> BTreeMap<String, String> {
     fields.insert("os".to_string(), std::env::consts::OS.to_string());
     fields.insert("arch".to_string(), std::env::consts::ARCH.to_string());
     fields.insert("language".to_string(), language_bucket());
-    fields.insert(
-        "surface_mode".to_string(),
-        sanitized_value(&config.island_surface_mode),
-    );
     fields.insert("install_channel".to_string(), install_channel());
     fields
 }

@@ -8,12 +8,13 @@ complete target is supplied at build time and the user has enabled analytics.
 
 Set these build environment variables together:
 
-- `AGENT_ISLAND_TELEMETRY_SLS_HOST`
-- `AGENT_ISLAND_TELEMETRY_SLS_PROJECT`
-- `AGENT_ISLAND_TELEMETRY_SLS_LOGSTORE`
+- `VIBEBOARD_TELEMETRY_SLS_HOST`
+- `VIBEBOARD_TELEMETRY_SLS_PROJECT`
+- `VIBEBOARD_TELEMETRY_SLS_LOGSTORE`
 
-The payload uses the fixed topic `product-telemetry` and source
-`agent-island`. It never includes prompts, responses, code, diffs, terminal
+The legacy `AGENT_ISLAND_TELEMETRY_SLS_*` names are still honored as a build-time
+fallback for existing release pipelines. The payload uses the fixed topic
+`product-telemetry` and source `vibeboard`. It never includes prompts, responses, code, diffs, terminal
 output, project paths, repository names, hostnames, raw Hook payloads, secrets,
 tokens, API keys, or session identifiers. See [privacy-policy.md](privacy-policy.md)
 for the user-facing policy.

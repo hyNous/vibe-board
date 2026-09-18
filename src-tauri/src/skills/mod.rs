@@ -4,7 +4,6 @@ pub mod config_file_editor;
 pub mod explanation;
 pub mod frontmatter;
 pub mod installer;
-pub mod marketplace;
 pub mod mcp_management;
 pub mod plugin_management;
 pub mod registry;
@@ -193,48 +192,6 @@ pub struct McpValidationResult {
 pub struct PluginInstallRequest {
     pub source: String,
     pub agent: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct MarketplaceSource {
-    pub id: String,
-    pub name: String,
-    pub url: String,
-    pub enabled: bool,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct MarketplaceMcpConfig {
-    pub command: String,
-    #[serde(default)]
-    pub args: Vec<String>,
-    #[serde(default)]
-    pub env: std::collections::HashMap<String, String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct MarketplacePluginConfig {
-    #[serde(default)]
-    pub agents: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct MarketplaceItem {
-    pub id: String,
-    pub name: String,
-    pub description: String,
-    pub category: String,
-    pub source_type: String,
-    pub source: String,
-    pub sub_path: Option<String>,
-    pub author: String,
-    pub accent: String,
-    pub mcp: Option<MarketplaceMcpConfig>,
-    pub plugin: Option<MarketplacePluginConfig>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -728,7 +685,7 @@ mod tests {
     }
 
     #[test]
-    fn installs_codex_plugin_and_loads_marketplace_sources() {
+    fn installs_codex_plugin_and_scans_disabled_state() {
         let _guard = lock_home();
         let home = TempHome::new("plugin-marketplace");
         let plugin_source = home.path.join("sources/context-plugin");
@@ -760,25 +717,6 @@ enabled = false
                     && matches!(skill.skill_type, SkillType::Plugin)
                     && !skill.agents[0].enabled),
             "installed codex plugin should scan TOML disabled state"
-        );
-
-        let manifest = home.path.join("market.json");
-        fs::write(
-            &manifest,
-            r##"{"items":[{"id":"local-market-skill","name":"Local Skill","description":"From local manifest","category":"skill","sourceType":"github","source":"owner/repo","author":"Local","accent":"#123456"}]}"##,
-        )
-        .expect("write marketplace manifest");
-        registry::upsert_marketplace_source(MarketplaceSource {
-            id: "local".to_string(),
-            name: "Local".to_string(),
-            url: manifest.display().to_string(),
-            enabled: true,
-        })
-        .expect("add marketplace source");
-        let items = marketplace::list_items().expect("list marketplace items");
-        assert!(
-            items.iter().any(|item| item.id == "local-market-skill"),
-            "custom marketplace source should contribute items"
         );
     }
 

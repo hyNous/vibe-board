@@ -1,5 +1,5 @@
 ---
-name: agent-island-shared
+name: vibe-board-shared
 description: Use Vibe Board as the canonical local Skill center when a Skill must be installed, updated, inspected, or shared across multiple coding Agents.
 ---
 

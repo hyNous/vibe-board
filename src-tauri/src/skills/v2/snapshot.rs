@@ -21,7 +21,7 @@ pub fn export_to_file(svc: &Service) -> Result<String, String> {
 }
 
 pub fn snapshot_path(svc: &Service) -> Result<PathBuf, String> {
-    Ok(svc.center_path()?.join("agent-island-skills.snapshot.json"))
+    Ok(svc.center_path()?.join("vibeboard-skills.snapshot.json"))
 }
 
 pub fn import(_svc: &Service, _json: String) -> Result<(), String> {

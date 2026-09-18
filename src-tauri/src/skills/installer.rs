@@ -324,30 +324,6 @@ pub(crate) fn resolve_external_skill_source_with_token(
     resolve_install_source_with_token(source, github_token)
 }
 
-pub(crate) fn resolve_github_repo_skills_with_cancel(
-    source: &str,
-    skill_ids: &[String],
-    github_token: Option<&str>,
-    cancel: &AtomicBool,
-) -> Result<(PathBuf, Option<PathBuf>), String> {
-    let parsed = if let Some(spec) = source.strip_prefix("github:") {
-        parse_github_spec_ref(spec)?
-    } else if source.starts_with("https://github.com/") || source.starts_with("http://github.com/")
-    {
-        parse_github_url_ref(source)?
-    } else {
-        return Err(format!("Invalid GitHub repository source: {source}"));
-    };
-    clone_repo_skills_with_cancel(
-        &parsed.repo_url,
-        parsed.branch.as_deref(),
-        parsed.subpath.as_deref(),
-        skill_ids,
-        github_token,
-        cancel,
-    )
-}
-
 fn download_markdown_skill(source: &str) -> Result<(PathBuf, Option<PathBuf>), String> {
     let root = temp_install_dir()?;
     let skill_dir = root.join(skill_dir_name_from_url(source));
@@ -494,7 +470,7 @@ pub fn install_plugin(request: &PluginInstallRequest) -> Result<String, String> 
         .filter(|value| !value.trim().is_empty())
         .unwrap_or("local");
     let dest = plugin_install_root(&request.agent)?
-        .join("agent-island")
+        .join("vibeboard")
         .join(&plugin_id)
         .join(version);
     copy_recursive(&src, &dest)?;
@@ -530,7 +506,7 @@ fn temp_install_dir() -> Result<PathBuf, String> {
         .as_millis();
     let dir = dirs::home_dir()
         .unwrap_or_else(std::env::temp_dir)
-        .join(".agent-island")
+        .join(".vibeboard")
         .join("tmp")
         .join(format!("install-{millis}"));
     fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
@@ -811,7 +787,7 @@ fn curl_text_with_timeout(
         .arg("-H")
         .arg("Accept: application/vnd.github+json")
         .arg("-H")
-        .arg("User-Agent: AgentBro")
+        .arg("User-Agent: VibeBoard")
         .arg(url)
         .output()
         .map_err(|e| format!("Failed to run curl: {e}"))?;
@@ -1415,7 +1391,8 @@ fn download_zip(source: &str) -> Result<(PathBuf, Option<PathBuf>), String> {
 }
 
 fn github_token() -> Option<String> {
-    std::env::var("AGENTBRO_GITHUB_TOKEN")
+    std::env::var("VIBEBOARD_GITHUB_TOKEN")
+        .or_else(|_| std::env::var("AGENTBRO_GITHUB_TOKEN"))
         .or_else(|_| std::env::var("GITHUB_TOKEN"))
         .ok()
         .filter(|value| !value.trim().is_empty())

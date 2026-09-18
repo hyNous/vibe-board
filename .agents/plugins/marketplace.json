@@ -1,14 +1,14 @@
 {
-  "name": "agent-island-local",
+  "name": "vibe-board-local",
   "interface": {
     "displayName": "Vibe Board (Local)"
   },
   "plugins": [
     {
-      "name": "agent-island-host",
+      "name": "vibe-board-host",
       "source": {
         "source": "local",
-        "path": "./plugins/agent-island-host"
+        "path": "./plugins/vibe-board-host"
       },
       "policy": {
         "installation": "AVAILABLE",

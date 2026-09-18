@@ -26,17 +26,16 @@ pub fn is_ignored_entry(name: &str) -> bool {
 }
 
 pub fn home() -> PathBuf {
-    // Prefer $HOME directly so tests that set HOME get their temp dir even when
-    // dirs::home_dir() resolves through a cached/OS path.
-    if let Some(h) = std::env::var_os("HOME") {
-        if !h.is_empty() {
-            return PathBuf::from(h);
-        }
-    }
-    dirs::home_dir().unwrap_or_else(std::env::temp_dir)
+    // Shared resolution: prefers VIBEBOARD_HOME/$HOME so tests that set them get
+    // their temp dir even when dirs::home_dir() resolves the real OS profile.
+    crate::data_dir::home_dir()
 }
 
-pub fn agent_island_home() -> PathBuf {
+pub fn vibeboard_home() -> PathBuf {
+    home().join(".vibeboard")
+}
+
+pub fn legacy_agent_island_home() -> PathBuf {
     home().join(".agent-island")
 }
 
@@ -46,17 +45,20 @@ pub fn legacy_agentbro_home() -> PathBuf {
 }
 
 /// Compatibility alias for older callers. New Vibe Board data belongs under
-/// `.agent-island`.
+/// `.vibeboard`.
 pub fn agentbro_home() -> PathBuf {
-    agent_island_home()
+    vibeboard_home()
 }
 
 pub fn unified_center_marker_path() -> PathBuf {
-    agent_island_home().join("unified-skill-center")
+    vibeboard_home().join("unified-skill-center")
 }
 
 pub fn unified_center_active() -> bool {
     unified_center_marker_path().is_file()
+        || legacy_agent_island_home()
+            .join("unified-skill-center")
+            .is_file()
 }
 
 /// Activate the single shared Skill center used by Codex, Claude Code and any
@@ -64,6 +66,11 @@ pub fn unified_center_active() -> bool {
 /// legacy directory is never deleted so rollback remains possible.
 pub fn activate_unified_center() -> Result<(), String> {
     if unified_center_active() {
+        // Move a marker written under the previous data root forward once.
+        let legacy_marker = legacy_agent_island_home().join("unified-skill-center");
+        if !unified_center_marker_path().exists() && legacy_marker.exists() {
+            let _ = crate::data_dir::migrate_file(&legacy_marker, &unified_center_marker_path());
+        }
         return Ok(());
     }
     let canonical = home().join(".agents").join("skills");
@@ -114,19 +121,17 @@ pub fn all_center_dirs() -> Vec<PathBuf> {
 }
 
 pub fn default_sqlite_path() -> PathBuf {
-    agent_island_home()
+    vibeboard_home()
         .join("skill-manager")
         .join("skill-manager.db")
 }
 
 pub fn default_snapshot_path() -> PathBuf {
-    default_center_path().join("agent-island-skills.snapshot.json")
+    default_center_path().join("vibeboard-skills.snapshot.json")
 }
 
 pub fn settings_path() -> PathBuf {
-    agent_island_home()
-        .join("skill-manager")
-        .join("settings.json")
+    vibeboard_home().join("skill-manager").join("settings.json")
 }
 
 pub fn expand_tilde(p: &str) -> PathBuf {
@@ -286,6 +291,8 @@ fn is_url(target: &str) -> bool {
     target.starts_with("http://")
         || target.starts_with("https://")
         || target.starts_with("mailto:")
+        || target.starts_with("vibeboard:")
+        || target.starts_with("agentisland:")
         || target.starts_with("agentbro:")
         || target.starts_with("ccswitch:")
 }

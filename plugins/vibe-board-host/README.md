@@ -9,7 +9,7 @@ The package contains both supported host manifests:
 
 ## Behavior
 
-On `SessionStart`, the plugin asynchronously runs the bundled Node launcher. The launcher invokes the Vibe Board bridge from `~/.agent-island/bin/`, which:
+On `SessionStart`, the plugin asynchronously runs the bundled Node launcher. The launcher invokes the Vibe Board bridge from `~/.vibeboard/bin/` (falling back to the legacy `~/.agent-island/bin/` and `~/.agentbro/bin/` copies), which:
 
 1. records the active host (`codex` or `claude-code`);
 2. connects to the existing Vibe Board hook server; or
@@ -26,7 +26,7 @@ For development, point each host at this directory:
 
 ```text
 Codex: enable the local plugin directory and review/trust its hooks with /hooks.
-Claude Code: claude --plugin-dir ./plugins/agent-island-host
+Claude Code: claude --plugin-dir ./plugins/vibe-board-host
 ```
 
 The Codex manifest is validated against the current plugin schema. The bundled

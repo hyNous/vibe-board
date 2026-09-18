@@ -25,16 +25,16 @@
 
 ## 配置和迁移
 
-- 应用配置：`%APPDATA%\agent-island\config.json`
-- Bridge：`%USERPROFILE%\.agent-island\bin\agent-island-bridge.exe`
-- 运行数据：`%USERPROFILE%\.agent-island\`
+- 应用配置：`%APPDATA%\vibeboard\config.json`（旧安装会从 `%APPDATA%\agent-island\config.json` 一次性迁移）
+- Bridge：`%USERPROFILE%\.vibeboard\bin\vibe-board-bridge.exe`
+- 运行数据：`%USERPROFILE%\.vibeboard\`，旧数据从 `%USERPROFILE%\.agent-island\` 和 `%USERPROFILE%\.agentbro\` 兼容读取或迁移
 - Skill 中心：`%USERPROFILE%\.agents\skills\`
 
 把安装包复制到另一台 Windows 电脑后，首次启动会在新电脑重新扫描和配置，不会依赖原电脑的绝对路径。用户需要在新电脑上重新批准 Agent Hook；已有账号凭据仍由对应 Agent 自己管理。
 
 ## 手动插件方式
 
-`plugins/agent-island-host/` 是兼容已有 Codex/Claude Code 插件工作流的可选清单。普通安装优先使用应用内向导；只有在用户明确希望由 Agent 插件管理宿主 Hook 时，才需要手动注册它。
+`plugins/vibe-board-host/` 是兼容已有 Codex/Claude Code 插件工作流的可选清单。普通安装优先使用应用内向导；只有在用户明确希望由 Agent 插件管理宿主 Hook 时，才需要手动注册它。
 
 ## 平台范围
 

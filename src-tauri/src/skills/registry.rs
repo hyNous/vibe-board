@@ -1,8 +1,5 @@
 use super::agent_paths;
-use super::{
-    CollectionExport, DiscoveredSkill, MarketplaceSource, ScanRoot, SkillCollection, SkillPack,
-    SyncConfig,
-};
+use super::{CollectionExport, DiscoveredSkill, ScanRoot, SkillCollection, SkillPack, SyncConfig};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
@@ -34,8 +31,6 @@ pub struct Metadata {
     pub sync: Option<SyncConfig>,
     #[serde(default)]
     pub custom_agents: Vec<CustomAgentEntry>,
-    #[serde(default)]
-    pub marketplace_sources: Vec<MarketplaceSource>,
     #[serde(default)]
     pub explanations: HashMap<String, SkillExplanationEntry>,
 }
@@ -107,15 +102,13 @@ pub struct UpdateCustomAgentConfig {
 }
 
 pub fn load() -> Metadata {
-    let path = agent_paths::agentbro_metadata_path();
-    fs::read_to_string(&path)
-        .ok()
+    agent_paths::read_metadata()
         .and_then(|c| serde_json::from_str(&c).ok())
         .unwrap_or_default()
 }
 
 pub fn save(metadata: &Metadata) -> Result<(), String> {
-    let path = agent_paths::agentbro_metadata_path();
+    let path = agent_paths::vibeboard_metadata_path();
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
@@ -129,7 +122,7 @@ pub fn add_source(skill_id: &str, origin: &str) -> Result<(), String> {
         skill_id.to_string(),
         SkillSourceEntry {
             origin: origin.to_string(),
-            installed_via: "island".to_string(),
+            installed_via: "vibeboard".to_string(),
         },
     );
     save(&meta)
@@ -342,40 +335,6 @@ pub fn get_sync_config() -> Option<SyncConfig> {
 pub fn set_sync_config(config: SyncConfig) -> Result<(), String> {
     let mut meta = load();
     meta.sync = Some(config);
-    save(&meta)
-}
-
-pub fn list_marketplace_sources() -> Vec<MarketplaceSource> {
-    load().marketplace_sources
-}
-
-pub fn upsert_marketplace_source(source: MarketplaceSource) -> Result<(), String> {
-    if source.id.trim().is_empty() {
-        return Err("Marketplace source id cannot be empty".to_string());
-    }
-    if source.url.trim().is_empty() {
-        return Err("Marketplace source url cannot be empty".to_string());
-    }
-    let mut meta = load();
-    if let Some(existing) = meta
-        .marketplace_sources
-        .iter_mut()
-        .find(|entry| entry.id == source.id)
-    {
-        *existing = source;
-    } else {
-        meta.marketplace_sources.push(source);
-    }
-    save(&meta)
-}
-
-pub fn remove_marketplace_source(id: &str) -> Result<(), String> {
-    let mut meta = load();
-    let before = meta.marketplace_sources.len();
-    meta.marketplace_sources.retain(|entry| entry.id != id);
-    if before == meta.marketplace_sources.len() {
-        return Err(format!("Marketplace source not found: {id}"));
-    }
     save(&meta)
 }
 

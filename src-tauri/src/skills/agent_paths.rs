@@ -331,12 +331,27 @@ pub fn central_skill_dirs() -> Vec<PathBuf> {
     vec![central_skills_dir(), legacy_agentbro_skills_dir()]
 }
 
-pub fn agentbro_metadata_path() -> PathBuf {
+pub fn vibeboard_metadata_path() -> PathBuf {
+    home().join(".vibeboard").join("metadata.json")
+}
+
+pub fn legacy_agent_island_metadata_path() -> PathBuf {
     home().join(".agent-island").join("metadata.json")
 }
 
 pub fn legacy_agentbro_metadata_path() -> PathBuf {
     home().join(".agentbro").join("metadata.json")
+}
+
+/// Read Vibe Board metadata, falling back to the retired data roots once.
+pub fn read_metadata() -> Option<String> {
+    [
+        vibeboard_metadata_path(),
+        legacy_agent_island_metadata_path(),
+        legacy_agentbro_metadata_path(),
+    ]
+    .into_iter()
+    .find_map(|path| std::fs::read_to_string(path).ok())
 }
 
 fn custom_agent_paths(agent: &str) -> Option<SkillPaths> {
@@ -364,9 +379,7 @@ fn custom_agent_plugin_dir(agent: &str) -> Option<PathBuf> {
 }
 
 fn custom_agent_entry(agent: &str) -> Option<serde_json::Value> {
-    let content = std::fs::read_to_string(agentbro_metadata_path())
-        .or_else(|_| std::fs::read_to_string(legacy_agentbro_metadata_path()))
-        .ok()?;
+    let content = read_metadata()?;
     let json: serde_json::Value = serde_json::from_str(&content).ok()?;
     let custom_agents = json
         .get("customAgents")

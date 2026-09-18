@@ -123,24 +123,24 @@ const tauriVersion = tauri.version
 const cargoName = packageTomlField(cargoToml, 'name')
 const cargoVersion = packageTomlField(cargoToml, 'version')
 const cargoDefaultRun = packageTomlField(cargoToml, 'default-run')
-const cargoLockVersion = cargoLockPackageVersion(cargoLock, 'agent-island')
+const cargoLockVersion = cargoLockPackageVersion(cargoLock, 'vibe-board')
 const windowsBuildScript = read('scripts/build-windows.mjs')
 const runtimeSource = read('src-tauri/src/lib.rs')
 const commandSource = read('src-tauri/src/commands/mod.rs')
 const notificationSource = read('src-tauri/src/platform/notifications.rs')
-const schemaSource = read('src-tauri/src/switch/schema.rs')
+const schemaSource = read('src-tauri/src/control_tower/db.rs')
 
 requireEqual('package.json name', pkg.name, 'vibe-board')
 requireEqual('Tauri productName', tauri.productName, 'Vibe Board')
-requireEqual('Tauri identifier', tauri.identifier, 'com.agentisland.desktop')
+requireEqual('Tauri identifier', tauri.identifier, 'com.vibeboard.desktop')
 requireEqual('Tauri updater artifact generation', String(tauri.bundle?.createUpdaterArtifacts), 'true')
-requireEqual('Cargo package name', cargoName, 'agent-island')
-requireEqual('Cargo default-run', cargoDefaultRun, 'agent-island')
+requireEqual('Cargo package name', cargoName, 'vibe-board')
+requireEqual('Cargo default-run', cargoDefaultRun, 'vibe-board')
 requireEqual('package.json license', pkg.license, 'Apache-2.0')
 requireEqual('Cargo license', packageTomlField(cargoToml, 'license'), 'Apache-2.0')
 requireEqual('Tauri version', tauriVersion, packageVersion)
 requireEqual('Cargo version', cargoVersion, packageVersion)
-requireEqual('Cargo.lock agent-island version', cargoLockVersion, packageVersion)
+requireEqual('Cargo.lock vibe-board version', cargoLockVersion, packageVersion)
 
 const bundleTargets = tauri.bundle?.targets
 const explicitBundleTargets = Array.isArray(bundleTargets)
@@ -225,15 +225,28 @@ if (strictRelease) {
     requireEnv('APPLE_PASSWORD')
     requireEnv('APPLE_TEAM_ID')
 
-    const telemetryEnvNames = [
-      'AGENT_ISLAND_TELEMETRY_SLS_HOST',
-      'AGENT_ISLAND_TELEMETRY_SLS_PROJECT',
-      'AGENT_ISLAND_TELEMETRY_SLS_LOGSTORE',
+    const telemetryEnvGroups = [
+      [
+        'VIBEBOARD_TELEMETRY_SLS_HOST',
+        'VIBEBOARD_TELEMETRY_SLS_PROJECT',
+        'VIBEBOARD_TELEMETRY_SLS_LOGSTORE',
+      ],
+      [
+        'AGENT_ISLAND_TELEMETRY_SLS_HOST',
+        'AGENT_ISLAND_TELEMETRY_SLS_PROJECT',
+        'AGENT_ISLAND_TELEMETRY_SLS_LOGSTORE',
+      ],
     ]
-    const telemetryEnvCount = countPresentEnv(telemetryEnvNames)
-    if (telemetryEnvCount > 0 && telemetryEnvCount < telemetryEnvNames.length) {
-      errors.push('AGENT_ISLAND_TELEMETRY_SLS_HOST, AGENT_ISLAND_TELEMETRY_SLS_PROJECT, and AGENT_ISLAND_TELEMETRY_SLS_LOGSTORE must all be set together')
-    } else if (telemetryEnvCount === 0) {
+    const telemetryEnvCount = telemetryEnvGroups
+      .map((names) => countPresentEnv(names))
+      .reduce((total, count) => total + count, 0)
+    for (const names of telemetryEnvGroups) {
+      const count = countPresentEnv(names)
+      if (count > 0 && count < names.length) {
+        errors.push(`${names.join(', ')} must all be set together`)
+      }
+    }
+    if (telemetryEnvCount === 0) {
       warnings.push('Vibe Board anonymous telemetry SLS target is not set; release builds will not upload anonymous usage stats.')
     }
   } else {

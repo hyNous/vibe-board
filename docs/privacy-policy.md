@@ -4,8 +4,7 @@ Last updated: September 3, 2026
 
 Vibe Board is a local-first desktop utility for surfacing AI coding-agent
 events in a floating island. Coding session data and local configuration stay
-on your device unless you explicitly use a remote integration or enable the
-optional telemetry build.
+on your device unless you enable the optional telemetry build.
 
 ## Data collection
 
@@ -29,13 +28,6 @@ approvals, questions, completion notifications, supported-tool configuration,
 preferences, and integration state. This information is used to display state,
 route notifications, install or remove integrations you request, and focus
 related local windows.
-
-## Remote SSH features
-
-If you enable remote SSH support, Vibe Board uses the SSH target information
-you provide to connect to the selected host and forward session events back to
-the local app. Remote connection details and forwarded events are not sent to
-telemetry.
 
 ## Diagnostics
 

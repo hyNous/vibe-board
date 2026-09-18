@@ -2200,7 +2200,7 @@ impl HookServer {
                 Self::refresh_cache_ttl_from_transcript(store, session_id, _raw);
                 Self::refresh_subagents_from_transcript(store, session_id, _raw);
                 let is_suppressed = Self::check_suppression(store, session_id);
-                if is_suppressed || Self::is_remote_hook_event(_raw) {
+                if is_suppressed {
                     if let Ok(guard) = app.lock() {
                         if let Some(ref handle) = *guard {
                             let summary = store
@@ -2260,7 +2260,7 @@ impl HookServer {
                 Self::refresh_cache_ttl_from_transcript(store, session_id, _raw);
                 Self::refresh_subagents_from_transcript(store, session_id, _raw);
                 let is_suppressed = Self::check_suppression(store, session_id);
-                if is_suppressed || Self::is_remote_hook_event(_raw) {
+                if is_suppressed {
                     if let Ok(guard) = app.lock() {
                         if let Some(ref handle) = *guard {
                             crate::platform::notifications::send_completion_notification(
@@ -2291,7 +2291,7 @@ impl HookServer {
                     s.last_response = None;
                 });
                 let is_suppressed = Self::check_suppression(store, session_id);
-                if is_suppressed || Self::is_remote_hook_event(_raw) {
+                if is_suppressed {
                     if let Ok(guard) = app.lock() {
                         if let Some(ref handle) = *guard {
                             crate::platform::notifications::send_error_notification(
@@ -2611,14 +2611,10 @@ impl HookServer {
             }
         }
 
-        // Update local pid/tty if present. Remote hooks report the agent PID from the
-        // remote machine, which cannot be validated against the local process tree.
-        if !Self::is_remote_hook_event(raw) {
-            if let Some(pid) = raw.get("pid").and_then(|v| v.as_u64()) {
-                store.update_session(session_id, |s| {
-                    s.pid = Some(pid as u32);
-                });
-            }
+        if let Some(pid) = raw.get("pid").and_then(|v| v.as_u64()) {
+            store.update_session(session_id, |s| {
+                s.pid = Some(pid as u32);
+            });
         }
         if let Some(tty) = raw.get("tty").and_then(|v| v.as_str()) {
             store.update_session(session_id, |s| {
@@ -2713,7 +2709,7 @@ impl HookServer {
                 s.last_response = None;
             });
             let is_suppressed = Self::check_suppression(store, session_id);
-            if is_suppressed || Self::is_remote_hook_event(raw) {
+            if is_suppressed {
                 if let Ok(guard) = app.lock() {
                     if let Some(ref handle) = *guard {
                         crate::platform::notifications::send_error_notification(handle, &text);
@@ -3009,11 +3005,6 @@ impl HookServer {
         fallback: &str,
         raw: Option<&serde_json::Value>,
     ) -> String {
-        if raw.is_some_and(Self::is_remote_hook_event) {
-            return Self::useful_completion_text(Some(incoming))
-                .unwrap_or_else(|| fallback.to_string());
-        }
-
         Self::useful_completion_text(Some(incoming))
             .or_else(|| {
                 store
@@ -3128,11 +3119,7 @@ impl HookServer {
             return;
         };
 
-        let pid = if Self::is_remote_hook_event(raw) {
-            None
-        } else {
-            raw.get("pid").and_then(|v| v.as_u64()).map(|v| v as u32)
-        };
+        let pid = raw.get("pid").and_then(|v| v.as_u64()).map(|v| v as u32);
         let tty = raw
             .get("tty")
             .and_then(|v| v.as_str())
@@ -3153,8 +3140,6 @@ impl HookServer {
         let zellij_session_name = optional_nonempty_string(raw, "_zellij_session_name");
         let cmux_surface_id = optional_nonempty_string(raw, "_cmux_surface_id");
         let cmux_workspace_id = optional_nonempty_string(raw, "_cmux_workspace_id");
-        let remote_host_id = optional_nonempty_string(raw, "_remote_host_id");
-        let remote_host_name = optional_nonempty_string(raw, "_remote_host_name");
         let model = optional_nonempty_string(raw, "model");
 
         if pid.is_none()
@@ -3168,8 +3153,6 @@ impl HookServer {
             && zellij_session_name.is_none()
             && cmux_surface_id.is_none()
             && cmux_workspace_id.is_none()
-            && remote_host_id.is_none()
-            && remote_host_name.is_none()
             && model.is_none()
         {
             return;
@@ -3209,20 +3192,10 @@ impl HookServer {
             if let Some(value) = cmux_workspace_id {
                 s.cmux_workspace_id = Some(value.to_string());
             }
-            if let Some(value) = remote_host_id {
-                s.remote_host_id = Some(value.to_string());
-            }
-            if let Some(value) = remote_host_name {
-                s.remote_host_name = Some(value.to_string());
-            }
             if let Some(value) = model {
                 s.model = Some(value.to_string());
             }
         });
-    }
-
-    fn is_remote_hook_event(raw: &serde_json::Value) -> bool {
-        raw.get("_remote_host_id").is_some() || raw.get("_remote_host_name").is_some()
     }
 
     fn route_interaction_to_terminal_if_idle(
@@ -3232,7 +3205,7 @@ impl HookServer {
         session_id: &str,
         interaction_kind: &str,
     ) -> bool {
-        let Some(idle_seconds) = Self::idle_interaction_route_seconds(config_store, raw) else {
+        let Some(idle_seconds) = Self::idle_interaction_route_seconds(config_store) else {
             return false;
         };
 
@@ -3249,26 +3222,19 @@ impl HookServer {
 
     fn idle_interaction_route_seconds(
         config_store: &Arc<std::sync::Mutex<Option<ConfigStore>>>,
-        raw: &serde_json::Value,
     ) -> Option<u64> {
         let config_store = Self::current_config_store(config_store)?;
         let config = config_store.get();
         let idle_seconds = crate::platform::idle::user_idle_seconds()?;
-        if Self::idle_interaction_should_route(&config, raw, Some(idle_seconds)) {
+        if Self::idle_interaction_should_route(&config, Some(idle_seconds)) {
             Some(idle_seconds)
         } else {
             None
         }
     }
 
-    fn idle_interaction_should_route(
-        config: &AppConfig,
-        raw: &serde_json::Value,
-        idle_seconds: Option<u64>,
-    ) -> bool {
-        if !config.idle_interaction_routing_enabled
-            || config.idle_interaction_routing_minutes == 0
-            || Self::is_remote_hook_event(raw)
+    fn idle_interaction_should_route(config: &AppConfig, idle_seconds: Option<u64>) -> bool {
+        if !config.idle_interaction_routing_enabled || config.idle_interaction_routing_minutes == 0
         {
             return false;
         }
@@ -3731,40 +3697,6 @@ mod tests {
     }
 
     #[test]
-    fn remote_hook_pid_is_not_stored_as_local_process() {
-        let store = Arc::new(SessionStore::new());
-        let raw = serde_json::json!({
-            "agent": "claude-code",
-            "session_id": "remote-mid-session",
-            "cwd": "/tmp/remote-project",
-            "event": "UserPromptSubmit",
-            "status": "processing",
-            "prompt": "remote prompt",
-            "pid": u32::MAX,
-            "_remote_host_id": "host-1",
-            "_remote_host_name": "Remote"
-        });
-        let event = AgentEvent::Processing {
-            session_id: "remote-mid-session".to_string(),
-            description: "Processing user input: remote prompt".to_string(),
-        };
-        let sound = Arc::new(std::sync::Mutex::new(None));
-        let app = Arc::new(std::sync::Mutex::new(None));
-        let config_store = Arc::new(std::sync::Mutex::new(None));
-
-        HookServer::ensure_session_for_event(&store, &event, &raw);
-        HookServer::process_event(&event, &raw, &store, &sound, &app, &config_store);
-
-        let sessions = store.get_all_sessions();
-        assert_eq!(sessions.len(), 1);
-        assert_eq!(sessions[0].id, "remote-mid-session");
-        assert_eq!(sessions[0].pid, None);
-        assert_eq!(sessions[0].remote_host_id.as_deref(), Some("host-1"));
-        assert_eq!(sessions[0].remote_host_name.as_deref(), Some("Remote"));
-        assert_eq!(sessions[0].phase, SessionPhase::Processing);
-    }
-
-    #[test]
     fn codex_interaction_timeout_matches_hook_bridge_window() {
         let raw = serde_json::json!({ "agent": "codex" });
 
@@ -4071,43 +4003,22 @@ mod tests {
 
     #[test]
     fn idle_interaction_routing_requires_enabled_local_idle_session() {
-        let raw = serde_json::json!({ "session_id": "s1", "cwd": "/tmp/project" });
         let mut config = AppConfig::default();
         config.idle_interaction_routing_minutes = 5;
 
         assert!(!HookServer::idle_interaction_should_route(
             &config,
-            &raw,
             Some(600)
         ));
 
         config.idle_interaction_routing_enabled = true;
         assert!(!HookServer::idle_interaction_should_route(
             &config,
-            &raw,
             Some(299)
         ));
         assert!(HookServer::idle_interaction_should_route(
             &config,
-            &raw,
             Some(300)
-        ));
-    }
-
-    #[test]
-    fn idle_interaction_routing_skips_remote_sessions() {
-        let raw = serde_json::json!({
-            "session_id": "remote",
-            "_remote_host_id": "host-1"
-        });
-        let mut config = AppConfig::default();
-        config.idle_interaction_routing_enabled = true;
-        config.idle_interaction_routing_minutes = 1;
-
-        assert!(!HookServer::idle_interaction_should_route(
-            &config,
-            &raw,
-            Some(3600)
         ));
     }
 

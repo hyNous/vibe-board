@@ -232,11 +232,13 @@ impl Service {
         })
     }
 
-    /// Migrate legacy `~/.agentbro/metadata.json` (sources, packs) into the DB.
-    /// Never deletes the legacy file.
+    /// Migrate legacy `~/.agent-island/metadata.json` or `~/.agentbro/metadata.json`
+    /// (sources, packs) into the DB. Never deletes the legacy file.
     pub fn migrate_legacy_metadata(&self) -> Result<(), String> {
-        let path = db::legacy_metadata_path();
-        let Ok(content) = std::fs::read_to_string(&path) else {
+        let content = db::legacy_metadata_paths()
+            .into_iter()
+            .find_map(|path| std::fs::read_to_string(path).ok());
+        let Some(content) = content else {
             return Ok(());
         };
         let Ok(v) = serde_json::from_str::<serde_json::Value>(&content) else {
@@ -346,7 +348,8 @@ impl Service {
             if fsutil::is_ignored_entry(&name) || name.starts_with('.') {
                 continue;
             }
-            if name == "agent-island-skills.snapshot.json"
+            if name == "vibeboard-skills.snapshot.json"
+                || name == "agent-island-skills.snapshot.json"
                 || name == "agentbro-skills.snapshot.json"
             {
                 continue;
@@ -2053,7 +2056,8 @@ impl Service {
                 Some("zip")
             ) {
             cleanup_old_temp_imports();
-            let dest = std::env::temp_dir().join(format!("agentbro-skill-import-{}", uuid_short()));
+            let dest =
+                std::env::temp_dir().join(format!("vibeboard-skill-import-{}", uuid_short()));
             extract_zip(&src, &dest)?;
             dest
         } else {
@@ -2349,7 +2353,7 @@ impl Service {
                 None,
                 input.imported_from_agent.as_deref(),
                 input.imported_from_path.as_deref(),
-                "agentbro",
+                "vibeboard",
             )?;
             Ok(())
         })?;
@@ -3543,8 +3547,8 @@ impl Service {
             .parent()
             .ok_or_else(|| format!("Target path '{}' has no parent.", target_path.display()))?;
         let token = uuid_short();
-        let pending_link = parent.join(format!(".agentbro-takeover-link-{token}"));
-        let backup = parent.join(format!(".agentbro-takeover-backup-{token}"));
+        let pending_link = parent.join(format!(".vibeboard-takeover-link-{token}"));
+        let backup = parent.join(format!(".vibeboard-takeover-backup-{token}"));
         if !fsutil::try_symlink(center_path, &pending_link)? {
             return Err(format!(
                 "Could not create a symlink for '{}'; the agent copy was preserved.",
@@ -3696,7 +3700,7 @@ impl Service {
                     None,
                     Some(agent_id),
                     Some(src_path_str.as_str()),
-                    "agentbro",
+                    "vibeboard",
                 )?;
                 Ok(())
             })?;
@@ -6003,7 +6007,7 @@ fn prepare_shared_cleanup_destination(
             destination.display()
         )
     })?;
-    let temporary = parent.join(format!(".agentbro-shared-detach-{}", uuid_short()));
+    let temporary = parent.join(format!(".vibeboard-shared-detach-{}", uuid_short()));
     fsutil::copy_dir_recursive(source, &temporary)?;
     if let Err(error) = ensure_shared_adopt_source_unchanged(shared_root, source, expected_hash) {
         let _ = fsutil::remove_path(&temporary);
@@ -6814,7 +6818,9 @@ fn cleanup_old_temp_imports() {
     if let Ok(rd) = std::fs::read_dir(std::env::temp_dir()) {
         for e in rd.flatten() {
             let name = e.file_name().to_string_lossy().to_string();
-            if name.starts_with("agentbro-skill-import-") {
+            if name.starts_with("vibeboard-skill-import-")
+                || name.starts_with("agentbro-skill-import-")
+            {
                 let _ = std::fs::remove_dir_all(e.path());
             }
         }

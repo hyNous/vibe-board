@@ -43,11 +43,17 @@ impl OpenCodeAdapter {
 
     /// Verify that the opencode plugin hooks are correctly installed.
     /// Checks:
-    ///  1. The plugin file exists at ~/.config/opencode/plugins/agentbro.js
-    ///  2. opencode.json contains "agentbro" in its plugin array
+    ///  1. The plugin file exists at ~/.config/opencode/plugins/vibeboard.js
+    ///  2. opencode.json contains the Vibe Board plugin in its plugin array
     pub fn verify_hooks(&self) -> OpenCodeHookVerificationResult {
         let plugin_path = self.plugin_path();
-        if !plugin_path.exists() {
+        let legacy_home = dirs::home_dir().unwrap_or_else(std::env::temp_dir);
+        let legacy_plugin_path = legacy_home
+            .join(".config")
+            .join("opencode")
+            .join("plugins")
+            .join("agentbro.js");
+        if !plugin_path.exists() && !legacy_plugin_path.exists() {
             return OpenCodeHookVerificationResult::MissingPluginFile;
         }
 
@@ -70,12 +76,22 @@ impl OpenCodeAdapter {
         };
 
         let has_agentbro = plugins.iter().any(|p| {
-            p.as_str().map(|s| s.contains("agentbro")).unwrap_or(false)
+            p.as_str()
+                .map(|s| {
+                    s.contains("vibeboard")
+                        || s.contains("vibe-board")
+                        || s.contains("agentbro")
+                        || s.contains("agent-island")
+                })
+                .unwrap_or(false)
                 || p.as_array()
                     .and_then(|arr| {
-                        arr.first()
-                            .and_then(|v| v.as_str())
-                            .map(|s| s.contains("agentbro"))
+                        arr.first().and_then(|v| v.as_str()).map(|s| {
+                            s.contains("vibeboard")
+                                || s.contains("vibe-board")
+                                || s.contains("agentbro")
+                                || s.contains("agent-island")
+                        })
                     })
                     .unwrap_or(false)
         });

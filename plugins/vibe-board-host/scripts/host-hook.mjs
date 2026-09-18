@@ -12,13 +12,12 @@ const source = valueAfter('--source')
 const host = valueAfter('--host')
 if (!source || !host) process.exit(0)
 
-const bridge = join(
-  homedir(),
-  '.agent-island',
-  'bin',
-  process.platform === 'win32' ? 'agent-island-bridge.exe' : 'agent-island-bridge',
-)
-if (!existsSync(bridge)) process.exit(0)
+const bridge = [
+  join(homedir(), '.vibeboard', 'bin', process.platform === 'win32' ? 'vibe-board-bridge.exe' : 'vibe-board-bridge'),
+  join(homedir(), '.agent-island', 'bin', process.platform === 'win32' ? 'agent-island-bridge.exe' : 'agent-island-bridge'),
+  join(homedir(), '.agentbro', 'bin', process.platform === 'win32' ? 'agentbro-bridge.exe' : 'agentbro-bridge'),
+].find((candidate) => existsSync(candidate))
+if (!bridge) process.exit(0)
 
 const child = spawn(bridge, ['--source', source, '--host', host], {
   stdio: ['pipe', 'ignore', 'ignore'],

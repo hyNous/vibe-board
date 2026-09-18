@@ -978,6 +978,8 @@ fn is_url(target: &str) -> bool {
     target.starts_with("http://")
         || target.starts_with("https://")
         || target.starts_with("mailto:")
+        || target.starts_with("vibeboard:")
+        || target.starts_with("agentisland:")
         || target.starts_with("agentbro:")
         || target.starts_with("ccswitch:")
 }

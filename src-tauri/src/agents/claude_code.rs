@@ -172,7 +172,9 @@ fn is_managed_status_line(value: &Value) -> bool {
             .get("command")
             .and_then(Value::as_str)
             .map(|command| {
-                command.contains("agent-island-bridge") || command.contains("agentbro-bridge")
+                command.contains("vibe-board-bridge")
+                    || command.contains("agent-island-bridge")
+                    || command.contains("agentbro-bridge")
             })
             .unwrap_or(false)
 }
@@ -991,7 +993,8 @@ impl ClaudeCodeAdapter {
                                     h.get("command")
                                         .and_then(|c| c.as_str())
                                         .map(|c| {
-                                            c.contains("agentbro-bridge")
+                                            c.contains("vibe-board-bridge")
+                                                || c.contains("agentbro-bridge")
                                                 || c.contains("agent-island-bridge")
                                         })
                                         .unwrap_or(false)

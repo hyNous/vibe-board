@@ -14,7 +14,7 @@ export interface ThemeConfig {
   name: string
   version: string
   author: 'builtin' | 'user'
-  provider?: 'agentbro' | 'codex'
+  provider?: 'vibeboard' | 'agent-island' | 'agentbro' | 'codex'
   isCodexPet?: boolean
   displayName?: string
   description?: string

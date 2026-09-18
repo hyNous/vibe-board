@@ -45,14 +45,14 @@ const emptyOperation = (name: AgentOperationName): AgentOperationState => ({
   expanded: true,
 })
 
-const AGENT_CACHE_KEY = 'agent-island.agentPrograms.cache.v1'
-const LEGACY_AGENT_CACHE_KEY = 'agentbro.agentPrograms.cache.v1'
+const AGENT_CACHE_KEY = 'vibeboard.agentPrograms.cache.v1'
+const LEGACY_AGENT_CACHE_KEYS = ['agent-island.agentPrograms.cache.v1', 'agentbro.agentPrograms.cache.v1']
 
 function readCachedAgents() {
   if (typeof window === 'undefined') return []
   try {
     const value = window.localStorage.getItem(AGENT_CACHE_KEY)
-      ?? window.localStorage.getItem(LEGACY_AGENT_CACHE_KEY)
+      ?? LEGACY_AGENT_CACHE_KEYS.map((key) => window.localStorage.getItem(key)).find(Boolean)
     return value ? JSON.parse(value) as AgentProgramInfo[] : []
   } catch {
     return []

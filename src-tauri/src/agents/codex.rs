@@ -1049,7 +1049,7 @@ fn canonical_json(value: &serde_json::Value) -> String {
 }
 
 fn codex_trust_backup_root() -> PathBuf {
-    crate::data_dir::agent_island_home()
+    crate::data_dir::vibeboard_home()
         .join("hooks")
         .join("backups")
 }
@@ -1454,7 +1454,7 @@ fn write_codex_config_file(
         .parent()
         .ok_or_else(|| format!("Invalid Codex config path: {}", config_path.display()))?;
     let temp = parent.join(format!(
-        ".{}.agent-island-{}.tmp",
+        ".{}.vibeboard-{}.tmp",
         config_path
             .file_name()
             .and_then(|name| name.to_str())

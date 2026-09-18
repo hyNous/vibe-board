@@ -6,8 +6,8 @@
 use std::env;
 use std::sync::Arc;
 
-use agent_island_lib::control_tower::agentctl::{self, DispatchRequest};
-use agent_island_lib::control_tower::ControlTowerDatabase;
+use vibe_board_lib::control_tower::agentctl::{self, DispatchRequest};
+use vibe_board_lib::control_tower::ControlTowerDatabase;
 
 const USAGE: &str = r#"Usage:
   agentctl dispatch --agent <claude|opencode|antigravity> --task <text>

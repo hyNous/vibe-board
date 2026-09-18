@@ -68,5 +68,5 @@ fn main() {
         close_inherited_file_descriptors();
     }
 
-    agent_island_lib::run()
+    vibe_board_lib::run()
 }

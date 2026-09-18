@@ -49,24 +49,48 @@ fn build_service() -> Result<Arc<service::Service>, String> {
 
 fn resolve_sqlite_path(home: &std::path::Path) -> Result<PathBuf, String> {
     let default = fsutil::default_sqlite_path();
-    // Check new location first, then legacy flat location
+    // Check the current location first, then legacy Agent Island/AgentBro ones.
     let settings_file = fsutil::settings_path();
-    let legacy_settings = home.join(".agentbro/skill-manager-settings.json");
-    let legacy_nested_settings = home.join(".agentbro/skill-manager/settings.json");
-    let content = std::fs::read_to_string(&settings_file)
-        .or_else(|_| std::fs::read_to_string(&legacy_settings))
-        .or_else(|_| std::fs::read_to_string(&legacy_nested_settings));
-    if let Ok(content) = content {
+    let legacy_settings = [
+        home.join(".agent-island/skill-manager/settings.json"),
+        home.join(".agent-island/skill-manager-settings.json"),
+        home.join(".agentbro/skill-manager/settings.json"),
+        home.join(".agentbro/skill-manager-settings.json"),
+    ];
+    let content = std::fs::read_to_string(&settings_file).ok().or_else(|| {
+        legacy_settings
+            .iter()
+            .find_map(|path| std::fs::read_to_string(path).ok())
+    });
+    if let Some(content) = content {
         if let Ok(v) = serde_json::from_str::<serde_json::Value>(&content) {
             if let Some(p) = v.get("sqlitePath").and_then(|p| p.as_str()) {
                 if !p.is_empty() {
-                    return Ok(fsutil::expand_tilde(p));
+                    let resolved = fsutil::expand_tilde(p);
+                    // A stored legacy default must not pin new writes to the
+                    // retired data root.
+                    let legacy_defaults = [
+                        fsutil::legacy_agent_island_home()
+                            .join("skill-manager")
+                            .join("skill-manager.db"),
+                        fsutil::legacy_agentbro_home()
+                            .join("skill-manager")
+                            .join("skill-manager.db"),
+                    ];
+                    if legacy_defaults.contains(&resolved) {
+                        return Ok(default);
+                    }
+                    return Ok(resolved);
                 }
             }
         }
     }
     // Migrate legacy settings file if it exists
-    crate::data_dir::migrate_file(&legacy_settings, &settings_file);
-    crate::data_dir::migrate_file(&legacy_nested_settings, &settings_file);
+    for legacy in &legacy_settings {
+        let _ = crate::data_dir::migrate_file(legacy, &settings_file);
+        if settings_file.exists() {
+            break;
+        }
+    }
     Ok(default)
 }

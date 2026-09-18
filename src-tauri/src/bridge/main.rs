@@ -1,12 +1,12 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-//! AgentBro Hook Bridge
+//! Vibe Board Hook Bridge
 //!
 //! A lightweight compiled binary that Claude Code hooks call.
-//! Reads JSON from stdin, forwards events to AgentBro via Unix socket or TCP.
+//! Reads JSON from stdin, forwards events to Vibe Board via Unix socket or TCP.
 //! For PermissionRequest events, waits for a response and outputs it.
 
-use std::fs::{self, OpenOptions};
+use std::fs::OpenOptions;
 use std::io::{self, BufRead, BufReader, Read, Write};
 use std::net::TcpStream;
 #[cfg(unix)]
@@ -544,13 +544,18 @@ fn parent_process_id() -> u32 {
     }
 }
 
-/// Connect to AgentBro: try Unix socket first, fall back to TCP
+/// Connect to Vibe Board: try Unix socket first, fall back to TCP
 fn connect() -> Option<Stream> {
-    let endpoint = agent_island_lib::hook_endpoint::current();
+    let endpoint = vibe_board_lib::hook_endpoint::current();
     #[cfg(unix)]
     {
         if let Ok(s) = UnixStream::connect(&endpoint.socket_path) {
             return Some(Stream::Unix(s));
+        }
+        for legacy_socket in vibe_board_lib::hook_endpoint::legacy_socket_paths() {
+            if let Ok(s) = UnixStream::connect(legacy_socket) {
+                return Some(Stream::Unix(s));
+            }
         }
     }
     if let Ok(s) = TcpStream::connect(endpoint.tcp_addr()) {
@@ -570,8 +575,7 @@ fn ensure_agent_island_running() {
         thread::sleep(Duration::from_millis(50));
     }
 
-    let Ok(raw_path) = fs::read_to_string(agent_island_lib::data_dir::executable_marker_path())
-    else {
+    let Some(raw_path) = vibe_board_lib::data_dir::read_executable_marker() else {
         return;
     };
     let executable = PathBuf::from(raw_path.trim());
@@ -579,7 +583,7 @@ fn ensure_agent_island_running() {
         return;
     }
 
-    let mut command = agent_island_lib::platform::process::background_command(&executable);
+    let mut command = vibe_board_lib::platform::process::background_command(&executable);
     command
         .stdin(Stdio::null())
         .stdout(Stdio::null())
@@ -606,21 +610,21 @@ fn maybe_start_configured_host(source: &str, event: &str) {
         return;
     }
 
-    let config = agent_island_lib::config::ConfigStore::new().get();
+    let config = vibe_board_lib::config::ConfigStore::new().get();
     let Some(host) = config
         .host_agent
         .as_deref()
-        .and_then(agent_island_lib::data_dir::normalize_usage_host)
+        .and_then(vibe_board_lib::data_dir::normalize_usage_host)
     else {
         return;
     };
     if !config.auto_start_on_host_session
-        || agent_island_lib::data_dir::normalize_usage_host(source) != Some(host)
+        || vibe_board_lib::data_dir::normalize_usage_host(source) != Some(host)
     {
         return;
     }
 
-    if let Err(error) = agent_island_lib::data_dir::set_usage_host(host) {
+    if let Err(error) = vibe_board_lib::data_dir::set_usage_host(host) {
         eprintln!("Vibe Board host marker failed: {error}");
     }
     ensure_agent_island_running();
@@ -655,24 +659,18 @@ fn send_and_maybe_receive(
 }
 
 fn invocation_log_path() -> PathBuf {
-    let home = dirs::home_dir().unwrap_or_else(std::env::temp_dir);
-    let new_path = home
-        .join(".agent-island")
+    let new_path = vibe_board_lib::data_dir::vibeboard_home()
         .join("hooks")
         .join("invocations.jsonl");
     if !new_path.exists() {
-        let legacy_root = agent_island_lib::data_dir::legacy_agentbro_home();
-        for old_path in [
-            legacy_root.join("hooks").join("invocations.jsonl"),
-            legacy_root.join("hook-invocations.jsonl"),
-        ] {
-            if old_path.exists() {
-                if let Some(parent) = new_path.parent() {
-                    let _ = std::fs::create_dir_all(parent);
-                }
-                let _ = std::fs::rename(&old_path, &new_path);
+        for legacy_root in vibe_board_lib::data_dir::legacy_homes() {
+            for old_path in [
+                legacy_root.join("hooks").join("invocations.jsonl"),
+                legacy_root.join("hook-invocations.jsonl"),
+            ] {
+                let _ = vibe_board_lib::data_dir::migrate_file(&old_path, &new_path);
                 if new_path.exists() {
-                    break;
+                    return new_path;
                 }
             }
         }
@@ -899,8 +897,8 @@ fn main() {
     let forced_event = arg_value("--event");
 
     if let Some(host) = arg_value("--host") {
-        if let Some(normalized) = agent_island_lib::data_dir::normalize_usage_host(&host) {
-            if let Err(error) = agent_island_lib::data_dir::set_usage_host(normalized) {
+        if let Some(normalized) = vibe_board_lib::data_dir::normalize_usage_host(&host) {
+            if let Err(error) = vibe_board_lib::data_dir::set_usage_host(normalized) {
                 eprintln!("Vibe Board host marker failed: {error}");
             }
             ensure_agent_island_running();

@@ -5,12 +5,15 @@ use std::path::{Path, PathBuf};
 
 fn themes_dir() -> PathBuf {
     let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
-    home.join(".config").join("agent-island").join("themes")
+    home.join(".config").join("vibeboard").join("themes")
 }
 
-fn legacy_themes_dir() -> PathBuf {
+fn legacy_themes_dirs() -> [PathBuf; 2] {
     let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
-    home.join(".config").join("agentbro").join("themes")
+    [
+        home.join(".config").join("agent-island").join("themes"),
+        home.join(".config").join("agentbro").join("themes"),
+    ]
 }
 
 fn codex_pets_dir() -> PathBuf {
@@ -21,7 +24,7 @@ fn codex_pets_dir() -> PathBuf {
 pub fn scan_themes() -> Vec<serde_json::Value> {
     let mut themes = Vec::new();
     let mut seen_names = HashSet::new();
-    for dir in [themes_dir(), legacy_themes_dir()] {
+    for dir in std::iter::once(themes_dir()).chain(legacy_themes_dirs()) {
         if dir.exists() {
             if let Ok(entries) = fs::read_dir(&dir) {
                 for entry in entries.flatten() {
@@ -64,8 +67,8 @@ pub fn get_theme_bundle(name: &str) -> Option<serde_json::Value> {
         return codex_pet_theme_from_dir(&dir);
     }
 
-    let (dir, mut val) = [themes_dir(), legacy_themes_dir()]
-        .into_iter()
+    let (dir, mut val) = std::iter::once(themes_dir())
+        .chain(legacy_themes_dirs())
         .map(|base| base.join(name))
         .find_map(|dir| {
             let theme_json = dir.join("theme.json");

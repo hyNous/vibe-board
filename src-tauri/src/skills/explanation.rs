@@ -84,12 +84,16 @@ fn generate_with_api(
     content: &str,
     lang: &str,
 ) -> Result<(String, String), String> {
-    let api_key = std::env::var("AGENTBRO_AI_API_KEY")
+    let api_key = std::env::var("VIBEBOARD_AI_API_KEY")
+        .or_else(|_| std::env::var("VIBEBOARD_AI_API_KEY"))
         .or_else(|_| std::env::var("OPENAI_API_KEY"))
         .map_err(|_| "No AI API key configured".to_string())?;
-    let api_url = std::env::var("AGENTBRO_AI_API_URL")
+    let api_url = std::env::var("VIBEBOARD_AI_API_URL")
+        .or_else(|_| std::env::var("AGENTBRO_AI_API_URL"))
         .unwrap_or_else(|_| "https://api.openai.com/v1/chat/completions".to_string());
-    let model = std::env::var("AGENTBRO_AI_MODEL").unwrap_or_else(|_| "gpt-4.1-mini".to_string());
+    let model = std::env::var("VIBEBOARD_AI_MODEL")
+        .or_else(|_| std::env::var("AGENTBRO_AI_MODEL"))
+        .unwrap_or_else(|_| "gpt-4.1-mini".to_string());
     let prompt = explanation_prompt(skill_id, content, lang);
     let body = serde_json::json!({
         "model": model,
@@ -171,13 +175,13 @@ fn local_explanation(skill_id: &str, content: &str, lang: &str) -> String {
 
     if lang.starts_with("zh") {
         format!(
-            "### 用途\n{name}：{description}\n\n### 适用场景\n这个 Skill 适合在任务需要调用其说明中的流程、工具或领域知识时启用。它的主要内容结构包括：\n{}\n\n### 重要要求\n{}\n\n### 风险提示\n这是本地结构化解释。设置 AGENTBRO_AI_API_KEY 或 OPENAI_API_KEY 后可生成更完整的 AI 解释。",
+            "### 用途\n{name}：{description}\n\n### 适用场景\n这个 Skill 适合在任务需要调用其说明中的流程、工具或领域知识时启用。它的主要内容结构包括：\n{}\n\n### 重要要求\n{}\n\n### 风险提示\n这是本地结构化解释。设置 VIBEBOARD_AI_API_KEY 或 OPENAI_API_KEY 后可生成更完整的 AI 解释。",
             if headings.is_empty() { "- 未发现标题结构".to_string() } else { headings.join("\n") },
             if requirements.is_empty() { "- 未在 frontmatter 中发现显式依赖".to_string() } else { requirements.join("\n") },
         )
     } else {
         format!(
-            "### Purpose\n{name}: {description}\n\n### When To Use\nUse this skill when the task needs the workflow, tools, or domain knowledge described in the skill. Main sections found:\n{}\n\n### Requirements\n{}\n\n### Risks\nThis is a local structured explanation. Set AGENTBRO_AI_API_KEY or OPENAI_API_KEY to generate a fuller AI explanation.",
+            "### Purpose\n{name}: {description}\n\n### When To Use\nUse this skill when the task needs the workflow, tools, or domain knowledge described in the skill. Main sections found:\n{}\n\n### Requirements\n{}\n\n### Risks\nThis is a local structured explanation. Set VIBEBOARD_AI_API_KEY or OPENAI_API_KEY to generate a fuller AI explanation.",
             if headings.is_empty() { "- No heading structure found".to_string() } else { headings.join("\n") },
             if requirements.is_empty() { "- No explicit frontmatter requirements found".to_string() } else { requirements.join("\n") },
         )

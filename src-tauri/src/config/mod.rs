@@ -35,20 +35,6 @@ pub struct CustomSoundConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct WindowOrigin {
-    pub x: f64,
-    pub y: f64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PetWindowAnchor {
-    pub left: bool,
-    pub top: bool,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct CustomHookInstall {
     pub id: String,
     pub profile_id: String,
@@ -183,9 +169,6 @@ pub struct AppConfig {
     /// Webhook forwarding configurations (DingTalk / Feishu)
     #[serde(default)]
     pub webhook_configs: Vec<crate::webhook::WebhookConfig>,
-    /// SSH remote host configurations
-    #[serde(default)]
-    pub remote_hosts: Vec<crate::remote::RemoteHost>,
     /// Sound volume (0-100)
     #[serde(default = "default_volume")]
     pub volume: u8,
@@ -213,28 +196,6 @@ pub struct AppConfig {
     /// Filter sessions by focused terminal window
     #[serde(default)]
     pub follow_focus: bool,
-    /// Island surface mode: "island" or "pet"
-    #[serde(default = "default_island_surface_mode")]
-    pub island_surface_mode: String,
-    /// Dev-only pet vitals debug panel visibility.
-    #[serde(default)]
-    pub pet_vitals_debug_open: bool,
-    /// Pet scale percentage
-    #[serde(default = "default_island_pet_scale")]
-    pub island_pet_scale: u32,
-    /// Pet window origin
-    #[serde(default)]
-    pub island_pet_window_origin: Option<WindowOrigin>,
-    /// Pet sprite anchor inside the transparent pet window.
-    #[serde(default)]
-    pub island_pet_window_anchor: Option<PetWindowAnchor>,
-    /// Active pet identifier (e.g. "codex:dewey", "user:my-cat"). `None` = auto-follow active session's agent.
-    #[serde(default)]
-    pub island_active_pet_id: Option<String>,
-    /// AUTO 模式下每个 agent 默认显示的宠物。Key 是 adapter.name()（"claude-code"、"codex" ...），
-    /// value 是 pet id（"codex:dewey"）。缺失的 agent 在 AUTO 模式下回退到 registry[0]。
-    #[serde(default)]
-    pub island_agent_pet_map: std::collections::HashMap<String, String>,
     /// Global keyboard shortcut to toggle island visibility
     #[serde(default = "default_global_shortcut")]
     pub global_shortcut: String,
@@ -332,14 +293,6 @@ fn default_shortcut_skip() -> String {
     "CommandOrControl+Shift+S".to_string()
 }
 
-fn default_island_surface_mode() -> String {
-    "island".to_string()
-}
-
-fn default_island_pet_scale() -> u32 {
-    72
-}
-
 const DEFAULT_CODEX_APP_SERVER_SYNC_INTERVAL_SECONDS: u32 = 30;
 const LEGACY_CHIME_SOUND_CHOICE: &str = concat!("builtin:", "p", "i", "n", "g");
 
@@ -409,7 +362,6 @@ impl Default for AppConfig {
             engine_instances: Vec::new(),
             custom_hook_installs: Vec::new(),
             webhook_configs: Vec::new(),
-            remote_hosts: Vec::new(),
             volume: default_volume(),
             custom_hooks_path: String::new(),
             buddy_device: BuddyDeviceConfig::default(),
@@ -419,13 +371,6 @@ impl Default for AppConfig {
             analytics_enabled: true,
             analytics_consent_prompt_completed: false,
             follow_focus: false,
-            island_surface_mode: default_island_surface_mode(),
-            pet_vitals_debug_open: false,
-            island_pet_scale: default_island_pet_scale(),
-            island_pet_window_origin: None,
-            island_pet_window_anchor: None,
-            island_active_pet_id: None,
-            island_agent_pet_map: std::collections::HashMap::new(),
             global_shortcut: "CommandOrControl+Shift+I".to_string(),
             shortcut_approve: default_shortcut_approve(),
             shortcut_approve_enabled: false,
@@ -543,24 +488,37 @@ impl ConfigStore {
         let base = dirs::config_dir()
             .or_else(dirs::data_local_dir)
             .unwrap_or_else(std::env::temp_dir);
-        base.join("agent-island").join("config.json")
+        base.join("vibeboard").join("config.json")
+    }
+
+    fn legacy_config_paths(path: &PathBuf) -> Vec<PathBuf> {
+        let Some(base) = path.parent().and_then(|parent| parent.parent()) else {
+            return Vec::new();
+        };
+        ["agent-island", "agentbro"]
+            .into_iter()
+            .map(|dir| base.join(dir).join("config.json"))
+            .collect()
     }
 
     /// Load config from disk
     fn load_from_disk(path: &PathBuf) -> Option<AppConfig> {
         // Adopt the old config once so subsequent writes stay entirely under
         // Vibe Board. Keep the read fallback for locked/cross-volume cases.
+        let legacy_paths = Self::legacy_config_paths(path);
         if !path.exists() {
-            if let Some(base) = path.parent()?.parent() {
-                crate::data_dir::migrate_file(&base.join("agentbro").join("config.json"), path);
+            for legacy in &legacy_paths {
+                let _ = crate::data_dir::migrate_file(legacy, path);
+                if path.exists() {
+                    break;
+                }
             }
         }
         let content = match std::fs::read_to_string(path) {
             Ok(content) => content,
-            Err(_) => {
-                let base = path.parent()?.parent()?;
-                std::fs::read_to_string(base.join("agentbro").join("config.json")).ok()?
-            }
+            Err(_) => legacy_paths
+                .iter()
+                .find_map(|legacy| std::fs::read_to_string(legacy).ok())?,
         };
         let mut config: AppConfig = serde_json::from_str(&content).ok()?;
         // Older Windows builds defaulted this feature off and had no setting
@@ -662,7 +620,7 @@ mod tests {
     };
 
     #[test]
-    fn defaults_match_agent_island_behavior() {
+    fn defaults_match_vibe_board_behavior() {
         let config = AppConfig::default();
 
         assert_eq!(config.completion_timeout, 5);
@@ -893,5 +851,34 @@ mod tests {
                 .map(|rule| rule.sound.as_str()),
             Some("builtin:chime")
         );
+    }
+
+    #[test]
+    fn adopts_the_legacy_agent_island_config_under_the_vibeboard_root() {
+        let base = std::env::temp_dir().join(format!(
+            "vibeboard-config-migration-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("system time")
+                .as_nanos()
+        ));
+        let legacy = base.join("agent-island").join("config.json");
+        std::fs::create_dir_all(legacy.parent().expect("legacy parent")).expect("legacy dir");
+        let mut legacy_config = AppConfig::default();
+        legacy_config.language = "zh".to_string();
+        std::fs::write(
+            &legacy,
+            serde_json::to_string_pretty(&legacy_config).expect("serialize"),
+        )
+        .expect("write legacy config");
+        let target = base.join("vibeboard").join("config.json");
+
+        let loaded = super::ConfigStore::load_from_disk(&target).expect("load config");
+
+        assert_eq!(loaded.language, "zh", "the stored preference must survive");
+        assert!(target.exists(), "the config must move under the new root");
+        assert!(!legacy.exists(), "the legacy config must not stay behind");
+        let _ = std::fs::remove_dir_all(&base);
     }
 }

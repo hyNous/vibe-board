@@ -18,7 +18,7 @@ pub fn push_to_github() -> Result<SyncResult, String> {
         .and_then(|s| s.github_token.as_ref())
         .ok_or("No GitHub token configured")?;
 
-    let tmp_dir = std::env::temp_dir().join("agentbro-sync");
+    let tmp_dir = std::env::temp_dir().join("vibeboard-sync");
     let _ = fs::remove_dir_all(&tmp_dir);
 
     let repo_url = format!("https://{}@github.com/{}.git", token, repo);
@@ -62,7 +62,7 @@ pub fn push_to_github() -> Result<SyncResult, String> {
         .output()
         .map_err(|e| e.to_string())?;
     Command::new(crate::agents::executable::command_path("git"))
-        .args(["commit", "-m", "AgentBro sync"])
+        .args(["commit", "-m", "Vibe Board sync"])
         .current_dir(&tmp_dir)
         .output()
         .map_err(|e| e.to_string())?;
@@ -110,7 +110,7 @@ pub fn pull_from_github() -> Result<SyncResult, String> {
         .and_then(|s| s.github_token.as_ref())
         .ok_or("No GitHub token configured")?;
 
-    let tmp_dir = std::env::temp_dir().join("agentbro-sync-pull");
+    let tmp_dir = std::env::temp_dir().join("vibeboard-sync-pull");
     let _ = fs::remove_dir_all(&tmp_dir);
 
     let repo_url = format!("https://{}@github.com/{}.git", token, repo);
@@ -371,7 +371,7 @@ pub fn import_backup(path: &str) -> Result<(), String> {
     let file = fs::File::open(expand_user_path(path)).map_err(|e| e.to_string())?;
     let mut archive = zip::ZipArchive::new(file).map_err(|e| e.to_string())?;
 
-    let extract_dir = std::env::temp_dir().join("agentbro-import");
+    let extract_dir = std::env::temp_dir().join("vibeboard-import");
     let _ = fs::remove_dir_all(&extract_dir);
     archive.extract(&extract_dir).map_err(|e| e.to_string())?;
 
@@ -511,10 +511,10 @@ fn add_dir_to_zip<W: std::io::Write + std::io::Seek>(
 }
 
 fn pending_pull_dir() -> PathBuf {
-    agent_paths::agentbro_metadata_path()
+    agent_paths::vibeboard_metadata_path()
         .parent()
         .map(|parent| parent.join("sync").join("pending-pull"))
-        .unwrap_or_else(|| std::env::temp_dir().join("agentbro-pending-pull"))
+        .unwrap_or_else(|| std::env::temp_dir().join("vibeboard-pending-pull"))
 }
 
 fn persist_pending_pull(tmp_dir: &Path) -> Result<(), String> {

@@ -136,7 +136,7 @@ export const useThemeStore = create<ThemeStore>()(
       },
     }),
     {
-      name: 'agent-island-theme',
+      name: 'vibeboard-theme',
       version: 3,
       partialize: (state) => ({ activeThemeName: state.activeThemeName, colorTheme: state.colorTheme }),
       migrate: (persistedState, version) => {

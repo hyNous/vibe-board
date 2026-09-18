@@ -1,5 +1,5 @@
 {
-  "name": "agent-island-host",
+  "name": "vibe-board-host",
   "version": "1.0.0",
   "description": "Starts Vibe Board from a Codex session, marks Codex as the primary usage host, and exposes the shared Skill center.",
   "author": {

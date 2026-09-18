@@ -1,7 +1,7 @@
 // Segment-aware TOML hook parser for `[[hooks]]` array-of-tables format.
 //
 // Parses a TOML file into Segment::Text and Segment::Hook fragments so we can
-// safely merge AgentBro-managed hooks with user-defined hooks and surrounding
+// safely merge Vibe Board-managed hooks with user-defined hooks and surrounding
 // configuration without losing anything. Strict text-only parser (no toml
 // crate) — preserves formatting and comments outside of `[[hooks]]` blocks.
 
@@ -22,7 +22,9 @@ pub enum Segment {
 }
 
 pub fn is_managed(entry: &TomlHookEntry) -> bool {
-    entry.command.contains("agentbro-bridge") || entry.command.contains("agent-island-bridge")
+    entry.command.contains("vibe-board-bridge")
+        || entry.command.contains("agent-island-bridge")
+        || entry.command.contains("agentbro-bridge")
 }
 
 fn is_legacy_vibe_island(entry: &TomlHookEntry) -> bool {
@@ -132,7 +134,7 @@ pub fn parse_segments(content: &str) -> Vec<Segment> {
     segments
 }
 
-/// Rebuild TOML content. Drops AgentBro-managed `[[hooks]]` entries, known
+/// Rebuild TOML content. Drops Vibe Board-managed `[[hooks]]` entries, known
 /// legacy managed entries, and orphan marker comments from the input, then
 /// appends the supplied managed hooks under a single marker comment.
 pub fn rebuild(segments: &[Segment], managed: &[TomlHookEntry], marker: &str) -> String {
@@ -382,8 +384,8 @@ timeout = 10
 
     #[test]
     fn parse_handles_file_with_only_marker_no_hooks() {
-        let toml = "# AgentBro managed integration: kimi\n";
-        let segments = parse_segments(toml);
+        let toml = format!("# {MARKER_PREFIX}: kimi\n");
+        let segments = parse_segments(&toml);
         // Whole content is a single text segment containing the marker.
         assert_eq!(segments.len(), 1);
         match &segments[0] {

@@ -37,7 +37,7 @@ pub fn write_agent_config_file(
         &path,
         content,
         expected_revision,
-        &crate::skills::v2::fsutil::agent_island_home()
+        &crate::skills::v2::fsutil::vibeboard_home()
             .join("config")
             .join("backups"),
     )
@@ -82,7 +82,7 @@ fn ensure_supported_config_file(path: &Path) -> Result<(), String> {
         .to_ascii_lowercase();
     if !matches!(extension.as_str(), "json" | "toml") {
         return Err(
-            "Only JSON and TOML configuration files can be edited in AgentBro.".to_string(),
+            "Only JSON and TOML configuration files can be edited in Vibe Board.".to_string(),
         );
     }
     Ok(())
@@ -130,7 +130,9 @@ fn write_document_at(
     let original =
         fs::read(path).map_err(|error| format!("Failed to read {}: {error}", path.display()))?;
     if revision_for(agent_id, path, &original) != expected_revision {
-        return Err("Configuration changed outside AgentBro. Reload it before saving.".to_string());
+        return Err(
+            "Configuration changed outside Vibe Board. Reload it before saving.".to_string(),
+        );
     }
 
     write_backup(backup_root, agent_id, path, &original)?;
@@ -138,7 +140,7 @@ fn write_document_at(
         .parent()
         .ok_or_else(|| format!("Invalid configuration path: {}", path.display()))?;
     let temp = parent.join(format!(
-        ".{}.agentbro-{}.tmp",
+        ".{}.vibeboard-{}.tmp",
         path.file_name()
             .and_then(|name| name.to_str())
             .unwrap_or("config"),
@@ -175,7 +177,7 @@ fn validate_content(path: &Path, content: &str) -> Result<(), String> {
             .map_err(|error| format!("Invalid JSON: {error}")),
         "toml" => crate::skills::mcp_management::validate_toml_shape(content)
             .map_err(|error| format!("Invalid TOML: {error}")),
-        _ => Err("Only JSON and TOML configuration files can be edited in AgentBro.".to_string()),
+        _ => Err("Only JSON and TOML configuration files can be edited in Vibe Board.".to_string()),
     }
 }
 
@@ -312,7 +314,7 @@ mod tests {
         )
         .unwrap_err();
 
-        assert!(error.contains("changed outside AgentBro"));
+        assert!(error.contains("changed outside Vibe Board"));
         assert_eq!(fs::read_to_string(&path).unwrap(), "{\"value\":2}\n");
         fs::remove_dir_all(root).unwrap();
     }

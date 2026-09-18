@@ -523,41 +523,6 @@ pub struct GitHubSkillSyncResult {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct MarketplaceBatchSkillInput {
-    pub item_id: String,
-    pub skill_id: String,
-    pub source_uri: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct MarketplaceBatchItemResult {
-    pub item_id: String,
-    pub skill_id: String,
-    pub success: bool,
-    pub error: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct MarketplaceBatchInstallResult {
-    pub items: Vec<MarketplaceBatchItemResult>,
-    pub cancelled: bool,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct MarketplaceBatchProgress {
-    pub job_id: String,
-    pub phase: String,
-    pub item_id: Option<String>,
-    pub completed: usize,
-    pub total: usize,
-    pub message: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct DeleteCenterSkillPreview {
     pub skill_id: String,
     pub skill_ids: Vec<String>,

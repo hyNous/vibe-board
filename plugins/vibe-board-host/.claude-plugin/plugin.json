@@ -1,5 +1,5 @@
 {
-  "name": "agent-island-host",
+  "name": "vibe-board-host",
   "displayName": "Vibe Board Host",
   "version": "1.0.0",
   "description": "Starts Vibe Board from a Claude Code session, marks Claude Code as the primary usage host, and exposes the shared Skill center.",
