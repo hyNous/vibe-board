@@ -2,15 +2,13 @@ import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { HOMEBREW_UPDATE_COMMAND } from '../../hooks/useUpdater'
-import type { UpdateInstallChannel, UpdateStatus } from '../../hooks/useUpdater'
+import type { UpdateStatus } from '../../hooks/useUpdater'
 
 interface UpdateDialogProps {
   version: string
   notes: string | null
   date: string | null
   status: UpdateStatus
-  installChannel: UpdateInstallChannel
   manualDownloadUrl?: string | null
   downloadProgress?: {
     downloaded: number
@@ -32,7 +30,6 @@ export function UpdateDialog({
   notes,
   date,
   status,
-  installChannel,
   manualDownloadUrl,
   downloadProgress,
   restartPending = false,
@@ -47,7 +44,6 @@ export function UpdateDialog({
   const { t, i18n } = useTranslation()
   const isDownloading = status === 'downloading'
   const isReady = status === 'ready'
-  const isHomebrew = installChannel === 'homebrew'
   const isManualDownload = Boolean(manualDownloadUrl) && !isReady
   const progressPercent = downloadProgress?.percent ?? null
   const progressLabel = formatProgress(downloadProgress)
@@ -126,7 +122,7 @@ export function UpdateDialog({
 
         </div>
 
-        {(isDownloading || isReady || isHomebrew) && (
+        {(isDownloading || isReady) && (
           <div className="update-dialog__status">
             {isDownloading && (
               <div className="update-dialog__progress">
@@ -153,12 +149,6 @@ export function UpdateDialog({
               </div>
             )}
 
-            {isHomebrew && (
-              <div className="update-dialog__ready">
-                {t('update.homebrewHint')}
-                <code className="update-dialog__command">{HOMEBREW_UPDATE_COMMAND}</code>
-              </div>
-            )}
           </div>
         )}
 
@@ -171,7 +161,7 @@ export function UpdateDialog({
             onClick={onInstall}
             disabled={isDownloading}
           >
-            {isDownloading ? t('update.downloading') : isReady ? t('update.restart') : isHomebrew ? t('update.copyCommand') : isManualDownload ? t('update.downloadLatest') : t('update.install')}
+            {isDownloading ? t('update.downloading') : isReady ? t('update.restart') : isManualDownload ? t('update.downloadLatest') : t('update.install')}
           </button>
         </div>
       </div>

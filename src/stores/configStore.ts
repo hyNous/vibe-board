@@ -60,13 +60,6 @@ export interface ShortcutBinding {
   keys: string
 }
 
-export interface SSHHost {
-  id: string
-  name: string
-  host: string
-  enabled: boolean
-}
-
 export interface WebhookEntry {
   id: string
   name: string
@@ -78,16 +71,6 @@ export interface WebhookEntry {
   enabled: boolean
   delayEnabled: boolean
   delayMinutes: number
-}
-
-export interface RemoteHostEntry {
-  id: string
-  name: string
-  sshTarget: string
-  port: number | null
-  remoteSocketPath: string
-  autoConnect: boolean
-  connectionStatus: 'disconnected' | 'connecting' | 'connected' | 'failed'
 }
 
 export interface LabFeature {
@@ -161,16 +144,6 @@ interface ConfigState {
   confettiEnabled: boolean
   analyticsEnabled: boolean
   analyticsConsentPromptCompleted: boolean
-  islandSurfaceMode: 'island' | 'pet'
-  petVitalsEnabled: boolean
-  petVitalsDebugOpen: boolean
-  islandPetScale: number
-  islandPetWindowOrigin: { x: number; y: number } | null
-  islandPetWindowAnchor: { left: boolean; top: boolean } | null
-  /** Active pet identifier (e.g. 'codex:dewey'). `null` = auto-follow active session's agent type. */
-  islandActivePetId: string | null
-  /** AUTO 模式下每个 agent 默认显示的宠物。Key = adapter name（'claude-code'、'codex'...）。 */
-  islandAgentPetMap: Record<string, string>
 
   // General extras
   followFocus: boolean
@@ -192,10 +165,6 @@ interface ConfigState {
 
   // Shortcuts
   shortcuts: ShortcutBinding[]
-
-  // SSH Remote
-  sshHosts: SSHHost[]
-  tcpPort: number
 
   // Labs
   labFeatures: LabFeature[]
@@ -238,9 +207,6 @@ interface ConfigState {
 
   // Webhooks
   webhooks: WebhookEntry[]
-
-  // Remote Hosts
-  remoteHostEntries: RemoteHostEntry[]
 
   // Panel layout
   allowHorizontalDrag: boolean
@@ -287,18 +253,12 @@ interface ConfigActions {
   toggleAgentHook: (agentType: AgentType) => void
   toggleSoundEvent: (id: string) => void
   updateShortcut: (action: string, keys: string) => void
-  addSSHHost: (host: SSHHost) => void
-  removeSSHHost: (id: string) => void
   toggleLabFeature: (id: string) => void
   // Webhook actions
   addWebhook: (webhook: WebhookEntry) => void
   removeWebhook: (id: string) => void
   updateWebhook: (webhook: WebhookEntry) => void
   toggleWebhook: (id: string) => void
-  // Remote host actions
-  addRemoteHostEntry: (host: RemoteHostEntry) => void
-  removeRemoteHostEntry: (id: string) => void
-  updateRemoteHostStatus: (id: string, status: RemoteHostEntry['connectionStatus']) => void
   addSessionSilenceRule: (rule: Omit<SessionSilenceRule, 'id' | 'enabled' | 'createdAt'> & Partial<Pick<SessionSilenceRule, 'enabled'>>) => void
   removeSessionSilenceRule: (id: string) => void
   toggleSessionSilenceRule: (id: string) => void
@@ -459,14 +419,6 @@ function createIslandDefaults(): Partial<ConfigState> {
     tipsEnabled: true,
     pixelCursorEnabled: true,
     confettiEnabled: true,
-    islandSurfaceMode: 'island',
-    petVitalsEnabled: true,
-    petVitalsDebugOpen: false,
-    islandPetScale: 72,
-    islandPetWindowOrigin: null,
-    islandPetWindowAnchor: null,
-    islandActivePetId: null,
-    islandAgentPetMap: {},
     followFocus: false,
     globalShortcut: 'CommandOrControl+Shift+I',
     shortcutApprove: DEFAULT_GLOBAL_APPROVE_SHORTCUT,
@@ -570,14 +522,6 @@ export const useConfigStore = create<ConfigStore>()(
   confettiEnabled: true,
   analyticsEnabled: true,
   analyticsConsentPromptCompleted: false,
-  islandSurfaceMode: 'island',
-  petVitalsEnabled: true,
-  petVitalsDebugOpen: false,
-  islandPetScale: 72,
-  islandPetWindowOrigin: null,
-  islandPetWindowAnchor: null,
-  islandActivePetId: null,
-  islandAgentPetMap: {},
 
   // General extras
   followFocus: false,
@@ -599,10 +543,6 @@ export const useConfigStore = create<ConfigStore>()(
 
   // Shortcuts
   shortcuts: defaultShortcuts,
-
-  // SSH Remote
-  sshHosts: [],
-  tcpPort: 7399,
 
   // Labs
   labFeatures: defaultLabFeatures,
@@ -648,9 +588,6 @@ export const useConfigStore = create<ConfigStore>()(
 
   // Webhooks
   webhooks: [],
-
-  // Remote Hosts
-  remoteHostEntries: [],
 
   // Panel layout
   allowHorizontalDrag: true,
@@ -735,14 +672,6 @@ export const useConfigStore = create<ConfigStore>()(
     }))
   },
 
-  addSSHHost: (host) => {
-    set((state) => ({ sshHosts: [...state.sshHosts, host] }))
-  },
-
-  removeSSHHost: (id) => {
-    set((state) => ({ sshHosts: state.sshHosts.filter((h) => h.id !== id) }))
-  },
-
   toggleLabFeature: (id) => {
     set((state) => ({
       labFeatures: state.labFeatures.map((f) =>
@@ -768,22 +697,6 @@ export const useConfigStore = create<ConfigStore>()(
   toggleWebhook: (id) => {
     set((state) => ({
       webhooks: state.webhooks.map((w) => (w.id === id ? { ...w, enabled: !w.enabled } : w)),
-    }))
-  },
-
-  addRemoteHostEntry: (host) => {
-    set((state) => ({ remoteHostEntries: [...state.remoteHostEntries, host] }))
-  },
-
-  removeRemoteHostEntry: (id) => {
-    set((state) => ({ remoteHostEntries: state.remoteHostEntries.filter((h) => h.id !== id) }))
-  },
-
-  updateRemoteHostStatus: (id, status) => {
-    set((state) => ({
-      remoteHostEntries: state.remoteHostEntries.map((h) =>
-        h.id === id ? { ...h, connectionStatus: status } : h
-      ),
     }))
   },
 
@@ -827,7 +740,7 @@ export const useConfigStore = create<ConfigStore>()(
   },
     }),
     {
-      name: 'agent-island-config',
+      name: 'vibeboard-config',
       merge: (persistedState, currentState) => {
         const persisted = persistedState as Partial<ConfigState> | undefined
         const migratedPermissionShortcuts = persisted?.permissionShortcutDefaultsMigrated === true

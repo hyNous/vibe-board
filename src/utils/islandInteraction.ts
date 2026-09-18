@@ -39,12 +39,7 @@ export function hasUnfinishedTasks(session: SessionState): boolean {
   return Boolean(session.tasks?.some((task) => task.status !== 'completed'))
 }
 
-export function isRemoteSession(session: SessionState): boolean {
-  return Boolean(session.remoteHostId || session.remoteHostName)
-}
-
 export function sessionHasVisibleActivity(session: SessionState): boolean {
-  if (isRemoteSession(session)) return false
   return session.runState
     ? session.runState.status === 'running'
     : session.phase === 'processing' || session.phase === 'compacting'

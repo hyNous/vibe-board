@@ -28,8 +28,34 @@ jobs:
       - run: pnpm test:run
       - run: pnpm build
 
-  backend:
-    name: Backend (fmt + clippy + test)
+  backend-windows:
+    # Windows is the delivery platform, so it has to compile cleanly here.
+    # The unit tests are NOT run on Windows: a batch of them still assume POSIX
+    # path separators, a writable $HOME and symlink permissions, so they fail on
+    # a Windows runner for reasons unrelated to the code under test. Fixing them
+    # is tracked in ROADMAP.md; until then macOS is what gates test regressions.
+    name: Backend Windows (fmt + clippy + check)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: windows
+      - name: Prepare bridge resource
+        shell: bash
+        run: |
+          mkdir -p src-tauri/target/vibe-board-bridge-resource
+          touch src-tauri/target/vibe-board-bridge-resource/vibe-board-bridge
+      - run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
+      - run: cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
+      - run: cargo check --manifest-path src-tauri/Cargo.toml --all-targets
+
+  backend-macos:
+    name: Backend macOS (fmt + clippy + test)
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -39,13 +65,27 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
+          key: macos
       - name: Install system dependencies
-        run: |
-          brew install pkg-config
+        run: brew install pkg-config
       - name: Prepare bridge resource
         run: |
-          mkdir -p src-tauri/target/agent-island-bridge-resource
-          touch src-tauri/target/agent-island-bridge-resource/agent-island-bridge
+          mkdir -p src-tauri/target/vibe-board-bridge-resource
+          touch src-tauri/target/vibe-board-bridge-resource/vibe-board-bridge
       - run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
       - run: cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
       - run: cargo test --manifest-path src-tauri/Cargo.toml
+
+  release-readiness:
+    name: Release readiness
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      # Verifies that package.json, tauri.conf.json, Cargo.toml and Cargo.lock
+      # agree on the version, and that the release inputs this repository owns
+      # are present. Not strict mode: an empty updater pubkey stays a warning
+      # until Vibe Board has its own signing key.
+      - run: node scripts/check-release-readiness.mjs

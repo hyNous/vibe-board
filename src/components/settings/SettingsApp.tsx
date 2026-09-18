@@ -10,8 +10,6 @@ import { IslandSection } from './sections/IslandSection'
 import { UnifiedUsageSection } from './sections/UnifiedUsageSection'
 import { AgentMonitorSection } from './sections/AgentMonitorSection'
 import { AboutSection } from './sections/AboutSection'
-import { SwitchSection } from './sections/SwitchSection'
-import { RemoteServersSection } from './sections/RemoteServersSection'
 import { SkillManagerSection } from '../skills-v2/SkillManagerSection'
 import { SkillOverviewPage } from '../skills-v2/SkillOverviewPage'
 import { SetupWizard } from './SetupWizard'
@@ -19,12 +17,11 @@ import { useUpdater } from '../../hooks/useUpdater'
 import { useConfigStore } from '../../stores/configStore'
 import { useSkillStoreV2 } from '../../stores/skillStoreV2'
 import { getConfig, isTauri } from '../../services/tauriApi'
-import type { IslandSettingsView, MonitorSettingsView } from '../../types/capability'
+import type { IslandSettingsView } from '../../types/capability'
 import '../../styles/settings.css'
 
 const sections: Record<string, () => ReactNode> = {
   'general': GeneralSection,
-  'remote-servers': RemoteServersSection,
   'skill-manager-v2': SkillManagerSection,
 }
 
@@ -40,7 +37,6 @@ export function SettingsApp({ onClose }: SettingsAppProps) {
   const [setupConfigLoaded, setSetupConfigLoaded] = useState(() => !isTauri())
   const [activeSection, setActiveSection] = useState('tasks')
   const [activeIslandView, setActiveIslandView] = useState<IslandSettingsView>('overview')
-  const [activeMonitorView, setActiveMonitorView] = useState<MonitorSettingsView>('overview')
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [updateMinimized, setUpdateMinimized] = useState(false)
   const SectionComponent = sections[activeSection] ?? GeneralSection
@@ -134,11 +130,9 @@ export function SettingsApp({ onClose }: SettingsAppProps) {
     <div className="settings-app">
       <SettingsSidebar
         activeSection={activeSection}
-        activeMonitorView={activeMonitorView}
         collapsed={sidebarCollapsed}
         onCollapsedChange={setSidebarCollapsed}
         onSelect={setActiveSection}
-        onMonitorViewChange={setActiveMonitorView}
       />
       <div className={contentClassName}>
         {activeSection !== 'skill-manager-v2' && activeSection !== 'agents' && (
@@ -179,7 +173,7 @@ export function SettingsApp({ onClose }: SettingsAppProps) {
             transition={{ duration: 0.15 }}
           >
             {activeSection === 'tasks' ? (
-              <AgentMonitorSection activeView="tasks" />
+              <AgentMonitorSection />
             ) : activeSection === 'usage' ? (
               <UnifiedUsageSection />
             ) : activeSection === 'skills' ? (
@@ -193,14 +187,9 @@ export function SettingsApp({ onClose }: SettingsAppProps) {
               <SkillManagerSection />
             ) : activeSection === 'island' ? (
               <IslandSection activeView={activeIslandView} onViewChange={setActiveIslandView} />
-            ) : activeSection === 'monitor' ? (
-              <AgentMonitorSection activeView={activeMonitorView} />
-            ) : activeSection === 'switch' ? (
-              <SwitchSection />
             ) : activeSection === 'about' ? (
               <AboutSection
                 updateStatus={updater.status}
-                updateInstallChannel={updater.installChannel}
                 updateVersion={updater.version}
                 updateError={updater.error}
                 updateRestartPending={updater.restartPending}
@@ -221,7 +210,6 @@ export function SettingsApp({ onClose }: SettingsAppProps) {
           notes={updater.notes}
           date={updater.date}
           status={updater.status}
-          installChannel={updater.installChannel}
           manualDownloadUrl={updater.manualDownloadUrl}
           downloadProgress={updater.downloadProgress}
           restartPending={updater.restartPending}

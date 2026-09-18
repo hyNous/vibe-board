@@ -28,13 +28,19 @@ new abstractions or dependencies. Keep translations in all five locale files.
 
 ## Compatibility boundary
 
-The runtime still recognizes legacy `.agentbro` data directories, Hook markers,
-and bridge commands so existing installations can migrate safely. Do not
-remove those compatibility paths while changing the Vibe Board UI or release
-identity.
+The runtime keeps Vibe Board state under `.vibeboard` and still recognizes the
+retired `.agent-island` and `.agentbro` data directories, Hook markers, and
+bridge commands so existing installations can migrate safely. Do not remove
+those compatibility reads while changing the Vibe Board UI or release identity.
 
 ## Publishing boundary
 
 Keep [LICENSE](../LICENSE), [NOTICE](../NOTICE), [TRADEMARKS.md](../TRADEMARKS.md),
 and [UPSTREAM.md](../UPSTREAM.md) with any public distribution. Do not add
 credentials, `.env` files, signing keys, or private diagnostic data.
+
+Versioning, release steps, distribution channels and the current signing and
+auto-update limits are defined in [RELEASING.md](../RELEASING.md); what the
+project plans to do next is in [ROADMAP.md](../ROADMAP.md). Vibe Board does not
+follow the upstream release line, and it ships no package-manager channel — do
+not add an update path that points at an upstream cask, tap or repository.

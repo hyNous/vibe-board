@@ -3,7 +3,6 @@ import type { SessionState } from '../types/agent'
 export type ComposerLockReason =
   | 'codex-app'
   | 'qoder-app'
-  | 'remote'
   | 'no-terminal'
 
 export type ComposerCapability =
@@ -48,10 +47,6 @@ function isQoderAppSession(session: SessionState): boolean {
     || (session.terminal?.toLowerCase().includes('qoder') ?? false)
 }
 
-function isRemoteSession(session: SessionState): boolean {
-  return Boolean(session.remoteHostId || session.remoteHostName)
-}
-
 function isCodexAppServerBackedSession(session: SessionState): boolean {
   return Boolean(session.codexAppServerThreadId)
 }
@@ -67,10 +62,6 @@ export function getComposerCapability(
   session: SessionState,
   options: ComposerCapabilityOptions = {},
 ): ComposerCapability {
-  if (isRemoteSession(session)) {
-    return { kind: 'locked', reason: 'remote' }
-  }
-
   if (isCodexDesktopSession(session)) {
     return options.codexDesktopRepliesSupported
       && options.codexAppServerLive

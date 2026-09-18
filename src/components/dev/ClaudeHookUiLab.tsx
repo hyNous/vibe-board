@@ -58,7 +58,7 @@ interface RealPromptItem {
 }
 
 const LAB_SESSION_ID = 'claude-hook-lab'
-const LAB_CWD = '/Users/demo/projects/agentbro'
+const LAB_CWD = '/Users/demo/projects/vibe-board'
 const RECORDED_SESSION_ID = 'e336326d-ab6f-4002-bc6a-3ba66892b469'
 const RECORDED_CWD = '/Users/demo/projects/empty'
 const VIEW_MODE_LABELS: Record<LabViewMode, string> = {
@@ -185,7 +185,7 @@ const REAL_TEST_PROMPTS: RealPromptItem[] = [
   },
 ]
 
-const EMPTY_PROJECT_SETUP_COMMAND = 'mkdir -p /tmp/agentbro-hook-lab && cd /tmp/agentbro-hook-lab && claude'
+const EMPTY_PROJECT_SETUP_COMMAND = 'mkdir -p /tmp/vibeboard-hook-lab && cd /tmp/vibeboard-hook-lab && claude'
 
 function copyTextToClipboard(text: string): Promise<void> {
   if (typeof document !== 'undefined' && typeof document.execCommand === 'function') {
@@ -295,7 +295,7 @@ function baseSession(now: number, overrides: Partial<SessionState> = {}): Sessio
     id: LAB_SESSION_ID,
     agentType: 'claude-code',
     engineLabel: 'Claude',
-    project: 'agentbro',
+    project: 'vibe-board',
     cwd: LAB_CWD,
     terminal: 'iTerm/tmux',
     phase: 'processing',
@@ -779,7 +779,7 @@ function recordedCompactSession(now: number): SessionState {
       {
         role: 'tool_use',
         toolName: 'Compacting',
-        toolInput: '/compact\nPreCompact [/Users/demo/.agentbro/bin/agentbro-bridge --source claude-code] completed successfully',
+        toolInput: '/compact\nPreCompact [/Users/demo/.vibeboard/bin/vibe-board-bridge --source claude-code] completed successfully',
         status: 'success',
         timestamp: now - 7_000,
       },
@@ -959,7 +959,7 @@ function emptyIdleSessions(): SessionState[] {
 function multiSessionMixedSessions(now: number): SessionState[] {
   return [
     withSessionId(preToolSession(now), 'lab-multi-processing', {
-      project: 'agentbro',
+      project: 'vibe-board',
       sessionTitle: 'Running focused tests',
       lastUserMessage: '跑一下灵动岛回归测试',
     }),
@@ -1031,7 +1031,7 @@ function overlayQueueSessions(now: number): SessionState[] {
 
 function longContentSession(now: number): SessionState {
   const longDiff: DiffContent = {
-    filePath: '/Users/demo/projects/agentbro/src/components/notch/super-long-path-for-regression/ExtremelyLongPermissionCardAndDynamicIslandLayoutRegressionFixture.tsx',
+    filePath: '/Users/demo/projects/vibe-board/src/components/notch/super-long-path-for-regression/ExtremelyLongPermissionCardAndDynamicIslandLayoutRegressionFixture.tsx',
     lines: [
       { type: 'context', lineNumber: 118, content: 'const previous = buildIslandAppearancePreview(colorTheme, scenario, viewport)' },
       { type: 'remove', lineNumber: 119, content: 'return previous.render({ compact: true })' },
@@ -1069,7 +1069,7 @@ function longContentSession(now: number): SessionState {
 function statusBadgeSession(now: number): SessionState {
   return baseSession(now, {
     phase: 'error',
-    project: 'agentbro',
+    project: 'vibe-board',
     description: 'Rate limit warning, YOLO badge, error badge, and unattended red state.',
     sessionTitle: 'Status badge matrix',
     lastUserMessage: '验证折叠态的状态徽标是否都能看见。',

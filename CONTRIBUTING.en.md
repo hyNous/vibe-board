@@ -57,7 +57,7 @@ pnpm tauri:dev   # full native app (recommended)
 pnpm dev         # browser UI only — http://localhost:1423
 ```
 
-`pnpm tauri:dev` first runs `cargo build` for the `agent-island-bridge` binary, then starts Vite + the native window. First build is slow (5-10 min for Rust deps); incremental builds are quick.
+`pnpm tauri:dev` first runs `cargo build` for the `vibe-board-bridge` binary, then starts Vite + the native window. First build is slow (5-10 min for Rust deps); incremental builds are quick.
 
 ### Run before every commit
 
@@ -96,7 +96,7 @@ One commit, one logical change. PRs that include "while I was here, I cleaned up
 
 ### Version numbers
 
-**Do NOT bump versions in PRs.** Maintainers update versions at release time, and they must stay in sync across four files:
+**Do NOT bump versions in PRs.** Maintainers update versions at release time, and they must stay in sync across four files (full process in [RELEASING.md](RELEASING.md)):
 
 - `package.json`
 - `src-tauri/tauri.conf.json`
@@ -153,7 +153,7 @@ We encourage AI-assisted contributions — Vibe Board is itself a tool for AI co
 - **Create an Issue before code changes.** The assistant must create or link an Issue before editing, use a dedicated task branch, and close the loop with `Closes #<number>` in the PR. Pure questions and read-only analysis do not need an Issue.
 - **Disclose AI authorship honestly.** If a PR is mostly AI-generated, add a line like "Co-authored with <Agent name>" to the description. We don't discriminate — we just expect honesty.
 - **AI-generated code still has to pass the checks.** `pnpm lint`, `pnpm test:run`, `cargo check` must be green before you open the PR. PRs where the assistant skipped tests / ignored errors / didn't verify will be sent back.
-- **Don't let the AI touch brand assets, signing config, or the release pipeline.** These have trademark and security implications. See the [restricted areas list](.claude/CLAUDE.md#6-禁区不要动).
+- **Don't let the AI touch brand assets, signing config, or the release pipeline.** These have trademark and security implications. See the [publishing boundary](.claude/CLAUDE.md#publishing-boundary) and [RELEASING.md](RELEASING.md).
 - **For non-trivial changes** (architecture changes, new dependencies, edits spanning 5+ files), align with maintainers in an issue or the PR description *before* the AI starts implementing. Don't drop a 200-line AI-generated diff out of nowhere.
 
 ---
@@ -171,5 +171,7 @@ Details in [`TRADEMARKS.md`](TRADEMARKS.md) and [`NOTICE`](NOTICE).
 ## Community
 
 - Releases: [hyNous/agent-island/releases](https://github.com/hyNous/agent-island/releases)
+
+What's planned next is in [ROADMAP.md](ROADMAP.md); versioning and release policy is in [RELEASING.md](RELEASING.md).
 
 For larger ideas, open an issue first as a discussion thread before you implement — it's much friendlier than getting a finished PR sent back for redesign.

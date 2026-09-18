@@ -8,6 +8,8 @@
 
   <p>
     <a href="./README.en.md">English</a> ·
+    <a href="./ROADMAP.md">路线图</a> ·
+    <a href="./RELEASING.md">发布与版本</a> ·
     <a href="./UPSTREAM.md">上游与许可</a> ·
     <a href="./docs/privacy-policy.md">隐私说明</a>
   </p>
@@ -36,7 +38,7 @@ Vibe Board 常驻屏幕顶部或左右边缘，展开后按顺序显示当前任
 3. 向导会安装所选 Hook、保存启动选项并重新校验；校验失败会留在向导中提示错误。之后打开宿主 Agent 的新会话即可连接。
 4. 需要调整时，在 **Settings → General → Agent connection** 重新选择宿主、子 Agent 或重新校验。
 
-安装包是未签名的 Windows x64 构建，SmartScreen 可能要求确认；自动更新未启用，发布采用 GitHub Releases 手动下载。完整的首次设置、权限边界和迁移说明见 [产品安装与首次设置说明](./docs/product-setup.md)。
+安装包是未签名的 Windows x64 构建，SmartScreen 可能要求确认；自动更新未启用，发布采用 GitHub Releases 手动下载。Vibe Board 有自己的版本与发布流程，不跟随上游发版，也没有 Homebrew 或其他包管理器渠道，详见 [发布与版本策略](./RELEASING.md)。完整的首次设置、权限边界和迁移说明见 [产品安装与首次设置说明](./docs/product-setup.md)。
 
 ## 主要能力
 
@@ -79,4 +81,4 @@ cargo check --manifest-path src-tauri/Cargo.toml
 
 Vibe Board 代码基于 [Apache License 2.0](./LICENSE) 发布，并保留上游的 [NOTICE](./NOTICE) 与品牌边界 [TRADEMARKS.md](./TRADEMARKS.md)。
 
-本项目是基于 [AgentBro](https://github.com/shirenchuang/agentbro) 的独立修改版：产品名称、图标和发布配置已替换，不代表上游项目的官方发行版，详见 [UPSTREAM.md](./UPSTREAM.md)。欢迎提交 Issue 或 Pull Request，提交前请阅读 [CONTRIBUTING.md](./CONTRIBUTING.md)。
+本项目是基于 [AgentBro](https://github.com/shirenchuang/agentbro) 的独立修改版：产品名称、图标和发布配置已替换，不代表上游项目的官方发行版，详见 [UPSTREAM.md](./UPSTREAM.md)。后续维护、发布和路线图都由本仓库自行决定，不依赖上游主线流程，见 [RELEASING.md](./RELEASING.md) 与 [ROADMAP.md](./ROADMAP.md)。欢迎提交 Issue 或 Pull Request，提交前请阅读 [CONTRIBUTING.md](./CONTRIBUTING.md)。

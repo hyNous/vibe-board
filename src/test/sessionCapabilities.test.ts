@@ -121,31 +121,6 @@ describe('getComposerCapability', () => {
     })
   })
 
-  it('locks remote sessions', () => {
-    expect(getComposerCapability(session({ remoteHostId: 'host-1' }))).toEqual({
-      kind: 'locked',
-      reason: 'remote',
-    })
-  })
-
-  it('keeps remote Codex app-server sessions locked', () => {
-    const s = session({
-      agentType: 'codex',
-      codexAppServerThreadId: 'thread-1',
-      remoteHostId: 'host-1',
-      termBundleId: 'com.openai.codex',
-      tty: undefined,
-      pid: undefined,
-    })
-    expect(getComposerCapability(s, {
-      codexAppServerLive: true,
-      codexDesktopRepliesSupported: true,
-    })).toEqual({
-      kind: 'locked',
-      reason: 'remote',
-    })
-  })
-
   it('locks sessions with no tty and no pid', () => {
     expect(getComposerCapability(session({ tty: undefined, pid: undefined }))).toEqual({
       kind: 'locked',

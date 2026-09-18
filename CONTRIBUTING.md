@@ -57,7 +57,7 @@ pnpm tauri:dev   # 完整原生应用(推荐)
 pnpm dev         # 仅浏览器 UI,适合调样式 → http://localhost:1423
 ```
 
-`pnpm tauri:dev` 会先 `cargo build` 一份 `agent-island-bridge` 二进制,再启 Vite + 原生窗口。第一次构建比较慢,Rust 依赖编译可能要 5-10 分钟,后续增量很快。
+`pnpm tauri:dev` 会先 `cargo build` 一份 `vibe-board-bridge` 二进制,再启 Vite + 原生窗口。第一次构建比较慢,Rust 依赖编译可能要 5-10 分钟,后续增量很快。
 
 ### 提交前必跑
 
@@ -96,7 +96,7 @@ chore: 升级 vitest 到 4.2
 
 ### 版本号
 
-**不要在 PR 里改版本号。** 版本号由 maintainer 在发版时统一更新,且必须在四个文件里同步:
+**不要在 PR 里改版本号。** 版本号由 maintainer 在发版时统一更新,且必须在四个文件里同步(完整流程见 [RELEASING.md](RELEASING.md)):
 
 - `package.json`
 - `src-tauri/tauri.conf.json`
@@ -153,7 +153,7 @@ chore: 升级 vitest 到 4.2
 - **代码改动先建 Issue**:Agent 必须在写文件前创建或关联 Issue,使用独立任务分支,并在 PR 中用 `Closes #<编号>` 建立闭环。纯问答和只读分析不需要制造 Issue。
 - **PR 描述请如实标注**:如果整份 PR 主要由 AI 生成,在描述里加一句"Co-authored with <Agent 名>"或类似措辞。我们不歧视 AI,但要求诚实。
 - **AI 生成的代码也得自测**:`pnpm lint`、`pnpm test:run`、`cargo check` 全绿再提。AI 跳过测试 / 没看清错误 / 改完不验证的 PR 会被退回。
-- **不要让 AI 改品牌资产、签名配置、发布流程**。这些有商标和安全含义,需要人工判断。具体见 [禁区列表](.claude/CLAUDE.md#6-禁区不要动)。
+- **不要让 AI 改品牌资产、签名配置、发布流程**。这些有商标和安全含义,需要人工判断。具体见 [.claude/CLAUDE.md 的 Publishing boundary](.claude/CLAUDE.md#publishing-boundary) 和 [RELEASING.md](RELEASING.md)。
 - **Agent 决策权**:涉及架构变更、新依赖、改动跨 5+ 文件时,人类先在 Issue 或 PR 描述里和 maintainer 对齐方案,再让 AI 实施;不要直接让 AI 大改后丢一个 200 行 PR 过来。
 
 ---
@@ -167,5 +167,7 @@ Vibe Board 是基于 [AgentBro](UPSTREAM.md) Apache-2.0 代码的独立分发版
 ## 社区
 
 - Releases: [hyNous/agent-island/releases](https://github.com/hyNous/agent-island/releases)
+
+想知道接下来要做什么,看 [ROADMAP.md](ROADMAP.md);发布与版本策略见 [RELEASING.md](RELEASING.md)。
 
 有想做但不确定要不要做的 idea,可以先在 Issue 里开一个 Discussion 性质的帖子,聊清楚再动工 —— 比写完 PR 被请回去返工友好很多。

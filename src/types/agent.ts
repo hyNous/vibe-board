@@ -244,8 +244,6 @@ export interface SessionState {
   lastUserMessage?: string
   lastUserMessageAt?: number
   sessionTitle?: string
-  remoteHostId?: string
-  remoteHostName?: string
   pid?: number
   tty?: string
   termProgram?: string

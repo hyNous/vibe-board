@@ -1,27 +1,24 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import type { DownloadEvent, Update } from '@tauri-apps/plugin-updater'
-import { getCurrentAppVersion, isHomebrewInstall, isTauri, restartApp } from '../services/tauriApi'
+import { getCurrentAppVersion, isTauri, restartApp } from '../services/tauriApi'
 import { useConfigStore } from '../stores/configStore'
 import { useSessionStore } from '../stores/sessionStore'
 import { blockingBackgroundSessionCount } from '../utils/energyPolicy'
 import { isWindowsPlatform } from '../utils/platform'
 
 export type UpdateStatus = 'idle' | 'checking' | 'available' | 'downloading' | 'ready' | 'error' | 'up-to-date'
-export type UpdateInstallChannel = 'direct' | 'homebrew'
 
-const RELEASE_API_URL = (import.meta.env.VITE_AGENT_ISLAND_RELEASE_API_URL ?? '').trim()
-const LATEST_DMG_URL = (import.meta.env.VITE_AGENT_ISLAND_LATEST_DMG_URL ?? '').trim()
-const LATEST_WINDOWS_SETUP_URL = (import.meta.env.VITE_AGENT_ISLAND_LATEST_WINDOWS_SETUP_URL ?? '').trim()
+const RELEASE_API_URL = (import.meta.env.VITE_VIBEBOARD_RELEASE_API_URL ?? import.meta.env.VITE_AGENT_ISLAND_RELEASE_API_URL ?? '').trim()
+const LATEST_DMG_URL = (import.meta.env.VITE_VIBEBOARD_LATEST_DMG_URL ?? import.meta.env.VITE_AGENT_ISLAND_LATEST_DMG_URL ?? '').trim()
+const LATEST_WINDOWS_SETUP_URL = (import.meta.env.VITE_VIBEBOARD_LATEST_WINDOWS_SETUP_URL ?? import.meta.env.VITE_AGENT_ISLAND_LATEST_WINDOWS_SETUP_URL ?? '').trim()
 const UPDATE_CHECK_TIMEOUT_MS = 8_000
 const SETTINGS_AUTO_CHECK_DELAY_MS = 5_000
 const BACKGROUND_AUTO_CHECK_DELAY_MS = 60_000
 const BACKGROUND_AUTO_CHECK_INTERVAL_MS = 12 * 60 * 60 * 1000
 const AUTO_RESTART_IDLE_GRACE_MS = 2 * 60 * 1000
-export const HOMEBREW_UPDATE_COMMAND = 'brew upgrade --cask agent-island'
 
 interface UpdateState {
   status: UpdateStatus
-  installChannel: UpdateInstallChannel
   version: string | null
   notes: string | null
   date: string | null
@@ -45,7 +42,6 @@ export function useUpdater(options: UseUpdaterOptions = {}) {
   const { background = false } = options
   const updateRef = useRef<Update | null>(null)
   const manualDownloadUrlRef = useRef<string | null>(null)
-  const installChannelRef = useRef<UpdateInstallChannel>('direct')
   const autoCheckUpdate = useConfigStore((s) => s.autoCheckUpdate)
   const autoInstallUpdate = useConfigStore((s) => s.autoInstallUpdate)
   const blockingSessionCount = useSessionStore((s) => blockingBackgroundSessionCount(s.sessionList))
@@ -55,7 +51,6 @@ export function useUpdater(options: UseUpdaterOptions = {}) {
   const statusRef = useRef<UpdateStatus>('idle')
   const [state, setState] = useState<UpdateState>({
     status: 'idle',
-    installChannel: 'direct',
     version: null,
     notes: null,
     date: null,
@@ -73,42 +68,6 @@ export function useUpdater(options: UseUpdaterOptions = {}) {
     setState(prev => ({ ...prev, status: 'checking', error: null }))
 
     try {
-      // Fire the install-channel probe and the network check concurrently so the
-      // homebrew round-trip doesn't add latency before the GitHub request starts.
-      const homebrewPromise = isHomebrewInstall()
-      const homebrewReleasePromise = homebrewPromise.then((isHomebrew) =>
-        isHomebrew ? checkGitHubLatestRelease() : null,
-      )
-
-      const homebrewInstall = await homebrewPromise
-      if (homebrewInstall) {
-        const fallback = (await homebrewReleasePromise)!
-        updateRef.current = null
-        manualDownloadUrlRef.current = null
-        installChannelRef.current = 'homebrew'
-        autoInstallTriggeredRef.current = false
-
-        if (fallback.available) {
-          setState({
-            status: 'available',
-            installChannel: 'homebrew',
-            version: fallback.version,
-            notes: fallback.notes,
-            date: fallback.date,
-            error: null,
-            manualDownloadUrl: null,
-            downloadProgress: null,
-            restartPending: false,
-            restartBlockedByActivity: false,
-            blockingSessionCount: 0,
-          })
-        } else {
-          setState(createEmptyState('up-to-date', 'homebrew'))
-        }
-        return
-      }
-
-      installChannelRef.current = 'direct'
       const { check } = await import('@tauri-apps/plugin-updater')
       const update = await check({
         timeout: UPDATE_CHECK_TIMEOUT_MS,
@@ -118,11 +77,9 @@ export function useUpdater(options: UseUpdaterOptions = {}) {
       if (update) {
         updateRef.current = update
         manualDownloadUrlRef.current = null
-        installChannelRef.current = 'direct'
         autoInstallTriggeredRef.current = false
         setState({
           status: 'available',
-          installChannel: 'direct',
           version: update.version,
           notes: update.body ?? null,
           date: update.date ?? null,
@@ -136,9 +93,8 @@ export function useUpdater(options: UseUpdaterOptions = {}) {
       } else {
         updateRef.current = null
         manualDownloadUrlRef.current = null
-        installChannelRef.current = 'direct'
         autoInstallTriggeredRef.current = false
-        setState(createEmptyState('up-to-date', 'direct'))
+        setState(createEmptyState('up-to-date'))
       }
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e)
@@ -149,11 +105,9 @@ export function useUpdater(options: UseUpdaterOptions = {}) {
           console.warn('[updater] direct check failed; using GitHub release fallback:', message)
           updateRef.current = null
           manualDownloadUrlRef.current = fallback.downloadUrl
-          installChannelRef.current = 'direct'
           autoInstallTriggeredRef.current = false
           setState({
             status: 'available',
-            installChannel: 'direct',
             version: fallback.version,
             notes: fallback.notes,
             date: fallback.date,
@@ -169,14 +123,13 @@ export function useUpdater(options: UseUpdaterOptions = {}) {
 
         updateRef.current = null
         manualDownloadUrlRef.current = null
-        installChannelRef.current = 'direct'
         autoInstallTriggeredRef.current = false
-        setState(createEmptyState('up-to-date', 'direct'))
+        setState(createEmptyState('up-to-date'))
       } catch (fallbackError) {
         const fallbackMessage = fallbackError instanceof Error ? fallbackError.message : String(fallbackError)
         console.error('[updater] check failed:', message)
         console.error('[updater] fallback check failed:', fallbackMessage)
-        setState(createEmptyState('error', 'direct'))
+        setState(createEmptyState('error'))
       }
     }
   }, [])
@@ -195,11 +148,6 @@ export function useUpdater(options: UseUpdaterOptions = {}) {
         return
       }
       await restartApp()
-      return
-    }
-
-    if (installChannelRef.current === 'homebrew') {
-      await copyText(HOMEBREW_UPDATE_COMMAND)
       return
     }
 
@@ -262,9 +210,8 @@ export function useUpdater(options: UseUpdaterOptions = {}) {
   const dismissUpdate = useCallback(() => {
     updateRef.current = null
     manualDownloadUrlRef.current = null
-    installChannelRef.current = 'direct'
     autoInstallTriggeredRef.current = false
-    setState(createEmptyState('idle', 'direct'))
+    setState(createEmptyState('idle'))
   }, [])
 
   useEffect(() => {
@@ -350,10 +297,9 @@ export function useUpdater(options: UseUpdaterOptions = {}) {
   return { ...state, checkForUpdate, installUpdate, dismissUpdate }
 }
 
-function createEmptyState(status: UpdateStatus, installChannel: UpdateInstallChannel): UpdateState {
+function createEmptyState(status: UpdateStatus): UpdateState {
   return {
     status,
-    installChannel,
     version: null,
     notes: null,
     date: null,
@@ -474,21 +420,4 @@ function normalizeVersion(version: string): number[] {
     .split('.')
     .map((part) => Number.parseInt(part, 10))
     .map((part) => (Number.isFinite(part) ? part : 0))
-}
-
-async function copyText(text: string): Promise<void> {
-  if (navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(text)
-    return
-  }
-
-  const textarea = document.createElement('textarea')
-  textarea.value = text
-  textarea.setAttribute('readonly', 'true')
-  textarea.style.position = 'fixed'
-  textarea.style.opacity = '0'
-  document.body.appendChild(textarea)
-  textarea.select()
-  document.execCommand('copy')
-  document.body.removeChild(textarea)
 }

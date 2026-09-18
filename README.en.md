@@ -8,6 +8,8 @@
 
   <p>
     <a href="./README.md">中文</a> ·
+    <a href="./ROADMAP.md">Roadmap</a> ·
+    <a href="./RELEASING.md">Releases</a> ·
     <a href="./UPSTREAM.md">Upstream &amp; license</a> ·
     <a href="./docs/privacy-policy.md">Privacy</a>
   </p>
@@ -79,4 +81,4 @@ cargo check --manifest-path src-tauri/Cargo.toml
 
 Vibe Board code is released under the [Apache License 2.0](./LICENSE), while the upstream [NOTICE](./NOTICE) and branding boundary in [TRADEMARKS.md](./TRADEMARKS.md) remain in the repository.
 
-This is an independent modification based on [AgentBro](https://github.com/shirenchuang/agentbro): the product name, icons, and release configuration have been replaced, and this repository is not an official upstream distribution. See [UPSTREAM.md](./UPSTREAM.md) for details. Issues and pull requests are welcome; read [CONTRIBUTING.md](./CONTRIBUTING.md) first.
+This is an independent modification based on [AgentBro](https://github.com/shirenchuang/agentbro): the product name, icons, and release configuration have been replaced, and this repository is not an official upstream distribution. See [UPSTREAM.md](./UPSTREAM.md) for details. Versioning, releases, and the roadmap are decided in this repository and do not follow the upstream release line — see [RELEASING.md](./RELEASING.md) and [ROADMAP.md](./ROADMAP.md). Issues and pull requests are welcome; read [CONTRIBUTING.md](./CONTRIBUTING.md) first.

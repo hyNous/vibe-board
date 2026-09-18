@@ -4,7 +4,6 @@
 import { useEffect } from 'react'
 import i18n from 'i18next'
 import { isTauri, getSessions, getAgentStatuses, getUsageRateLimits, getUsageSnapshots, getConfig, listThemes, setSoundEventRule, getActiveThemeBundle, setLanguage, getAppStateFlags } from '../services/tauriApi'
-import { usePetStore } from '../stores/petStore'
 import type { BackendSession, BackendConfig, ParsedMessage, ParsedMessageBlock } from '../services/tauriApi'
 import { useSessionStore } from '../stores/sessionStore'
 import { useConfigStore } from '../stores/configStore'
@@ -224,8 +223,6 @@ export function transformSession(bs: BackendSession): SessionState {
     lastToolTarget: bs.lastToolTarget ?? undefined,
     lastToolStatus: (bs.lastToolStatus as ToolStatus) ?? undefined,
     sessionTitle: bs.sessionTitle ?? undefined,
-    remoteHostId: bs.remoteHostId ?? undefined,
-    remoteHostName: bs.remoteHostName ?? undefined,
     pid: bs.pid ?? undefined,
     tty: bs.tty ?? undefined,
     termProgram: bs.termProgram ?? undefined,
@@ -403,13 +400,6 @@ function applyBackendConfig(config: BackendConfig) {
     confettiEnabled: config.confettiEnabled,
     analyticsEnabled: config.analyticsEnabled ?? true,
     analyticsConsentPromptCompleted: config.analyticsConsentPromptCompleted ?? true,
-    islandSurfaceMode: config.islandSurfaceMode ?? 'island',
-    petVitalsDebugOpen: import.meta.env.DEV ? (config.petVitalsDebugOpen ?? false) : false,
-    islandPetScale: config.islandPetScale ?? 72,
-    islandPetWindowOrigin: config.islandPetWindowOrigin ?? null,
-    islandPetWindowAnchor: config.islandPetWindowAnchor ?? null,
-    islandActivePetId: config.islandActivePetId ?? null,
-    islandAgentPetMap: config.islandAgentPetMap ?? {},
     followFocus: config.followFocus,
     quietHours: {
       enabled: config.quietHoursEnabled,
@@ -634,9 +624,6 @@ export function useConfigSync(enabled = true, canWriteMigrations = true) {
       }
       applyBackendConfig(effectiveConfig)
       syncThemesFromBackend(effectiveConfig.theme)
-      const petStore = usePetStore.getState()
-      petStore.hydrateFromConfig(effectiveConfig.islandActivePetId ?? null)
-      void petStore.loadRegistry()
       if (canWriteMigrations && (!effectiveConfig.soundRules || Object.keys(effectiveConfig.soundRules).length === 0)) {
         syncSoundEventSettingsToBackend()
       }
@@ -648,7 +635,6 @@ export function useConfigSync(enabled = true, canWriteMigrations = true) {
       (event) => {
         applyBackendConfig(event.payload)
         applyBackendThemeChange(event.payload.theme)
-        usePetStore.getState().hydrateFromConfig(event.payload.islandActivePetId ?? null)
       },
       (fn) => { unlisten = fn },
       () => cancelled,
@@ -663,12 +649,14 @@ export function useConfigSync(enabled = true, canWriteMigrations = true) {
         clearPendingBackendTheme(detail.name)
       }
     }
+    window.addEventListener('vibeboard-theme-sync', handleThemeSync)
     window.addEventListener('agent-island-theme-sync', handleThemeSync)
     window.addEventListener('agentbro-theme-sync', handleThemeSync)
 
     return () => {
       cancelled = true
       unlisten?.()
+      window.removeEventListener('vibeboard-theme-sync', handleThemeSync)
       window.removeEventListener('agent-island-theme-sync', handleThemeSync)
       window.removeEventListener('agentbro-theme-sync', handleThemeSync)
     }
@@ -999,7 +987,7 @@ export function useHookRecoveryEvents(enabled = true) {
 /** Combined init hook — call once in App with the current window label. */
 export function useTauriInit(scope: TauriInitScope = 'notch') {
   const ready = scope !== null
-  useSessionEvents(scope === 'notch' ? 'full' : scope === 'pet' ? 'events' : 'off')
+  useSessionEvents(scope === 'notch' ? 'full' : 'off')
   useConfigSync(ready, scope === 'notch')
   useConversationUpdates(scope === 'notch')
   useHookRecoveryEvents(scope === 'notch')

@@ -3,8 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { open } from '@tauri-apps/plugin-shell'
 import { save } from '@tauri-apps/plugin-dialog'
 import { exportDiagnostics, getCurrentAppVersion } from '../../../services/tauriApi'
-import { HOMEBREW_UPDATE_COMMAND } from '../../../hooks/useUpdater'
-import type { UpdateInstallChannel, UpdateStatus } from '../../../hooks/useUpdater'
+import type { UpdateStatus } from '../../../hooks/useUpdater'
 import { useConfigStore } from '../../../stores/configStore'
 import { SettingSection } from '../SettingSection'
 import { SettingGroup } from '../SettingGroup'
@@ -14,7 +13,6 @@ import { GlassButton } from '../../shared'
 
 interface AboutSectionProps {
   updateStatus?: UpdateStatus
-  updateInstallChannel?: UpdateInstallChannel
   updateVersion?: string | null
   updateError?: string | null
   updateRestartPending?: boolean
@@ -23,7 +21,9 @@ interface AboutSectionProps {
   onCheckForUpdate?: () => void
 }
 
-const REPOSITORY_URL = ((import.meta.env.VITE_AGENT_ISLAND_REPOSITORY_URL ?? '').trim() || 'https://github.com/hyNous/agent-island').replace(/\/$/, '')
+// The distribution repositories still live under their published names, so the
+// repository URL stays external while the product name is Vibe Board.
+const REPOSITORY_URL = ((import.meta.env.VITE_VIBEBOARD_REPOSITORY_URL ?? import.meta.env.VITE_AGENT_ISLAND_REPOSITORY_URL ?? '').trim() || 'https://github.com/hyNous/agent-island').replace(/\/$/, '')
 const REPO_ISSUES_URL = `${REPOSITORY_URL}/issues/new`
 const REPO_RELEASES_URL = `${REPOSITORY_URL}/releases`
 
@@ -45,7 +45,6 @@ function ExternalArrow() {
 
 export function AboutSection({
   updateStatus,
-  updateInstallChannel = 'direct',
   updateVersion,
   updateError,
   updateRestartPending = false,
@@ -106,9 +105,7 @@ export function AboutSection({
     switch (updateStatus) {
       case 'checking': return t('settings.updateChecking', { defaultValue: '正在检查更新...' })
       case 'available':
-        return updateInstallChannel === 'homebrew'
-          ? t('settings.updateAvailableHomebrew', { version: updateVersion, command: HOMEBREW_UPDATE_COMMAND, defaultValue: `发现新版本 ${updateVersion}。请运行 ${HOMEBREW_UPDATE_COMMAND}` })
-          : t('settings.updateAvailable', { version: updateVersion, defaultValue: `发现新版本 ${updateVersion}` })
+        return t('settings.updateAvailable', { version: updateVersion, defaultValue: `发现新版本 ${updateVersion}` })
       case 'downloading': return t('settings.updateDownloading', { version: updateVersion, defaultValue: `正在下载 ${updateVersion}...` })
       case 'ready':
         if (updateRestartBlockedByActivity) {

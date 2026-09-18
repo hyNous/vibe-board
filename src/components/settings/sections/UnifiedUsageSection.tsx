@@ -1,18 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { CodexUsageSection } from './CodexUsageSection'
-import { getNetworkMonitorRequests, type NetworkRequestSummary } from '../../../services/monitorApi'
-import { getUsageSnapshots, isTauri, listUsageProviders, type UsageProviderStatus } from '../../../services/tauriApi'
-import type { RateLimitInfo } from '../../../types/agent'
+import { getAgentStatuses, getUsageSnapshots, isTauri, listUsageProviders, type UsageProviderStatus } from '../../../services/tauriApi'
+import type { AgentStatusSnapshot, RateLimitInfo } from '../../../types/agent'
 import { formatTokens } from '../../../utils/tokens'
 import './UnifiedUsageSection.css'
 
-type UsageView = 'overview' | 'quota' | 'token-trend' | 'breakdown'
+type UsageView = 'overview' | 'quota' | 'token-trend'
 
 const USAGE_VIEWS: Array<{ id: UsageView; label: string }> = [
   { id: 'overview', label: 'Overview' },
   { id: 'quota', label: 'Quota' },
   { id: 'token-trend', label: 'Token Usage' },
-  { id: 'breakdown', label: 'Breakdown' },
 ]
 
 type CoverageId = 'codex' | 'claude' | 'gemini' | 'pi' | 'opencode' | 'other'
@@ -64,8 +62,8 @@ function formatFreshness(timestamp: number | null): string {
   return `${Math.floor(age / 86_400_000)} 天前`
 }
 
-function usageStatusLabel(status: UsageProviderStatus | null, requests: number): string {
-  if (!status) return requests > 0 ? '已采集' : '未采集'
+function usageStatusLabel(status: UsageProviderStatus | null): string {
+  if (!status) return '未采集'
   if (!status.enabled) return '已停用'
   if (status.available) return '可用'
   if (status.authStatus === 'missing') return '待授权'
@@ -80,49 +78,56 @@ type ProviderCoverageStats = {
   status: UsageProviderStatus | null
   primary: boolean
   quota: RateLimitInfo | null
-  requests: number
   tokens: number
-  latestRequestAt: number | null
+  tokenUpdatedAt: number | null
 }
 
 function ProviderCoverage({
-  requests,
   statuses,
   snapshots,
+  agentStatuses,
   loading,
   error,
 }: {
-  requests: NetworkRequestSummary[]
   statuses: UsageProviderStatus[]
   snapshots: RateLimitInfo[]
+  agentStatuses: AgentStatusSnapshot[]
   loading: boolean
   error: string
 }) {
   const rows = useMemo<ProviderCoverageStats[]>(() => PROVIDER_COVERAGE.map((provider) => {
     const status = statuses.find((item) => provider.statusProviders.includes(item.provider)) ?? null
-    const providerRequests = requests.filter((request) => coverageIdForProvider(request.provider) === provider.id)
     const quota = findQuotaSnapshot(snapshots, provider.id)
+    const matchingAgents = agentStatuses.filter((item) => coverageIdForProvider(item.agent) === provider.id)
+    // `AgentStatusSnapshot.tokens` is overwritten with the agent's most recent
+    // session each time that session reports, so this sums one last-known
+    // session per agent — never an all-session or per-day total.
+    const tokens = matchingAgents.reduce((total, item) => total + item.tokens.input + item.tokens.output + item.tokens.cacheRead + item.tokens.cacheCreate, 0)
+    const tokenUpdatedAt = matchingAgents.reduce<number | null>(
+      (latest, item) => latest == null || item.lastSeenAt > latest ? item.lastSeenAt : latest,
+      null,
+    )
     return {
       id: provider.id,
       label: provider.label,
       status,
       primary: status?.primary ?? false,
       quota,
-      requests: providerRequests.length,
-      tokens: providerRequests.reduce((total, request) => total + requestTokens(request), 0),
-      latestRequestAt: providerRequests.reduce<number | null>(
-        (latest, request) => latest == null || request.timestampMs > latest ? request.timestampMs : latest,
-        null,
-      ),
+      tokens,
+      tokenUpdatedAt,
     }
-  }).sort((a, b) => Number(b.primary) - Number(a.primary)), [requests, snapshots, statuses])
+  }).sort((a, b) => Number(b.primary) - Number(a.primary)), [agentStatuses, snapshots, statuses])
 
   return (
     <section className="unified-usage__provider-card">
       <div className="unified-usage__provider-head">
         <div>
           <h3>Provider Coverage</h3>
-          <p>每个 Provider 独立显示真实 token 或 quota；安装插件并启动宿主 Agent 后，宿主会标记为“宿主”，子 Agent 数据保持不变。</p>
+          <p>
+            每个 Provider 独立显示真实 token 或 quota。Usage 列是该 Provider 下每个 Agent
+            <strong>最近一次会话</strong>的 token 之和，不是当天或历史全部会话的累计；安装插件并启动宿主 Agent
+            后，宿主会标记为“宿主”，子 Agent 数据保持不变。
+          </p>
         </div>
         {loading && <span className="unified-usage__provider-loading">读取中...</span>}
       </div>
@@ -134,21 +139,22 @@ function ProviderCoverage({
           </thead>
           <tbody>
             {rows.map((row) => {
-              const updatedAt = [row.status?.updatedAt ?? null, row.quota?.updatedAt ?? null, row.latestRequestAt]
+              const updatedAt = [row.status?.updatedAt ?? null, row.quota?.updatedAt ?? null, row.tokenUpdatedAt]
                 .filter((value): value is number => value != null)
                 .reduce<number | null>((latest, value) => latest == null || value > latest ? value : latest, null)
               const detail = row.status?.detail
                 ?? (row.id === 'other' ? '未匹配到已支持 Provider 的请求会归入 Other。' : '尚未发现本地用量或 quota 数据。')
-              const quota = formatQuotaRemaining(row.quota) || usageStatusLabel(row.status, row.requests)
+              const usage = row.tokens > 0 ? `${formatTokens(row.tokens)} tok` : usageStatusLabel(row.status)
+              const quota = formatQuotaRemaining(row.quota) || usageStatusLabel(row.status)
               return (
                 <tr key={row.id}>
                   <td>
                     <strong>{row.label}</strong>
                     {row.primary && <span className="unified-usage__provider-badge">宿主</span>}
                   </td>
-                  <td>{row.requests > 0 ? `${row.requests} · ${formatTokens(row.tokens)}` : '未采集'}</td>
+                  <td>{usage}</td>
                   <td>{quota || 'Unknown'}</td>
-                  <td>{row.quota?.source ?? row.status?.source ?? (row.requests > 0 ? 'network monitor' : '—')}</td>
+                  <td>{row.quota?.source ?? row.status?.source ?? (row.tokens > 0 ? 'last session tokens' : '—')}</td>
                   <td>{formatFreshness(updatedAt)}</td>
                   <td title={detail}>{detail}</td>
                 </tr>
@@ -161,110 +167,33 @@ function ProviderCoverage({
   )
 }
 
-function requestTokens(request: NetworkRequestSummary) {
-  if (request.usageSummary?.totalTokens != null) return request.usageSummary.totalTokens
-  const usage = request.usage ?? {}
-  const number = (key: string) => typeof usage[key] === 'number' ? usage[key] as number : 0
-  return number('input_tokens') + number('output_tokens') + number('cache_creation_input_tokens') + number('cache_read_input_tokens')
-}
-
-function todayTokens(requests: NetworkRequestSummary[]) {
-  const start = new Date()
-  start.setHours(0, 0, 0, 0)
-  return requests
-    .filter((request) => request.timestampMs >= start.getTime())
-    .reduce((total, request) => total + requestTokens(request), 0)
-}
-
-function groupRequests(requests: NetworkRequestSummary[], keyFor: (request: NetworkRequestSummary) => string) {
-  const groups = new Map<string, { key: string; requests: number; tokens: number }>()
-  for (const request of requests) {
-    const key = keyFor(request)
-    const group = groups.get(key) ?? { key, requests: 0, tokens: 0 }
-    group.requests += 1
-    group.tokens += requestTokens(request)
-    groups.set(key, group)
-  }
-  return Array.from(groups.values()).sort((a, b) => b.tokens - a.tokens || b.requests - a.requests)
-}
-
-function BreakdownTable({ title, rows }: { title: string; rows: Array<{ key: string; requests: number; tokens: number }> }) {
-  return (
-    <section className="unified-usage__breakdown-card">
-      <h3>{title}</h3>
-      {rows.length === 0 ? (
-        <p>暂无可用数据。</p>
-      ) : (
-        <table>
-          <thead>
-            <tr><th>维度</th><th>请求</th><th>Token</th></tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => (
-              <tr key={row.key}>
-                <td>{row.key}</td>
-                <td>{row.requests}</td>
-                <td>{formatTokens(row.tokens)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-    </section>
-  )
-}
-
-function UsageBreakdown({ requests }: { requests: NetworkRequestSummary[] }) {
-  const dimensions = [
-    ['By Agent', (request: NetworkRequestSummary) => request.requestType || 'Unknown'],
-    ['By Provider', (request: NetworkRequestSummary) => request.provider || 'Unknown'],
-    ['By Model', (request: NetworkRequestSummary) => request.model || 'Unknown'],
-    ['By Project', (request: NetworkRequestSummary) => request.project || '未关联项目'],
-    ['By Task', () => '未关联任务'],
-  ] as Array<[string, (request: NetworkRequestSummary) => string]>
-
-  return (
-    <>
-      <div className="unified-usage__source-note">
-        Breakdown 使用本地网络抓包中的真实 request/usage；Task 只有在事件带任务关联时才会细分，当前未关联的请求会明确归入“未关联任务”。
-      </div>
-      <div className="unified-usage__breakdown-grid">
-        {dimensions.map(([title, keyFor]) => <BreakdownTable key={title} title={title} rows={groupRequests(requests, keyFor)} />)}
-      </div>
-    </>
-  )
-}
-
 export function UnifiedUsageSection() {
   const [view, setView] = useState<UsageView>('overview')
-  const [requests, setRequests] = useState<NetworkRequestSummary[]>([])
-  const [error, setError] = useState('')
   const [providerStatuses, setProviderStatuses] = useState<UsageProviderStatus[]>([])
   const [providerError, setProviderError] = useState('')
   const [providerLoading, setProviderLoading] = useState(false)
   const [quotaSnapshots, setQuotaSnapshots] = useState<RateLimitInfo[]>([])
+  const [agentStatuses, setAgentStatuses] = useState<AgentStatusSnapshot[]>([])
 
-  const loadRequests = useCallback(async () => {
+  const loadUsage = useCallback(async () => {
     if (!isTauri()) {
-      setRequests([])
       setProviderStatuses([])
       setQuotaSnapshots([])
+      setAgentStatuses([])
       return
     }
     setProviderLoading(true)
-    setError('')
     setProviderError('')
     try {
-      const [networkResult, providerResult, quotaResult] = await Promise.allSettled([
-        getNetworkMonitorRequests(),
+      const [providerResult, quotaResult, agentResult] = await Promise.allSettled([
         listUsageProviders(false),
         getUsageSnapshots(),
+        getAgentStatuses(),
       ])
-      if (networkResult.status === 'fulfilled') setRequests(networkResult.value)
-      else setError(String(networkResult.reason))
       if (providerResult.status === 'fulfilled') setProviderStatuses(providerResult.value)
       else setProviderError(String(providerResult.reason))
       setQuotaSnapshots(quotaResult.status === 'fulfilled' ? quotaResult.value : [])
+      setAgentStatuses(agentResult.status === 'fulfilled' ? agentResult.value : [])
     } finally {
       setProviderLoading(false)
     }
@@ -272,17 +201,17 @@ export function UnifiedUsageSection() {
 
   useEffect(() => {
     const id = window.setTimeout(() => {
-      void loadRequests()
+      void loadUsage()
     }, 0)
     return () => window.clearTimeout(id)
-  }, [loadRequests])
+  }, [loadUsage])
 
-  const providers = useMemo(
-    () => new Set(requests.map((request) => request.provider).filter(Boolean)),
-    [requests],
+  const availableProviders = providerStatuses.filter((status) => status.available).length
+  // Sum of each agent's last known session, not a daily or all-session total.
+  const lastSessionTokenTotal = agentStatuses.reduce(
+    (total, status) => total + status.tokens.input + status.tokens.output + status.tokens.cacheRead + status.tokens.cacheCreate,
+    0,
   )
-  const liveTokens = todayTokens(requests)
-  const tokensToday = liveTokens
   const quotaSummary = quotaSnapshots
     .map((snapshot) => {
       const label = snapshot.providerLabel ?? snapshot.provider ?? 'Provider'
@@ -306,9 +235,9 @@ export function UnifiedUsageSection() {
       <header className="agent-monitor__header">
         <div>
           <h2>Usage</h2>
-          <p>统一查看 Provider token 用量与当前 quota；没有真实数据时保持 Unknown。</p>
+          <p>统一查看每个 Agent 最近一次会话的真实 token 与当前 quota；没有真实数据时保持 Unknown。</p>
         </div>
-        <button type="button" className="agent-monitor__refresh" disabled={providerLoading} onClick={() => void loadRequests()}>刷新用量</button>
+        <button type="button" className="agent-monitor__refresh" disabled={providerLoading} onClick={() => void loadUsage()}>刷新用量</button>
       </header>
 
       <div className="unified-usage__tabs" role="tablist" aria-label="Usage views">
@@ -326,35 +255,30 @@ export function UnifiedUsageSection() {
         ))}
       </div>
 
-      {error && <div className="unified-usage__error">网络用量读取失败：{error}</div>}
+      {providerError && <div className="unified-usage__error">Provider 状态读取失败：{providerError}</div>}
 
       {view === 'overview' && (
         <>
           <div className="unified-usage__summary">
-            <div><span>{tokensToday > 0 ? 'Tokens Today' : primaryProvider ? 'Host Quota Remaining' : 'Quota Remaining'}</span><strong>{tokensToday > 0 ? formatTokens(tokensToday) : headlineQuota || 'Unknown'}</strong><em>{tokensToday > 0 ? 'network monitor' : primaryProvider ? primaryProvider.label : 'provider usage reader'}</em></div>
-            <div><span>Active Providers</span><strong>{providers.size > 0 ? providers.size : '未采集'}</strong><em>当前请求来源</em></div>
+            <div><span>{lastSessionTokenTotal > 0 ? 'Last Session Tokens' : primaryProvider ? 'Host Quota Remaining' : 'Quota Remaining'}</span><strong>{lastSessionTokenTotal > 0 ? formatTokens(lastSessionTokenTotal) : headlineQuota || 'Unknown'}</strong><em>{lastSessionTokenTotal > 0 ? '每个 Agent 最近一次会话之和' : primaryProvider?.label ?? 'provider usage reader'}</em></div>
+            <div><span>Active Providers</span><strong>{providerStatuses.length > 0 ? `${availableProviders} / ${providerStatuses.length}` : '未采集'}</strong><em>可用 Provider / 已登记</em></div>
             <div><span>Plugin Host</span><strong>{primaryProvider?.label ?? '未绑定'}</strong><em>{primaryProvider ? '最近一次宿主会话' : '启动已安装插件的 Agent 后自动绑定'}</em></div>
           </div>
-          <ProviderCoverage requests={requests} statuses={providerStatuses} snapshots={quotaSnapshots} loading={providerLoading} error={providerError} />
+          <ProviderCoverage statuses={providerStatuses} snapshots={quotaSnapshots} agentStatuses={agentStatuses} loading={providerLoading} error={providerError} />
           <CodexUsageSection showHeader={false} />
         </>
       )}
 
       {view === 'quota' && (
         <>
-          <ProviderCoverage requests={requests} statuses={providerStatuses} snapshots={quotaSnapshots} loading={providerLoading} error={providerError} />
+          <ProviderCoverage statuses={providerStatuses} snapshots={quotaSnapshots} agentStatuses={agentStatuses} loading={providerLoading} error={providerError} />
           <CodexUsageSection showHeader={false} />
         </>
       )}
       {view === 'token-trend' && (
         <div className="unified-usage__panel">
-          <p className="unified-usage__panel-note">能读取 token 时展示真实 token；没有 token 时只展示 Provider quota 剩余值。</p>
+          <p className="unified-usage__panel-note">能读取 token 时展示真实 token：Codex 用量来自本地 rollout 聚合，其他 Agent 来自 Hook 会话累计；没有 token 时只展示 Provider quota 剩余值。</p>
           <CodexUsageSection showHeader={false} />
-        </div>
-      )}
-      {view === 'breakdown' && (
-        <div className="unified-usage__panel">
-          <UsageBreakdown requests={requests} />
         </div>
       )}
     </section>

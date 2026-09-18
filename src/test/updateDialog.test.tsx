@@ -28,7 +28,6 @@ function baseProps() {
     version: '0.3.0',
     notes: 'Some notes',
     date: null,
-    installChannel: 'direct' as const,
     manualDownloadUrl: null,
     onMinimize: vi.fn(),
     onExpand: vi.fn(),
