@@ -6,6 +6,10 @@ use std::path::{Path, PathBuf};
 
 pub(super) const MARKER_PREFIX: &str = "Vibe Board managed integration";
 pub(super) const LEGACY_MARKER_PREFIX: &str = "AgentBro managed integration";
+const CURSOR_HOOKS_KEY: &str = "vibeBoardHooks";
+const LEGACY_CURSOR_HOOKS_KEY: &str = "agentBroHooks";
+const KIRO_MARKER_KEY: &str = "_vibeboard";
+const LEGACY_KIRO_MARKER_KEY: &str = "_agentbro";
 
 #[derive(Clone, Copy)]
 pub enum HookEntryTemplate {
@@ -685,7 +689,7 @@ pub fn kiro_profile() -> AgentIntegrationProfile {
     AgentIntegrationProfile {
         id: "kiro",
         installation_kind: InstallationKind::KiroAgentFile,
-        configuration_path: ".kiro/agents/agentbro.json",
+        configuration_path: ".kiro/agents/vibe-board.json",
         activation_path: None,
         source: "kiro",
         extra_args: &[],
@@ -824,7 +828,7 @@ pub fn hermes_profile() -> AgentIntegrationProfile {
     AgentIntegrationProfile {
         id: "hermes",
         installation_kind: InstallationKind::PluginDirectory,
-        configuration_path: ".hermes/plugins/agentbro",
+        configuration_path: ".hermes/plugins/vibe-board",
         activation_path: None,
         source: "hermes",
         extra_args: &[],
@@ -836,7 +840,7 @@ pub fn opencode_profile() -> AgentIntegrationProfile {
     AgentIntegrationProfile {
         id: "opencode",
         installation_kind: InstallationKind::PluginFile,
-        configuration_path: ".config/opencode/plugins/agentbro.js",
+        configuration_path: ".config/opencode/plugins/vibeboard.js",
         activation_path: Some(".config/opencode/opencode.json"),
         source: "opencode",
         extra_args: &[],
@@ -878,6 +882,33 @@ pub fn configuration_url(profile: &AgentIntegrationProfile) -> PathBuf {
 
 pub fn activation_url(profile: &AgentIntegrationProfile) -> Option<PathBuf> {
     profile.activation_path.map(resolve_home_path)
+}
+
+/// Authored integration files written under the retired AgentBro namespace.
+/// Paths are derived from the install destination so a custom install root only
+/// cleans its own directory: installing or uninstalling a hook at a custom path
+/// must never delete managed hooks that live in the default profile root.
+fn legacy_managed_paths(profile: &AgentIntegrationProfile, installed: &Path) -> Vec<PathBuf> {
+    let legacy_name = match profile.id {
+        "hermes" => "agentbro",
+        "kiro" => "agentbro.json",
+        "opencode" => "agentbro.js",
+        _ => return Vec::new(),
+    };
+    let Some(parent) = installed.parent() else {
+        return Vec::new();
+    };
+    vec![parent.join(legacy_name)]
+}
+
+fn remove_legacy_managed_paths(profile: &AgentIntegrationProfile, installed: &Path) {
+    for path in legacy_managed_paths(profile, installed) {
+        if path.is_dir() && hook_manager::has_agentbro_hooks(&path) {
+            let _ = std::fs::remove_dir_all(&path);
+        } else if path.is_file() && hook_manager::has_agentbro_hooks(&path) {
+            let _ = std::fs::remove_file(&path);
+        }
+    }
 }
 
 pub fn profile_for_agent(id: &str) -> Option<AgentIntegrationProfile> {
@@ -1025,6 +1056,7 @@ pub fn install_at(
             update_toml_hooks(profile, path)?;
         }
     }
+    remove_legacy_managed_paths(profile, path);
     Ok(())
 }
 
@@ -1217,6 +1249,7 @@ pub fn uninstall_at(
             remove_toml_hooks(path)?;
         }
     }
+    remove_legacy_managed_paths(profile, path);
     Ok(())
 }
 
@@ -1491,6 +1524,7 @@ fn text_hooks_health(profile: &AgentIntegrationProfile, path: &Path) -> HookInst
     };
     let marker = marker(profile);
     if !content.contains(&marker)
+        && !content.contains("vibe-board-bridge")
         && !content.contains("agentbro-bridge")
         && !content.contains("agent-island-bridge")
     {
@@ -1522,7 +1556,10 @@ fn cursor_settings_health(profile: &AgentIntegrationProfile, path: &Path) -> Hoo
         Ok(value) => value,
         Err(status) => return status,
     };
-    let Some(hooks) = settings.get("agentBroHooks") else {
+    let Some(hooks) = settings
+        .get(CURSOR_HOOKS_KEY)
+        .or_else(|| settings.get(LEGACY_CURSOR_HOOKS_KEY))
+    else {
         return HookInstallHealth::NotInstalled;
     };
     if !hooks
@@ -1552,7 +1589,8 @@ fn kiro_agent_file_health(profile: &AgentIntegrationProfile, path: &Path) -> Hoo
         Err(status) => return status,
     };
     if settings
-        .get("_agentbro")
+        .get(KIRO_MARKER_KEY)
+        .or_else(|| settings.get(LEGACY_KIRO_MARKER_KEY))
         .and_then(Value::as_str)
         .is_none_or(|value| value != marker(profile))
     {
@@ -1655,13 +1693,16 @@ pub fn managed_bridge_command_labeled(
         if let Some(label) = engine_label {
             parts.insert(
                 1,
-                format!("AGENTBRO_ENGINE_LABEL={}", hook_manager::shell_quote(label)),
+                format!(
+                    "VIBEBOARD_ENGINE_LABEL={}",
+                    hook_manager::shell_quote(label)
+                ),
             );
         }
         if let Some(root) = config_root {
             parts.insert(
                 if engine_label.is_some() { 2 } else { 1 },
-                format!("AGENTBRO_CONFIG_ROOT={}", hook_manager::shell_quote(root)),
+                format!("VIBEBOARD_CONFIG_ROOT={}", hook_manager::shell_quote(root)),
             );
         }
     }
@@ -1695,10 +1736,10 @@ fn bridge_env_json_labeled(
         crate::hook_endpoint::HOOK_PORT_ENV: endpoint.tcp_port.to_string(),
     });
     if let Some(label) = engine_label {
-        env["AGENTBRO_ENGINE_LABEL"] = serde_json::Value::String(label.to_string());
+        env["VIBEBOARD_ENGINE_LABEL"] = serde_json::Value::String(label.to_string());
     }
     if let Some(root) = config_root {
-        env["AGENTBRO_CONFIG_ROOT"] = serde_json::Value::String(root.to_string());
+        env["VIBEBOARD_CONFIG_ROOT"] = serde_json::Value::String(root.to_string());
     }
     Ok(serde_json::to_string(&env)?)
 }
@@ -1715,7 +1756,7 @@ fn marker(profile: &AgentIntegrationProfile) -> String {
 }
 
 fn resolve_home_path(relative: &str) -> PathBuf {
-    let home = dirs::home_dir().unwrap_or_else(std::env::temp_dir);
+    let home = crate::data_dir::home_dir();
     relative
         .split('/')
         .filter(|part| !part.is_empty())
@@ -1723,32 +1764,47 @@ fn resolve_home_path(relative: &str) -> PathBuf {
 }
 
 fn hook_selection_path() -> PathBuf {
-    if let Ok(path) = std::env::var("AGENTBRO_HOOK_SELECTIONS_PATH") {
+    if let Ok(path) = std::env::var("VIBEBOARD_HOOK_SELECTIONS_PATH")
+        .or_else(|_| std::env::var("AGENTBRO_HOOK_SELECTIONS_PATH"))
+    {
         return PathBuf::from(path);
     }
-    let home = dirs::home_dir().unwrap_or_else(std::env::temp_dir);
-    let new_path = home
-        .join(".agent-island")
+    let new_path = crate::data_dir::vibeboard_home()
         .join("hooks")
         .join("event-selections.json");
-    let legacy_root = crate::data_dir::legacy_agentbro_home();
-    for old_path in [
-        legacy_root.join("hooks").join("event-selections.json"),
-        legacy_root.join("hook-event-selections.json"),
-    ] {
-        if !new_path.exists() {
-            crate::data_dir::migrate_file(&old_path, &new_path);
-        }
-        if new_path.exists() {
-            break;
+    if !new_path.exists() {
+        'migrate: for legacy_root in crate::data_dir::legacy_homes() {
+            for old_path in [
+                legacy_root.join("hooks").join("event-selections.json"),
+                legacy_root.join("hook-event-selections.json"),
+            ] {
+                let _ = crate::data_dir::migrate_file(&old_path, &new_path);
+                if new_path.exists() {
+                    break 'migrate;
+                }
+            }
         }
     }
     new_path
 }
 
 fn load_stored_hook_selections() -> StoredHookSelections {
-    std::fs::read_to_string(hook_selection_path())
+    let content = std::fs::read_to_string(hook_selection_path())
         .ok()
+        .or_else(|| {
+            // The move can fail (for example when the legacy file is locked); keep
+            // the event selection readable from the retired root in that case.
+            crate::data_dir::legacy_homes()
+                .into_iter()
+                .flat_map(|root| {
+                    [
+                        root.join("hooks").join("event-selections.json"),
+                        root.join("hook-event-selections.json"),
+                    ]
+                })
+                .find_map(|path| std::fs::read_to_string(path).ok())
+        });
+    content
         .and_then(|content| serde_json::from_str::<StoredHookSelections>(&content).ok())
         .unwrap_or_else(|| StoredHookSelections(BTreeMap::new()))
 }
@@ -1951,7 +2007,14 @@ fn remove_nested_json_hooks(
     hook_manager::write_json_config(path, &settings)
 }
 
-const ANTIGRAVITY_AGENTBRO_HOOK: &str = "agentbro";
+const ANTIGRAVITY_HOOK_KEY: &str = "vibeboard";
+const LEGACY_ANTIGRAVITY_HOOK_KEY: &str = "agentbro";
+
+fn antigravity_hook_definition(settings: &Value) -> Option<&Value> {
+    settings
+        .get(ANTIGRAVITY_HOOK_KEY)
+        .or_else(|| settings.get(LEGACY_ANTIGRAVITY_HOOK_KEY))
+}
 
 fn update_antigravity_json_hooks(
     profile: &AgentIntegrationProfile,
@@ -1959,18 +2022,18 @@ fn update_antigravity_json_hooks(
     command: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut settings = read_json_config_for_update(path)?;
-    let root = settings
-        .as_object_mut()
-        .ok_or("Antigravity hooks configuration must be a JSON object")?;
-    if let Some(existing) = root.get(ANTIGRAVITY_AGENTBRO_HOOK) {
+    if let Some(existing) = antigravity_hook_definition(&settings) {
         if !json_hook_contains_profile(existing, profile) {
             return Err(format!(
                 "Antigravity hook name '{}' is already used by another integration",
-                ANTIGRAVITY_AGENTBRO_HOOK
+                ANTIGRAVITY_HOOK_KEY
             )
             .into());
         }
     }
+    let root = settings
+        .as_object_mut()
+        .ok_or("Antigravity hooks configuration must be a JSON object")?;
 
     let mut definition = serde_json::Map::new();
     for event in effective_events(profile) {
@@ -1991,10 +2054,8 @@ fn update_antigravity_json_hooks(
         };
         definition.insert(event.name.to_string(), handlers);
     }
-    root.insert(
-        ANTIGRAVITY_AGENTBRO_HOOK.to_string(),
-        Value::Object(definition),
-    );
+    root.remove(LEGACY_ANTIGRAVITY_HOOK_KEY);
+    root.insert(ANTIGRAVITY_HOOK_KEY.to_string(), Value::Object(definition));
     hook_manager::write_json_config(path, &settings)
 }
 
@@ -2009,11 +2070,15 @@ fn remove_antigravity_json_hooks(
     let root = settings
         .as_object_mut()
         .ok_or("Antigravity hooks configuration must be a JSON object")?;
-    if root
-        .get(ANTIGRAVITY_AGENTBRO_HOOK)
-        .is_some_and(|definition| json_hook_contains_profile(definition, profile))
-    {
-        root.remove(ANTIGRAVITY_AGENTBRO_HOOK);
+    let contains_profile = [ANTIGRAVITY_HOOK_KEY, LEGACY_ANTIGRAVITY_HOOK_KEY]
+        .iter()
+        .any(|key| {
+            root.get(*key)
+                .is_some_and(|definition| json_hook_contains_profile(definition, profile))
+        });
+    if contains_profile {
+        root.remove(ANTIGRAVITY_HOOK_KEY);
+        root.remove(LEGACY_ANTIGRAVITY_HOOK_KEY);
         hook_manager::write_json_config(path, &settings)?;
     }
     Ok(())
@@ -2035,7 +2100,7 @@ fn antigravity_json_hooks_contain_profile(profile: &AgentIntegrationProfile, pat
     std::fs::read_to_string(path)
         .ok()
         .and_then(|content| serde_json::from_str::<Value>(&content).ok())
-        .and_then(|settings| settings.get(ANTIGRAVITY_AGENTBRO_HOOK).cloned())
+        .and_then(|settings| antigravity_hook_definition(&settings).cloned())
         .is_some_and(|definition| json_hook_contains_profile(&definition, profile))
 }
 
@@ -2047,10 +2112,7 @@ fn antigravity_json_hooks_health(
         Ok(value) => value,
         Err(status) => return status,
     };
-    let Some(definition) = settings
-        .get(ANTIGRAVITY_AGENTBRO_HOOK)
-        .and_then(Value::as_object)
-    else {
+    let Some(definition) = antigravity_hook_definition(&settings).and_then(Value::as_object) else {
         return HookInstallHealth::NotInstalled;
     };
     if !json_hook_contains_profile(&Value::Object(definition.clone()), profile) {
@@ -2361,10 +2423,13 @@ where
 }
 
 fn is_agentbro_command(command: &str) -> bool {
-    command.contains("agentbro-bridge")
+    command.contains("vibe-board-bridge")
+        || command.contains("agentbro-bridge")
         || command.contains("agent-island-bridge")
+        || command.contains("/.vibeboard/")
         || command.contains("/.agentbro/")
         || command.contains("/.agent-island/")
+        || command.contains("VIBEBOARD_")
         || command.contains("AGENTBRO_")
         || command.contains(MARKER_PREFIX)
         || command.contains(LEGACY_MARKER_PREFIX)
@@ -2384,7 +2449,10 @@ fn update_cursor_settings(
     path: &Path,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut settings = hook_manager::read_json_config(path);
-    settings["agentBroHooks"] = serde_json::json!({
+    if let Some(object) = settings.as_object_mut() {
+        object.remove(LEGACY_CURSOR_HOOKS_KEY);
+    }
+    settings[CURSOR_HOOKS_KEY] = serde_json::json!({
         "command": managed_bridge_command(profile)?,
         "enabled": true,
     });
@@ -2397,14 +2465,17 @@ fn remove_cursor_settings(path: &Path) -> Result<(), Box<dyn std::error::Error>>
     }
     let mut settings = hook_manager::read_json_config(path);
     if let Some(object) = settings.as_object_mut() {
-        object.remove("agentBroHooks");
+        object.remove(CURSOR_HOOKS_KEY);
+        object.remove(LEGACY_CURSOR_HOOKS_KEY);
     }
     hook_manager::write_json_config(path, &settings)
 }
 
 fn cursor_settings_enabled(path: &Path) -> bool {
-    hook_manager::read_json_config(path)
-        .get("agentBroHooks")
+    let settings = hook_manager::read_json_config(path);
+    settings
+        .get(CURSOR_HOOKS_KEY)
+        .or_else(|| settings.get(LEGACY_CURSOR_HOOKS_KEY))
         .and_then(|hooks| hooks.get("enabled"))
         .and_then(Value::as_bool)
         .unwrap_or(false)
@@ -2428,8 +2499,8 @@ fn write_kiro_agent_file(
         })
         .collect::<serde_json::Map<String, Value>>();
     let content = serde_json::json!({
-        "_agentbro": marker(profile),
-        "name": "agentbro",
+        KIRO_MARKER_KEY: marker(profile),
+        "name": "vibe-board",
         "description": "Vibe Board status monitor hooks",
         "hooks": hooks,
     });
@@ -2652,7 +2723,14 @@ fn set_plugin_enabled(
             let Some(value) = entry.as_str() else {
                 return true;
             };
-            value != plugin_specifier && value != plugin_path_string
+            if value == plugin_specifier || value == plugin_path_string {
+                return false;
+            }
+            // Drop the retired Agent Island/AgentBro registration once.
+            !value.contains("plugins/agentbro.js")
+                && !value.contains("plugins\\agentbro.js")
+                && !value.contains("plugins/agent-island.js")
+                && !value.contains("plugins\\agent-island.js")
         })
         .collect();
 
@@ -2767,11 +2845,11 @@ fn strip_legacy_sentinel_block(content: &str) -> String {
     let mut inside = false;
     for line in content.lines() {
         match line.trim() {
-            "# [AGENTBRO-START]" => {
+            "# [VIBEBOARD-START]" | "# [AGENTBRO-START]" => {
                 inside = true;
                 continue;
             }
-            "# [AGENTBRO-END]" => {
+            "# [VIBEBOARD-END]" | "# [AGENTBRO-END]" => {
                 inside = false;
                 continue;
             }
@@ -2794,7 +2872,7 @@ fn hermes_plugin_files(
     let enabled_events_json = enabled_event_names_json(profile)?;
     let plugin_yaml = format!(
         r#"# {marker}
-name: agentbro
+name: vibe-board
 version: 1.0.0
 description: Forward Hermes Agent plugin hooks to Vibe Board
 provides_hooks:
@@ -3686,23 +3764,25 @@ name = "also keep"
         assert_eq!(first, second);
         assert!(settings.get("personal-linter").is_some());
         assert_eq!(
-            settings["agentbro"]["PreToolUse"][0]["matcher"],
+            settings["vibeboard"]["PreToolUse"][0]["matcher"],
             serde_json::json!("*")
         );
-        assert!(settings["agentbro"]["PreToolUse"][0]["hooks"][0]["command"]
-            .as_str()
-            .unwrap()
-            .contains("--event PreToolUse"));
         assert!(
-            settings["agentbro"]["PostToolUse"][0]["hooks"][0]["command"]
+            settings["vibeboard"]["PreToolUse"][0]["hooks"][0]["command"]
+                .as_str()
+                .unwrap()
+                .contains("--event PreToolUse")
+        );
+        assert!(
+            settings["vibeboard"]["PostToolUse"][0]["hooks"][0]["command"]
                 .as_str()
                 .unwrap()
                 .contains("--event PostToolUse")
         );
-        assert!(settings["agentbro"]["PreInvocation"][0]
+        assert!(settings["vibeboard"]["PreInvocation"][0]
             .get("hooks")
             .is_none());
-        assert!(settings["agentbro"]["Stop"][0]["command"]
+        assert!(settings["vibeboard"]["Stop"][0]["command"]
             .as_str()
             .unwrap()
             .contains("--event Stop"));
@@ -3710,8 +3790,49 @@ name = "also keep"
         remove_antigravity_json_hooks(&profile, &path).unwrap();
         let removed: Value =
             serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
-        assert!(removed.get("agentbro").is_none());
+        assert!(removed.get("vibeboard").is_none());
         assert!(removed.get("personal-linter").is_some());
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn antigravity_profile_migrates_the_legacy_named_hook() {
+        let path = std::env::temp_dir().join(format!(
+            "vibeboard-antigravity-legacy-key-{}-{}.json",
+            std::process::id(),
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::write(
+            &path,
+            serde_json::to_vec(&serde_json::json!({
+                "agentbro": {
+                    "Stop": [{
+                        "type": "command",
+                        "command": "/Users/me/.agentbro/bin/agentbro-bridge --source antigravity --event Stop"
+                    }]
+                }
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        let profile = antigravity_profile();
+
+        update_antigravity_json_hooks(
+            &profile,
+            &path,
+            "/Users/me/.vibeboard/bin/vibe-board-bridge --source antigravity",
+        )
+        .unwrap();
+        let settings: Value =
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+
+        assert!(settings.get("agentbro").is_none());
+        assert_eq!(
+            settings["vibeboard"]["Stop"][0]["command"],
+            serde_json::json!(
+                "/Users/me/.vibeboard/bin/vibe-board-bridge --source antigravity --event Stop"
+            )
+        );
         let _ = std::fs::remove_file(path);
     }
 
@@ -3725,10 +3846,10 @@ name = "also keep"
         std::fs::write(
             &path,
             serde_json::to_vec(&serde_json::json!({
-                "agentbro": {
+                "vibeboard": {
                     "Stop": [{
                         "type": "command",
-                        "command": "/usr/local/bin/not-agentbro"
+                        "command": "/usr/local/bin/not-vibeboard"
                     }]
                 }
             }))
@@ -4340,5 +4461,103 @@ name = "also keep"
                 adapter.name()
             );
         }
+    }
+
+    fn isolated_root(label: &str) -> PathBuf {
+        let path = std::env::temp_dir().join(format!(
+            "vibeboard-profiles-{label}-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("system time")
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&path).expect("isolated root");
+        path
+    }
+
+    fn write_managed_file(path: &Path) -> PathBuf {
+        std::fs::create_dir_all(path.parent().expect("file parent")).expect("file dir");
+        std::fs::write(path, "// vibeboard managed hook").expect("managed file");
+        path.to_path_buf()
+    }
+
+    #[test]
+    fn legacy_cleanup_paths_are_derived_from_the_install_directory() {
+        let root = isolated_root("scope-paths");
+        let installed = root.join("custom").join("vibe-board.json");
+
+        let paths = legacy_managed_paths(&kiro_profile(), &installed);
+
+        assert_eq!(paths, vec![root.join("custom").join("agentbro.json")]);
+        assert_ne!(
+            paths[0],
+            crate::data_dir::home_dir()
+                .join(".kiro")
+                .join("agents")
+                .join("agentbro.json"),
+            "the legacy path must come from the install root, not the user profile"
+        );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn custom_install_cleanup_keeps_default_root_hooks() {
+        let root = isolated_root("scope-remove");
+        let default_legacy = write_managed_file(
+            &root
+                .join("default")
+                .join(".kiro")
+                .join("agents")
+                .join("agentbro.json"),
+        );
+        let custom_legacy = write_managed_file(&root.join("custom").join("agentbro.json"));
+
+        remove_legacy_managed_paths(
+            &kiro_profile(),
+            &root.join("custom").join("vibe-board.json"),
+        );
+
+        assert!(
+            !custom_legacy.exists(),
+            "the custom root's own legacy file must be cleaned up"
+        );
+        assert!(
+            default_legacy.exists(),
+            "a custom install must not delete managed hooks in the default root"
+        );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn custom_hermes_install_cleanup_keeps_default_plugin_directory() {
+        let root = isolated_root("scope-hermes");
+        let default_legacy = root
+            .join("default")
+            .join(".hermes")
+            .join("plugins")
+            .join("agentbro");
+        std::fs::create_dir_all(&default_legacy).expect("default legacy dir");
+        std::fs::write(
+            default_legacy.join("plugin.yaml"),
+            "// vibeboard managed hook",
+        )
+        .expect("default plugin");
+        let custom_legacy = root.join("custom").join("agentbro");
+        std::fs::create_dir_all(&custom_legacy).expect("custom legacy dir");
+        std::fs::write(
+            custom_legacy.join("plugin.yaml"),
+            "// vibeboard managed hook",
+        )
+        .expect("custom plugin");
+
+        remove_legacy_managed_paths(&hermes_profile(), &root.join("custom").join("vibe-board"));
+
+        assert!(!custom_legacy.exists());
+        assert!(
+            default_legacy.exists(),
+            "the default plugin directory must survive a custom install"
+        );
+        let _ = std::fs::remove_dir_all(&root);
     }
 }

@@ -23,14 +23,27 @@ impl ControlTowerDatabase {
         let db_dir = Self::db_dir()?;
         std::fs::create_dir_all(&db_dir)?;
         let db_path = db_dir.join("tasks.db");
-        // Move the trace database out of the retired AgentBro root before
-        // opening it. WAL/SHM sidecars are moved with the database.
+        // Carry the trace database over from the retired Agent Island/AgentBro
+        // roots before opening it. The copy is published as one complete SQLite
+        // file (the legacy original is retained) and a failed copy is reported
+        // instead of opening a fresh database next to leftover files.
         if !db_path.exists() {
-            let legacy = crate::data_dir::legacy_agentbro_home()
-                .join("control_tower")
-                .join("tasks.db");
-            crate::data_dir::migrate_sqlite(&legacy, &db_path);
+            for legacy_root in crate::data_dir::legacy_homes() {
+                let legacy = legacy_root.join("control_tower").join("tasks.db");
+                if crate::data_dir::migrate_sqlite(&legacy, &db_path).map_err(|error| {
+                    anyhow::anyhow!(
+                        "migrate legacy task database {}: {}",
+                        legacy.display(),
+                        error
+                    )
+                })? {
+                    break;
+                }
+            }
         }
+        // A leftover journal without its database must not be replayed into a
+        // freshly created one.
+        crate::data_dir::ensure_no_orphan_sqlite_sidecars(&db_path)?;
         let conn = Connection::open(&db_path)?;
         Self::init_connection(&conn, true)?;
         Ok(Self {
@@ -125,7 +138,7 @@ impl ControlTowerDatabase {
     }
 
     fn db_dir() -> anyhow::Result<PathBuf> {
-        Ok(crate::data_dir::agent_island_home().join("control_tower"))
+        Ok(crate::data_dir::vibeboard_home().join("control_tower"))
     }
 
     fn get_events_for_run(conn: &Connection, run_id: &str) -> anyhow::Result<Vec<TaskEventRecord>> {
