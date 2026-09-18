@@ -33,6 +33,19 @@ Windows x64、未签名 NSIS 安装包，通过本仓库 GitHub Releases 手动�
    和符号链接权限，在 Windows 上失败。修完之后 CI 的 Windows job 才能从
    fmt/clippy/check 升级到跑完整测试（见 [RELEASING.md](RELEASING.md#6-ci)）。
 
+### 已验证（2026-09-18 真机）
+
+任务库迁移（含 WAL 数据）、界面偏好跨 identifier 承接、旧数据保留、启动无错误，
+均已在真机安装后核对文件系统与日志确认。**未验证的仍是"旧版已安装时的覆盖升级"**——
+本次是全新安装 + 旧数据的组合。
+
+### 待修：旧 Skill 设置未完整导入
+
+`skills::v2::resolve_sqlite_path` 只取旧 `settings.json` 的 `sqlitePath`，其余六项设置
+（centerPath / defaultDistributeMode / linkFailPolicy / startupScan / showUnmanaged /
+autoSyncSkillPacks）不会导入新库。改过这些值的老用户升级后会被静默重置为默认。
+优先级低：Windows 默认值与常见配置重合，影响面小。
+
 ## 中期
 
 4. **任务同步可靠性**。各 Agent 没有统一稳定的任务生命周期接口，Codex 执行中仍

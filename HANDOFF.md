@@ -4,6 +4,34 @@
 
 ## 最新进度（优先于下方历史记录）
 
+### 2026-09-18 装机验收：迁移路径在真机上验证通过
+
+维护者在本机安装 `Vibe Board_3.1.1_x64-setup.exe`（未签名 NSIS，13,047,410 字节）
+并使用，报告各项功能正常。随后对文件系统与启动日志做了事实核对，**不依赖主观"看起来正常"**：
+
+- **任务库迁移成功且 WAL 数据完整**：旧 `~/.agent-island/control_tower/tasks.db` 主库仅 4,096 字节、
+  真实数据在 61,832 字节的 `-wal` 里；迁移后 `~/.vibeboard/control_tower/tasks.db` 为 40,960 字节，
+  说明 `VACUUM INTO` 正确把已提交 WAL 折叠进了新库。这正是 6c 工作包要解决的问题，现已在真机确认。
+- **旧数据原样保留**：`~/.agent-island/control_tower/` 下主库与 sidecar 均未被移动或删除，可回退。
+- **界面偏好承接成功**：`%LOCALAPPDATA%\com.vibeboard.desktop\EBWebView` 已建立（14MB），
+  完成标记 `vibeboard-webview-storage.migrated` 已写入，启动日志中无
+  `Legacy UI storage was not carried over` 警告。旧 `com.agentisland.desktop` 目录（51MB）只读保留。
+- **启动日志干净**：`%LOCALAPPDATA%\com.vibeboard.desktop\logsibeboard.log` 共 2,142 字节，
+  无 ERROR/WARN，无迁移相关告警。
+- **Skill DB 未迁移属正常**：旧 `~/.agent-island/skill-manager/` 下只有 `settings.json`，
+  **本来就没有旧数据库**，因此新建库是正确行为；2.6MB 的 `-wal` 是首次扫描写入。
+- **安装形态**：本机此前并未安装旧版（`Program Files` 与 `%LOCALAPPDATA%\Programs` 均无），
+  因此这是全新安装而非覆盖升级。**"旧安装覆盖升级"这一条仍未验证**，本次验证的是
+  "旧数据 + 新安装" 场景。
+
+**本次发现的一个未处理小缺口（不影响本机）**：`skills::v2::resolve_sqlite_path` 只从旧
+`skill-manager/settings.json` 取 `sqlitePath`，且当该值指向 legacy 默认路径时会直接返回新默认值并
+提前返回，不再走下面的 `migrate_file`，所以旧 settings.json 中另外六项
+（`centerPath`/`defaultDistributeMode`/`linkFailPolicy`/`startupScan`/`showUnmanaged`/`autoSyncSkillPacks`）
+不会被导入新库。本机这六项恰好与 Windows 默认值完全一致（`default_mode()` 在 Windows 上即为
+`copy`，`center_path` 默认即 `~/.agents/skills`），因此无任何可见影响；但如果某个老用户改过
+`centerPath` 等值，升级后会被静默重置为默认。已记入 ROADMAP 待办。
+
 ### 2026-09-18 独立发布生命周期收尾：上游更新通道下线 / 残留远程胶水清理 / 用量口径校正
 
 承接上一轮中断的 `independence-release-lifecycle-8` 工作包（该包此前只写出了任务描述，从未执行）。前面 1–7b 各包的改动全部保留，未回退、未重做。
