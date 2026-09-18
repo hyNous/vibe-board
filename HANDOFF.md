@@ -20,6 +20,8 @@
 - **删除根目录旧名 QA 脚本**：`qa-agent-island-state-tests.py`、`test-agent-island-hook.py`、`test-agent-island-hook.sh`。三者均无任何引用，使用 `socket.AF_UNIX` 与 `/tmp/agentbro.sock`，在 Windows 交付平台上无法运行，且指向已被新 socket 取代的旧路径。已提交历史（`b80182d`）中可恢复。此前它们被标为"待用户确认"，本轮按"能删则删"处理。
 - **保留未动的兼容面**：`.agent-island`/`.agentbro` 数据根读取与迁移、`AGENTBRO_HOOK_*` 环境变量、旧 socket 回退、`agentisland:`/`agentbro:` 深链识别、`com.agentisland.desktop` WebView/login plist 承接、`disabledByAgentbro` IPC 字段、`App.tsx`/`agentStore` 的旧 localStorage key 回退、`LICENSE`/`NOTICE`/`TRADEMARKS.md`/`UPSTREAM.md` 上游归属。仓库 remote 地址（`hyNous/agent-island`、`hyNous/agentbro`）与 README 中的 clone/releases 链接是真实地址，未改名、未伪造新仓库。
 - **验证**：`npx tsc -b`、`npx eslint .`、`npx vitest run`（47 文件 **523 项全部通过**）、`npx vite build`、`node scripts/check-release-readiness.mjs`（ok，仅 updater pubkey 为空的既有警告）、`cargo fmt --check`、`cargo check --all-targets` 通过。`cargo test --lib` 为 **547 通过 / 32 失败 / 3 忽略**，与上一轮记录的基线数量完全一致，均为既有 Windows 路径/HOME/符号链接类失败，本轮无新增失败。注：本机未安装 `pnpm`，以上用 `npx` 调用同名脚本执行，命令等价。前端全量跑了三次：第一次与第三次 47 文件 523 项全过，第二次 `settingsIslandMenu > saves the island effect choice from the appearance page` 单项失败，单独重跑该文件 22/22 通过——判定为与既有 `skillManagerV2View` 超时同类的并发 flake，不是本轮引入的回归，但也没有去修它。
+- **深链不恢复（维护者 2026-09-18 决定）**：原始验收条件要求"深链使用 Vibe Board 命名"，但 `agentisland:`/`ccswitch:` scheme 已随 switch 子系统删除，应用现在不注册任何 URL scheme。维护者确认不恢复，已记入 ROADMAP.md，后续不要当作漏做项补回来。
+- **更新地址仍缺位（前置条件未满足）**：原始任务要求建立 Vibe Board 自己的更新地址。本轮只删除了指向上游 cask 的错误路径，没有建立新地址——需要先有 updater 签名密钥与至少一个已发布 Release，否则用户只会拿到"检查更新失败"。详见 RELEASING.md 第 4 节。
 - **未验证/未做**：未安装或启动应用做桌面级验收；`RELEASING.md` 第 4 节列出的签名、覆盖升级承接、macOS 设备级安装均仍未验证；`skillStoreV2.runtimeEnvironmentId` 的 40 处恒真守卫按上述理由保留；未提交、未推送、未安装，未改动真实用户配置与 hook；`releases/` 下安装包保持原样。
 
 ### 2026-09-17 身份迁移中断安全收尾：完整副本 + 单次原子发布

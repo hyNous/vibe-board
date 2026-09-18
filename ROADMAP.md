@@ -6,6 +6,11 @@
 已经明确**不在**范围内的（相关代码已经删除，不会回来）：远程 SSH 服务器管理、
 Agent Switch / CCSwitch、宠物生态、旧版 Skill 市场、网络抓包 Inspector。
 
+**深链（URL scheme）也不恢复。** 早期的 `agentisland:` / `ccswitch:` 深链只服务于
+Agent Switch，随该子系统一并删除，应用现在不注册任何 `xxx://` scheme。原始验收
+条件里写的是"深链使用 Vibe Board 命名"，维护者已在 2026-09-18 确认改为不恢复。
+看到这条差异时不要把深链插件加回来。
+
 更新时间：2026-09-18
 
 ---
