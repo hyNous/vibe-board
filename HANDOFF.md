@@ -4,6 +4,41 @@
 
 ## 最新进度（优先于下方历史记录）
 
+### 2026-09-18 节点：独立化完成，进入「逐项测试 + UI 改版」阶段
+
+**这是一个检查点。** 从 AgentBro 衍生独立的工作到此告一段落，下一阶段是维护者
+逐项测试现有功能并改版 UI。打了本地 tag `checkpoint/2026-09-18-independence-complete`
+（未推送）。此处记录节点状态，供下一阶段起步时对照。
+
+**代码状态**：工作树干净，`main` 无未提交改动。独立化工作共 8 个提交
+（`7f518d4`..`f09de63`），基线为 `76e7a59`。
+
+**已装机验收**：`Vibe Board_3.1.1_x64-setup.exe` 已安装使用，功能正常；任务库迁移
+（含 WAL 数据）与界面偏好承接已通过文件系统与日志核对确认。详见上一节。
+
+**仓库目录本轮变化**：
+- 新增 `assets/brand/`：应用图标与 logo 的原始高清源文件（此前散落在仓库外、无版本管理）。
+  改图标时改这里再导出到 `src-tauri/icons/`，不要反向操作。
+- 新增 `docs/product/`：2026-08 的原始 PRD 与开发路线。**是历史立项依据，不是当前规格**。
+- `releases/Vibe Board-latest-setup.exe` 已更新为本轮构建的 3.1.1（12.4 MB），
+  与 `src-tauri/target/release/bundle/nsis/` 下的产物逐字节一致。取安装包走 `releases/`，
+  不必进 `target` 深层目录。删除了与 latest 完全相同的重复测试包。
+- 仓库外层目录（`D:\Projects\code island`）的散落文件已由维护者确认清空，现仅剩 `control-tower`。
+
+**磁盘清理**：整个项目 52.4 GB → 约 4.1 GB。删除内容全部是 Git 忽略的构建缓存：
+`target/debug` 47 GB（开发模式缓存，当前走 release 构建）、`target/release` 中 620 MB
+改名前 `agent-island` 时期的死产物（43 个文件，不参与任何增量复用）、
+`target/agent-island-bridge-resource`。保留 `target/release`（3.78 GB）与 `node_modules`，
+以维持增量构建速度（有缓存约 2.5 分钟，无缓存需重编 663 个依赖）。
+
+**下一阶段需要知道的**：
+- 逐项测试时，改动量最大、最该重点验的是 Skill 安装页（`InstallView.tsx`）、
+  用量页（`UnifiedUsageSection.tsx`）、Agent 监控页（`AgentMonitorSection.tsx`）。
+- 改 UI 前先读 ROADMAP.md 的「不在范围内」清单，那些功能是有意删除的，不要因为
+  界面上看不到就以为是缺失。
+- 前端测试 47 文件 523 项；`cargo test --lib` 在 Windows 上有 32 项既有失败，
+  全部源于测试自身的 POSIX 假设，不是产品缺陷。
+
 ### 2026-09-18 装机验收：迁移路径在真机上验证通过
 
 维护者在本机安装 `Vibe Board_3.1.1_x64-setup.exe`（未签名 NSIS，13,047,410 字节）
