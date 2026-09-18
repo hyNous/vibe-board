@@ -74,12 +74,8 @@ describe('settings island menu', () => {
       displayMonitor: 'auto',
       followFocus: false,
       tipsEnabled: true,
-      sshHosts: [],
       analyticsEnabled: false,
       analyticsConsentPromptCompleted: true,
-      islandSurfaceMode: 'island',
-      islandPetScale: 72,
-      islandPetWindowOrigin: null,
     })
   })
 
@@ -90,7 +86,8 @@ describe('settings island menu', () => {
     ).map((item) => item.textContent?.trim())
 
     expect(visibleLabels).toEqual(['任务看板', '使用额度', 'Skill管理', 'Agent管理', '外观设置', '通用设置'])
-    expect(screen.getByText('远程服务器')).not.toBeVisible()
+    expect(screen.queryByText('远程服务器')).not.toBeInTheDocument()
+    expect(screen.queryByText('Agent Switch')).not.toBeInTheDocument()
     expect(screen.getByText('关于')).not.toBeVisible()
   })
 
@@ -153,37 +150,13 @@ describe('settings island menu', () => {
     expect(screen.queryByText('settings.sshDescription')).not.toBeInTheDocument()
   })
 
-  it('opens Remote Servers as an independent settings section', async () => {
-    render(<SettingsApp onClose={vi.fn()} />)
-
-    fireEvent.click(screen.getByText('远程服务器'))
-
-    await waitFor(() => expect(screen.getByText('settings.listeningPortDesc')).toBeInTheDocument())
-    expect(screen.getByText('One server directory for Vibe Board')).toBeInTheDocument()
-  })
-
   it('orders Skill and Agent management in the primary navigation', () => {
     const { container } = render(<SettingsApp onClose={vi.fn()} />)
-    const labels = Array.from(container.querySelectorAll('.settings-sidebar__item .settings-sidebar__label-text'))
+    const labels = Array.from(container.querySelectorAll('.settings-sidebar__item:not([hidden]) .settings-sidebar__label-text'))
       .map((item) => item.textContent?.trim())
 
     expect(labels.indexOf('Skill管理')).toBeLessThan(labels.indexOf('Agent管理'))
-    expect(labels.indexOf('Agent管理')).toBeLessThan(labels.indexOf('远程服务器'))
-  })
-
-  it('keeps the independent Remote Servers host fallback working outside Tauri', async () => {
-    render(<SettingsApp onClose={vi.fn()} />)
-
-    fireEvent.click(screen.getByText('远程服务器'))
-
-    fireEvent.change(await screen.findByPlaceholderText('settings.name'), { target: { value: 'Dev Box' } })
-    fireEvent.change(screen.getByPlaceholderText('user@host'), { target: { value: 'dev.example.com:2222' } })
-    fireEvent.click(screen.getByRole('button', { name: 'settings.add' }))
-
-    await waitFor(() => expect(screen.getByText('Dev Box')).toBeInTheDocument())
-    expect(useConfigStore.getState().sshHosts).toEqual([
-      expect.objectContaining({ name: 'Dev Box', host: 'dev.example.com:2222', enabled: true }),
-    ])
+    expect(labels.indexOf('Agent管理')).toBeLessThan(labels.indexOf('外观设置'))
   })
 
   it('places Hook diagnostics under Integration instead of Advanced', async () => {

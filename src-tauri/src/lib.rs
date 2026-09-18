@@ -8,13 +8,9 @@ pub mod energy;
 pub mod hook_endpoint;
 pub mod hooks;
 pub mod menu_bar;
-pub mod network_monitor;
-pub mod pets;
 pub mod platform;
-pub mod remote;
 pub mod skills;
 pub mod sound;
-pub mod switch;
 pub mod telemetry;
 pub mod terminal;
 pub mod theme;
@@ -37,7 +33,6 @@ use hooks::conversation_parser::{
 use hooks::file_watcher::ConversationWatcher;
 use hooks::server::HookServer;
 use hooks::session_store::{SessionPhase, SessionState, SessionStore};
-use network_monitor::NetworkMonitor;
 use platform::display::{find_target_monitor, list_displays_inner, DisplayInfo};
 use sound::{SoundEvent, SoundPack, SoundPackImportResult};
 use telemetry::TelemetryService;
@@ -69,28 +64,11 @@ struct NotchDragResult {
     position_mode: String,
 }
 
-#[derive(Debug, Clone, Copy)]
-struct PetDragState {
-    start_cursor_x: f64,
-    start_cursor_y: f64,
-    start_window_x: f64,
-    start_window_y: f64,
-    current_x: f64,
-    current_y: f64,
-    native_drag: bool,
-    start_anchor: PetStageAnchor,
-}
-
 static NOTCH_DRAG_STATE: OnceLock<Mutex<Option<NotchDragState>>> = OnceLock::new();
-static PET_DRAG_STATE: OnceLock<Mutex<Option<PetDragState>>> = OnceLock::new();
 static TRAY_ICON_RECT: OnceLock<Mutex<Option<tauri::Rect>>> = OnceLock::new();
 
 fn notch_drag_state() -> &'static Mutex<Option<NotchDragState>> {
     NOTCH_DRAG_STATE.get_or_init(|| Mutex::new(None))
-}
-
-fn pet_drag_state() -> &'static Mutex<Option<PetDragState>> {
-    PET_DRAG_STATE.get_or_init(|| Mutex::new(None))
 }
 
 fn tray_icon_rect() -> &'static Mutex<Option<tauri::Rect>> {
@@ -451,6 +429,8 @@ fn is_system_url(target: &str) -> bool {
     target.starts_with("http://")
         || target.starts_with("https://")
         || target.starts_with("mailto:")
+        || target.starts_with("vibeboard:")
+        || target.starts_with("agentisland:")
         || target.starts_with("agentbro:")
         || target.starts_with("ccswitch:")
 }
@@ -1104,319 +1084,9 @@ async fn uninstall_all_hooks(
     Ok(errors)
 }
 
-// ── Remote SSH Commands ─────────────────────────────────────────
-
-#[tauri::command]
-async fn list_remote_hosts(
-    state: tauri::State<'_, commands::AppState>,
-) -> Result<Vec<remote::RemoteHost>, String> {
-    Ok(state.remote_manager.hosts())
-}
-
-#[tauri::command]
-async fn add_remote_host(
-    state: tauri::State<'_, commands::AppState>,
-    host: remote::RemoteHost,
-) -> Result<(), String> {
-    state.remote_manager.add_host(host.clone());
-    let mut cfg = state.config_store.get();
-    cfg.remote_hosts.push(host);
-    state.config_store.update(cfg)
-}
-
-#[tauri::command]
-async fn remove_remote_host(
-    state: tauri::State<'_, commands::AppState>,
-    id: String,
-) -> Result<(), String> {
-    state.remote_manager.remove_host(&id);
-    let mut cfg = state.config_store.get();
-    cfg.remote_hosts.retain(|h| h.id != id);
-    state.config_store.update(cfg)
-}
-
-#[tauri::command]
-async fn connect_remote(
-    state: tauri::State<'_, commands::AppState>,
-    id: String,
-) -> Result<(), String> {
-    state.remote_manager.connect(&id);
-    Ok(())
-}
-
-#[tauri::command]
-async fn disconnect_remote(
-    state: tauri::State<'_, commands::AppState>,
-    id: String,
-) -> Result<(), String> {
-    state.remote_manager.disconnect(&id);
-    Ok(())
-}
-
-#[tauri::command]
-async fn install_remote_hooks(
-    state: tauri::State<'_, commands::AppState>,
-    id: String,
-) -> Result<String, String> {
-    let hosts = state.remote_manager.hosts();
-    let host = hosts
-        .iter()
-        .find(|h| h.id == id)
-        .ok_or_else(|| format!("Host {} not found", id))?
-        .clone();
-    let result = remote::installer::RemoteInstaller::install_hooks(&host).await;
-    if result.ok {
-        let config = state.config_store.get();
-        state
-            .telemetry
-            .record_hook_install(&config, "remote:all")
-            .await;
-        Ok(result.message)
-    } else {
-        Err(result.message)
-    }
-}
-
-#[tauri::command]
-async fn uninstall_remote_hooks(
-    state: tauri::State<'_, commands::AppState>,
-    id: String,
-) -> Result<String, String> {
-    let hosts = state.remote_manager.hosts();
-    let host = hosts
-        .iter()
-        .find(|h| h.id == id)
-        .ok_or_else(|| format!("Host {} not found", id))?
-        .clone();
-    let result = remote::installer::RemoteInstaller::uninstall_hooks(&host).await;
-    if result.ok {
-        let config = state.config_store.get();
-        state
-            .telemetry
-            .record_hook_uninstall(&config, "remote:all")
-            .await;
-        Ok(result.message)
-    } else {
-        Err(result.message)
-    }
-}
-
-#[tauri::command]
-async fn install_remote_agent_hooks(
-    state: tauri::State<'_, commands::AppState>,
-    id: String,
-    agent_id: String,
-) -> Result<String, String> {
-    let hosts = state.remote_manager.hosts();
-    let host = hosts
-        .iter()
-        .find(|h| h.id == id)
-        .ok_or_else(|| format!("Host {} not found", id))?
-        .clone();
-    let result =
-        remote::installer::RemoteInstaller::install_hooks_for_agent(&host, &agent_id).await;
-    if result.ok {
-        let config = state.config_store.get();
-        state
-            .telemetry
-            .record_hook_install(&config, &format!("remote:{agent_id}"))
-            .await;
-        Ok(result.message)
-    } else {
-        Err(result.message)
-    }
-}
-
-#[tauri::command]
-async fn uninstall_remote_agent_hooks(
-    state: tauri::State<'_, commands::AppState>,
-    id: String,
-    agent_id: String,
-) -> Result<String, String> {
-    let hosts = state.remote_manager.hosts();
-    let host = hosts
-        .iter()
-        .find(|h| h.id == id)
-        .ok_or_else(|| format!("Host {} not found", id))?
-        .clone();
-    let result =
-        remote::installer::RemoteInstaller::uninstall_hooks_for_agent(&host, &agent_id).await;
-    if result.ok {
-        let config = state.config_store.get();
-        state
-            .telemetry
-            .record_hook_uninstall(&config, &format!("remote:{agent_id}"))
-            .await;
-        Ok(result.message)
-    } else {
-        Err(result.message)
-    }
-}
-
-#[tauri::command]
-async fn check_remote_hooks(
-    state: tauri::State<'_, commands::AppState>,
-    id: String,
-) -> Result<Vec<String>, String> {
-    let hosts = state.remote_manager.hosts();
-    let host = hosts
-        .iter()
-        .find(|h| h.id == id)
-        .ok_or_else(|| format!("Host {} not found", id))?
-        .clone();
-    Ok(remote::installer::RemoteInstaller::check_installed_agents(&host).await)
-}
-
-#[tauri::command]
-async fn probe_remote_host(
-    state: tauri::State<'_, commands::AppState>,
-    id: String,
-) -> Result<remote::installer::RemoteProbeReport, String> {
-    let hosts = state.remote_manager.hosts();
-    let host = hosts
-        .iter()
-        .find(|h| h.id == id)
-        .ok_or_else(|| format!("Host {} not found", id))?
-        .clone();
-    Ok(remote::installer::RemoteInstaller::probe_host(&host).await)
-}
-
-#[tauri::command]
-async fn remote_skill_manager_invoke(
-    state: tauri::State<'_, commands::AppState>,
-    id: String,
-    command: String,
-    args: serde_json::Value,
-) -> Result<serde_json::Value, String> {
-    let host = state
-        .remote_manager
-        .hosts()
-        .into_iter()
-        .find(|host| host.id == id)
-        .ok_or_else(|| format!("Host {id} not found"))?;
-    if command == "open_skill_path"
-        || command == "reveal_skill_path"
-        || command == "open_system_path"
-    {
-        let target = remote::skill_manager::invoke(&host, &command, args).await?;
-        let path = target
-            .get("path")
-            .and_then(serde_json::Value::as_str)
-            .ok_or_else(|| "Remote path response is missing path".to_string())?;
-        let parent = target
-            .get("parentPath")
-            .and_then(serde_json::Value::as_str)
-            .ok_or_else(|| "Remote path response is missing parentPath".to_string())?;
-        let name = target
-            .get("name")
-            .and_then(serde_json::Value::as_str)
-            .unwrap_or_default();
-        let is_directory = target
-            .get("isDirectory")
-            .and_then(serde_json::Value::as_bool)
-            .unwrap_or(false);
-        let reveal = command == "reveal_skill_path";
-        let directory = if is_directory && !reveal {
-            path
-        } else {
-            parent
-        };
-        let target_name = (!is_directory || reveal).then_some(name);
-        remote::terminal::launch_at_path(&host, directory, target_name)?;
-        return Ok(serde_json::Value::Null);
-    }
-    if command == "get_skill_explanation_cmd" {
-        let skill_id = args
-            .get("skillId")
-            .and_then(serde_json::Value::as_str)
-            .ok_or_else(|| "Missing skillId".to_string())?;
-        let lang = args
-            .get("lang")
-            .and_then(serde_json::Value::as_str)
-            .ok_or_else(|| "Missing lang".to_string())?;
-        let cache_id = format!("remote:{}:{skill_id}", host.id);
-        let mut explanation = skills::explanation::get_cached(&cache_id, lang);
-        if let Some(ref mut value) = explanation {
-            value.skill_id = skill_id.to_string();
-        }
-        return serde_json::to_value(explanation).map_err(|error| error.to_string());
-    }
-    if command == "generate_skill_explanation_cmd" {
-        let skill_id = args
-            .get("skillId")
-            .and_then(serde_json::Value::as_str)
-            .ok_or_else(|| "Missing skillId".to_string())?;
-        let skill_path = args
-            .get("skillPath")
-            .and_then(serde_json::Value::as_str)
-            .ok_or_else(|| "Missing skillPath".to_string())?;
-        let lang = args
-            .get("lang")
-            .and_then(serde_json::Value::as_str)
-            .ok_or_else(|| "Missing lang".to_string())?;
-        let refresh = args
-            .get("refresh")
-            .and_then(serde_json::Value::as_bool)
-            .unwrap_or(false);
-        let file_path = if skill_path.ends_with(".md") {
-            skill_path.to_string()
-        } else {
-            format!("{}/SKILL.md", skill_path.trim_end_matches('/'))
-        };
-        let content = remote::skill_manager::invoke(
-            &host,
-            "read_skill_file_content",
-            serde_json::json!({ "filePath": file_path }),
-        )
-        .await?
-        .as_str()
-        .ok_or_else(|| "Remote SKILL.md was not text".to_string())?
-        .to_string();
-        let temp_path = std::env::temp_dir().join(format!(
-            "agentbro-remote-skill-explanation-{}.md",
-            uuid::Uuid::new_v4()
-        ));
-        std::fs::write(&temp_path, content)
-            .map_err(|error| format!("Write remote Skill explanation input: {error}"))?;
-        let cache_id = format!("remote:{}:{skill_id}", host.id);
-        let generated = skills::explanation::generate(
-            &cache_id,
-            &temp_path.display().to_string(),
-            lang,
-            refresh,
-        );
-        let _ = std::fs::remove_file(&temp_path);
-        let mut explanation = generated?;
-        explanation.skill_id = skill_id.to_string();
-        return serde_json::to_value(explanation).map_err(|error| error.to_string());
-    }
-    remote::skill_manager::invoke(&host, &command, args).await
-}
-
 #[tauri::command]
 fn probe_codex_app_server() -> agents::codex::CodexAppServerProbe {
     agents::codex::probe_app_server_readiness()
-}
-
-#[tauri::command]
-fn list_remote_installable_agents() -> Vec<String> {
-    remote::installer::REMOTE_INSTALLABLE_AGENTS
-        .iter()
-        .map(|s| s.to_string())
-        .collect()
-}
-
-#[tauri::command]
-async fn get_remote_status(
-    state: tauri::State<'_, commands::AppState>,
-    id: String,
-) -> Result<remote::ConnectionStatus, String> {
-    Ok(state.remote_manager.status(&id))
-}
-
-#[tauri::command]
-async fn list_ssh_config_hosts() -> Result<Vec<remote::SshConfigHost>, String> {
-    Ok(remote::ssh_config::read_ssh_config_hosts())
 }
 
 // ── Webhook Commands ────────────────────────────────────────────
@@ -1792,17 +1462,9 @@ struct LogicalRect {
     height: f64,
 }
 
-fn monitor_uses_primary_origin(monitor: &tauri::Monitor) -> bool {
-    let pos = monitor.position();
-    pos.x == 0 && pos.y == 0
-}
-
 /// Hit-tests the cursor against a list of logical (CSS px) rects expressed in
-/// the target webview's viewport coordinates. Returns true if the cursor is
+/// the notch webview's viewport coordinates. Returns true if the cursor is
 /// inside any rect; used to drive per-zone click-through.
-///
-/// `window_label` defaults to "notch" for backward compatibility; callers in
-/// the pet webview should pass "pet".
 #[tauri::command]
 async fn is_cursor_in_window_zones(
     app: tauri::AppHandle,
@@ -1822,14 +1484,6 @@ async fn is_cursor_in_window_zones(
         let scale = window.scale_factor().unwrap_or(1.0).max(1.0);
 
         let monitor = window.current_monitor().ok().flatten();
-        if label == "pet" {
-            if let Some(monitor) = monitor.as_ref() {
-                if !monitor_uses_primary_origin(monitor) {
-                    return Ok(true);
-                }
-            }
-        }
-
         let monitor_origin_logical = monitor
             .map(|m| {
                 let s = m.scale_factor().max(1.0);
@@ -1978,7 +1632,7 @@ fn show_notch_window(app: &tauri::AppHandle) {
         let _ = window.show();
         configure_notch_window_for_spaces(app);
         let _ = window.set_focus();
-        let _ = app.emit("tray-open-agentisland", ());
+        let _ = app.emit("tray-open-vibeboard", ());
     }
 }
 
@@ -2642,10 +2296,10 @@ fn attach_settings_close_handler(app: &tauri::AppHandle, window: &tauri::Webview
 }
 
 fn restore_island_surface_after_settings_close(app: &tauri::AppHandle) {
-    let config = app.state::<AppState>().config_store.get();
-    let is_pet_mode = config.island_surface_mode == "pet";
-    let saved_origin = config.island_pet_window_origin.clone();
-    sync_pet_window_visibility_inner(app, is_pet_mode, saved_origin.as_ref());
+    if let Some(notch_window) = app.get_webview_window("notch") {
+        let _ = notch_window.show();
+        apply_notch_window_for_spaces(&notch_window);
+    }
 }
 
 #[tauri::command]
@@ -2659,36 +2313,13 @@ async fn restart_app(app: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-#[tauri::command]
-async fn is_homebrew_install() -> Result<bool, String> {
-    Ok(is_homebrew_install_path())
-}
-
-fn is_homebrew_install_path() -> bool {
-    if PathBuf::from("/opt/homebrew/Caskroom/agentbro").exists()
-        || PathBuf::from("/usr/local/Caskroom/agentbro").exists()
-    {
-        return true;
-    }
-
-    std::env::current_exe()
-        .ok()
-        .map(|path| path.canonicalize().unwrap_or(path))
-        .map(|path| {
-            let path = path.to_string_lossy();
-            path.contains("/opt/homebrew/Caskroom/agentbro/")
-                || path.contains("/usr/local/Caskroom/agentbro/")
-        })
-        .unwrap_or(false)
-}
-
 // ── Sound Commands ───────────────────────────────────────────────
 
 fn custom_sounds_dir() -> PathBuf {
     let base = dirs::data_dir()
         .or_else(dirs::config_dir)
         .unwrap_or_else(std::env::temp_dir);
-    base.join("agent-island").join("sounds")
+    base.join("vibeboard").join("sounds")
 }
 
 fn schedule_initial_setup(app: &tauri::AppHandle) {
@@ -4191,85 +3822,6 @@ async fn get_registry_metadata() -> Result<skills::registry::Metadata, String> {
     Ok(skills::registry::load())
 }
 
-#[tauri::command]
-async fn list_marketplace_items_cmd() -> Result<Vec<skills::MarketplaceItem>, String> {
-    skills::marketplace::list_items()
-}
-
-#[tauri::command]
-async fn list_registries() -> Result<Vec<skills::marketplace::SkillRegistry>, String> {
-    Ok(skills::marketplace::list_registries())
-}
-
-#[tauri::command]
-async fn add_registry(
-    name: String,
-    source_type: String,
-    url: String,
-) -> Result<skills::marketplace::SkillRegistry, String> {
-    skills::marketplace::add_registry(name, source_type, url)
-}
-
-#[tauri::command]
-async fn remove_registry(registry_id: String) -> Result<(), String> {
-    skills::marketplace::remove_registry(&registry_id)
-}
-
-#[tauri::command]
-async fn sync_registry(
-    registry_id: String,
-) -> Result<Vec<skills::marketplace::MarketplaceSkill>, String> {
-    skills::marketplace::sync_registry(
-        &registry_id,
-        skills::marketplace::SyncRegistryOptions::default(),
-    )
-}
-
-#[tauri::command]
-async fn sync_registry_with_options(
-    registry_id: String,
-    options: Option<skills::marketplace::SyncRegistryOptions>,
-) -> Result<Vec<skills::marketplace::MarketplaceSkill>, String> {
-    skills::marketplace::sync_registry(&registry_id, options.unwrap_or_default())
-}
-
-#[tauri::command]
-async fn search_marketplace_skills(
-    registry_id: Option<String>,
-    query: Option<String>,
-    board: Option<String>,
-) -> Result<Vec<skills::marketplace::MarketplaceSkill>, String> {
-    skills::marketplace::search_marketplace_skills_async(registry_id, query, board).await
-}
-
-#[tauri::command]
-async fn fetch_marketplace_skill_detail(
-    source: String,
-    skill_id: String,
-) -> Result<skills::marketplace::MarketplaceSkillDetail, String> {
-    skills::marketplace::fetch_skills_sh_skill_detail(source, skill_id).await
-}
-
-#[tauri::command]
-async fn install_marketplace_skill(skill_id: String) -> Result<(), String> {
-    skills::marketplace::install_marketplace_skill(&skill_id)
-}
-
-#[tauri::command]
-async fn list_marketplace_sources_cmd() -> Result<Vec<skills::MarketplaceSource>, String> {
-    Ok(skills::registry::list_marketplace_sources())
-}
-
-#[tauri::command]
-async fn upsert_marketplace_source_cmd(source: skills::MarketplaceSource) -> Result<(), String> {
-    skills::registry::upsert_marketplace_source(source)
-}
-
-#[tauri::command]
-async fn remove_marketplace_source_cmd(id: String) -> Result<(), String> {
-    skills::registry::remove_marketplace_source(&id)
-}
-
 // ── Display reconfiguration handler ──────────────────────────────
 #[cfg(target_os = "macos")]
 #[link(name = "CoreGraphics", kind = "framework")]
@@ -4302,9 +3854,6 @@ unsafe extern "C" fn display_reconfig_callback(
             let h = handle.clone();
             let _ = handle.run_on_main_thread(move || {
                 let _ = reposition_notch_to_display(&h, None, None);
-                if let Some(window) = h.get_webview_window("pet") {
-                    apply_pet_window_for_spaces(&window);
-                }
             });
         });
     }
@@ -4381,63 +3930,11 @@ fn apply_notch_window_for_spaces(window: &tauri::WebviewWindow) {
 #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
 fn apply_notch_window_for_spaces(_window: &tauri::WebviewWindow) {}
 
-#[cfg(target_os = "macos")]
-fn apply_pet_window_for_spaces(window: &tauri::WebviewWindow) {
-    use objc2_app_kit::{NSScreenSaverWindowLevel, NSWindow, NSWindowCollectionBehavior};
-
-    let _ = window.set_always_on_top(true);
-    let _ = window.set_visible_on_all_workspaces(true);
-    if let Ok(ptr) = window.ns_window() {
-        unsafe {
-            let ns_window = ptr as *const NSWindow;
-            let mut behavior = (*ns_window).collectionBehavior();
-
-            behavior &= !(NSWindowCollectionBehavior::Primary
-                | NSWindowCollectionBehavior::Auxiliary
-                | NSWindowCollectionBehavior::Managed
-                | NSWindowCollectionBehavior::Transient
-                | NSWindowCollectionBehavior::FullScreenPrimary
-                | NSWindowCollectionBehavior::FullScreenNone
-                | NSWindowCollectionBehavior::FullScreenAllowsTiling
-                | NSWindowCollectionBehavior::FullScreenDisallowsTiling
-                | NSWindowCollectionBehavior::MoveToActiveSpace
-                | NSWindowCollectionBehavior::ParticipatesInCycle
-                | NSWindowCollectionBehavior::Stationary);
-            behavior |= NSWindowCollectionBehavior::CanJoinAllSpaces
-                | NSWindowCollectionBehavior::CanJoinAllApplications
-                | NSWindowCollectionBehavior::FullScreenAuxiliary
-                | NSWindowCollectionBehavior::Stationary
-                | NSWindowCollectionBehavior::IgnoresCycle;
-            (*ns_window).setCollectionBehavior(behavior);
-            (*ns_window).setCanHide(false);
-            (*ns_window).setLevel(NSScreenSaverWindowLevel + 1);
-            (*ns_window).orderFrontRegardless();
-        }
-    }
-}
-
-#[cfg(target_os = "windows")]
-fn apply_pet_window_for_spaces(window: &tauri::WebviewWindow) {
-    let _ = window.set_always_on_top(true);
-}
-
-#[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
-fn apply_pet_window_for_spaces(_window: &tauri::WebviewWindow) {}
-
 fn configure_notch_window_for_spaces(app: &tauri::AppHandle) {
     let handle = app.clone();
     let _ = app.run_on_main_thread(move || {
         if let Some(window) = handle.get_webview_window("notch") {
             apply_notch_window_for_spaces(&window);
-        }
-    });
-}
-
-fn configure_pet_window_for_spaces(app: &tauri::AppHandle) {
-    let handle = app.clone();
-    let _ = app.run_on_main_thread(move || {
-        if let Some(window) = handle.get_webview_window("pet") {
-            apply_pet_window_for_spaces(&window);
         }
     });
 }
@@ -4497,8 +3994,6 @@ fn reposition_notch_to_display(
         .or_else(|| window.primary_monitor().ok().flatten());
 
     if let Some(monitor) = monitor {
-        // The pet now lives in its own dedicated window (label: "pet"); the
-        // notch window is positioned on the selected top/left/right edge.
         let current_scale = window
             .current_monitor()
             .ok()
@@ -4732,263 +4227,11 @@ fn set_notch_window_frame(
         .map_err(|error| error.to_string())
 }
 
-const PET_DEFAULT_TRAILING_INSET: f64 = 24.0;
-const PET_DEFAULT_BOTTOM_INSET: f64 = 36.0;
-const PET_SLOT_SIZE_LOGICAL: f64 = 160.0;
-const PET_ANCHOR_RIGHT_LOGICAL: f64 = 132.0;
-const PET_ANCHOR_BOTTOM_LOGICAL: f64 = 44.0;
-
-#[derive(Debug, Clone, Copy)]
-struct PetStageAnchor {
-    left: bool,
-    top: bool,
-}
-
-fn pet_stage_anchor_from_config(anchor: &config::PetWindowAnchor) -> PetStageAnchor {
-    PetStageAnchor {
-        left: anchor.left,
-        top: anchor.top,
-    }
-}
-
-fn pet_stage_anchor_to_config(anchor: PetStageAnchor) -> config::PetWindowAnchor {
-    config::PetWindowAnchor {
-        left: anchor.left,
-        top: anchor.top,
-    }
-}
-
-/// Show / position / hide the pet companion window based on the active
-/// island surface mode. The pet is its own Tauri window so dragging it
-/// doesn't drag the island shell along with it.
-pub fn sync_pet_window_visibility(app: &tauri::AppHandle, config: &config::AppConfig) {
-    let handle = app.clone();
-    let is_pet_mode = config.island_surface_mode == "pet";
-    let saved_origin = config.island_pet_window_origin.clone();
-
-    let _ = app.run_on_main_thread(move || {
-        sync_pet_window_visibility_inner(&handle, is_pet_mode, saved_origin.as_ref());
-    });
-}
-
-/// Inner logic for pet/island window switching. **Must be called on the main thread.**
-pub fn sync_pet_window_visibility_inner(
-    handle: &tauri::AppHandle,
-    is_pet_mode: bool,
-    saved_origin: Option<&config::WindowOrigin>,
-) {
-    if !is_pet_mode {
-        // Leaving pet mode: destroy the webview entirely instead of hiding it.
-        // The descriptor lives in `build_pet_window`, so the next switch back
-        // to pet mode recreates it. This drops ~74 MB resident plus the
-        // associated WebKit XPC processes when the user is back on the notch.
-        if let Some(pet_window) = handle.get_webview_window("pet") {
-            let _ = pet_window.destroy();
-        }
-        if let Some(notch_window) = handle.get_webview_window("notch") {
-            let _ = notch_window.show();
-            apply_notch_window_for_spaces(&notch_window);
-        }
-        return;
-    }
-
-    let pet_window = match handle.get_webview_window("pet") {
-        Some(existing) => existing,
-        None => match build_pet_window(handle) {
-            Ok(w) => w,
-            Err(e) => {
-                log::warn!("Failed to create pet window: {e}");
-                return;
-            }
-        },
-    };
-
-    if let Some(notch_window) = handle.get_webview_window("notch") {
-        let _ = notch_window.hide();
-    }
-
-    let monitor = pet_window
-        .current_monitor()
-        .ok()
-        .flatten()
-        .or_else(|| pet_window.primary_monitor().ok().flatten());
-    if let Some(monitor) = monitor {
-        if let Ok(size) = pet_window.outer_size() {
-            position_pet_window(
-                &pet_window,
-                &monitor,
-                size.width as f64,
-                size.height as f64,
-                saved_origin,
-            );
-        }
-    }
-    apply_pet_window_for_spaces(&pet_window);
-    let _ = pet_window.show();
-    apply_pet_window_for_spaces(&pet_window);
-}
-
-/// Build the pet webview on demand. Mirrors the descriptor that used to live
-/// in `tauri.conf.json::app.windows[pet]`. We rebuild it every time the user
-/// switches into pet mode rather than parking the process idle on the notch.
-fn build_pet_window(app: &tauri::AppHandle) -> Result<tauri::WebviewWindow, String> {
-    tauri::WebviewWindowBuilder::new(app, "pet", tauri::WebviewUrl::App("index.html".into()))
-        .title("Vibe Board Pet")
-        .inner_size(820.0, 360.0)
-        .transparent(true)
-        .decorations(false)
-        .shadow(false)
-        .always_on_top(true)
-        .skip_taskbar(true)
-        .resizable(false)
-        .focused(false)
-        .accept_first_mouse(true)
-        .background_color(tauri::webview::Color(0, 0, 0, 0))
-        .visible(false)
-        .build()
-        .map_err(|e| format!("pet window: {e}"))
-}
-
-fn position_pet_window(
-    window: &tauri::WebviewWindow,
-    monitor: &tauri::Monitor,
-    width: f64,
-    height: f64,
-    saved_origin: Option<&config::WindowOrigin>,
-) {
-    if let Some(origin) = saved_origin {
-        if origin.x.is_finite()
-            && origin.y.is_finite()
-            && pet_origin_is_visible_on_any_monitor(window, width, height, origin.x, origin.y)
-        {
-            let _ = window.set_position(tauri::Position::Physical(tauri::PhysicalPosition::new(
-                origin.x.round() as i32,
-                origin.y.round() as i32,
-            )));
-            apply_pet_window_for_spaces(window);
-            return;
-        }
-    }
-
-    // Pet now lives in its own window; the whole window IS the pet area, so
-    // we just place it near the bottom-right of the monitor.
-    let pos = monitor.position();
-    let size = monitor.size();
-    let scale = monitor.scale_factor();
-    let trailing_inset = PET_DEFAULT_TRAILING_INSET * scale;
-    let bottom_inset = PET_DEFAULT_BOTTOM_INSET * scale;
-    let margin = 8.0 * scale;
-    let monitor_x = pos.x as f64;
-    let monitor_y = pos.y as f64;
-    let monitor_width = size.width as f64;
-    let monitor_height = size.height as f64;
-    let desired_x = monitor_x + monitor_width - trailing_inset - width;
-    let desired_y = monitor_y + monitor_height - bottom_inset - height;
-    let min_x = monitor_x + margin;
-    let max_x = monitor_x + monitor_width - margin - width;
-    let min_y = monitor_y + margin;
-    let max_y = monitor_y + monitor_height - margin - height;
-    let x = desired_x.clamp(min_x, max_x.max(min_x)).round();
-    let y = desired_y.clamp(min_y, max_y.max(min_y)).round();
-    let _ = window.set_position(tauri::Position::Physical(tauri::PhysicalPosition::new(
-        x as i32, y as i32,
-    )));
-    apply_pet_window_for_spaces(window);
-}
-
-fn pet_origin_is_visible_on_any_monitor(
-    window: &tauri::WebviewWindow,
-    window_width: f64,
-    window_height: f64,
-    x: f64,
-    y: f64,
-) -> bool {
-    let Ok(monitors) = window.available_monitors() else {
-        return false;
-    };
-    monitors.into_iter().any(|monitor| {
-        let pos = monitor.position();
-        let size = monitor.size();
-        pet_window_rect_has_visible_area(
-            Rect {
-                x: pos.x as f64,
-                y: pos.y as f64,
-                width: size.width as f64,
-                height: size.height as f64,
-            },
-            Rect {
-                x,
-                y,
-                width: window_width,
-                height: window_height,
-            },
-        )
-    })
-}
-
-#[derive(Clone, Copy)]
-struct Rect {
-    x: f64,
-    y: f64,
-    width: f64,
-    height: f64,
-}
-
-fn pet_window_rect_has_visible_area(monitor: Rect, window: Rect) -> bool {
-    if monitor.width <= 0.0 || monitor.height <= 0.0 || window.width <= 0.0 || window.height <= 0.0
-    {
-        return false;
-    }
-
-    let visible_width =
-        (window.x + window.width).min(monitor.x + monitor.width) - window.x.max(monitor.x);
-    let visible_height =
-        (window.y + window.height).min(monitor.y + monitor.height) - window.y.max(monitor.y);
-    let required_width = window.width.min(64.0);
-    let required_height = window.height.min(64.0);
-
-    visible_width >= required_width && visible_height >= required_height
-}
-
-fn clamp_point_into_rect(rect: Rect, x: f64, y: f64, margin: f64) -> (f64, f64) {
-    let min_x = rect.x + margin;
-    let max_x = rect.x + rect.width - margin;
-    let min_y = rect.y + margin;
-    let max_y = rect.y + rect.height - margin;
-    (
-        x.clamp(min_x, max_x.max(min_x)),
-        y.clamp(min_y, max_y.max(min_y)),
-    )
-}
-
-fn distance_point_to_rect(rect: Rect, x: f64, y: f64) -> f64 {
-    let right = rect.x + rect.width;
-    let bottom = rect.y + rect.height;
-    let dx = if x < rect.x {
-        rect.x - x
-    } else if x > right {
-        x - right
-    } else {
-        0.0
-    };
-    let dy = if y < rect.y {
-        rect.y - y
-    } else if y > bottom {
-        y - bottom
-    } else {
-        0.0
-    };
-    dx.hypot(dy)
-}
-
 #[cfg(test)]
-mod pet_window_tests {
+mod notch_window_tests {
     #[cfg(target_os = "windows")]
     use super::notch_frame_to_physical;
-    use super::{
-        clamp_point_into_rect, distance_point_to_rect, notch_cursor_scale,
-        notch_drag_window_bounds, notch_drop_position_mode, pet_window_rect_has_visible_area, Rect,
-    };
+    use super::{notch_cursor_scale, notch_drag_window_bounds, notch_drop_position_mode};
 
     #[cfg(target_os = "windows")]
     #[test]
@@ -5099,243 +4342,6 @@ mod pet_window_tests {
         #[cfg(not(target_os = "windows"))]
         assert_eq!(notch_cursor_scale(1.5), 1.0);
     }
-
-    #[test]
-    fn saved_pet_window_origin_must_leave_visible_area_on_screen() {
-        assert!(!pet_window_rect_has_visible_area(
-            Rect {
-                x: 0.0,
-                y: 0.0,
-                width: 1728.0,
-                height: 1117.0,
-            },
-            Rect {
-                x: 2185.0,
-                y: -1098.0,
-                width: 820.0,
-                height: 360.0,
-            },
-        ));
-    }
-
-    #[test]
-    fn saved_pet_window_origin_can_live_on_monitor_above_primary() {
-        assert!(pet_window_rect_has_visible_area(
-            Rect {
-                x: 0.0,
-                y: -1117.0,
-                width: 1728.0,
-                height: 1117.0,
-            },
-            Rect {
-                x: 864.0,
-                y: -1098.0,
-                width: 820.0,
-                height: 360.0,
-            },
-        ));
-    }
-
-    #[test]
-    fn clamp_pulls_offscreen_point_back_inside_rect() {
-        let monitor = Rect {
-            x: 0.0,
-            y: 0.0,
-            width: 1728.0,
-            height: 1117.0,
-        };
-        let (cx, cy) = clamp_point_into_rect(monitor, -500.0, 9999.0, 24.0);
-        assert_eq!(cx, 24.0);
-        assert_eq!(cy, 1117.0 - 24.0);
-    }
-
-    #[test]
-    fn clamp_leaves_onscreen_point_unchanged() {
-        let monitor = Rect {
-            x: 0.0,
-            y: 0.0,
-            width: 1728.0,
-            height: 1117.0,
-        };
-        let (cx, cy) = clamp_point_into_rect(monitor, 500.0, 500.0, 24.0);
-        assert_eq!(cx, 500.0);
-        assert_eq!(cy, 500.0);
-    }
-
-    #[test]
-    fn nearest_rect_is_the_one_closer_to_an_offscreen_point() {
-        let primary = Rect {
-            x: 0.0,
-            y: 0.0,
-            width: 1728.0,
-            height: 1117.0,
-        };
-        let above = Rect {
-            x: 0.0,
-            y: -1117.0,
-            width: 1728.0,
-            height: 1117.0,
-        };
-        // A point far above the primary screen sits closer to the upper monitor.
-        assert!(
-            distance_point_to_rect(above, 864.0, -1500.0)
-                < distance_point_to_rect(primary, 864.0, -1500.0)
-        );
-    }
-}
-
-fn current_pet_scale_percent(app: &tauri::AppHandle) -> f64 {
-    app.state::<AppState>()
-        .config_store
-        .get()
-        .island_pet_scale
-        .clamp(10, 120) as f64
-}
-
-fn pet_rect_in_window(
-    window_width: f64,
-    window_height: f64,
-    window_scale: f64,
-    pet_scale_percent: f64,
-    anchor: PetStageAnchor,
-) -> (f64, f64, f64) {
-    let scale = window_scale.max(1.0);
-    let display_scale = (pet_scale_percent / 100.0).clamp(0.1, 1.2);
-    let pet_size = PET_SLOT_SIZE_LOGICAL * display_scale * scale;
-    let pet_left = if anchor.left {
-        PET_ANCHOR_RIGHT_LOGICAL * scale
-    } else {
-        window_width - PET_ANCHOR_RIGHT_LOGICAL * scale - pet_size
-    };
-    let pet_top = if anchor.top {
-        PET_ANCHOR_BOTTOM_LOGICAL * scale
-    } else {
-        window_height - PET_ANCHOR_BOTTOM_LOGICAL * scale - pet_size
-    };
-    (pet_left, pet_top, pet_size)
-}
-
-fn pet_stage_anchor_for_origin(
-    monitor: &tauri::Monitor,
-    window_width: f64,
-    window_height: f64,
-    window_scale: f64,
-    pet_scale_percent: f64,
-    x: f64,
-    y: f64,
-) -> PetStageAnchor {
-    let default_anchor = PetStageAnchor {
-        left: false,
-        top: false,
-    };
-    let (pet_left, pet_top, pet_size) = pet_rect_in_window(
-        window_width,
-        window_height,
-        window_scale,
-        pet_scale_percent,
-        default_anchor,
-    );
-    let pet_center_x = x + pet_left + pet_size / 2.0;
-    let pet_center_y = y + pet_top + pet_size / 2.0;
-    let pos = monitor.position();
-    let size = monitor.size();
-    PetStageAnchor {
-        left: pet_center_x < pos.x as f64 + size.width as f64 / 2.0,
-        top: pet_center_y < pos.y as f64 + size.height as f64 / 2.0,
-    }
-}
-
-fn pet_stage_anchor_for_center(
-    monitor: &tauri::Monitor,
-    center_x: f64,
-    center_y: f64,
-) -> PetStageAnchor {
-    let pos = monitor.position();
-    let size = monitor.size();
-    PetStageAnchor {
-        left: center_x < pos.x as f64 + size.width as f64 / 2.0,
-        top: center_y < pos.y as f64 + size.height as f64 / 2.0,
-    }
-}
-
-fn monitor_containing_point(app: &tauri::AppHandle, x: f64, y: f64) -> Option<tauri::Monitor> {
-    app.available_monitors().ok()?.into_iter().find(|monitor| {
-        let pos = monitor.position();
-        let size = monitor.size();
-        let left = pos.x as f64;
-        let top = pos.y as f64;
-        let right = left + size.width as f64;
-        let bottom = top + size.height as f64;
-        x >= left && x < right && y >= top && y < bottom
-    })
-}
-
-fn monitor_rect(monitor: &tauri::Monitor) -> Rect {
-    let pos = monitor.position();
-    let size = monitor.size();
-    Rect {
-        x: pos.x as f64,
-        y: pos.y as f64,
-        width: size.width as f64,
-        height: size.height as f64,
-    }
-}
-
-fn clamp_point_into_monitor(monitor: &tauri::Monitor, x: f64, y: f64) -> (f64, f64) {
-    let scale = monitor.scale_factor().max(1.0);
-    clamp_point_into_rect(monitor_rect(monitor), x, y, 24.0 * scale)
-}
-
-fn nearest_monitor_for_point(app: &tauri::AppHandle, x: f64, y: f64) -> Option<tauri::Monitor> {
-    app.available_monitors().ok()?.into_iter().min_by(|a, b| {
-        let da = distance_point_to_rect(monitor_rect(a), x, y);
-        let db = distance_point_to_rect(monitor_rect(b), x, y);
-        da.partial_cmp(&db).unwrap_or(std::cmp::Ordering::Equal)
-    })
-}
-
-fn monitor_for_pet_origin(
-    app: &tauri::AppHandle,
-    window_width: f64,
-    window_height: f64,
-    window_scale: f64,
-    pet_scale_percent: f64,
-    x: f64,
-    y: f64,
-) -> Option<tauri::Monitor> {
-    let monitors = app.available_monitors().ok()?;
-    for monitor in &monitors {
-        let anchor = pet_stage_anchor_for_origin(
-            monitor,
-            window_width,
-            window_height,
-            window_scale,
-            pet_scale_percent,
-            x,
-            y,
-        );
-        let (pet_left, pet_top, pet_size) = pet_rect_in_window(
-            window_width,
-            window_height,
-            window_scale,
-            pet_scale_percent,
-            anchor,
-        );
-        let center_x = x + pet_left + pet_size / 2.0;
-        let center_y = y + pet_top + pet_size / 2.0;
-        let pos = monitor.position();
-        let size = monitor.size();
-        let left = pos.x as f64;
-        let top = pos.y as f64;
-        if center_x >= left
-            && center_x < left + size.width as f64
-            && center_y >= top
-            && center_y < top + size.height as f64
-        {
-            return Some(monitor.clone());
-        }
-    }
-    None
 }
 
 fn notch_drag_bounds(
@@ -5714,241 +4720,6 @@ async fn end_notch_drag(app: tauri::AppHandle) -> Result<Option<NotchDragResult>
     Ok(final_position)
 }
 
-#[tauri::command]
-async fn start_pet_drag(
-    app: tauri::AppHandle,
-    anchor_left: Option<bool>,
-    anchor_top: Option<bool>,
-) -> Result<bool, String> {
-    let Some(window) = app.get_webview_window("pet") else {
-        return Ok(false);
-    };
-    let (cursor_x, cursor_y) = app_cursor_position(&app)?;
-    let position = window.outer_position().map_err(|e| e.to_string())?;
-    let size = window.outer_size().map_err(|e| e.to_string())?;
-    let window_scale = window.scale_factor().unwrap_or(1.0);
-    let pet_scale = current_pet_scale_percent(&app);
-    let start_anchor = match (anchor_left, anchor_top) {
-        (Some(left), Some(top)) => PetStageAnchor { left, top },
-        _ => app
-            .try_state::<AppState>()
-            .and_then(|state| state.config_store.get().island_pet_window_anchor)
-            .map(|anchor| pet_stage_anchor_from_config(&anchor))
-            .or_else(|| {
-                monitor_for_pet_origin(
-                    &app,
-                    size.width as f64,
-                    size.height as f64,
-                    window_scale,
-                    pet_scale,
-                    position.x as f64,
-                    position.y as f64,
-                )
-                .map(|m| {
-                    pet_stage_anchor_for_origin(
-                        &m,
-                        size.width as f64,
-                        size.height as f64,
-                        window_scale,
-                        pet_scale,
-                        position.x as f64,
-                        position.y as f64,
-                    )
-                })
-            })
-            .unwrap_or(PetStageAnchor {
-                left: false,
-                top: false,
-            }),
-    };
-    {
-        let mut drag = pet_drag_state()
-            .lock()
-            .map_err(|e| format!("Pet drag lock error: {}", e))?;
-        *drag = Some(PetDragState {
-            start_cursor_x: cursor_x,
-            start_cursor_y: cursor_y,
-            start_window_x: position.x as f64,
-            start_window_y: position.y as f64,
-            current_x: position.x as f64,
-            current_y: position.y as f64,
-            native_drag: false,
-            start_anchor,
-        });
-    }
-
-    if window.start_dragging().is_ok() {
-        if let Ok(mut drag) = pet_drag_state().lock() {
-            if let Some(state) = drag.as_mut() {
-                state.native_drag = true;
-            }
-        }
-        return Ok(true);
-    }
-
-    let app_handle = app.clone();
-    tauri::async_runtime::spawn(async move {
-        let started_at = std::time::Instant::now();
-        loop {
-            tokio::time::sleep(std::time::Duration::from_millis(16)).await;
-            if started_at.elapsed() > std::time::Duration::from_secs(30) {
-                if let Ok(mut drag) = pet_drag_state().lock() {
-                    *drag = None;
-                }
-                break;
-            }
-            let keep_dragging =
-                drain_pool(|| update_pet_drag_position(&app_handle)).unwrap_or(false);
-            if !keep_dragging {
-                break;
-            }
-        }
-    });
-
-    Ok(true)
-}
-
-fn update_pet_drag_position(app: &tauri::AppHandle) -> Result<bool, String> {
-    let Some(window) = app.get_webview_window("pet") else {
-        return Ok(false);
-    };
-    let (cursor_x, cursor_y) = app_cursor_position(app)?;
-    let next_origin = {
-        let drag = pet_drag_state()
-            .lock()
-            .map_err(|e| format!("Pet drag lock error: {}", e))?;
-        let Some(state) = drag.as_ref() else {
-            return Ok(false);
-        };
-        config::WindowOrigin {
-            x: (state.start_window_x + cursor_x - state.start_cursor_x).round(),
-            y: (state.start_window_y + cursor_y - state.start_cursor_y).round(),
-        }
-    };
-
-    {
-        let mut drag = pet_drag_state()
-            .lock()
-            .map_err(|e| format!("Pet drag lock error: {}", e))?;
-        let Some(state) = drag.as_mut() else {
-            return Ok(false);
-        };
-        if (next_origin.x - state.current_x).abs() < 1.0
-            && (next_origin.y - state.current_y).abs() < 1.0
-        {
-            return Ok(true);
-        }
-        state.current_x = next_origin.x;
-        state.current_y = next_origin.y;
-    }
-
-    let _ = window.set_position(tauri::Position::Physical(tauri::PhysicalPosition::new(
-        next_origin.x as i32,
-        next_origin.y as i32,
-    )));
-    Ok(true)
-}
-
-#[derive(Debug, Clone, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-struct PetDragResult {
-    origin: crate::config::WindowOrigin,
-    anchor_left: bool,
-    anchor_top: bool,
-}
-
-#[tauri::command]
-async fn end_pet_drag(app: tauri::AppHandle) -> Result<Option<PetDragResult>, String> {
-    let drag_snapshot = {
-        let mut drag = pet_drag_state()
-            .lock()
-            .map_err(|e| format!("Pet drag lock error: {}", e))?;
-        drag.take()
-    };
-    let Some(snap) = drag_snapshot else {
-        return Ok(None);
-    };
-    let mut origin = crate::config::WindowOrigin {
-        x: snap.current_x.round(),
-        y: snap.current_y.round(),
-    };
-    let mut result_anchor = snap.start_anchor;
-
-    if let Some(window) = app.get_webview_window("pet") {
-        if snap.native_drag {
-            if let Ok(position) = window.outer_position() {
-                origin.x = position.x as f64;
-                origin.y = position.y as f64;
-            }
-        }
-        if let Ok(size) = window.outer_size() {
-            let window_scale = window.scale_factor().unwrap_or(1.0).max(1.0);
-            let pet_scale = current_pet_scale_percent(&app);
-            let w = size.width as f64;
-            let h = size.height as f64;
-            let (old_left, old_top, old_size) =
-                pet_rect_in_window(w, h, window_scale, pet_scale, snap.start_anchor);
-            let pet_center_x = origin.x + old_left + old_size / 2.0;
-            let pet_center_y = origin.y + old_top + old_size / 2.0;
-            if let Some(monitor) = monitor_containing_point(&app, pet_center_x, pet_center_y) {
-                let new_anchor = pet_stage_anchor_for_center(&monitor, pet_center_x, pet_center_y);
-                if snap.start_anchor.left != new_anchor.left
-                    || snap.start_anchor.top != new_anchor.top
-                {
-                    let (new_left, new_top, new_size) =
-                        pet_rect_in_window(w, h, window_scale, pet_scale, new_anchor);
-                    origin.x = (pet_center_x - new_left - new_size / 2.0).round();
-                    origin.y = (pet_center_y - new_top - new_size / 2.0).round();
-                }
-                result_anchor = new_anchor;
-            } else if let Some(monitor) =
-                nearest_monitor_for_point(&app, pet_center_x, pet_center_y)
-            {
-                // The OS-native drag has no screen bounds, so a pet can land
-                // entirely off-screen. Pull its center back inside the closest
-                // monitor before committing the position so it stays reachable.
-                let (cx, cy) = clamp_point_into_monitor(&monitor, pet_center_x, pet_center_y);
-                let new_anchor = pet_stage_anchor_for_center(&monitor, cx, cy);
-                let (new_left, new_top, new_size) =
-                    pet_rect_in_window(w, h, window_scale, pet_scale, new_anchor);
-                origin.x = (cx - new_left - new_size / 2.0).round();
-                origin.y = (cy - new_top - new_size / 2.0).round();
-                result_anchor = new_anchor;
-            }
-        }
-        let _ = window.set_position(tauri::Position::Physical(tauri::PhysicalPosition::new(
-            origin.x as i32,
-            origin.y as i32,
-        )));
-    }
-
-    let state = app.state::<AppState>();
-    let mut config = state.config_store.get();
-    config.island_pet_window_origin = Some(origin.clone());
-    config.island_pet_window_anchor = Some(pet_stage_anchor_to_config(result_anchor));
-    state.config_store.update(config)?;
-
-    Ok(Some(PetDragResult {
-        origin,
-        anchor_left: result_anchor.left,
-        anchor_top: result_anchor.top,
-    }))
-}
-
-#[tauri::command]
-async fn reset_pet_position(app: tauri::AppHandle) -> Result<(), String> {
-    let state = app.state::<AppState>();
-    let mut config = state.config_store.get();
-    config.island_pet_window_origin = None;
-    config.island_pet_window_anchor = None;
-    state.config_store.update(config.clone())?;
-    // With no saved origin, sync_pet_window_visibility -> position_pet_window
-    // drops the pet back at its default bottom-right spot. A no-op when the
-    // app is not in pet mode (the window is destroyed instead).
-    sync_pet_window_visibility(&app, &config);
-    Ok(())
-}
-
 /// Resize the notch window dynamically from the frontend and re-center
 /// on the display selected in config (falls back to primary).
 #[derive(Debug, Clone, serde::Serialize)]
@@ -5980,9 +4751,6 @@ async fn resize_notch(
             .or_else(|| window.primary_monitor().ok().flatten());
 
         if let Some(monitor) = monitor {
-            // The notch window always uses standard island top-center geometry.
-            // Pet placement is handled by sync_pet_window_visibility / drag commands
-            // on the dedicated "pet" window.
             let (x, y, anchor_offset_x) = notch_window_geometry(
                 &monitor,
                 width,
@@ -6003,20 +4771,29 @@ async fn resize_notch(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let context = tauri::generate_context!();
+    // Tauri keys WebView2 storage by identifier. Carry the retained UI storage
+    // (localStorage preferences) forward before the first window creates the new
+    // namespace, which is before tauri_plugin_log can exist. The carry-over is
+    // marker-gated and retried until it completes, so a failure here must not
+    // block startup; hold the message and emit it from `setup`, once the logger
+    // is installed and the warning can actually reach stdout and the log file.
+    let webview_storage_migration_error =
+        data_dir::migrate_legacy_webview_storage(context.config().identifier.as_str()).err();
     tauri::Builder::default()
         .plugin(
             tauri_plugin_log::Builder::new()
                 .targets([
                     tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stdout),
                     tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::LogDir {
-                        file_name: Some("agent-island".to_string()),
+                        file_name: Some("vibeboard".to_string()),
                     }),
                 ])
                 .max_file_size(2_000_000)
                 .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepAll)
                 .level(log::LevelFilter::Info)
                 .level_for("agentbro", log::LevelFilter::Info)
-                .level_for("agent_island_lib", log::LevelFilter::Info)
+                .level_for("vibe_board_lib", log::LevelFilter::Info)
                 .build(),
         )
         .plugin(tauri_plugin_shell::init())
@@ -6024,8 +4801,13 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
-        .plugin(tauri_plugin_deep_link::init())
-        .setup(|app| {
+        .setup(move |app| {
+            if let Some(error) = webview_storage_migration_error {
+                log::warn!(
+                    "Legacy UI storage was not carried over: {error}. The legacy copy is kept                      and the carry-over is retried on the next launch."
+                );
+            }
+
             if let Ok(executable) = std::env::current_exe() {
                 if let Err(error) = data_dir::remember_executable(&executable) {
                     log::warn!("Failed to remember Vibe Board executable path: {error}");
@@ -6091,11 +4873,6 @@ pub fn run() {
             let mut session_store = SessionStore::new();
             session_store.set_app_handle(app.handle().clone());
             let session_store = Arc::new(session_store);
-
-            // Pet window: position to the saved (or default) corner and show
-            // only when pet surface mode is active. The pet lives in its own
-            // Tauri window so dragging it doesn't move the island shell.
-            sync_pet_window_visibility(app.handle(), &config_store.get());
 
             // Cursor-monitor tracker: a single background poller that emits
             // `cursor-monitor-changed` to the frontend (notch) only on real
@@ -6378,36 +5155,9 @@ pub fn run() {
                 Arc::new(platform::display_controller::DisplayController::new());
             display_controller.set_app_handle(app.handle().clone());
 
-            // Initialize remote manager with persisted hosts
-            // Use the hook server's socket so the reverse tunnel delivers events
-            // directly to the running HookServer listener.
-            let local_socket = hook_endpoint::current().socket_path;
-            let remote_manager = Arc::new(remote::RemoteManager::new(local_socket));
-            {
-                let cfg = config_store.get();
-                for host in cfg.remote_hosts {
-                    remote_manager.add_host(host);
-                }
-            }
-            remote_manager.startup();
-            commands::start_remote_codex_state_sync(
-                config_store.clone(),
-                session_store.clone(),
-                remote_manager.clone(),
-            );
-
             // Initialize diagnostic ring buffer
             let diagnostic_buffer = Arc::new(hooks::diagnostics::DiagnosticRingBuffer::new());
-            let network_monitor = Arc::new(NetworkMonitor::new());
 
-            let switch_db = Arc::new(switch::db::SwitchDatabase::open().unwrap_or_else(|err| {
-                log::error!("Failed to open switch database: {err}");
-                switch::db::SwitchDatabase::open_in_memory().unwrap_or_else(|fallback_err| {
-                    log::error!("Failed to open in-memory switch database: {fallback_err}");
-                    std::process::exit(1);
-                })
-            }));
-            network_monitor.set_usage_database(switch_db.clone());
             let telemetry = Arc::new(TelemetryService::new());
 
             let app_state = AppState {
@@ -6419,10 +5169,7 @@ pub fn run() {
                 sound_engine,
                 conversation_watcher,
                 display_controller,
-                remote_manager,
                 diagnostic_buffer,
-                network_monitor,
-                switch_db,
                 task_db,
                 telemetry,
                 tray_icon,
@@ -6456,19 +5203,6 @@ pub fn run() {
                 schedule_initial_setup(app.handle());
             }
 
-            // Deep link handler
-            {
-                use tauri_plugin_deep_link::DeepLinkExt;
-                let handle = app.handle().clone();
-                app.deep_link().on_open_url(move |event| {
-                    for url in event.urls() {
-                        if let Some(payload) = switch::deeplink::parse_deep_link(url.as_str()) {
-                            let _ = handle.emit("switch-deep-link", &payload);
-                        }
-                    }
-                });
-            }
-
             log::info!("Vibe Board started");
             Ok(())
         })
@@ -6497,7 +5231,6 @@ pub fn run() {
             commands::set_analytics_enabled,
             commands::set_launch_at_login,
             commands::set_island_feature_flags,
-            commands::set_island_surface_options,
             commands::install_hooks,
             commands::remove_hooks,
             commands::get_adapter_status,
@@ -6508,15 +5241,6 @@ pub fn run() {
             commands::get_chat_history_tail,
             commands::get_subagent_chat_history,
             commands::monitor::get_monitor_sessions,
-            commands::monitor::get_monitor_session_detail,
-            commands::monitor::get_monitor_timeline,
-            commands::monitor::get_network_monitor_status,
-            commands::monitor::set_network_monitor_enabled,
-            commands::monitor::get_network_monitor_requests,
-            commands::monitor::get_network_monitor_request_detail,
-            commands::monitor::get_claude_wrapper_status,
-            commands::monitor::install_claude_wrapper,
-            commands::monitor::remove_claude_wrapper,
             control_tower::commands::create_demo_task_trace,
             control_tower::commands::get_task_traces,
             control_tower::commands::dispatch_agent,
@@ -6546,12 +5270,6 @@ pub fn run() {
             clear_island_layout_preview,
             start_notch_drag,
             end_notch_drag,
-            start_pet_drag,
-            end_pet_drag,
-            reset_pet_position,
-            pets::discover_pets,
-            commands::set_active_pet_id,
-            commands::set_agent_default_pet,
             is_cursor_in_window_zones,
             should_suppress,
             get_cursor_position,
@@ -6575,22 +5293,7 @@ pub fn run() {
             reinstall_all_hooks,
             uninstall_all_hooks,
             commands::simulate_hook_event,
-            list_remote_hosts,
-            add_remote_host,
-            remove_remote_host,
-            connect_remote,
-            disconnect_remote,
-            install_remote_hooks,
-            uninstall_remote_hooks,
-            install_remote_agent_hooks,
-            uninstall_remote_agent_hooks,
-            check_remote_hooks,
-            probe_remote_host,
-            remote_skill_manager_invoke,
             probe_codex_app_server,
-            list_remote_installable_agents,
-            get_remote_status,
-            list_ssh_config_hosts,
             list_webhooks,
             add_webhook,
             remove_webhook,
@@ -6611,7 +5314,6 @@ pub fn run() {
             perform_haptic,
             set_notch_focusable,
             restart_app,
-            is_homebrew_install,
             open_image,
             read_image_data_url,
             open_system_path,
@@ -6682,18 +5384,6 @@ pub fn run() {
             export_backup_cmd,
             import_backup_cmd,
             get_registry_metadata,
-            list_marketplace_items_cmd,
-            list_registries,
-            add_registry,
-            remove_registry,
-            sync_registry,
-            sync_registry_with_options,
-            search_marketplace_skills,
-            fetch_marketplace_skill_detail,
-            install_marketplace_skill,
-            list_marketplace_sources_cmd,
-            upsert_marketplace_source_cmd,
-            remove_marketplace_source_cmd,
             agents::programs::agent_list,
             agents::programs::agent_refresh,
             agents::programs::agent_install,
@@ -6704,31 +5394,6 @@ pub fn run() {
             agents::programs::add_custom_agent,
             agents::programs::update_custom_agent,
             agents::programs::remove_custom_agent,
-            switch::commands::switch_list_providers,
-            switch::commands::switch_create_provider,
-            switch::commands::switch_update_provider,
-            switch::commands::switch_delete_provider,
-            switch::commands::switch_duplicate_provider,
-            switch::commands::switch_set_current,
-            switch::commands::switch_get_current,
-            switch::commands::switch_detect_cc_switch,
-            switch::commands::switch_import_cc_switch_preview,
-            switch::commands::switch_import_cc_switch,
-            switch::commands::switch_clear_all_data,
-            switch::commands::switch_list_prompts,
-            switch::commands::switch_create_prompt,
-            switch::commands::switch_update_prompt,
-            switch::commands::switch_delete_prompt,
-            switch::commands::switch_toggle_prompt,
-            switch::commands::switch_apply_prompts,
-            switch::commands::switch_list_presets,
-            switch::commands::switch_get_usage_summary,
-            switch::commands::switch_get_usage_by_provider,
-            switch::commands::switch_get_usage_by_model,
-            switch::commands::switch_get_daily_cost,
-            switch::commands::switch_list_model_pricing,
-            switch::commands::switch_get_provider_health,
-            switch::commands::switch_speed_test,
             skills::v2::commands::skill_manager_bootstrap,
             skills::v2::commands::skill_manager_init,
             skills::v2::commands::skill_manager_overview,
@@ -6743,8 +5408,6 @@ pub fn run() {
             skills::v2::commands::execute_add_center_skill,
             skills::v2::commands::check_github_skill_update,
             skills::v2::commands::sync_github_skill,
-            skills::v2::commands::execute_marketplace_skill_batch,
-            skills::v2::commands::cancel_marketplace_skill_batch,
             skills::v2::commands::preview_delete_center_skill,
             skills::v2::commands::execute_delete_center_skill,
             skills::v2::commands::preview_delete_center_skills,
@@ -6805,6 +5468,6 @@ pub fn run() {
             skills::v2::commands::open_skill_path,
             skills::v2::commands::reveal_skill_path,
         ])
-        .run(tauri::generate_context!())
+        .run(context)
         .expect("error while running Vibe Board");
 }

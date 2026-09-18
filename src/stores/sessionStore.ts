@@ -101,14 +101,6 @@ function clearBlockingOverlaysForSession(queue: OverlayItem[], sessionId: string
   ))
 }
 
-function isRemoteSession(session: SessionState | undefined | null): boolean {
-  return Boolean(session?.remoteHostId || session?.remoteHostName)
-}
-
-function isNonBlockingOverlayType(type: OverlayItem['type']): boolean {
-  return type === 'response' || type === 'completion' || type === 'compacting'
-}
-
 function mergeLocalUserMessages(remoteMessages: ChatMessage[], localMessages: ChatMessage[]): ChatMessage[] {
   const merged = [...remoteMessages]
   const remoteUserKeys = new Set(
@@ -821,7 +813,6 @@ export const useSessionStore: UseBoundStore<StoreApi<SessionStore>> = create<Ses
   replaceAllSessions: (newSessions, options) => {
     const prevState = useSessionStore.getState()
     const newOverlays: OverlayItem[] = []
-    const remoteNewPromptSessionIds = new Set<string>()
     const suppressed = options?.suppressed === true
     const now = Date.now()
 
@@ -892,10 +883,6 @@ export const useSessionStore: UseBoundStore<StoreApi<SessionStore>> = create<Ses
           runState: incoming.runState ?? agentRunStateFromSession(baseSession, now),
         }
         sessions[s.id] = s
-        if (isRemoteSession(s) && s.phase === 'processing' && lastUserMessageChanged) {
-          remoteNewPromptSessionIds.add(s.id)
-        }
-
         // Detect new pendingQuestion — create question overlay
         if (s.pendingQuestion && !prev?.pendingQuestion) {
           const existingOverlay = state.overlayQueue.find((o) => o.sessionId === s.id && o.type === 'question')
@@ -993,14 +980,7 @@ export const useSessionStore: UseBoundStore<StoreApi<SessionStore>> = create<Ses
         // Detect a newly available assistant response and show the response overlay.
         const responseText = usefulCompletionText(s.responseText)
         const previousResponseText = usefulCompletionText(prev?.responseText)
-        const remoteResponseReady = !isRemoteSession(s) || s.phase === 'ready' || s.phase === 'idle' || s.phase === 'done'
-        const remoteGenericCompletion = isRemoteSession(s)
-          && remoteResponseReady
-          && !responseText
-          && isGenericCompletionText(s.responseText)
-          && s.responseText !== prev?.responseText
-          && Boolean(s.lastUserMessage || s.sessionTitle || s.responseText)
-        if (!hideNonBlockingOverlays && remoteResponseReady && s.phase !== 'done' && responseText && responseText !== previousResponseText && !sessionEndedText(s.responseText)) {
+        if (!hideNonBlockingOverlays && s.phase !== 'done' && responseText && responseText !== previousResponseText && !sessionEndedText(s.responseText)) {
           newOverlays.push({
             id: `response-${s.id}-${Date.now()}`,
             sessionId: s.id,
@@ -1012,16 +992,6 @@ export const useSessionStore: UseBoundStore<StoreApi<SessionStore>> = create<Ses
             createdAt: Date.now(),
           })
         }
-        if (!hideNonBlockingOverlays && s.phase !== 'done' && remoteGenericCompletion) {
-          newOverlays.push({
-            id: `completion-${s.id}-${Date.now()}`,
-            sessionId: s.id,
-            type: 'completion',
-            data: { summary: s.sessionTitle || s.lastUserMessage || s.responseText || 'Task completed' },
-            createdAt: Date.now(),
-          })
-        }
-
         // Backend session updates are the source of truth in Tauri mode, so
         // synthesize completion overlays when a session transitions to done.
         if (!hideNonBlockingOverlays && s.phase === 'done' && prev?.phase !== 'done' && !shouldSuppressCompletionOverlay(s)) {
@@ -1041,7 +1011,6 @@ export const useSessionStore: UseBoundStore<StoreApi<SessionStore>> = create<Ses
         activeSessionId = sessionList[0]?.id ?? null
       }
       const overlayQueue = state.overlayQueue.filter((overlay) => {
-        if (remoteNewPromptSessionIds.has(overlay.sessionId) && isNonBlockingOverlayType(overlay.type)) return false
         const session = sessions[overlay.sessionId]
         if (!session) return false
         if (overlay.type === 'permission') return Boolean(session.pendingPermission)

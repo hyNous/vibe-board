@@ -4,7 +4,6 @@
 
 import type { AgentRunState, AgentStatusSnapshot, RateLimitInfo, SessionNotice, SessionState } from '../types/agent'
 import type { ThemeConfig } from '../types/theme'
-import type { PetMetadata } from '../types/pet'
 import type { SideIslandSize, IslandDragAnchor } from '../utils/islandLayout'
 import { useConfigStore } from '../stores/configStore'
 
@@ -54,16 +53,6 @@ export async function getCurrentAppVersion(): Promise<string> {
 export async function restartApp(): Promise<void> {
   if (!isTauri()) return
   return invoke('restart_app')
-}
-
-export async function isHomebrewInstall(): Promise<boolean> {
-  if (!isTauri()) return false
-  try {
-    return await invoke<boolean>('is_homebrew_install')
-  } catch (error) {
-    console.warn('[tauriApi] failed to detect install channel:', error)
-    return false
-  }
 }
 
 // ── Backend Types (match Rust serde camelCase output) ────────────
@@ -136,8 +125,6 @@ export interface BackendSession {
   lastToolStatus: string | null
   description: string | null
   sessionTitle: string | null
-  remoteHostId?: string | null
-  remoteHostName?: string | null
   pid: number | null
   tty: string | null
   termProgram: string | null
@@ -201,33 +188,6 @@ export interface MonitorSessionSummary {
   subagentCount: number
   activeToolCount: number
   title: string | null
-}
-
-export interface MonitorRawEvent {
-  seq: number
-  timestampMs: number
-  sessionId: string
-  agent: string | null
-  eventName: string
-  raw: unknown
-}
-
-export interface MonitorTimelineItem {
-  id: string
-  timestampMs: number
-  kind: 'session' | 'tool' | 'hook' | 'hook_tool' | 'approval' | 'question' | 'plan' | 'subagent' | string
-  title: string
-  detail: string | null
-  status: string | null
-  toolName: string | null
-  rawEventSeq: number | null
-}
-
-export interface MonitorSessionDetail {
-  session: BackendSession
-  timeline: MonitorTimelineItem[]
-  rawEvents: MonitorRawEvent[]
-  transcriptPath: string | null
 }
 
 export interface UsageProviderStatus {
@@ -295,65 +255,6 @@ export interface CodexAppServerSyncReport {
   threads: CodexAppServerThreadSummary[]
 }
 
-export interface NetworkMonitorStatus {
-  enabled: boolean
-  proxyUrl: string | null
-  upstreamBaseUrl: string
-  requestCount: number
-  activeRequestCount: number
-}
-
-export interface ClaudeWrapperStatus {
-  installed: boolean
-  shimPath: string
-  pathHintInstalled: boolean
-  shellConfigPath: string
-}
-
-export interface NetworkRequestSummary {
-  id: string
-  timestampMs: number
-  provider: string
-  method: string
-  url: string
-  upstreamUrl: string
-  sessionId: string | null
-  project: string | null
-  model: string | null
-  status: number | null
-  durationMs: number | null
-  requestBytes: number
-  responseBytes: number
-  isStream: boolean
-  mainAgent: boolean
-  requestType: string
-  requestSubType: string | null
-  messageCount: number
-  toolCount: number
-  systemPreview: string | null
-  usage: Record<string, unknown> | null
-  usageSummary: {
-    inputTokens: number
-    outputTokens: number
-    cacheCreationInputTokens: number
-    cacheReadInputTokens: number
-    totalTokens: number
-    cacheHitRate: number | null
-  } | null
-  error: string | null
-  inProgress: boolean
-}
-
-export interface NetworkRequestDetail {
-  summary: NetworkRequestSummary
-  requestHeaders: unknown
-  requestBody: unknown
-  responseHeaders: unknown
-  responseBody: string | null
-  responseBodyTruncated: boolean
-  streamEventCount: number
-}
-
 export interface BackendConfig {
   soundEnabled: boolean
   soundVolume: number
@@ -395,13 +296,6 @@ export interface BackendConfig {
   confettiEnabled: boolean
   analyticsEnabled: boolean
   analyticsConsentPromptCompleted: boolean
-  islandSurfaceMode: 'island' | 'pet'
-  petVitalsDebugOpen?: boolean
-  islandPetScale: number
-  islandPetWindowOrigin: { x: number; y: number } | null
-  islandPetWindowAnchor?: { left: boolean; top: boolean } | null
-  islandActivePetId: string | null
-  islandAgentPetMap: Record<string, string>
   followFocus: boolean
   quietHoursEnabled: boolean
   quietHoursStart: string
@@ -506,93 +400,7 @@ export async function getMonitorSessions(): Promise<MonitorSessionSummary[]> {
   return invoke<MonitorSessionSummary[]>('get_monitor_sessions')
 }
 
-export async function getMonitorSessionDetail(sessionId: string): Promise<MonitorSessionDetail | null> {
-  if (!isTauri()) return null
-  return invoke<MonitorSessionDetail>('get_monitor_session_detail', { sessionId })
-}
-
-export async function getMonitorTimeline(sessionId: string): Promise<MonitorTimelineItem[]> {
-  if (!isTauri()) return []
-  return invoke<MonitorTimelineItem[]>('get_monitor_timeline', { sessionId })
-}
-
-export async function getNetworkMonitorStatus(): Promise<NetworkMonitorStatus> {
-  if (!isTauri()) {
-    return {
-      enabled: false,
-      proxyUrl: null,
-      upstreamBaseUrl: 'https://api.anthropic.com',
-      requestCount: 0,
-      activeRequestCount: 0,
-    }
-  }
-  return invoke<NetworkMonitorStatus>('get_network_monitor_status')
-}
-
-export async function setNetworkMonitorEnabled(enabled: boolean, upstreamBaseUrl?: string): Promise<NetworkMonitorStatus> {
-  if (!isTauri()) {
-    return {
-      enabled: false,
-      proxyUrl: null,
-      upstreamBaseUrl: upstreamBaseUrl || 'https://api.anthropic.com',
-      requestCount: 0,
-      activeRequestCount: 0,
-    }
-  }
-  return invoke<NetworkMonitorStatus>('set_network_monitor_enabled', { enabled, upstreamBaseUrl })
-}
-
-export async function getNetworkMonitorRequests(): Promise<NetworkRequestSummary[]> {
-  if (!isTauri()) return []
-  return invoke<NetworkRequestSummary[]>('get_network_monitor_requests')
-}
-
-export async function getNetworkMonitorRequestDetail(requestId: string): Promise<NetworkRequestDetail | null> {
-  if (!isTauri()) return null
-  return invoke<NetworkRequestDetail | null>('get_network_monitor_request_detail', { requestId })
-}
-
-export async function getClaudeWrapperStatus(): Promise<ClaudeWrapperStatus> {
-  if (!isTauri()) {
-    return {
-      installed: false,
-      shimPath: '~/.agent-island/bin/claude',
-      pathHintInstalled: false,
-      shellConfigPath: '~/.zshrc',
-    }
-  }
-  return invoke<ClaudeWrapperStatus>('get_claude_wrapper_status')
-}
-
-export async function installClaudeWrapper(): Promise<ClaudeWrapperStatus> {
-  if (!isTauri()) return getClaudeWrapperStatus()
-  return invoke<ClaudeWrapperStatus>('install_claude_wrapper')
-}
-
-export async function removeClaudeWrapper(): Promise<ClaudeWrapperStatus> {
-  if (!isTauri()) return getClaudeWrapperStatus()
-  return invoke<ClaudeWrapperStatus>('remove_claude_wrapper')
-}
-
 export type { TaskRecord, AgentRunRecord, TaskEventRecord } from '../types/taskTrace'
-
-export interface DispatchRequest {
-  agent: 'claude' | 'opencode' | 'antigravity'
-  role?: string
-  task: string
-  taskId?: string
-  parentRunId?: string
-  cwd?: string
-}
-
-export interface DispatchResult {
-  runId: string
-  sessionId: string
-  agent: string
-  pid?: number | null
-  status: string
-  exitCode?: number | null
-}
 
 export async function createDemoTaskTrace(): Promise<import('../types/taskTrace').TaskRecord> {
   if (!isTauri()) {
@@ -604,13 +412,6 @@ export async function createDemoTaskTrace(): Promise<import('../types/taskTrace'
 export async function getTaskTraces(): Promise<import('../types/taskTrace').TaskRecord[]> {
   if (!isTauri()) return []
   return invoke<import('../types/taskTrace').TaskRecord[]>('get_task_traces')
-}
-
-export async function dispatchAgent(request: DispatchRequest): Promise<DispatchResult> {
-  if (!isTauri()) {
-    throw new Error('Agent dispatch requires Tauri runtime')
-  }
-  return invoke<DispatchResult>('dispatch_agent', { request })
 }
 
 export async function respondPermission(sessionId: string, allowed: boolean, always?: boolean): Promise<void> {
@@ -715,13 +516,6 @@ export async function getConfig(): Promise<BackendConfig> {
       confettiEnabled: true,
       analyticsEnabled: true,
       analyticsConsentPromptCompleted: false,
-      islandSurfaceMode: 'island',
-      petVitalsDebugOpen: false,
-      islandPetScale: 72,
-      islandPetWindowOrigin: null,
-      islandPetWindowAnchor: null,
-      islandActivePetId: null,
-      islandAgentPetMap: {},
       followFocus: false,
       quietHoursEnabled: false,
       quietHoursStart: '22:00',
@@ -899,11 +693,11 @@ export async function getActiveThemeBundle(name: string): Promise<ThemeConfig> {
 
 export async function setActiveBackendTheme(name: string): Promise<void> {
   if (!isTauri()) return
-  window.dispatchEvent(new CustomEvent('agent-island-theme-sync', { detail: { status: 'pending', name } }))
+  window.dispatchEvent(new CustomEvent('vibeboard-theme-sync', { detail: { status: 'pending', name } }))
   try {
     return await invoke('set_active_theme', { name })
   } catch (error) {
-    window.dispatchEvent(new CustomEvent('agent-island-theme-sync', { detail: { status: 'failed', name } }))
+    window.dispatchEvent(new CustomEvent('vibeboard-theme-sync', { detail: { status: 'failed', name } }))
     throw error
   }
 }
@@ -979,17 +773,6 @@ export async function setIslandFeatureFlags(options: {
 }): Promise<void> {
   if (!isTauri()) return
   return invoke('set_island_feature_flags', options)
-}
-
-export async function setIslandSurfaceOptions(options: {
-  islandSurfaceMode: 'island' | 'pet'
-  islandPetScale: number
-}): Promise<void> {
-  if (!isTauri()) return
-  return invoke('set_island_surface_options', {
-    islandSurfaceMode: options.islandSurfaceMode,
-    islandPetScale: options.islandPetScale,
-  })
 }
 
 export async function setSoundQuietHours(enabled: boolean, start: string, end: string): Promise<void> {
@@ -1278,7 +1061,7 @@ export async function setNotchFocusable(focusable: boolean): Promise<void> {
 
 export async function setNotchIgnoreCursorEvents(
   ignore: boolean,
-  windowLabel?: 'notch' | 'pet',
+  windowLabel?: 'notch',
 ): Promise<void> {
   if (!isTauri()) return
   return invoke('set_notch_ignore_cursor_events', { ignore, windowLabel })
@@ -1389,52 +1172,6 @@ export async function endNotchDrag(): Promise<NotchDragResult | null> {
   return invoke<NotchDragResult | null>('end_notch_drag')
 }
 
-export async function startPetDrag(
-  anchorLeft?: boolean,
-  anchorTop?: boolean,
-): Promise<boolean> {
-  if (!isTauri()) return false
-  return invoke<boolean>('start_pet_drag', { anchorLeft, anchorTop })
-}
-
-export interface PetDragResult {
-  origin: { x: number; y: number }
-  anchorLeft: boolean
-  anchorTop: boolean
-}
-
-export async function endPetDrag(): Promise<PetDragResult | null> {
-  if (!isTauri()) return null
-  return invoke<PetDragResult | null>('end_pet_drag')
-}
-
-export async function resetPetPosition(): Promise<void> {
-  if (!isTauri()) return
-  return invoke<void>('reset_pet_position')
-}
-
-// ── Pet Discovery & Selection ────────────────────────────────────
-
-interface PetDiscoveryResult {
-  pets: PetMetadata[]
-  warnings: string[]
-}
-
-export async function discoverPets(): Promise<PetDiscoveryResult> {
-  if (!isTauri()) return { pets: [], warnings: [] }
-  return invoke<PetDiscoveryResult>('discover_pets')
-}
-
-export async function setActivePetId(petId: string | null): Promise<void> {
-  if (!isTauri()) return
-  return invoke<void>('set_active_pet_id', { petId })
-}
-
-export async function setAgentDefaultPet(agent: string, petId: string | null): Promise<void> {
-  if (!isTauri()) return
-  return invoke<void>('set_agent_default_pet', { agent, petId })
-}
-
 export interface LogicalRect {
   left: number
   top: number
@@ -1444,7 +1181,7 @@ export interface LogicalRect {
 
 export async function isCursorInWindowZones(
   zones: LogicalRect[],
-  windowLabel?: 'notch' | 'pet',
+  windowLabel?: 'notch',
 ): Promise<boolean> {
   if (!isTauri() || zones.length === 0) return false
   return invoke<boolean>('is_cursor_in_window_zones', { zones, windowLabel })
@@ -1613,122 +1350,6 @@ export async function reinstallAllHooks(): Promise<string[]> {
 export async function uninstallAllHooks(): Promise<string[]> {
   if (!isTauri()) return []
   return invoke<string[]>('uninstall_all_hooks')
-}
-
-// ── Remote SSH Management ────────────────────────────────────────
-
-export interface RemoteHost {
-  id: string
-  name: string
-  sshTarget: string
-  port: number | null
-  identityFile: string | null
-  authSocket: string | null
-  remoteSocketPath: string
-  autoConnect: boolean
-}
-
-export type ConnectionStatus =
-  | { state: 'disconnected' }
-  | { state: 'connecting' }
-  | { state: 'connected' }
-  | { state: 'failed'; message: string }
-
-export interface SshConfigHost {
-  name: string
-  hostname: string | null
-  user: string | null
-  port: number | null
-  identityFile: string | null
-}
-
-export async function listRemoteHosts(): Promise<RemoteHost[]> {
-  if (!isTauri()) return []
-  return invoke<RemoteHost[]>('list_remote_hosts')
-}
-
-export async function addRemoteHost(host: RemoteHost): Promise<void> {
-  if (!isTauri()) return
-  return invoke('add_remote_host', { host })
-}
-
-export async function removeRemoteHost(id: string): Promise<void> {
-  if (!isTauri()) return
-  return invoke('remove_remote_host', { id })
-}
-
-export async function connectRemote(id: string): Promise<void> {
-  if (!isTauri()) return
-  return invoke('connect_remote', { id })
-}
-
-export async function disconnectRemote(id: string): Promise<void> {
-  if (!isTauri()) return
-  return invoke('disconnect_remote', { id })
-}
-
-export async function installRemoteHooks(id: string): Promise<string> {
-  if (!isTauri()) return 'ok'
-  return invoke<string>('install_remote_hooks', { id })
-}
-
-export async function uninstallRemoteHooks(id: string): Promise<string> {
-  if (!isTauri()) return 'ok'
-  return invoke<string>('uninstall_remote_hooks', { id })
-}
-
-export async function installRemoteAgentHooks(id: string, agentId: string): Promise<string> {
-  if (!isTauri()) return 'ok'
-  return invoke<string>('install_remote_agent_hooks', { id, agentId })
-}
-
-export async function uninstallRemoteAgentHooks(id: string, agentId: string): Promise<string> {
-  if (!isTauri()) return 'ok'
-  return invoke<string>('uninstall_remote_agent_hooks', { id, agentId })
-}
-
-export async function checkRemoteHooks(id: string): Promise<string[]> {
-  if (!isTauri()) return []
-  return invoke<string[]>('check_remote_hooks', { id })
-}
-
-export interface RemoteProbeCheck {
-  id: string
-  label: string
-  status: 'ok' | 'warn' | 'error'
-  detail: string
-}
-
-export interface RemoteProbeReport {
-  ok: boolean
-  summary: string
-  checks: RemoteProbeCheck[]
-}
-
-export async function probeRemoteHost(id: string): Promise<RemoteProbeReport> {
-  if (!isTauri()) {
-    return {
-      ok: true,
-      summary: 'Remote host is ready',
-      checks: [],
-    }
-  }
-  return invoke<RemoteProbeReport>('probe_remote_host', { id })
-}
-
-export async function listRemoteInstallableAgents(): Promise<string[]> {
-  if (!isTauri()) return []
-  return invoke<string[]>('list_remote_installable_agents')
-}
-
-export async function getRemoteStatus(id: string): Promise<ConnectionStatus> {
-  if (!isTauri()) return { state: 'disconnected' }
-  return invoke<ConnectionStatus>('get_remote_status', { id })
-}
-
-export async function listSshConfigHosts(): Promise<SshConfigHost[]> {
-  if (!isTauri()) return []
-  return invoke<SshConfigHost[]>('list_ssh_config_hosts')
 }
 
 // ── Webhook Management ───────────────────────────────────────────

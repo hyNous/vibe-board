@@ -298,7 +298,7 @@ export function SetupWizard({ onClose }: SetupWizardProps) {
                     <label className={`setup-wizard__agent-card ${hostAgent === tool.name ? 'is-selected' : ''}`} key={tool.name}>
                       <input
                         type="radio"
-                        name="agent-island-host"
+                        name="vibe-board-host"
                         value={tool.name}
                         checked={hostAgent === tool.name}
                         onChange={() => {

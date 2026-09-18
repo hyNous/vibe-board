@@ -8,10 +8,6 @@ import { agentApi, type AgentOutputEvent, type AgentProgramInfo, type CustomAgen
 import { configureAgentHookEvents, getAllHookStatus, installAgentHook, uninstallAgentHook, type HookEventStatus, type HookStatus } from '../../services/tauriApi'
 import type { AgentConfigDocument, AgentDetail, AdoptPreview, ConflictBlocker, DistributionBlockerDecision, DistributionPreview, MoveDirectSkillToPackPreview, SkillPackSummary, SkillSummary, UnmanagedItemDto } from '../../services/skillApiV2'
 import { useSessionStore } from '../../stores/sessionStore'
-import {
-  LOCAL_RUNTIME_ENVIRONMENT_ID,
-  useRuntimeEnvironmentStore,
-} from '../../stores/runtimeEnvironmentStore'
 import { AgentIconBadge } from './AgentIconBadge'
 import { AdoptDialog } from './AdoptDialog'
 import { PreviewDialog } from './PreviewDialog'
@@ -146,10 +142,7 @@ function inventoryMetaLabel(agent: AgentInventoryEntry): string {
 }
 
 function assertRuntimeEnvironment(expectedId: string, message: string) {
-  if (
-    useRuntimeEnvironmentStore.getState().selectedEnvironmentId !== expectedId
-    || useSkillStoreV2.getState().runtimeEnvironmentId !== expectedId
-  ) {
+  if (useSkillStoreV2.getState().runtimeEnvironmentId !== expectedId) {
     throw new Error(message)
   }
 }
@@ -159,12 +152,7 @@ export function AgentManagementPage() {
   const state = useSkillStoreV2()
   const allSessions = useSessionStore((s) => s.sessionList)
   const activeSessionId = useSessionStore((s) => s.activeSessionId)
-  const runtimeEnvironmentId = useRuntimeEnvironmentStore((s) => s.selectedEnvironmentId)
-  const sessionList = useMemo(() => (
-    runtimeEnvironmentId === LOCAL_RUNTIME_ENVIRONMENT_ID
-      ? allSessions.filter((session) => !session.remoteHostId)
-      : allSessions.filter((session) => session.remoteHostId === runtimeEnvironmentId)
-  ), [allSessions, runtimeEnvironmentId])
+  const sessionList = allSessions
   const agentUsageScores = useMemo(() => buildAgentUsageScores(sessionList, activeSessionId), [sessionList, activeSessionId])
   const agents = useMemo(() => sortAgentSummaries(
     state.agents.filter((agent) => agent.id !== SHARED_SKILLS_AGENT_ID),
@@ -290,7 +278,7 @@ export function AgentManagementPage() {
   }, [notice])
 
   const openAdopt = async (agentId: string, unmanagedId: string) => {
-    const previewRuntimeEnvironmentId = useRuntimeEnvironmentStore.getState().selectedEnvironmentId
+    const previewRuntimeEnvironmentId = useSkillStoreV2.getState().runtimeEnvironmentId
     setAdoptingUnmanagedId(unmanagedId)
     setBusy(true)
     try {

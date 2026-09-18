@@ -1,22 +1,16 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, fireEvent, cleanup, waitFor, act, within } from '@testing-library/react'
 import '@testing-library/jest-dom/vitest'
 import { AgentIconBadge } from '../components/skills-v2/AgentIconBadge'
-import { useSkillStoreV2 } from '../stores/skillStoreV2'
+import { LOCAL_RUNTIME_ENVIRONMENT_ID, useSkillStoreV2 } from '../stores/skillStoreV2'
 import { useSessionStore } from '../stores/sessionStore'
 import { skillApiV2 } from '../services/skillApiV2'
 import { agentApi, type AgentProgramInfo } from '../services/agentApi'
 import * as tauriApi from '../services/tauriApi'
-import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import { open as openShell } from '@tauri-apps/plugin-shell'
 import i18n from '../i18n'
 import type { SkillSummary, AgentSummary, AgentDetail, AgentSkillInventoryAgent, AdoptPreview, DistributionPreview, MoveDirectSkillToPackPreview, SkillPackDetail, SkillDetail, SkillTargetDetail, UnmanagedItemDto } from '../services/skillApiV2'
 import type { AgentType, SessionState } from '../types/agent'
-import { useConfigStore } from '../stores/configStore'
-import {
-  LOCAL_RUNTIME_ENVIRONMENT_ID,
-  useRuntimeEnvironmentStore,
-} from '../stores/runtimeEnvironmentStore'
 
 // SkillManagerShell imports pages that call skillApiV2 at mount; we stub the api
 // so tests run without the Tauri runtime.
@@ -520,438 +514,6 @@ describe('Skill library view mode (no Agent matrix)', () => {
   })
 })
 
-describe('market install state', () => {
-  it('matches installed skills by v2 source URI across skills.sh and GitHub aliases', async () => {
-    const { isMarketItemInstalled } = await import('../components/skills-v2/marketInstallState')
-    const marketSkill = {
-      id: 'skillssh:vercel-labs@skills@find-skills',
-      registryId: 'skills-sh',
-      name: 'find-skills',
-      description: null,
-      source: 'vercel-labs/skills',
-      installCount: 1,
-      downloadUrl: 'skillssh:vercel-labs/skills/find-skills',
-      webUrl: 'https://skills.sh/vercel-labs/skills/find-skills',
-      isInstalled: false,
-      syncedAt: '2026-01-01T00:00:00Z',
-      cacheUpdatedAt: null,
-    }
-
-    expect(isMarketItemInstalled(marketSkill, [
-      makeSkill({
-        id: 'find-skills',
-        sourceType: 'github',
-        sourceUri: 'github:vercel-labs/skills/find-skills',
-      }),
-    ])).toBe(true)
-  })
-})
-
-describe('Marketplace install flow', () => {
-  beforeEach(async () => {
-    cleanup()
-    vi.restoreAllMocks()
-    await i18n.changeLanguage('zh')
-    useSkillStoreV2.setState({
-      skills: [],
-      packs: [
-        {
-          id: 'anthropics-skills',
-          name: 'anthropics/skills',
-          description: 'Anthropic skills',
-          tags: ['anthropics/skills'],
-          memberCount: 8,
-          appliedAgentCount: 0,
-          healthy: true,
-        },
-      ],
-      agents: [],
-      overview: null,
-      settings: null,
-      lastOverviewLoadedAt: Date.now(),
-      marketplaceInstallTask: null,
-      loadOverview: vi.fn().mockResolvedValue(undefined),
-      loadProjects: vi.fn().mockResolvedValue(undefined),
-    } as Partial<ReturnType<typeof useSkillStoreV2.getState>>)
-  })
-
-  afterEach(() => {
-    useSkillStoreV2.setState({ marketplaceInstallTask: null })
-  })
-
-  function marketSkill(overrides: Partial<Awaited<ReturnType<typeof skillApiV2.searchMarketplaceSkills>>[number]> = {}) {
-    return {
-      id: 'skillssh:anthropics@skills@brand-guidelines',
-      registryId: 'skills-sh',
-      name: 'brand-guidelines',
-      description: 'Brand skill',
-      source: 'anthropics/skills',
-      installCount: 100,
-      downloadUrl: 'skillssh:anthropics/skills/brand-guidelines',
-      webUrl: 'https://skills.sh/anthropics/skills/brand-guidelines',
-      isInstalled: false,
-      syncedAt: '2026-01-01T00:00:00Z',
-      cacheUpdatedAt: null,
-      ...overrides,
-    }
-  }
-
-  it('installs an outer marketplace card directly without opening the pack dialog', async () => {
-    vi.spyOn(skillApiV2, 'searchMarketplaceSkills').mockResolvedValue([marketSkill()])
-    const executeAdd = vi.spyOn(skillApiV2, 'executeAddCenterSkill').mockResolvedValue({
-      skillIds: ['brand-guidelines'],
-      updated: [],
-      skipped: [],
-    })
-    const onDone = vi.fn()
-
-    const { MarketPanel } = await import('../components/skills-v2/InstallView')
-    render(<MarketPanel onInstall={() => {}} onDone={onDone} />)
-
-    const addButton = await screen.findByTitle('安装')
-    fireEvent.click(addButton)
-
-    await waitFor(() => expect(executeAdd).toHaveBeenCalled())
-    expect(screen.queryByText('安装「brand-guidelines」')).not.toBeInTheDocument()
-    expect(onDone).toHaveBeenCalledWith('brand-guidelines')
-  })
-
-  it('labels an installed outer marketplace card action as distribution', async () => {
-    useSkillStoreV2.setState({
-      skills: [
-        makeSkill({
-          id: 'brand-guidelines',
-          name: 'brand-guidelines',
-          sourceType: 'skillssh',
-          sourceUri: 'skillssh:anthropics/skills/brand-guidelines',
-          installedAgents: [],
-        }),
-      ],
-    })
-    vi.spyOn(skillApiV2, 'searchMarketplaceSkills').mockResolvedValue([marketSkill()])
-
-    const { MarketPanel } = await import('../components/skills-v2/InstallView')
-    render(<MarketPanel onInstall={() => {}} onDone={() => {}} />)
-
-    const distributeButton = await screen.findByTitle('分发到 Agent')
-    expect(distributeButton).toHaveTextContent('分发')
-  })
-
-  it('opens the pack dialog only after entering a source market and completes without distribution handoff', async () => {
-    vi.spyOn(skillApiV2, 'searchMarketplaceSkills').mockResolvedValue([marketSkill()])
-    vi.spyOn(skillApiV2, 'executeAddCenterSkill').mockResolvedValue({
-      skillIds: ['brand-guidelines'],
-      updated: [],
-      skipped: [],
-    })
-    vi.spyOn(skillApiV2, 'getPackDetail').mockResolvedValue({
-      id: 'anthropics-skills',
-      name: 'anthropics/skills',
-      description: 'Anthropic skills',
-      tags: ['anthropics/skills'],
-      appliedAgents: [],
-      members: [],
-      createdAt: '2026-01-01T00:00:00Z',
-      updatedAt: '2026-01-01T00:00:00Z',
-    })
-    vi.spyOn(skillApiV2, 'upsertPack').mockResolvedValue({
-      id: 'anthropics-skills',
-      name: 'anthropics/skills',
-      description: 'Anthropic skills',
-      tags: ['anthropics/skills'],
-      members: [
-        {
-          skillId: 'brand-guidelines',
-          skillName: 'brand-guidelines',
-          required: true,
-          sortOrder: 0,
-          missing: false,
-        },
-      ],
-      appliedAgents: [],
-      createdAt: '2026-01-01T00:00:00Z',
-      updatedAt: '2026-01-01T00:00:00Z',
-    })
-    const onDone = vi.fn()
-
-    const { MarketPanel } = await import('../components/skills-v2/InstallView')
-    render(<MarketPanel onInstall={() => {}} onDone={onDone} />)
-
-    fireEvent.click(await screen.findByTitle('查看这个创建者的所有市场'))
-    fireEvent.click(await screen.findByText('anthropics/skills'))
-    fireEvent.click(await screen.findByTitle('安装选项'))
-
-    expect(await screen.findByText('安装「brand-guidelines」')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '安装' }))
-
-    await waitFor(() => expect(onDone).toHaveBeenCalledWith())
-    expect(onDone).not.toHaveBeenCalledWith('brand-guidelines')
-  })
-
-  it('closes the dialog and installs selected source-market Skills with one repository batch', async () => {
-    const secondSkill = marketSkill({
-      id: 'skillssh:anthropics@skills@frontend-design',
-      name: 'frontend-design',
-      downloadUrl: 'skillssh:anthropics/skills/frontend-design',
-      webUrl: 'https://skills.sh/anthropics/skills/frontend-design',
-    })
-    vi.spyOn(skillApiV2, 'searchMarketplaceSkills').mockResolvedValue([marketSkill(), secondSkill])
-
-    let finishBatch: ((result: Awaited<ReturnType<typeof skillApiV2.executeMarketplaceSkillBatch>>) => void) | null = null
-    const executeBatch = vi.spyOn(skillApiV2, 'executeMarketplaceSkillBatch').mockImplementation(() => new Promise((resolve) => {
-      finishBatch = resolve
-    }))
-    vi.spyOn(skillApiV2, 'getPackDetail').mockResolvedValue({
-      id: 'anthropics-skills',
-      name: 'anthropics/skills',
-      description: 'Anthropic skills',
-      tags: ['anthropics/skills'],
-      appliedAgents: [],
-      members: [],
-      createdAt: '2026-01-01T00:00:00Z',
-      updatedAt: '2026-01-01T00:00:00Z',
-    })
-    const upsertPack = vi.spyOn(skillApiV2, 'upsertPack').mockResolvedValue({
-      id: 'anthropics-skills',
-      name: 'anthropics/skills',
-      description: 'Anthropic skills',
-      tags: ['anthropics/skills'],
-      appliedAgents: [],
-      members: [],
-      createdAt: '2026-01-01T00:00:00Z',
-      updatedAt: '2026-01-01T00:00:00Z',
-    })
-    const onDone = vi.fn()
-
-    const { MarketPanel } = await import('../components/skills-v2/InstallView')
-    render(<MarketPanel onInstall={() => {}} onDone={onDone} />)
-
-    fireEvent.change(screen.getByPlaceholderText('搜索 skills.sh 市场…'), { target: { value: 'batch-install-test' } })
-    fireEvent.click(await screen.findAllByTitle('查看这个创建者的所有市场').then((buttons) => buttons[0]))
-    fireEvent.click(await screen.findByText('anthropics/skills'))
-
-    fireEvent.click(await screen.findByLabelText('选择 brand-guidelines'))
-    fireEvent.click(screen.getByLabelText('选择 frontend-design'))
-    fireEvent.click(screen.getByRole('button', { name: '安装已选（2）' }))
-
-    expect(await screen.findByRole('heading', { name: '安装已选的 2 个 Skills' })).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '开始安装 2 个 Skills' }))
-
-    await waitFor(() => expect(executeBatch).toHaveBeenCalledTimes(1))
-    expect(screen.queryByRole('heading', { name: '安装已选的 2 个 Skills' })).not.toBeInTheDocument()
-    expect(screen.getByText('正在读取仓库目录并下载选中的 Skills…')).toBeInTheDocument()
-    expect(executeBatch).toHaveBeenCalledWith(
-      expect.stringMatching(/^market-batch-/),
-      'github:anthropics/skills',
-      [
-        {
-          itemId: 'skillssh:anthropics@skills@brand-guidelines',
-          skillId: 'brand-guidelines',
-          sourceUri: 'skillssh:anthropics/skills/brand-guidelines',
-        },
-        {
-          itemId: 'skillssh:anthropics@skills@frontend-design',
-          skillId: 'frontend-design',
-          sourceUri: 'skillssh:anthropics/skills/frontend-design',
-        },
-      ],
-    )
-
-    await act(async () => {
-      finishBatch?.({
-        items: [
-          { itemId: 'skillssh:anthropics@skills@brand-guidelines', skillId: 'brand-guidelines', success: true, error: null },
-          { itemId: 'skillssh:anthropics@skills@frontend-design', skillId: 'frontend-design', success: true, error: null },
-        ],
-        cancelled: false,
-      })
-    })
-
-    await waitFor(() => expect(upsertPack).toHaveBeenCalledWith(expect.objectContaining({
-      id: 'anthropics-skills',
-      skillIds: ['brand-guidelines', 'frontend-design'],
-    })))
-    expect(await screen.findByText('批量安装完成')).toBeInTheDocument()
-    expect(onDone).toHaveBeenCalledWith()
-  })
-
-  it('reports a repository download error without marking every queued Skill as failed', async () => {
-    useSkillStoreV2.setState({ packs: [] })
-    vi.spyOn(skillApiV2, 'searchMarketplaceSkills').mockResolvedValue([marketSkill()])
-    vi.spyOn(skillApiV2, 'executeMarketplaceSkillBatch').mockRejectedValue(new Error('download timeout'))
-
-    const { MarketPanel } = await import('../components/skills-v2/InstallView')
-    render(<MarketPanel onInstall={() => {}} onDone={() => {}} />)
-
-    fireEvent.change(screen.getByPlaceholderText('搜索 skills.sh 市场…'), { target: { value: 'source-failure-test' } })
-    fireEvent.click(await screen.findByTitle('查看这个创建者的所有市场'))
-    fireEvent.click(await screen.findByText('anthropics/skills'))
-    fireEvent.click(await screen.findByLabelText('选择 brand-guidelines'))
-    fireEvent.click(screen.getByRole('button', { name: '安装已选（1）' }))
-    fireEvent.click(await screen.findByRole('radio', { name: /仅安装到中心库/ }))
-    fireEvent.click(screen.getByRole('button', { name: '开始安装 1 个 Skills' }))
-
-    await waitFor(() => expect(useSkillStoreV2.getState().marketplaceInstallTask?.busy).toBe(false))
-    const task = useSkillStoreV2.getState().marketplaceInstallTask
-    expect(task?.phase).toBe('source_failed')
-    expect(task?.result).toMatchObject({ successCount: 0, failedCount: 0 })
-    expect(task?.items['skillssh:anthropics@skills@brand-guidelines'].status).toBe('queued')
-    expect(screen.getByText('来源仓库下载失败')).toBeInTheDocument()
-    expect(screen.queryByText('0 / 1 completed · 0 failed')).not.toBeInTheDocument()
-    expect(screen.getByText('已完成 0 / 1 · 失败 0')).toBeInTheDocument()
-  })
-
-  it('creates one new skill pack for all selected source-market Skills', async () => {
-    useSkillStoreV2.setState({ packs: [] })
-    const secondSkill = marketSkill({
-      id: 'skillssh:anthropics@skills@frontend-design-new-pack',
-      name: 'frontend-design',
-      downloadUrl: 'skillssh:anthropics/skills/frontend-design',
-      webUrl: 'https://skills.sh/anthropics/skills/frontend-design',
-    })
-    vi.spyOn(skillApiV2, 'searchMarketplaceSkills').mockResolvedValue([marketSkill(), secondSkill])
-    vi.spyOn(skillApiV2, 'executeMarketplaceSkillBatch').mockResolvedValue({
-      items: [
-        { itemId: 'skillssh:anthropics@skills@brand-guidelines', skillId: 'brand-guidelines', success: true, error: null },
-        { itemId: 'skillssh:anthropics@skills@frontend-design-new-pack', skillId: 'frontend-design', success: true, error: null },
-      ],
-      cancelled: false,
-    })
-    const upsertPack = vi.spyOn(skillApiV2, 'upsertPack').mockResolvedValue({
-      id: 'new-market-pack',
-      name: 'anthropics/skills',
-      description: 'Anthropic market selection',
-      tags: ['market', 'anthropics/skills'],
-      appliedAgents: [],
-      members: [],
-      createdAt: '2026-01-01T00:00:00Z',
-      updatedAt: '2026-01-01T00:00:00Z',
-    })
-
-    const { MarketPanel } = await import('../components/skills-v2/InstallView')
-    render(<MarketPanel onInstall={() => {}} onDone={() => {}} />)
-
-    fireEvent.change(screen.getByPlaceholderText('搜索 skills.sh 市场…'), { target: { value: 'batch-new-pack-test' } })
-    fireEvent.click(await screen.findAllByTitle('查看这个创建者的所有市场').then((buttons) => buttons[0]))
-    fireEvent.click(await screen.findByText('anthropics/skills'))
-    fireEvent.click(await screen.findByText('全选本页'))
-    fireEvent.click(screen.getByRole('button', { name: '安装已选（2）' }))
-
-    expect(await screen.findByRole('radio', { name: /创建新的技能包/ })).toBeChecked()
-    fireEvent.change(screen.getByDisplayValue('anthropics/skills'), { target: { value: 'Anthropic Picks' } })
-    fireEvent.click(screen.getByRole('button', { name: '开始安装 2 个 Skills' }))
-
-    await waitFor(() => expect(upsertPack).toHaveBeenCalledTimes(1))
-    expect(upsertPack).toHaveBeenCalledWith(expect.objectContaining({
-      id: '',
-      name: 'Anthropic Picks',
-      tags: ['market', 'anthropics/skills'],
-      skillIds: ['brand-guidelines', 'frontend-design'],
-    }))
-  })
-
-  it('cancels the active repository download from the background progress bar', async () => {
-    useSkillStoreV2.setState({ packs: [] })
-    vi.spyOn(skillApiV2, 'searchMarketplaceSkills').mockResolvedValue([marketSkill()])
-    let finishBatch: ((result: Awaited<ReturnType<typeof skillApiV2.executeMarketplaceSkillBatch>>) => void) | null = null
-    const executeBatch = vi.spyOn(skillApiV2, 'executeMarketplaceSkillBatch').mockImplementation(() => new Promise((resolve) => {
-      finishBatch = resolve
-    }))
-    const cancelBatch = vi.spyOn(skillApiV2, 'cancelMarketplaceSkillBatch').mockResolvedValue(true)
-
-    const { MarketPanel } = await import('../components/skills-v2/InstallView')
-    render(<MarketPanel onInstall={() => {}} onDone={() => {}} />)
-
-    fireEvent.change(screen.getByPlaceholderText('搜索 skills.sh 市场…'), { target: { value: 'batch-cancel-test' } })
-    fireEvent.click(await screen.findByTitle('查看这个创建者的所有市场'))
-    fireEvent.click(await screen.findByText('anthropics/skills'))
-    fireEvent.click(await screen.findByLabelText('选择 brand-guidelines'))
-    fireEvent.click(screen.getByRole('button', { name: '安装已选（1）' }))
-    fireEvent.click(await screen.findByRole('button', { name: '开始安装 1 个 Skills' }))
-
-    await waitFor(() => expect(executeBatch).toHaveBeenCalledTimes(1))
-    fireEvent.click(screen.getByRole('button', { name: '取消安装' }))
-    const jobId = executeBatch.mock.calls[0][0]
-    await waitFor(() => expect(cancelBatch).toHaveBeenCalledWith(jobId))
-
-    await act(async () => {
-      finishBatch?.({ items: [], cancelled: true })
-    })
-
-    expect(await screen.findByText('批量安装已取消')).toBeInTheDocument()
-    expect(screen.getByText('已取消安装，取消前完成了 0 个 Skills。')).toBeInTheDocument()
-  })
-
-  it('keeps the marketplace task visible after leaving the market page', async () => {
-    useSkillStoreV2.setState({ packs: [] })
-    vi.spyOn(skillApiV2, 'searchMarketplaceSkills').mockResolvedValue([marketSkill()])
-    let finishBatch: ((result: Awaited<ReturnType<typeof skillApiV2.executeMarketplaceSkillBatch>>) => void) | null = null
-    vi.spyOn(skillApiV2, 'executeMarketplaceSkillBatch').mockImplementation(() => new Promise((resolve) => {
-      finishBatch = resolve
-    }))
-
-    const { MarketPanel } = await import('../components/skills-v2/InstallView')
-    const market = render(<MarketPanel onInstall={() => {}} onDone={() => {}} />)
-    fireEvent.change(screen.getByPlaceholderText('搜索 skills.sh 市场…'), { target: { value: 'background-navigation-test' } })
-    fireEvent.click(await screen.findByTitle('查看这个创建者的所有市场'))
-    fireEvent.click(await screen.findByText('anthropics/skills'))
-    fireEvent.click(await screen.findByLabelText('选择 brand-guidelines'))
-    fireEvent.click(screen.getByRole('button', { name: '安装已选（1）' }))
-    fireEvent.click(await screen.findByRole('radio', { name: /仅安装到中心库/ }))
-    fireEvent.click(screen.getByRole('button', { name: '开始安装 1 个 Skills' }))
-    await waitFor(() => expect(useSkillStoreV2.getState().marketplaceInstallTask?.busy).toBe(true))
-
-    market.unmount()
-    const onOpen = vi.fn()
-    const { MarketplaceInstallTaskDock } = await import('../components/skills-v2/MarketplaceInstallTaskDock')
-    render(<MarketplaceInstallTaskDock onOpen={onOpen} />)
-
-    expect(screen.getByRole('status', { name: '市场 Skill 安装任务' })).toHaveTextContent('0/1')
-    fireEvent.click(screen.getByRole('button', { name: '查看安装' }))
-    expect(onOpen).toHaveBeenCalledTimes(1)
-
-    await act(async () => {
-      finishBatch?.({
-        items: [
-          { itemId: 'skillssh:anthropics@skills@brand-guidelines', skillId: 'brand-guidelines', success: true, error: null },
-        ],
-        cancelled: false,
-      })
-    })
-
-    await waitFor(() => expect(useSkillStoreV2.getState().marketplaceInstallTask?.busy).toBe(false))
-    expect(screen.getByRole('status', { name: '市场 Skill 安装任务' })).toHaveTextContent('批量安装完成')
-    expect(screen.getByRole('status', { name: '市场 Skill 安装任务' })).toHaveTextContent('1/1')
-  })
-
-  it('keeps the Skill install sidebar entry free of marketplace progress', async () => {
-    useSkillStoreV2.getState().beginMarketplaceInstallTask(
-      'sidebar-market-job',
-      'anthropics/skills',
-      [{ id: 'brand-guidelines', name: 'brand-guidelines' }],
-    )
-    useSkillStoreV2.setState({ activeTab: 'library', activeInstallTab: 'git' })
-
-    const { SettingsSidebar } = await import('../components/settings/SettingsSidebar')
-    render(
-      <SettingsSidebar
-        activeSection="skill-manager-v2"
-        activeMonitorView="overview"
-        collapsed={false}
-        onCollapsedChange={() => {}}
-        onSelect={() => {}}
-        onMonitorViewChange={() => {}}
-      />,
-    )
-
-    const installEntry = screen.getByRole('button', { name: '安装 Skill' })
-    expect(installEntry).not.toHaveTextContent('0/1')
-    fireEvent.click(installEntry)
-    expect(useSkillStoreV2.getState().activeTab).toBe('install')
-    expect(useSkillStoreV2.getState().activeInstallTab).toBe('git')
-  })
-})
-
 describe('Git install skill preview view modes', () => {
   beforeEach(() => {
     cleanup()
@@ -1045,10 +607,6 @@ describe('Local skill import', () => {
     cleanup()
     vi.restoreAllMocks()
     vi.clearAllMocks()
-    useConfigStore.setState({ remoteHostEntries: [] })
-    useRuntimeEnvironmentStore.setState({
-      selectedEnvironmentId: LOCAL_RUNTIME_ENVIRONMENT_ID,
-    })
   })
 
   it('passes link import mode when importing a local source folder as a symlink', async () => {
@@ -1216,68 +774,6 @@ describe('Local skill import', () => {
     expect(screen.getByRole('button', { name: '无需导入' })).toBeDisabled()
   })
 
-  it('browses and imports paths from the selected remote server without opening the Mac dialog', async () => {
-    useConfigStore.setState({
-      remoteHostEntries: [{
-        id: 'ubuntu',
-        name: 'ubuntu',
-        sshTarget: 'agent@ubuntu',
-        port: 22,
-        remoteSocketPath: '/tmp/agentbro.sock',
-        autoConnect: false,
-        connectionStatus: 'disconnected',
-      }],
-    })
-    useRuntimeEnvironmentStore.setState({ selectedEnvironmentId: 'ubuntu' })
-    const browse = vi.spyOn(skillApiV2, 'browseRemoteSkillSources')
-      .mockResolvedValueOnce({
-        path: '/home/agent',
-        parentPath: null,
-        entries: [{
-          name: 'skills',
-          path: '/home/agent/skills',
-          entryType: 'directory',
-          hasSkillManifest: true,
-        }],
-      })
-      .mockResolvedValueOnce({
-        path: '/home/agent/skills',
-        parentPath: '/home/agent',
-        entries: [],
-      })
-    const previewAdd = vi.spyOn(skillApiV2, 'previewAddCenterSkill').mockResolvedValue({
-      centerPath: '/home/agent/.agents/skills',
-      candidates: [],
-      blockers: [],
-    })
-
-    const { LocalPanel } = await import('../components/skills-v2/InstallView')
-    render(<LocalPanel onDone={() => {}} />)
-
-    expect(screen.getByRole('heading', { name: '从 ubuntu 导入' })).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '浏览远程文件夹' }))
-
-    expect(await screen.findByRole('dialog', { name: '选择 ubuntu 上的文件夹' })).toBeInTheDocument()
-    await waitFor(() => expect(browse).toHaveBeenCalledWith('~'))
-    fireEvent.click(await screen.findByRole('button', { name: /skills.*Skill 文件夹/ }))
-    await waitFor(() => expect(screen.getByLabelText('远程目录路径')).toHaveValue('/home/agent/skills'))
-    fireEvent.click(screen.getByRole('button', { name: '选择当前文件夹' }))
-
-    expect(screen.getByPlaceholderText('浏览或输入远程服务器上的目录 / .zip'))
-      .toHaveValue('/home/agent/skills')
-    expect(openDialog).not.toHaveBeenCalled()
-    fireEvent.click(screen.getByRole('button', { name: '预览导入' }))
-
-    await waitFor(() => {
-      expect(previewAdd).toHaveBeenCalledWith({
-        sourcePath: '/home/agent/skills',
-        sourceType: 'local_folder',
-        sourceUri: '/home/agent/skills',
-        importMode: 'copy',
-        sourceLocation: 'remote',
-      })
-    })
-  })
 })
 
 describe('Agent sync local agent chips', () => {
@@ -2708,7 +2204,6 @@ describe('Skill detail slider + agent page render without crashing', () => {
     cleanup()
     vi.restoreAllMocks()
     i18n.changeLanguage('zh')
-    useRuntimeEnvironmentStore.setState({ selectedEnvironmentId: LOCAL_RUNTIME_ENVIRONMENT_ID })
     useSkillStoreV2.setState({
       runtimeEnvironmentId: LOCAL_RUNTIME_ENVIRONMENT_ID,
       viewMode: 'cards',
@@ -3274,11 +2769,9 @@ describe('Skill detail slider + agent page render without crashing', () => {
     render(
       <SettingsSidebar
         activeSection="skill-manager-v2"
-        activeMonitorView="overview"
         collapsed={false}
         onCollapsedChange={() => {}}
         onSelect={() => {}}
-        onMonitorViewChange={() => {}}
       />,
     )
 
@@ -3299,7 +2792,7 @@ describe('Skill detail slider + agent page render without crashing', () => {
   })
 
   it('sorts installed sidebar agents by active usage and supports drag reorder', async () => {
-    window.localStorage.removeItem('agentbro.agentManagement.agentOrder.v1')
+    window.localStorage.removeItem('vibeboard.agentManagement.agentOrder.v1')
     useSkillStoreV2.setState({
       activeTab: 'agents',
       selectedAgentId: null,
@@ -3321,11 +2814,9 @@ describe('Skill detail slider + agent page render without crashing', () => {
     const { container } = render(
       <SettingsSidebar
         activeSection="skill-manager-v2"
-        activeMonitorView="overview"
         collapsed={false}
         onCollapsedChange={() => {}}
         onSelect={() => {}}
-        onMonitorViewChange={() => {}}
       />,
     )
 
@@ -3347,8 +2838,8 @@ describe('Skill detail slider + agent page render without crashing', () => {
     fireEvent.mouseUp(window, { clientX: 20, clientY: 58 })
 
     expect(labels().slice(0, 3)).toEqual(['Claude Code', 'WorkBuddy', 'Codex'])
-    expect(JSON.parse(window.localStorage.getItem('agentbro.agentManagement.agentOrder.v1') || '[]')).toEqual(['claude-code', 'workbuddy', 'codex'])
-    window.localStorage.removeItem('agentbro.agentManagement.agentOrder.v1')
+    expect(JSON.parse(window.localStorage.getItem('vibeboard.agentManagement.agentOrder.v1') || '[]')).toEqual(['claude-code', 'workbuddy', 'codex'])
+    window.localStorage.removeItem('vibeboard.agentManagement.agentOrder.v1')
     useSessionStore.setState({ sessions: {}, sessionList: [], activeSessionId: null })
   })
 
@@ -3917,7 +3408,7 @@ describe('Skill detail slider + agent page render without crashing', () => {
     const overviewCallsBeforeRuntimeChange = overview.mock.calls.length
 
     act(() => {
-      useRuntimeEnvironmentStore.setState({ selectedEnvironmentId: 'remote-runtime' })
+      useSkillStoreV2.setState({ runtimeEnvironmentId: 'remote-runtime' })
       resolveExecute('shared-runtime')
     })
 
@@ -6271,11 +5762,9 @@ describe('Skill detail slider + agent page render without crashing', () => {
       <>
         <SettingsSidebar
           activeSection="skill-manager-v2"
-          activeMonitorView="overview"
           collapsed={false}
           onCollapsedChange={() => {}}
           onSelect={() => {}}
-          onMonitorViewChange={() => {}}
         />
         <AgentManagementPage />
       </>,

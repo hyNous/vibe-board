@@ -20,11 +20,8 @@ use crate::hooks::session_store::{
     AgentStatusSnapshot, PendingQuestion, RateLimitInfo, SessionPhase, SessionState, SessionStore,
     SubagentInfo, TokenUsage, UsageRateWindow,
 };
-use crate::network_monitor::NetworkMonitor;
 use crate::platform::display_controller::DisplayController;
-use crate::remote::{ConnectionStatus, RemoteHost, RemoteManager};
 use crate::sound::SoundEngine;
-use crate::switch::db::SwitchDatabase;
 use crate::telemetry::TelemetryService;
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
@@ -60,10 +57,7 @@ pub struct AppState {
     /// Wrapped in Mutex because RecommendedWatcher is not Sync on all platforms.
     pub conversation_watcher: Arc<Mutex<Option<ConversationWatcher>>>,
     pub display_controller: Arc<DisplayController>,
-    pub remote_manager: Arc<RemoteManager>,
     pub diagnostic_buffer: Arc<DiagnosticRingBuffer>,
-    pub network_monitor: Arc<NetworkMonitor>,
-    pub switch_db: Arc<SwitchDatabase>,
     pub task_db: Arc<crate::control_tower::ControlTowerDatabase>,
     pub telemetry: Arc<TelemetryService>,
     #[allow(dead_code)]
@@ -549,71 +543,6 @@ fn codex_app_server_refresh_interval_seconds(
     let mode = energy::mode_for_sessions(&store.get_all_sessions());
     let interval = energy::interval_seconds(mode, configured_seconds, 5, 60, 300);
     (mode, interval)
-}
-
-pub fn start_remote_codex_state_sync(
-    config_store: ConfigStore,
-    store: Arc<SessionStore>,
-    remote_manager: Arc<RemoteManager>,
-) {
-    tauri::async_runtime::spawn(async move {
-        let mut delivered: HashMap<String, i64> = HashMap::new();
-        let mut last_energy_mode: Option<EnergyMode> = None;
-
-        loop {
-            let config = config_store.get();
-            if !config.codex_app_server_sync_enabled {
-                tokio::time::sleep(Duration::from_secs(30)).await;
-                continue;
-            }
-
-            let (energy_mode, interval) = codex_app_server_refresh_interval_seconds(
-                &store,
-                config.codex_app_server_sync_interval_seconds,
-            );
-            if last_energy_mode != Some(energy_mode) {
-                log::debug!(
-                    "Remote Codex state sync energy mode: {:?}, interval={}s",
-                    energy_mode,
-                    interval
-                );
-                last_energy_mode = Some(energy_mode);
-            }
-
-            let cutoff_ms = chrono::Utc::now().timestamp_millis() - 15 * 60 * 1000;
-            for host in remote_manager.hosts() {
-                if remote_manager.status(&host.id) != ConnectionStatus::Connected {
-                    continue;
-                }
-
-                match crate::remote::installer::RemoteInstaller::read_recent_codex_threads(
-                    &host, cutoff_ms, 12,
-                )
-                .await
-                {
-                    Ok(threads) => {
-                        for thread in threads {
-                            let key = format!("{}:{}", host.id, thread.id);
-                            if thread.updated_at_ms <= delivered.get(&key).copied().unwrap_or(0) {
-                                continue;
-                            }
-                            delivered.insert(key, thread.updated_at_ms);
-                            sync_remote_codex_thread_to_store(&store, &host, &thread);
-                        }
-                    }
-                    Err(err) => {
-                        log::debug!(
-                            "Remote Codex state sync skipped host {}: {}",
-                            host.name,
-                            err
-                        );
-                    }
-                }
-            }
-
-            tokio::time::sleep(Duration::from_secs(interval)).await;
-        }
-    });
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -2596,93 +2525,6 @@ fn sync_codex_app_server_thread_to_store(
         cwd: Some(cwd),
         status,
         phase: format!("{:?}", phase),
-        updated_at,
-    })
-}
-
-fn sync_remote_codex_thread_to_store(
-    store: &SessionStore,
-    host: &RemoteHost,
-    thread: &crate::remote::installer::RemoteCodexThreadSnapshot,
-) -> Option<CodexAppServerThreadSummary> {
-    let thread_id = thread.id.trim();
-    let cwd = thread.cwd.trim();
-    if thread_id.is_empty() || cwd.is_empty() {
-        return None;
-    }
-
-    let preview = thread
-        .preview
-        .clone()
-        .or_else(|| thread.title.clone())
-        .filter(|value| !value.trim().is_empty());
-    let name = thread
-        .title
-        .clone()
-        .or_else(|| preview.clone())
-        .filter(|value| !value.trim().is_empty());
-    let project = name
-        .clone()
-        .or_else(|| {
-            Path::new(cwd)
-                .file_name()
-                .and_then(|value| value.to_str())
-                .map(str::to_string)
-        })
-        .filter(|value| !value.trim().is_empty())
-        .unwrap_or_else(|| "Codex".to_string());
-    let updated_at = (thread.updated_at_ms > 0).then_some(thread.updated_at_ms / 1000);
-    let status = Some(
-        thread
-            .thread_source
-            .clone()
-            .or_else(|| thread.source.clone())
-            .unwrap_or_else(|| "remote-state".to_string()),
-    );
-
-    store.get_or_create_session(thread_id, "codex", &project, cwd, &host.name);
-    store.update_session(thread_id, |session| {
-        session.agent_type = "codex".to_string();
-        session.engine_label = Some(format!("Codex App · {}", host.name));
-        session.codex_app_server_thread_id = None;
-        session.project = project.clone();
-        session.cwd = cwd.to_string();
-        session.terminal = host.name.clone();
-        session.term_bundle_id = None;
-        session.pid = None;
-        session.tty = None;
-        session.remote_host_id = Some(host.id.clone());
-        session.remote_host_name = Some(host.name.clone());
-        session.phase = if session.pending_permission.is_some() || session.pending_plan.is_some() {
-            SessionPhase::WaitingApproval
-        } else if session.pending_question.is_some() {
-            SessionPhase::WaitingInput
-        } else {
-            SessionPhase::Processing
-        };
-        session.session_title = name.clone();
-        session.description = preview.clone();
-        if let Some(updated_at) = updated_at {
-            session.last_main_agent_at = Some(updated_at);
-        }
-        if let Some(title) = name
-            .as_deref()
-            .filter(|title| preview.as_deref() != Some(*title))
-        {
-            session.last_user_message = Some(title.to_string());
-        }
-        if let Some(preview) = preview.clone() {
-            session.last_response = Some(preview);
-        }
-    });
-
-    Some(CodexAppServerThreadSummary {
-        id: thread_id.to_string(),
-        name,
-        preview,
-        cwd: Some(cwd.to_string()),
-        status,
-        phase: format!("{:?}", SessionPhase::Processing),
         updated_at,
     })
 }
@@ -6730,16 +6572,41 @@ fn launch_agent_path() -> Result<PathBuf, String> {
     Ok(home
         .join("Library")
         .join("LaunchAgents")
+        .join("com.vibeboard.desktop.login.plist"))
+}
+
+#[cfg(target_os = "macos")]
+fn legacy_launch_agent_path() -> Result<PathBuf, String> {
+    let home = dirs::home_dir().ok_or_else(|| "Unable to resolve home directory".to_string())?;
+    Ok(home
+        .join("Library")
+        .join("LaunchAgents")
         .join("com.agentisland.desktop.login.plist"))
 }
 
 #[cfg(target_os = "macos")]
-const APP_BUNDLE_IDENTIFIER: &str = "com.agentisland.desktop";
+const APP_BUNDLE_IDENTIFIER: &str = "com.vibeboard.desktop";
+
+#[cfg(target_os = "macos")]
+fn remove_launch_agent(plist_path: &Path) -> Result<(), String> {
+    if plist_path.exists() {
+        let domain = format!("gui/{}", unsafe { libc::getuid() });
+        let _ = std::process::Command::new("launchctl")
+            .arg("bootout")
+            .arg(domain)
+            .arg(plist_path)
+            .output();
+        std::fs::remove_file(plist_path).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
 
 #[cfg(target_os = "macos")]
 fn set_launch_at_login_state(enabled: bool) -> Result<(), String> {
     let plist_path = launch_agent_path()?;
     if enabled {
+        // Remove the Agent Island revision so startup does not double-launch.
+        remove_launch_agent(&legacy_launch_agent_path()?)?;
         if let Some(parent) = plist_path.parent() {
             std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
         }
@@ -6749,7 +6616,7 @@ fn set_launch_at_login_state(enabled: bool) -> Result<(), String> {
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>com.agentisland.desktop.login</string>
+  <string>com.vibeboard.desktop.login</string>
   <key>ProgramArguments</key>
   <array>
     <string>/usr/bin/open</string>
@@ -6763,14 +6630,9 @@ fn set_launch_at_login_state(enabled: bool) -> Result<(), String> {
 "#
         );
         std::fs::write(plist_path, plist).map_err(|e| e.to_string())?;
-    } else if plist_path.exists() {
-        let domain = format!("gui/{}", unsafe { libc::getuid() });
-        let _ = std::process::Command::new("launchctl")
-            .arg("bootout")
-            .arg(domain)
-            .arg(&plist_path)
-            .output();
-        std::fs::remove_file(plist_path).map_err(|e| e.to_string())?;
+    } else {
+        remove_launch_agent(&plist_path)?;
+        remove_launch_agent(&legacy_launch_agent_path()?)?;
     }
     Ok(())
 }
@@ -6894,67 +6756,6 @@ pub async fn set_island_feature_flags(
     config.pixel_cursor_enabled = pixel_cursor_enabled;
     config.confetti_enabled = confetti_enabled;
     config.follow_focus = follow_focus;
-    state.config_store.update(config)
-}
-
-#[tauri::command]
-pub async fn set_island_surface_options(
-    app: tauri::AppHandle,
-    state: State<'_, AppState>,
-    island_surface_mode: String,
-    island_pet_scale: u32,
-) -> Result<(), String> {
-    if !matches!(island_surface_mode.as_str(), "island" | "pet") {
-        return Err(format!(
-            "Unknown island surface mode: {}",
-            island_surface_mode
-        ));
-    }
-    let mut config = state.config_store.get();
-    let mode_changed = config.island_surface_mode != island_surface_mode;
-    config.island_surface_mode = island_surface_mode;
-    config.island_pet_scale = island_pet_scale.clamp(10, 120);
-    state.config_store.update(config.clone())?;
-
-    if mode_changed {
-        let handle = app.clone();
-        let saved_origin = config.island_pet_window_origin.clone();
-        let is_pet_mode = config.island_surface_mode == "pet";
-        app.run_on_main_thread(move || {
-            crate::sync_pet_window_visibility_inner(&handle, is_pet_mode, saved_origin.as_ref());
-        })
-        .map_err(|e| e.to_string())?;
-    } else if config.island_surface_mode == "pet" {
-        crate::configure_pet_window_for_spaces(&app);
-    }
-    Ok(())
-}
-
-#[tauri::command]
-pub async fn set_active_pet_id(
-    state: State<'_, AppState>,
-    pet_id: Option<String>,
-) -> Result<(), String> {
-    let mut config = state.config_store.get();
-    config.island_active_pet_id = pet_id.filter(|s| !s.is_empty());
-    state.config_store.update(config)
-}
-
-#[tauri::command]
-pub async fn set_agent_default_pet(
-    state: State<'_, AppState>,
-    agent: String,
-    pet_id: Option<String>,
-) -> Result<(), String> {
-    let mut config = state.config_store.get();
-    match pet_id.filter(|s| !s.is_empty()) {
-        Some(pid) => {
-            config.island_agent_pet_map.insert(agent, pid);
-        }
-        None => {
-            config.island_agent_pet_map.remove(&agent);
-        }
-    }
     state.config_store.update(config)
 }
 
@@ -7227,14 +7028,6 @@ fn parse_session_messages_for_command(
                 &fallback_session,
                 raw_events,
             )));
-        }
-        if let Some(ref session) = session {
-            if session.remote_host_id.is_some() || session.remote_host_name.is_some() {
-                return Ok(SessionMessagesResult::Remote(remote_session_chat_history(
-                    session,
-                    state.hook_server.raw_events_for_session(session_id),
-                )));
-            }
         }
         return Err(format!("No JSONL file found for session {}", session_id));
     };
@@ -7791,10 +7584,17 @@ fn redact_env_values(value: &mut serde_json::Value) {
 /// Generate or retrieve an anonymous install ID stored in the config directory.
 fn get_or_create_install_id() -> String {
     let base = dirs::config_dir().unwrap_or_else(std::env::temp_dir);
-    let id_path = base.join("agent-island").join("install_id");
-    let legacy_path = base.join("agentbro").join("install_id");
+    let id_path = base.join("vibeboard").join("install_id");
     if !id_path.exists() {
-        crate::data_dir::migrate_file(&legacy_path, &id_path);
+        for legacy_path in [
+            base.join("agent-island").join("install_id"),
+            base.join("agentbro").join("install_id"),
+        ] {
+            let _ = crate::data_dir::migrate_file(&legacy_path, &id_path);
+            if id_path.exists() {
+                break;
+            }
+        }
     }
     if let Ok(id) = std::fs::read_to_string(&id_path) {
         let trimmed = id.trim().to_string();
@@ -7822,29 +7622,6 @@ fn sanitized_config_json(config: &AppConfig) -> serde_json::Value {
                 if !secret.is_null() {
                     *secret = serde_json::Value::String("[REDACTED]".to_string());
                 }
-            }
-        }
-    }
-
-    // Redact remote hosts
-    if let Some(hosts) = val.get_mut("remoteHosts").and_then(|v| v.as_array_mut()) {
-        for host in hosts.iter_mut() {
-            if let Some(ssh_target) = host.get_mut("sshTarget") {
-                *ssh_target = serde_json::Value::String("[REDACTED]".to_string());
-            }
-            if let Some(identity_file) = host.get_mut("identityFile") {
-                if identity_file.is_string() {
-                    *identity_file = serde_json::Value::String("[REDACTED]".to_string());
-                }
-            }
-            if let Some(auth_socket) = host.get_mut("authSocket") {
-                if auth_socket.is_string() {
-                    *auth_socket = serde_json::Value::String("[REDACTED]".to_string());
-                }
-            }
-            if let Some(remote_socket_path) = host.get_mut("remoteSocketPath") {
-                let s = remote_socket_path.as_str().unwrap_or("");
-                *remote_socket_path = serde_json::Value::String(redact_paths(s));
             }
         }
     }
@@ -7985,14 +7762,17 @@ fn collect_hooks_sections(adapters: &[Arc<dyn AgentAdapter>]) -> Vec<String> {
 fn collect_log_files() -> Vec<(String, Vec<u8>)> {
     let base = dirs::data_local_dir()
         .unwrap_or_else(|| PathBuf::from("/tmp"))
-        .join("agent-island");
-    let log_dir = if base.join("logs").is_dir() {
-        base.join("logs")
-    } else {
-        base.parent()
-            .map(|parent| parent.join("agentbro").join("logs"))
-            .unwrap_or_else(|| base.join("logs"))
-    };
+        .join("vibeboard");
+    let log_dir = [base.join("logs")]
+        .into_iter()
+        .chain(["agent-island", "agentbro"].map(|dir| {
+            base.parent()
+                .unwrap_or_else(|| Path::new("/tmp"))
+                .join(dir)
+                .join("logs")
+        }))
+        .find(|dir| dir.is_dir())
+        .unwrap_or_else(|| base.join("logs"));
     let mut files = Vec::new();
     if let Ok(entries) = std::fs::read_dir(&log_dir) {
         let mut entries: Vec<_> = entries.filter_map(|e| e.ok()).collect();
@@ -8019,22 +7799,21 @@ fn collect_log_files() -> Vec<(String, Vec<u8>)> {
 }
 
 fn bridge_invocations_path() -> PathBuf {
-    let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("/tmp"));
-    let new_path = home
-        .join(".agent-island")
+    let new_path = crate::data_dir::vibeboard_home()
         .join("hooks")
         .join("invocations.jsonl");
     if new_path.exists() {
         return new_path;
     }
-    // Fall back to legacy path for reading
-    let legacy_root = crate::data_dir::legacy_agentbro_home();
-    for old_path in [
-        legacy_root.join("hooks").join("invocations.jsonl"),
-        legacy_root.join("hook-invocations.jsonl"),
-    ] {
-        if old_path.exists() {
-            return old_path;
+    // Fall back to legacy paths for reading
+    for legacy_root in crate::data_dir::legacy_homes() {
+        for old_path in [
+            legacy_root.join("hooks").join("invocations.jsonl"),
+            legacy_root.join("hook-invocations.jsonl"),
+        ] {
+            if old_path.exists() {
+                return old_path;
+            }
         }
     }
     new_path
@@ -8413,9 +8192,8 @@ mod tests {
         qoder_app_send_message_script, read_codex_session_meta_from_path,
         read_local_codex_rollout_state, redact_sensitive_hook_config, remote_session_chat_history,
         resolve_session_tty, session_has_desktop_host, sync_codex_app_server_thread_to_store,
-        sync_local_codex_rollouts_from_root, sync_remote_codex_thread_to_store,
-        terminal_hint_for_fallback, CodexAppServerPendingKind, CodexAppServerPendingRequest,
-        CODEX_TOKEN_SOURCE_LABEL,
+        sync_local_codex_rollouts_from_root, terminal_hint_for_fallback, CodexAppServerPendingKind,
+        CodexAppServerPendingRequest, CODEX_TOKEN_SOURCE_LABEL,
     };
     #[cfg(target_os = "windows")]
     use super::{
@@ -8430,8 +8208,6 @@ mod tests {
         PendingPermission, PendingQuestion, QuestionItem, QuestionOption, SessionPhase,
         SessionState, SessionStore, SubagentInfo,
     };
-    use crate::remote::installer::RemoteCodexThreadSnapshot;
-    use crate::remote::RemoteHost;
     use std::{collections::HashMap, fs, path::PathBuf};
 
     fn session(agent_type: &str, terminal: &str, tty: Option<&str>) -> SessionState {
@@ -8915,47 +8691,6 @@ mod tests {
         assert!(store.get_session("thread-recent-idle").is_some());
     }
 
-    #[test]
-    fn remote_codex_state_sync_marks_session_as_remote_codex_app() {
-        let store = SessionStore::new();
-        let host = RemoteHost {
-            id: "host-1".to_string(),
-            name: "GPU Box".to_string(),
-            ssh_target: "dev@gpu-box".to_string(),
-            port: Some(22),
-            identity_file: None,
-            auth_socket: None,
-            remote_socket_path: "/tmp/agentbro-remote.sock".to_string(),
-            auto_connect: true,
-        };
-        let thread = RemoteCodexThreadSnapshot {
-            id: "remote-thread-1".to_string(),
-            cwd: "/srv/project".to_string(),
-            title: Some("Ship remote Codex".to_string()),
-            preview: Some("Remote Codex changed files.".to_string()),
-            rollout_path: Some("/home/dev/.codex/sessions/rollout.jsonl".to_string()),
-            source: Some("codex".to_string()),
-            thread_source: Some("app-server".to_string()),
-            updated_at_ms: 1_780_070_000_123,
-        };
-
-        let summary = sync_remote_codex_thread_to_store(&store, &host, &thread).unwrap();
-        let session = store.get_session("remote-thread-1").unwrap();
-
-        assert_eq!(summary.status.as_deref(), Some("app-server"));
-        assert_eq!(session.agent_type, "codex");
-        assert_eq!(session.engine_label.as_deref(), Some("Codex App · GPU Box"));
-        assert_eq!(session.remote_host_id.as_deref(), Some("host-1"));
-        assert_eq!(session.remote_host_name.as_deref(), Some("GPU Box"));
-        assert_eq!(session.terminal, "GPU Box");
-        assert_eq!(session.phase, SessionPhase::Processing);
-        assert_eq!(session.last_main_agent_at, Some(1_780_070_000));
-        assert_eq!(
-            session.last_response.as_deref(),
-            Some("Remote Codex changed files.")
-        );
-    }
-
     #[tokio::test]
     async fn codex_app_server_permission_request_creates_pending_session() {
         let store = SessionStore::new();
@@ -9092,7 +8827,6 @@ mod tests {
     fn remote_session_chat_history_uses_raw_hook_events() {
         let mut session = session("claude-code", "", None);
         session.id = "remote-session".to_string();
-        session.remote_host_id = Some("host-1".to_string());
         session.last_response = Some("Fallback response".to_string());
 
         let messages = remote_session_chat_history(
@@ -9140,7 +8874,6 @@ mod tests {
     fn remote_session_chat_history_adds_session_completion_when_stop_is_generic() {
         let mut session = session("claude-code", "", None);
         session.id = "remote-session".to_string();
-        session.remote_host_id = Some("host-1".to_string());
         session.last_response = Some("Task completed".to_string());
 
         let messages = remote_session_chat_history(

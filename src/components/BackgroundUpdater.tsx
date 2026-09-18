@@ -3,7 +3,7 @@ import { useConfigStore } from '../stores/configStore'
 import { useUpdateStore } from '../stores/updateStore'
 import { useUpdater } from '../hooks/useUpdater'
 
-// Mounted in any always-on window (notch + pet) so a newer version is
+// Mounted in the always-on notch window so a newer version is
 // discovered even when Settings is closed. Each window runs its own check and
 // writes its own `updateStore`, which the surrounding surface reads to show a
 // dot. Gated on autoCheckUpdate; auto-download/restart stay gated separately

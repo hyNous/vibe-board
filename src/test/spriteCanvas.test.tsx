@@ -2,23 +2,29 @@ import { act, cleanup, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SpriteCanvas } from '../components/notch/SpriteCanvas'
 import { PRIORITY } from '../types/priority'
-import type { PetOption } from '../types/pet'
+import type { ThemeConfig } from '../types/theme'
 
-function makePet(): PetOption {
+function makeTheme(): ThemeConfig {
   return {
-    id: 'codex:test',
-    displayName: 'Test Pet',
-    provider: 'codex',
-    builtin: true,
-    spritesheetPath: '/tmp/test-pets/codex-test/spritesheet.webp',
-    spritesheetUrl: 'asset://localhost/tmp/test-pets/codex-test/spritesheet.webp',
-    frameSize: { width: 16, height: 16 },
-    animations: {
-      idle: { row: 0, frames: 1, fps: 10 },
-      running: { row: 7, frames: 2, fps: 10 },
-      'running-left': { row: 2, frames: 2, fps: 10 },
+    name: 'test-theme',
+    version: '1.0.0',
+    author: 'builtin',
+    pixelGrid: { cols: 1, rows: 1 },
+    priorityColors: {},
+    prioritySpeeds: {},
+    priorityPatterns: {},
+    character: {
+      spriteSheet: 'data:image/png;base64,test',
+      frameSize: { width: 16, height: 16 },
+      scale: 1,
+      animations: {
+        idle: { row: 0, frames: 1, fps: 10 },
+        running: { row: 7, frames: 2, fps: 10 },
+        'running-left': { row: 2, frames: 2, fps: 10 },
+      },
     },
     stateMapping: { working: 'running' },
+    sounds: { pack: 'none' },
   }
 }
 
@@ -38,7 +44,7 @@ describe('SpriteCanvas', () => {
   it('plays active work briefly, then settles back to idle frames', () => {
     render(
       <SpriteCanvas
-        pet={makePet()}
+        theme={makeTheme()}
         priority={PRIORITY.working}
         size={32}
         enableIdleBehaviors={false}
@@ -59,7 +65,7 @@ describe('SpriteCanvas', () => {
   it('keeps continuous overrides looping instead of settling to idle', () => {
     render(
       <SpriteCanvas
-        pet={makePet()}
+        theme={makeTheme()}
         priority={PRIORITY.working}
         size={32}
         animationOverride="running-left"
@@ -84,7 +90,7 @@ describe('SpriteCanvas', () => {
 
     render(
       <SpriteCanvas
-        pet={makePet()}
+        theme={makeTheme()}
         priority={PRIORITY.working}
         size={32}
         enableIdleBehaviors={false}

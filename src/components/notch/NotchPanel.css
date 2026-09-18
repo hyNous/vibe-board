@@ -211,20 +211,6 @@ html[data-island-color-theme="midnight"] .notch-panel[data-island-state="micro"]
   border-radius: var(--notch-side-radius, 36px) 0 0 var(--notch-side-radius, 36px) !important;
 }
 
-.notch-panel[data-island-state="pet"] {
-  overflow: visible !important;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-  clip-path: none;
-  -webkit-clip-path: none;
-}
-
-.notch-panel[data-island-state="pet"]::after {
-  content: none;
-}
-
 .notch-panel[data-dragging="true"] {
   cursor: grabbing;
   transition: none;

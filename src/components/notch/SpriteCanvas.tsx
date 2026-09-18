@@ -1,12 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { convertFileSrc } from '@tauri-apps/api/core'
-import type { PetOption } from '../../types/pet'
 import type { ThemeConfig } from '../../types/theme'
 import type { Priority } from '../../types/priority'
 import { priorityName } from '../../types/priority'
 
+interface SpriteCharacter {
+  id: string
+  spritesheetUrl: string
+  frameSize: { width: number; height: number }
+  animations: Record<string, { row: number; frames: number; fps: number }>
+  stateMapping: Record<string, string>
+}
+
 interface SpriteCanvasProps {
-  pet?: PetOption | null
   theme?: ThemeConfig
   priority: Priority
   size: number
@@ -37,7 +43,6 @@ const SLEEP_FPS_FLOOR = 2
 const ACTIVE_ANIMATION_LOOPS = 3
 
 export function SpriteCanvas({
-  pet,
   theme,
   priority,
   size,
@@ -56,7 +61,7 @@ export function SpriteCanvas({
 
   const trackedIdleMs = useTrackedIdleMs(priority, pageVisible)
   const effectiveIdleSinceMs = idleSinceMs && idleSinceMs > 0 ? idleSinceMs : trackedIdleMs
-  const activePet = useMemo(() => pet ?? themeToPet(theme), [pet, theme])
+  const activePet = useMemo(() => themeToPet(theme), [theme])
 
   const pName = priorityName(priority)
   const isIdle = pName === 'idle'
@@ -238,7 +243,7 @@ export function SpriteCanvas({
   )
 }
 
-function themeToPet(theme: ThemeConfig | undefined): PetOption | null {
+function themeToPet(theme: ThemeConfig | undefined): SpriteCharacter | null {
   if (!theme?.character) return null
   // Theme character.spriteSheet now carries an absolute filesystem path; the
   // legacy `spriteSheetDataUrl` field is no longer populated. Convert to an
@@ -250,11 +255,6 @@ function themeToPet(theme: ThemeConfig | undefined): PetOption | null {
     : convertFileSrc(spriteSheet)
   return {
     id: theme.name,
-    displayName: theme.displayName ?? theme.name,
-    description: theme.description,
-    provider: theme.provider ?? 'agentbro',
-    builtin: theme.author === 'builtin',
-    spritesheetPath: spriteSheet,
     spritesheetUrl,
     frameSize: theme.character.frameSize,
     animations: theme.character.animations,
@@ -271,7 +271,7 @@ function pickActiveAnimName({
   overrideAnimName: string | null
   idleBehavior: string | null
   baseAnimName: string
-  pet: PetOption | null
+  pet: SpriteCharacter | null
 }): string {
   if (overrideAnimName) return overrideAnimName
   if (idleBehavior && pet?.animations[idleBehavior]) return idleBehavior
@@ -280,7 +280,7 @@ function pickActiveAnimName({
 
 function pickAnimationOverride(
   animationOverride: string | readonly string[] | null | undefined,
-  pet: PetOption | null,
+  pet: SpriteCharacter | null,
 ): string | null {
   const overrides = Array.isArray(animationOverride)
     ? animationOverride
@@ -299,9 +299,9 @@ function getRenderStep({
   shouldSettleToIdle,
 }: {
   activeAnimName: string
-  activeAnim: NonNullable<PetOption['animations'][string]>
+  activeAnim: NonNullable<SpriteCharacter['animations'][string]>
   frameIndex: number
-  idleAnim: PetOption['animations'][string] | undefined
+  idleAnim: SpriteCharacter['animations'][string] | undefined
   prefersReducedMotion: boolean
   shouldSettleToIdle: boolean
 }): RenderedStep {
@@ -332,7 +332,7 @@ function computeEffectiveFps({
   isIdle,
   isSleeping,
 }: {
-  anim: NonNullable<PetOption['animations'][string]>
+  anim: NonNullable<SpriteCharacter['animations'][string]>
   activeAnimName: string
   baseAnimName: string
   contextPressure: number
@@ -355,12 +355,12 @@ type AtlasGrid = {
 }
 
 type RenderedStep = {
-  anim: NonNullable<PetOption['animations'][string]>
+  anim: NonNullable<SpriteCharacter['animations'][string]>
   animName: string
   frame: number
 }
 
-function inferAtlasGrid(pet: PetOption | null): AtlasGrid | null {
+function inferAtlasGrid(pet: SpriteCharacter | null): AtlasGrid | null {
   if (!pet) return null
   const animations = Object.values(pet.animations)
   if (animations.length === 0) return null

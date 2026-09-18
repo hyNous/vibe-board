@@ -1,31 +1,12 @@
 export {
-  getNetworkMonitorRequestDetail,
-  getNetworkMonitorRequests,
-  getNetworkMonitorStatus,
-  getClaudeWrapperStatus,
-  getMonitorSessionDetail,
   getMonitorSessions,
-  getMonitorTimeline,
   createDemoTaskTrace,
-  dispatchAgent,
   getTaskTraces,
-  installClaudeWrapper,
-  removeClaudeWrapper,
-  setNetworkMonitorEnabled,
 } from './tauriApi'
 
 export type {
-  MonitorRawEvent,
-  MonitorSessionDetail,
   MonitorSessionSummary,
-  MonitorTimelineItem,
-  NetworkMonitorStatus,
-  NetworkRequestDetail,
-  NetworkRequestSummary,
-  ClaudeWrapperStatus,
   TaskRecord,
   AgentRunRecord,
   TaskEventRecord,
-  DispatchRequest,
-  DispatchResult,
 } from './tauriApi'

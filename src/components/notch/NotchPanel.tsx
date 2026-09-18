@@ -60,8 +60,6 @@ const NATIVE_CURSOR_PASSTHROUGH_DELAY_MS = 120
 const HOVER_PANEL_MIN_HEIGHT = 180
 const HOVER_PANEL_HEIGHT = 320
 const EXPANDED_PREVIEW_SESSION_COUNT = 4
-const PET_SURFACE_WIDTH = 820
-const PET_SURFACE_HEIGHT = 360
 function nativeHostResizeKey(
   width: number,
   height: number,
@@ -244,7 +242,6 @@ export function NotchPanel() {
   const escSilenceDuration = useConfigStore((s) => s.escSilenceDuration)
   const interactionMode = useConfigStore((s) => s.interactionMode)
   const pixelCursorEnabled = useConfigStore((s) => s.pixelCursorEnabled)
-  const islandSurfaceMode = useConfigStore((s) => s.islandSurfaceMode)
   const islandAnimationScaleValue = useConfigStore((s) => s.islandAnimationScale)
   const islandAnimationScale = Math.max(0.1, islandAnimationScaleValue || 1)
   const followFocus = useConfigStore((s) => s.followFocus)
@@ -443,7 +440,7 @@ export function NotchPanel() {
     let unlisten: (() => void) | undefined
 
     import('@tauri-apps/api/event').then(({ listen }) => {
-      listen('tray-open-agentisland', () => {
+      const openPanel = () => {
         nativeHoverInsideRef.current = true
         interactionLockUntilRef.current = Date.now() + 700
         setPersistentIdleHidden(false)
@@ -451,7 +448,10 @@ export function NotchPanel() {
         setNotchOpacity(1).catch(() => {})
         useSessionStore.getState().setActiveSession(null)
         setPanelState('hover')
-      }).then((fn) => { unlisten = fn }).catch(() => {})
+      }
+      listen('tray-open-vibeboard', openPanel).then((fn) => {
+        unlisten = fn
+      }).catch(() => {})
     }).catch(() => {})
 
     return () => {
@@ -776,10 +776,6 @@ export function NotchPanel() {
 
   useEffect(() => {
     if (!isTauri()) return
-    if (islandSurfaceMode === 'pet') {
-      requestNativeIgnoreCursorEvents(true, { force: true })
-      return
-    }
 
     let cancelled = false
     let inFlight = false
@@ -835,15 +831,15 @@ export function NotchPanel() {
       cancelled = true
       if (pollTimer !== undefined) window.clearTimeout(pollTimer)
     }
-  }, [handleMouseEnter, handleMouseLeave, islandEnabled, islandSurfaceMode, isDragging, preparingOpen, requestNativeIgnoreCursorEvents])
+  }, [handleMouseEnter, handleMouseLeave, islandEnabled, isDragging, preparingOpen, requestNativeIgnoreCursorEvents])
 
   useEffect(() => {
-    if (!isTauri() || islandSurfaceMode === 'pet') return
+    if (!isTauri()) return
     const shouldForceInteractive = islandEnabled
       && (isDragging || preparingOpen || panelState !== 'collapsed')
     if (!shouldForceInteractive) return
     requestNativeIgnoreCursorEvents(false, { force: true })
-  }, [islandEnabled, islandSurfaceMode, isDragging, panelState, preparingOpen, requestNativeIgnoreCursorEvents])
+  }, [islandEnabled, isDragging, panelState, preparingOpen, requestNativeIgnoreCursorEvents])
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -1064,7 +1060,6 @@ export function NotchPanel() {
   const updateConfig = useConfigStore((s) => s.updateConfig)
   const effectiveHorizontalOffset = allowHorizontalDrag ? panelHorizontalOffset : 0
   const effectiveVerticalOffset = allowHorizontalDrag ? notchVerticalOffset : 0
-  const isPetMode = islandSurfaceMode === 'pet'
   // Sizing
   const isCompact = notchStyle === 'compact'
   const previewMode = layoutPreview?.mode
@@ -1099,10 +1094,8 @@ export function NotchPanel() {
         Math.max(360, window.innerWidth - 24),
       )
   const collapsedHeight = getCollapsedIslandHeight(notchHeightMode, customNotchHeight)
-  const regularContentWidth = isPetMode
-    ? PET_SURFACE_WIDTH
-    : previewMode === 'micro'
-      ? microPillWidth
+  const regularContentWidth = previewMode === 'micro'
+    ? microPillWidth
       : previewMode === 'compact'
         ? Math.round(compactPillWidth * (collapsedWidthScale / 100))
         : previewMode === 'expanded' || previewMode === 'completion'
@@ -1132,9 +1125,7 @@ export function NotchPanel() {
     (layoutPreview?.maxPanelHeight ?? maxPanelHeight) || 600,
   )
   const regularPanelHeight =
-    isPetMode
-      ? PET_SURFACE_HEIGHT
-      : previewMode === 'micro' || previewMode === 'compact'
+    previewMode === 'micro' || previewMode === 'compact'
         ? collapsedHeight
         : previewMode === 'completion'
           ? Math.min(Math.max(statusBarHeight + readableCompletionCardHeight + 72, 220), maxPanelHeight || 600)
@@ -1149,9 +1140,7 @@ export function NotchPanel() {
                   : (effectiveDetailPanelMaxHeight || 500)
   const panelHeight = sideCollapsed ? sideIslandDimensions.panelHeight : regularPanelHeight
 
-  const visualState = isPetMode
-    ? 'pet'
-    : previewMode === 'micro'
+  const visualState = previewMode === 'micro'
       ? 'micro'
       : previewMode === 'compact'
         ? 'compact'
@@ -1170,8 +1159,7 @@ export function NotchPanel() {
                       : effectivePanelState === 'expanded'
                         ? 'expanded'
                         : 'hover'
-  const usesNotchShell = !isPetMode
-  const shellSideExtension = usesNotchShell ? NOTCH_SHELL_SIDE_EXTENSION : 0
+  const shellSideExtension = NOTCH_SHELL_SIDE_EXTENSION
   const shellWidth = contentWidth + shellSideExtension * 2
   const notchShellClipPath = buildNotchShellClipPath(
     shellWidth,
@@ -1193,18 +1181,16 @@ export function NotchPanel() {
   const hitboxPadX = usesVisibleCollapsedHitbox || isSideNotch ? 0 : hitSlopX
   const maxHostSlopX = Math.max(NOTCH_HIT_SLOP_X_COLLAPSED, NOTCH_HIT_SLOP_X_EXPANDED)
   const maxHostSlopY = Math.max(NOTCH_HIT_SLOP_Y_COLLAPSED, NOTCH_HIT_SLOP_Y_EXPANDED)
-  const expandedHostContentWidth = isPetMode
-    ? PET_SURFACE_WIDTH
-    : usesWideApprovalOverlay
-      ? approvalPanelWidth
-      : expandedPanelContentWidth
-  const expandedHostPanelHeight = isPetMode ? PET_SURFACE_HEIGHT : Math.max(maxPanelHeight || 600, detailPanelMaxHeight || 500)
+  const expandedHostContentWidth = usesWideApprovalOverlay
+    ? approvalPanelWidth
+    : expandedPanelContentWidth
+  const expandedHostPanelHeight = Math.max(maxPanelHeight || 600, detailPanelMaxHeight || 500)
   const stableHostHitboxWidth = expandedHostContentWidth + shellSideExtension * 2 + maxHostSlopX * 2
   const stableHostHitboxHeight = expandedHostPanelHeight + maxHostSlopY
   const stableSideHostHitboxWidth = expandedPanelContentWidth + shellSideExtension * 2
   const stableSideHostHitboxHeight = expandedHostPanelHeight + NOTCH_HIT_SLOP_Y_EXPANDED
-  const islandHidden = !islandEnabled || isPetMode || (!layoutPreview && interaction.isHidden)
-  const hostUsesStableCanvas = !isPetMode && islandEnabled && (
+  const islandHidden = !islandEnabled || (!layoutPreview && interaction.isHidden)
+  const hostUsesStableCanvas = islandEnabled && (
     isSideNotch
     || effectivePanelState === 'collapsed'
   )
@@ -1232,7 +1218,7 @@ export function NotchPanel() {
     : scaleTransitionDuration(openMorphTransition, islandAnimationScale)
   const scaledContentTransition = scaleTransitionDuration(contentTransition, islandAnimationScale)
   const hostIsLargerThanTarget = hostHitboxSize.width > hitboxWidth || hostHitboxSize.height > hitboxHeight
-  const effectiveShellAnchorOffsetX = usesNotchShell && (effectivePanelState !== 'collapsed' || hostIsLargerThanTarget)
+  const effectiveShellAnchorOffsetX = (effectivePanelState !== 'collapsed' || hostIsLargerThanTarget)
     ? shellAnchorOffsetX
     : 0
   const nativeHoverAnchorOffsetX = isSideNotch
@@ -1586,7 +1572,6 @@ export function NotchPanel() {
             if (allowHorizontalDrag) event.preventDefault()
           }}
           style={{
-            display: isPetMode ? 'none' : undefined,
             overflow: 'hidden',
             cursor: allowHorizontalDrag ? (isDragging ? 'grabbing' : 'grab') : 'default',
             paddingInline: shellSideExtension,
@@ -1599,11 +1584,7 @@ export function NotchPanel() {
               data-testid="notch-drag-handle"
             />
           )}
-          {isPetMode ? (
-            null
-          ) : (
-            <>
-              <PixelCursor priority={activePriority} visible={pixelCursorEnabled && panelState !== 'collapsed'} />
+          <PixelCursor priority={activePriority} visible={pixelCursorEnabled && panelState !== 'collapsed'} />
 
               {!hasBlockingOverlayContent && (
                 <CollapsedBar
@@ -1672,8 +1653,6 @@ export function NotchPanel() {
                   </motion.div>
                 )}
               </AnimatePresence>
-            </>
-          )}
         </motion.div>
       </div>
     </div>

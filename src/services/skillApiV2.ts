@@ -1,23 +1,8 @@
 import { invoke as tauriInvoke } from '@tauri-apps/api/core'
-import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { isTauri as isTauriRuntime } from './tauriApi'
-import {
-  LOCAL_RUNTIME_ENVIRONMENT_ID,
-  useRuntimeEnvironmentStore,
-} from '../stores/runtimeEnvironmentStore'
 
 async function invoke<T>(command: string, args?: Record<string, unknown>): Promise<T> {
-  const environmentId = useRuntimeEnvironmentStore.getState().selectedEnvironmentId
-  const usesLocalDiscovery = command === 'search_marketplace_skills'
-    || command === 'fetch_marketplace_skill_detail'
-  if (environmentId === LOCAL_RUNTIME_ENVIRONMENT_ID || usesLocalDiscovery) {
-    return tauriInvoke<T>(command, args)
-  }
-  return tauriInvoke<T>('remote_skill_manager_invoke', {
-    id: environmentId,
-    command,
-    args: args ?? {},
-  })
+  return tauriInvoke<T>(command, args)
 }
 
 // ── Skill Manager v2 DTO types ────────────────────────────────────
@@ -554,24 +539,10 @@ export interface AddCenterSkillInput {
   sourcePath: string
   sourceType: string
   sourceUri?: string | null
-  sourceLocation?: 'local' | 'remote'
   importedFromAgent?: string | null
   importedFromPath?: string | null
   multi?: boolean
   importMode?: 'copy' | 'link'
-}
-
-export interface RemoteSkillSourceEntry {
-  name: string
-  path: string
-  entryType: 'directory' | 'archive'
-  hasSkillManifest: boolean
-}
-
-export interface RemoteSkillSourceListing {
-  path: string
-  parentPath: string | null
-  entries: RemoteSkillSourceEntry[]
 }
 
 export interface AddCenterSkillCandidate {
@@ -603,33 +574,6 @@ export interface AddCenterSkillResult {
   skillIds: string[]
   updated: string[]
   skipped: string[]
-}
-
-export interface MarketplaceBatchSkillInput {
-  itemId: string
-  skillId: string
-  sourceUri: string
-}
-
-export interface MarketplaceBatchItemResult {
-  itemId: string
-  skillId: string
-  success: boolean
-  error: string | null
-}
-
-export interface MarketplaceBatchInstallResult {
-  items: MarketplaceBatchItemResult[]
-  cancelled: boolean
-}
-
-export interface MarketplaceBatchProgress {
-  jobId: string
-  phase: 'cloning' | 'installing' | 'success' | 'failed' | 'completed' | 'cancelled' | string
-  itemId: string | null
-  completed: number
-  total: number
-  message: string | null
 }
 
 export interface AffectedTarget {
@@ -928,27 +872,6 @@ export interface GitHubSkillSyncResult {
   syncedAt: string
 }
 
-export interface MarketplaceSkill {
-  id: string
-  registryId: string
-  name: string
-  description: string | null
-  source: string | null
-  installCount: number | null
-  downloadUrl: string
-  webUrl: string | null
-  isInstalled: boolean
-  syncedAt: string
-  cacheUpdatedAt: string | null
-}
-
-export interface MarketplaceSkillDetail {
-  description: string | null
-  githubUrl: string | null
-  installCommand: string | null
-  webUrl: string | null
-}
-
 function demoMcpInventory(agent: string): McpInventory {
   return {
     agentId: agent,
@@ -1114,7 +1037,7 @@ export const skillApiV2 = {
       ? invoke<SkillManagerSettings>('skill_manager_settings')
       : Promise.resolve({
           centerPath: '~/.agents/skills',
-          sqlitePath: '~/.agent-island/skill-manager/skill-manager.db',
+          sqlitePath: '~/.vibeboard/skill-manager/skill-manager.db',
           defaultDistributeMode: 'link' as const,
           linkFailPolicy: 'ask' as const,
           startupScan: true,
@@ -1155,10 +1078,6 @@ export const skillApiV2 = {
         }),
   readFileContent: (filePath: string) =>
     isTauriRuntime() ? invoke<string>('read_skill_file_content', { filePath }) : Promise.resolve(''),
-  browseRemoteSkillSources: (path = '~') =>
-    isTauriRuntime()
-      ? invoke<RemoteSkillSourceListing>('browse_remote_skill_sources', { path })
-      : Promise.resolve({ path: '/home/agent', parentPath: null, entries: [] }),
   getSkillExplanation: (skillId: string, lang: string) =>
     isTauriRuntime() ? invoke<SkillExplanation | null>('get_skill_explanation_cmd', { skillId, lang }) : Promise.resolve(null),
   generateSkillExplanation: (skillId: string, skillPath: string, lang: string, refresh = false) =>
@@ -1203,21 +1122,6 @@ export const skillApiV2 = {
           updated: false,
           syncedAt: new Date().toISOString(),
         }),
-  executeMarketplaceSkillBatch: (jobId: string, repoSource: string, skills: MarketplaceBatchSkillInput[]) =>
-    isTauriRuntime()
-      ? invoke<MarketplaceBatchInstallResult>('execute_marketplace_skill_batch', { jobId, repoSource, skills })
-      : Promise.resolve({
-          items: skills.map((skill) => ({ itemId: skill.itemId, skillId: skill.skillId, success: true, error: null })),
-          cancelled: false,
-        }),
-  cancelMarketplaceSkillBatch: (jobId: string) =>
-    isTauriRuntime()
-      ? invoke<boolean>('cancel_marketplace_skill_batch', { jobId })
-      : Promise.resolve(true),
-  onMarketplaceBatchProgress: (handler: (progress: MarketplaceBatchProgress) => void): Promise<UnlistenFn> =>
-    isTauriRuntime()
-      ? listen<MarketplaceBatchProgress>('marketplace-skill-batch-progress', (event) => handler(event.payload))
-      : Promise.resolve(() => {}),
   previewGitHubRepoImport: (repoUrl: string, githubToken?: string) =>
     isTauriRuntime()
       ? invoke<GitHubRepoPreview>('preview_github_repo_import', {
@@ -1543,106 +1447,6 @@ export const skillApiV2 = {
   exportSnapshot: () => (isTauriRuntime() ? invoke<string>('skill_manager_export_snapshot') : Promise.resolve('')),
   openPath: (path: string) => (isTauriRuntime() ? invoke<void>('open_skill_path', { path }) : Promise.resolve()),
   revealPath: (path: string) => (isTauriRuntime() ? invoke<void>('reveal_skill_path', { path }) : Promise.resolve()),
-  searchMarketplaceSkills: (registryId?: string | null, query?: string | null, board?: string | null) =>
-    isTauriRuntime()
-      ? invoke<MarketplaceSkill[]>('search_marketplace_skills', { registryId: registryId ?? null, query: query ?? null, board: board ?? null })
-      : fetchSkillsShMarketplace(registryId, query, board),
-  fetchMarketplaceSkillDetail: (source: string, skillId: string) =>
-    isTauriRuntime()
-      ? invoke<MarketplaceSkillDetail>('fetch_marketplace_skill_detail', { source, skillId })
-      : Promise.resolve({ description: null, githubUrl: null, installCommand: null, webUrl: `https://skills.sh/${source}/${skillId}` }),
-}
-
-interface SkillsShSearchSkill {
-  id?: string
-  skillId?: string
-  skill_id?: string
-  name?: string
-  source?: string
-  installs?: number
-}
-
-interface SkillsShSearchResponse {
-  skills?: SkillsShSearchSkill[]
-}
-
-async function fetchSkillsShMarketplace(
-  registryId?: string | null,
-  query?: string | null,
-  board?: string | null,
-): Promise<MarketplaceSkill[]> {
-  const wantsSkillsSh = !registryId || ['skills-sh', 'skills.sh', 'skillssh'].includes(registryId)
-  if (!wantsSkillsSh || typeof fetch !== 'function') return []
-
-  try {
-    const url = new URL('https://skills.sh/api/search')
-    const queryText = query?.trim() || (board === 'hot' ? 'popular' : board === 'trending' ? 'trending' : 'skill')
-    url.searchParams.set('q', queryText)
-    url.searchParams.set('limit', '200')
-    const response = await fetch(url.toString())
-    if (!response.ok) return fallbackSkillsShMarketplace(query, board)
-
-    const value = (await response.json()) as SkillsShSearchResponse | SkillsShSearchSkill[]
-    const skills = Array.isArray(value) ? value : value.skills ?? []
-    const now = new Date().toISOString()
-    const mapped = skills
-      .map((skill) => toMarketplaceSkill(skill, now))
-      .filter((skill): skill is MarketplaceSkill => Boolean(skill))
-    return mapped.length > 0 ? mapped : fallbackSkillsShMarketplace(query, board)
-  } catch {
-    return fallbackSkillsShMarketplace(query, board)
-  }
-}
-
-function toMarketplaceSkill(skill: SkillsShSearchSkill, syncedAt: string): MarketplaceSkill | null {
-  const source = skill.source?.trim()
-  const skillId = (skill.skillId ?? skill.skill_id ?? '').trim()
-  if (!source || !skillId) return null
-
-  const id = skill.id?.trim()
-    ? `skillssh:${skill.id.trim().replace(/\//g, '@')}`
-    : `skillssh:${source.replace(/\//g, '@')}@${skillId.replace(/\//g, '@')}`
-  const installs = typeof skill.installs === 'number' ? skill.installs : 0
-  return {
-    id,
-    registryId: 'skills-sh',
-    name: skill.name?.trim() || skillId,
-    description: installs > 0 ? `skills.sh · ${installs} installs · ${source}` : `skills.sh · ${source}`,
-    source,
-    installCount: installs > 0 ? installs : null,
-    downloadUrl: `skillssh:${source}/${skillId}`,
-    webUrl: `https://skills.sh/${source}/${skillId}`,
-    isInstalled: false,
-    syncedAt,
-    cacheUpdatedAt: syncedAt,
-  }
-}
-
-function fallbackSkillsShMarketplace(query?: string | null, board?: string | null): MarketplaceSkill[] {
-  const now = new Date().toISOString()
-  const rows: SkillsShSearchSkill[] = [
-    { id: 'vercel-labs/skills/find-skills', skillId: 'find-skills', name: 'find-skills', source: 'vercel-labs/skills', installs: 2_006_831 },
-    { id: 'anthropics/skills/frontend-design', skillId: 'frontend-design', name: 'frontend-design', source: 'anthropics/skills', installs: 541_500 },
-    { id: 'vercel-labs/agent-skills/vercel-react-best-practices', skillId: 'vercel-react-best-practices', name: 'vercel-react-best-practices', source: 'vercel-labs/agent-skills', installs: 474_400 },
-    { id: 'vercel-labs/agent-browser/agent-browser', skillId: 'agent-browser', name: 'agent-browser', source: 'vercel-labs/agent-browser', installs: 447_200 },
-    { id: 'microsoft/azure-skills/microsoft-foundry', skillId: 'microsoft-foundry', name: 'microsoft-foundry', source: 'microsoft/azure-skills', installs: 389_800 },
-    { id: 'vercel-labs/agent-skills/web-design-guidelines', skillId: 'web-design-guidelines', name: 'web-design-guidelines', source: 'vercel-labs/agent-skills', installs: 388_900 },
-    { id: 'microsoft/azure-skills/azure-ai', skillId: 'azure-ai', name: 'azure-ai', source: 'microsoft/azure-skills', installs: 387_400 },
-    { id: 'microsoft/azure-skills/azure-deploy', skillId: 'azure-deploy', name: 'azure-deploy', source: 'microsoft/azure-skills', installs: 387_000 },
-    { id: 'microsoft/azure-skills/azure-diagnostics', skillId: 'azure-diagnostics', name: 'azure-diagnostics', source: 'microsoft/azure-skills', installs: 386_900 },
-  ]
-  const q = query?.trim().toLowerCase()
-  const filtered = q
-    ? rows.filter((row) => [row.name, row.source, row.skillId].filter(Boolean).join(' ').toLowerCase().includes(q))
-    : rows
-  const ordered = board === 'trending'
-    ? [...filtered].sort((a, b) => (b.name || '').localeCompare(a.name || ''))
-    : board === 'hot'
-      ? [...filtered].sort((a, b) => (b.installs || 0) - (a.installs || 0)).slice(1)
-      : filtered
-  return ordered
-    .map((skill) => toMarketplaceSkill(skill, now))
-    .filter((skill): skill is MarketplaceSkill => Boolean(skill))
 }
 
 function demoAgentInventory(): AgentSkillInventoryAgent[] {
@@ -1850,7 +1654,7 @@ function demoOverview(): SkillManagerOverview {
     issues: [],
     settings: {
       centerPath: '~/.agents/skills',
-      sqlitePath: '~/.agent-island/skill-manager/skill-manager.db',
+      sqlitePath: '~/.vibeboard/skill-manager/skill-manager.db',
       defaultDistributeMode: 'link',
       linkFailPolicy: 'ask',
       startupScan: true,

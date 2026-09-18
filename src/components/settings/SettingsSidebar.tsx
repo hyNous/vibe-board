@@ -5,7 +5,6 @@ import { useSkillStoreV2 } from '../../stores/skillStoreV2'
 import { useSessionStore } from '../../stores/sessionStore'
 import type { SkillManagerTab } from '../../stores/skillStoreV2'
 import { AgentIconBadge } from '../skills-v2/AgentIconBadge'
-import type { MonitorSettingsView } from '../../types/capability'
 import { getCurrentAppVersion } from '../../services/tauriApi'
 import { buildAgentUsageScores, readStoredAgentOrder, sortAgentSummaries, writeStoredAgentOrder } from '../../utils/agentOrdering'
 
@@ -65,29 +64,23 @@ const sidebarGroups: SidebarGroup[] = [
   },
   {
     items: [
-      { id: 'remote-servers', labelKey: 'settings.nav.remoteServers', labelDefault: '远程服务器', icon: '>_', hidden: true },
       { id: 'about', labelKey: 'settings.nav.about', labelDefault: '关于', icon: 'ℹ', hidden: true },
-      { id: 'switch', labelKey: 'settings.nav.switch', labelDefault: 'Agent Switch', icon: '⇄', hidden: true },
     ],
   },
 ]
 
 interface SettingsSidebarProps {
   activeSection: string
-  activeMonitorView: MonitorSettingsView
   collapsed: boolean
   onCollapsedChange: (collapsed: boolean) => void
   onSelect: (section: string) => void
-  onMonitorViewChange: (view: MonitorSettingsView) => void
 }
 
 export function SettingsSidebar({
   activeSection,
-  activeMonitorView,
   collapsed,
   onCollapsedChange,
   onSelect,
-  onMonitorViewChange,
 }: SettingsSidebarProps) {
   const { t } = useTranslation()
   const skillActiveTab = useSkillStoreV2((s) => s.activeTab)
@@ -206,11 +199,9 @@ export function SettingsSidebar({
   const capabilitySidebarClassName = `settings-sidebar settings-sidebar--capability settings-scroll${collapsed ? ' settings-sidebar--collapsed' : ''}`
   const toggleLabel = collapsed ? t('settings.expandSidebar', { defaultValue: 'Expand sidebar' }) : t('settings.collapseSidebar', { defaultValue: 'Collapse sidebar' })
   const sectionTitleById: Record<string, string> = {
-    monitor: t('settings.agentMonitor'),
-    switch: t('settings.switch'),
     'skill-manager-v2': t('settings.skillManager', { defaultValue: 'Agent管理' }),
   }
-  const isCapabilitySection = activeSection === 'monitor' || activeSection === 'switch' || activeSection === 'skill-manager-v2'
+  const isCapabilitySection = activeSection === 'skill-manager-v2'
   const brandTitle = isCapabilitySection ? sectionTitleById[activeSection] : t('settings.title')
   const backToSettingsLabel = t('settings.backToSettings', { defaultValue: 'Back to Settings' })
   const openSkillTab = (tab: SkillManagerTab) => {
@@ -250,43 +241,6 @@ export function SettingsSidebar({
       </button>
     </div>
   )
-
-  if (activeSection === 'monitor') {
-    const navItems: Array<{ id: MonitorSettingsView; label: string; icon: string; iconBg: string }> = [
-      { id: 'overview', label: '监控总览', icon: '▦', iconBg: '#34C759' },
-      { id: 'capture', label: '请求抓包', icon: '⇄', iconBg: '#007AFF' },
-      { id: 'stats', label: '项目统计', icon: '▥', iconBg: '#FF9500' },
-      { id: 'sessions', label: '会话追踪', icon: '◉', iconBg: '#5856D6' },
-      { id: 'access', label: '接入设置', icon: '<>', iconBg: '#8E8E93' },
-      { id: 'usage', label: '用量统计', icon: '$', iconBg: '#FF3B30' },
-    ]
-
-    return (
-      <nav className={capabilitySidebarClassName}>
-        {toggleSidebar}
-        <div className="settings-capability-nav">
-          {navItems.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              className={activeMonitorView === item.id ? 'active' : ''}
-              aria-label={item.label}
-              title={item.label}
-              onClick={() => onMonitorViewChange(item.id)}
-            >
-              <span
-                className="settings-sidebar__icon settings-capability-nav__icon--colored"
-                style={{ background: activeMonitorView === item.id ? 'rgba(255,255,255,0.25)' : item.iconBg, color: '#fff' }}
-              >
-                {item.icon}
-              </span>
-              <span className="settings-sidebar__label-text">{item.label}</span>
-            </button>
-          ))}
-        </div>
-      </nav>
-    )
-  }
 
   if (activeSection === 'skill-manager-v2') {
     const skillTabs: Array<{ id: SkillManagerTab; label: string; icon: string; iconBg: string }> = [
