@@ -2228,6 +2228,17 @@ fn show_settings_window(app: &tauri::AppHandle) -> Result<(), String> {
         // on its first show and after Explorer refreshes window metadata.
         let _ = window.set_skip_taskbar(true);
         apply_settings_window_for_spaces(&window);
+        // The window is decorated, so its native titlebar offers a minimize
+        // button, but `skip_taskbar` means a minimized window has no taskbar
+        // entry to click. `show()` alone does not restore a minimized window
+        // on Windows, so without this the window becomes unreachable: hidden
+        // from the taskbar and unaffected by every later "open settings".
+        // Restore first, then show.
+        if window.is_minimized().unwrap_or(false) {
+            if let Err(error) = window.unminimize() {
+                log::warn!("Failed to restore minimized settings window: {error}");
+            }
+        }
         let _ = window.show();
         let _ = window.set_focus();
 
