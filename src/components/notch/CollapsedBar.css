@@ -193,17 +193,6 @@
   overflow: visible;
 }
 
-.collapsed-bar__theme-avatar {
-  display: inline-grid;
-  flex: 0 0 auto;
-  place-items: center;
-  overflow: hidden;
-}
-
-.collapsed-bar__theme-avatar .sprite-canvas {
-  display: block;
-}
-
 .collapsed-bar__idle-logo-wrap,
 .collapsed-bar__agent-wrap {
   display: inline-grid;

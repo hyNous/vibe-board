@@ -32,19 +32,7 @@
       }
     ],
     "security": {
-      "csp": null,
-      "assetProtocol": {
-        "enable": true,
-        "scope": [
-          "$RESOURCE/themes/**",
-          "$HOME/.vibeboard/themes/**",
-          "$HOME/.agent-island/themes/**",
-          "$HOME/.codex/pets/**",
-          "$HOME/.config/vibeboard/themes/**",
-          "$HOME/.config/agent-island/themes/**",
-          "$HOME/.config/agentbro/themes/**"
-        ]
-      }
+      "csp": null
     }
   },
   "plugins": {
@@ -65,7 +53,6 @@
       "icons/icon.ico"
     ],
     "resources": {
-      "../src/themes": "themes",
       "target/vibe-board-bridge-resource/vibe-board-bridge": "vibe-board-bridge"
     }
   }

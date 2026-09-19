@@ -302,8 +302,6 @@
     "costModel": "Cost Model",
     "costModelDesc": "Model pricing used for cost estimation",
     "agentActivity": "Agent Activity Details",
-    "activeTheme": "Character Theme",
-    "activeThemeDesc": "Choose the pixel character theme for the island",
     "agentActivityDesc": "Show subagent activity and history entry points in the detail view",
     "soundDesc": "Configure notification sounds and audio feedback.",
     "enableSounds": "Enable Sounds",

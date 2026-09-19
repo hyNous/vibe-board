@@ -105,7 +105,6 @@ pub struct AppConfig {
     /// Vertical offset used by side notch placement.
     #[serde(default)]
     pub notch_vertical_offset: f64,
-    pub theme: String,
     #[serde(default = "default_language")]
     pub language: String,
     /// Which display to position on: "primary" or a monitor name
@@ -339,7 +338,6 @@ impl Default for AppConfig {
             host_visibility_mode: default_host_visibility_mode(),
             notch_position_mode: default_notch_position_mode(),
             notch_vertical_offset: 0.0,
-            theme: "midnight".to_string(),
             language: default_language(),
             display_id: "primary".to_string(),
             panel_horizontal_offset: 0.0,
@@ -652,6 +650,22 @@ mod tests {
         let config: AppConfig = serde_json::from_value(value).expect("deserialize legacy config");
 
         assert!(config.enabled_agents.is_empty());
+    }
+
+    #[test]
+    fn ignores_legacy_theme_selection() {
+        let mut value = serde_json::to_value(AppConfig::default()).expect("serialize config");
+        value
+            .as_object_mut()
+            .expect("config object")
+            .insert("theme".to_string(), serde_json::json!("codex-pet:nami"));
+
+        let config: AppConfig = serde_json::from_value(value).expect("deserialize legacy config");
+
+        assert!(serde_json::to_value(&config)
+            .expect("serialize config")
+            .get("theme")
+            .is_none());
     }
 
     #[test]

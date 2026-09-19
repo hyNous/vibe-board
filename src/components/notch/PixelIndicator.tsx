@@ -3,7 +3,8 @@ import { useMemo } from 'react'
 import type { Priority } from '../../types/priority'
 import { PRIORITY, computePriority, priorityName } from '../../types/priority'
 import type { SessionPhase } from '../../types/agent'
-import { useThemeStore } from '../../stores/themeStore'
+import type { ThemeConfig } from '../../types/theme'
+import inkAmberThemeConfig from '../../themes/ink-amber/theme.json'
 import './PixelIndicator.css'
 
 interface PixelIndicatorProps {
@@ -28,7 +29,7 @@ function phaseToFallbackPriority(phase: SessionPhase): Priority {
 }
 
 export function PixelIndicator({ priority, phase, size = 14 }: PixelIndicatorProps) {
-  const theme = useThemeStore((s) => s.activeTheme)
+  const theme = inkAmberThemeConfig as ThemeConfig
   const p = priority ?? (phase ? phaseToFallbackPriority(phase) : PRIORITY.idle)
   const pName = priorityName(p)
 

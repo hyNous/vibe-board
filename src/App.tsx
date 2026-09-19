@@ -5,7 +5,7 @@ import { useConfigStore } from './stores/configStore'
 import { BackgroundUpdater } from './components/BackgroundUpdater'
 import { useTauriInit } from './hooks/useTauri'
 import { useAutoHide } from './hooks/useAutoHide'
-import { getActiveThemeBundle, isTauri } from './services/tauriApi'
+import { isTauri } from './services/tauriApi'
 import { primaryModifierPressed } from './utils/platform'
 import './styles/globals.css'
 
@@ -107,31 +107,12 @@ function App() {
     const applyPersistedTheme = (raw: string | null) => {
       if (!raw) return
       try {
-        const persisted = JSON.parse(raw) as { version?: number; state?: { activeThemeName?: string; colorTheme?: string } }
+        const persisted = JSON.parse(raw) as { state?: { colorTheme?: string } }
         const nextTheme = persisted.state?.colorTheme
         if (nextTheme && COLOR_THEMES.some((theme) => theme.id === nextTheme)) {
           document.documentElement.setAttribute('data-island-color-theme', nextTheme)
           if (useThemeStore.getState().colorTheme !== nextTheme) {
             useThemeStore.setState({ colorTheme: nextTheme })
-          }
-        }
-        const activeThemeName = (persisted.version ?? 0) < 2 && persisted.state?.activeThemeName === 'default'
-          ? 'ink-amber'
-          : persisted.state?.activeThemeName
-        if (activeThemeName) {
-          const store = useThemeStore.getState()
-          if (store.activeThemeName === activeThemeName && store.activeTheme.name === activeThemeName) return
-          const theme = store.themes.find((candidate) => candidate.name === activeThemeName)
-          if (theme) {
-            store.setActiveTheme(activeThemeName)
-          } else if (isTauri()) {
-            getActiveThemeBundle(activeThemeName)
-              .then((bundle) => {
-                const latest = useThemeStore.getState()
-                latest.loadThemes([...latest.themes, bundle])
-                latest.setActiveTheme(activeThemeName)
-              })
-              .catch(() => {})
           }
         }
       } catch {

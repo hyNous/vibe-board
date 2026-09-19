@@ -7,12 +7,10 @@ import { TipDisplay } from './TipDisplay'
 import { openSettingsWindow, quitApp } from '../../services/tauriApi'
 import { useConfigStore } from '../../stores/configStore'
 import { useUpdateStore } from '../../stores/updateStore'
-import { useThemeStore } from '../../stores/themeStore'
 import { sessionNeedsAttention } from '../../utils/islandInteraction'
 import { statusFromSession } from '../../utils/agentRunState'
 import { getAgentDisplayName } from '../../utils/sessionDisplay'
 import { RateLimitBar } from './RateLimitBar'
-import { SpriteCanvas } from './SpriteCanvas'
 import './CollapsedBar.css'
 
 interface CollapsedBarProps {
@@ -86,7 +84,6 @@ export function CollapsedBar({ sessions, panelState, rateLimits, usageSnapshots,
   const showUsageQuota = useConfigStore((s) => s.showUsageQuota)
   const usageQueryEnabled = useConfigStore((s) => s.usageQueryEnabled)
   const tipsEnabled = useConfigStore((s) => s.tipsEnabled)
-  const activeTheme = useThemeStore((s) => s.activeTheme)
 
   const lead = getLeadSession(sessions)
   const executingSession = getExecutingSession(sessions)
@@ -112,18 +109,6 @@ export function CollapsedBar({ sessions, panelState, rateLimits, usageSnapshots,
     }
 
     const agentName = getAgentDisplayName(session)
-
-    if (activeTheme.character) {
-      return (
-        <span className="collapsed-bar__theme-avatar" style={{ width: size, height: size }} title={agentName} aria-label={agentName}>
-          <SpriteCanvas
-            priority={computePriority(session)}
-            size={size}
-            theme={activeTheme}
-          />
-        </span>
-      )
-    }
 
     return (
       <span className="collapsed-bar__agent-wrap" title={agentName} aria-label={agentName} data-agent={session.agentType}>

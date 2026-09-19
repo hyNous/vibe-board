@@ -3,11 +3,10 @@
  */
 import { useEffect } from 'react'
 import i18n from 'i18next'
-import { isTauri, getSessions, getAgentStatuses, getUsageRateLimits, getUsageSnapshots, getConfig, listThemes, setSoundEventRule, getActiveThemeBundle, setLanguage, getAppStateFlags } from '../services/tauriApi'
+import { isTauri, getSessions, getAgentStatuses, getUsageRateLimits, getUsageSnapshots, getConfig, setSoundEventRule, setLanguage, getAppStateFlags } from '../services/tauriApi'
 import type { BackendSession, BackendConfig, ParsedMessage, ParsedMessageBlock } from '../services/tauriApi'
 import { useSessionStore } from '../stores/sessionStore'
 import { useConfigStore } from '../stores/configStore'
-import { useThemeStore } from '../stores/themeStore'
 import type { SoundChoice } from '../stores/configStore'
 import type { SessionState, DiffContent, AgentType, AgentStatusSnapshot, ToolStatus, ChatMessage, RateLimitInfo } from '../types/agent'
 import { energyIntervalMs, getAppEnergyMode } from '../utils/energyPolicy'
@@ -29,63 +28,6 @@ function listenForTauriEvent<T>(
       else register(unlisten)
     })
     .catch((error) => console.error(`[tauri] listen ${eventName}:`, error))
-}
-
-let lastBackendThemeName: string | null = null
-let pendingBackendThemeName: string | null = null
-let pendingBackendThemeTimer: ReturnType<typeof setTimeout> | null = null
-
-function normalizeBackendThemeName(theme?: string | null): string | null {
-  return theme && theme !== 'system' ? theme : null
-}
-
-function markPendingBackendTheme(name: string) {
-  pendingBackendThemeName = name
-  if (pendingBackendThemeTimer) clearTimeout(pendingBackendThemeTimer)
-  pendingBackendThemeTimer = setTimeout(() => {
-    pendingBackendThemeName = null
-    pendingBackendThemeTimer = null
-  }, 5000)
-}
-
-function clearPendingBackendTheme(name?: string) {
-  if (name && pendingBackendThemeName !== name) return
-  pendingBackendThemeName = null
-  if (pendingBackendThemeTimer) {
-    clearTimeout(pendingBackendThemeTimer)
-    pendingBackendThemeTimer = null
-  }
-}
-
-function applyBackendThemeChange(theme?: string | null) {
-  const backendThemeName = normalizeBackendThemeName(theme)
-  if (!backendThemeName) return
-
-  lastBackendThemeName = backendThemeName
-
-  if (pendingBackendThemeName && pendingBackendThemeName !== backendThemeName) {
-    return
-  }
-
-  clearPendingBackendTheme(backendThemeName)
-
-  const store = useThemeStore.getState()
-  if (store.activeThemeName !== backendThemeName) {
-    const existing = store.themes.find((t) => t.name === backendThemeName)
-    if (existing) {
-      store.setActiveTheme(backendThemeName)
-    } else if (isTauri()) {
-      getActiveThemeBundle(backendThemeName)
-        .then((bundle) => {
-          const latest = useThemeStore.getState()
-          if (!latest.themes.some((t) => t.name === bundle.name)) {
-            latest.loadThemes([...latest.themes, bundle])
-          }
-          latest.setActiveTheme(backendThemeName)
-        })
-        .catch(() => {})
-    }
-  }
 }
 
 // ── Transform Backend → Frontend ─────────────────────────────────
@@ -432,26 +374,6 @@ function syncSoundEventSettingsToBackend() {
   })
 }
 
-function syncThemesFromBackend(configTheme?: string) {
-  const backendThemeName = normalizeBackendThemeName(configTheme)
-  const activeThemeNameAtSyncStart = useThemeStore.getState().activeThemeName
-  if (backendThemeName) {
-    lastBackendThemeName = backendThemeName
-  }
-
-  listThemes().then((themes) => {
-    const store = useThemeStore.getState()
-    store.loadThemes(themes)
-    if (
-      backendThemeName &&
-      backendThemeName === lastBackendThemeName &&
-      store.activeThemeName === activeThemeNameAtSyncStart
-    ) {
-      store.setActiveTheme(backendThemeName)
-    }
-  }).catch(e => console.error('[tauri] listThemes:', e))
-}
-
 let usageRateLimitRefreshInFlight = false
 let usageRateLimitLastRefreshAt = 0
 let usageRateLimitRefreshQueued = false
@@ -623,7 +545,6 @@ export function useConfigSync(enabled = true, canWriteMigrations = true) {
         setLanguage(effectiveConfig.language).catch(e => console.error('[tauri] setLanguage:', e))
       }
       applyBackendConfig(effectiveConfig)
-      syncThemesFromBackend(effectiveConfig.theme)
       if (canWriteMigrations && (!effectiveConfig.soundRules || Object.keys(effectiveConfig.soundRules).length === 0)) {
         syncSoundEventSettingsToBackend()
       }
@@ -634,31 +555,14 @@ export function useConfigSync(enabled = true, canWriteMigrations = true) {
       'config-changed',
       (event) => {
         applyBackendConfig(event.payload)
-        applyBackendThemeChange(event.payload.theme)
       },
       (fn) => { unlisten = fn },
       () => cancelled,
     )
 
-    const handleThemeSync = (event: Event) => {
-      const detail = (event as CustomEvent<{ status?: string; name?: string }>).detail
-      if (!detail?.name) return
-      if (detail.status === 'pending') {
-        markPendingBackendTheme(detail.name)
-      } else if (detail.status === 'failed') {
-        clearPendingBackendTheme(detail.name)
-      }
-    }
-    window.addEventListener('vibeboard-theme-sync', handleThemeSync)
-    window.addEventListener('agent-island-theme-sync', handleThemeSync)
-    window.addEventListener('agentbro-theme-sync', handleThemeSync)
-
     return () => {
       cancelled = true
       unlisten?.()
-      window.removeEventListener('vibeboard-theme-sync', handleThemeSync)
-      window.removeEventListener('agent-island-theme-sync', handleThemeSync)
-      window.removeEventListener('agentbro-theme-sync', handleThemeSync)
     }
   }, [canWriteMigrations, enabled])
 }

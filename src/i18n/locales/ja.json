@@ -249,8 +249,6 @@
     "costModel": "コストモデル",
     "costModelDesc": "コスト見積もりに使用するモデル価格",
     "agentActivity": "エージェントアクティビティの詳細",
-    "activeTheme": "アクティブテーマ",
-    "activeThemeDesc": "ピクセルインジケーターと色のビジュアルスタイル",
     "agentActivityDesc": "詳細ビューにサブエージェントの活動と履歴入口を表示する",
     "soundDesc": "通知音とオーディオフィードバックを設定します。",
     "enableSounds": "サウンドを有効にする",

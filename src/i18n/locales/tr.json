@@ -250,8 +250,6 @@
     "costModel": "Maliyet Modeli",
     "costModelDesc": "Maliyet tahmini için kullanılan model fiyatlandırması",
     "agentActivity": "Ajan Etkinlik Ayrıntıları",
-    "activeTheme": "Aktif Tema",
-    "activeThemeDesc": "Piksel göstergesi ve renkler için görsel stil",
     "agentActivityDesc": "Detay görünümünde alt ajan etkinliğini ve geçmiş girişlerini göster",
     "soundDesc": "Bildirim seslerini ve ses geri bildirimini yapılandırın.",
     "enableSounds": "Sesleri Etkinleştir",

@@ -305,8 +305,6 @@
     "costModel": "费用模型",
     "costModelDesc": "用于费用估算的模型定价",
     "agentActivity": "Agent 活动详情",
-    "activeTheme": "角色主题",
-    "activeThemeDesc": "选择灵动岛的像素角色主题",
     "agentActivityDesc": "在详情页显示子代理活动列表和历史入口",
     "islandPositionCenter": "居中",
     "islandPositionLeft": "向左 {{value}}px",

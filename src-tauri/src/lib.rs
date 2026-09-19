@@ -13,7 +13,6 @@ pub mod skills;
 pub mod sound;
 pub mod telemetry;
 pub mod terminal;
-pub mod theme;
 pub mod webhook;
 
 use std::path::{Path, PathBuf};
@@ -1355,39 +1354,6 @@ async fn get_diagnostic_events(
             component.as_deref(),
         ),
     })
-}
-
-// ── Theme Commands ──────────────────────────────────────────────
-
-#[tauri::command]
-async fn get_themes() -> Result<Vec<serde_json::Value>, String> {
-    Ok(theme::scanner::scan_themes())
-}
-
-#[tauri::command]
-async fn list_themes() -> Result<Vec<serde_json::Value>, String> {
-    Ok(theme::scanner::scan_themes())
-}
-
-#[tauri::command]
-async fn get_active_theme_bundle(name: String) -> Result<serde_json::Value, String> {
-    theme::scanner::get_theme_bundle(&name).ok_or_else(|| format!("Theme '{}' not found", name))
-}
-
-#[tauri::command]
-async fn import_theme(path: String) -> Result<String, String> {
-    let src = std::path::Path::new(&path);
-    theme::scanner::import_theme_from_path(src)
-}
-
-#[tauri::command]
-async fn set_active_theme(
-    state: tauri::State<'_, commands::AppState>,
-    name: String,
-) -> Result<(), String> {
-    let mut config = state.config_store.get();
-    config.theme = name;
-    state.config_store.update(config)
 }
 
 // ── Suppression Commands ────────────────────────────────────────
@@ -4965,13 +4931,6 @@ pub fn run() {
                 }
             });
 
-            // Initialize themes: ensure built-in themes exist in user dir
-            if let Ok(resource_path) = app.path().resource_dir() {
-                tauri::async_runtime::spawn_blocking(move || {
-                    theme::scanner::seed_builtin_themes(&resource_path);
-                });
-            }
-
             // Initialize adapters: default ~/.claude + custom engine instances
             let default_cc = ClaudeCodeAdapter::new();
             let mut cc_adapters: Vec<ClaudeCodeAdapter> = vec![];
@@ -5288,8 +5247,6 @@ pub fn run() {
             set_notch_ignore_cursor_events,
             save_sessions,
             load_sessions,
-            get_themes,
-            set_active_theme,
             get_display_level,
             notify_cursor_enter,
             notify_cursor_leave,
@@ -5328,9 +5285,6 @@ pub fn run() {
             open_image,
             read_image_data_url,
             open_system_path,
-            list_themes,
-            get_active_theme_bundle,
-            import_theme,
             scan_all_skills,
             scan_agent_skills,
             get_central_skill_bundles,

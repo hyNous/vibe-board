@@ -3,7 +3,6 @@
  */
 
 import type { AgentRunState, AgentStatusSnapshot, RateLimitInfo, SessionNotice, SessionState } from '../types/agent'
-import type { ThemeConfig } from '../types/theme'
 import type { SideIslandSize, IslandDragAnchor } from '../utils/islandLayout'
 import { useConfigStore } from '../stores/configStore'
 
@@ -272,7 +271,6 @@ export interface BackendConfig {
   hostVisibilityMode: 'independent' | 'follow'
   notchPositionMode: 'top' | 'left' | 'right'
   notchVerticalOffset: number
-  theme: string
   language: 'en' | 'zh' | 'ja' | 'ko' | 'tr'
   displayId: string
   panelHorizontalOffset: number
@@ -499,7 +497,6 @@ export async function getConfig(): Promise<BackendConfig> {
       hostVisibilityMode: 'independent',
       notchPositionMode: 'top',
       notchVerticalOffset: 0,
-      theme: 'midnight',
       language: 'en',
       displayId: 'primary',
       panelHorizontalOffset: 0,
@@ -675,31 +672,6 @@ export async function setBuddyDeviceConfig(config: BuddyDeviceConfig): Promise<B
 export async function buddyReverseFocus(sessionId: string): Promise<void> {
   if (!isTauri()) return
   return invoke('buddy_reverse_focus', { sessionId })
-}
-
-// ── Theme Commands ──────────────────────────────────────────────
-
-export async function listThemes(): Promise<ThemeConfig[]> {
-  if (!isTauri()) return []
-  return invoke<ThemeConfig[]>('list_themes')
-}
-
-export async function getActiveThemeBundle(name: string): Promise<ThemeConfig> {
-  if (!isTauri()) {
-    throw new Error(`Theme '${name}' not available in browser dev mode`)
-  }
-  return invoke<ThemeConfig>('get_active_theme_bundle', { name })
-}
-
-export async function setActiveBackendTheme(name: string): Promise<void> {
-  if (!isTauri()) return
-  window.dispatchEvent(new CustomEvent('vibeboard-theme-sync', { detail: { status: 'pending', name } }))
-  try {
-    return await invoke('set_active_theme', { name })
-  } catch (error) {
-    window.dispatchEvent(new CustomEvent('vibeboard-theme-sync', { detail: { status: 'failed', name } }))
-    throw error
-  }
 }
 
 // ── Hook Management ──────────────────────────────────────────────

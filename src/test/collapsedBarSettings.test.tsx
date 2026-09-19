@@ -76,6 +76,8 @@ describe('collapsed bar settings button', () => {
     )
 
     expect(container.querySelector('.collapsed-bar__agent-name')).toHaveTextContent('Codex')
+    expect(container.querySelector('.collapsed-bar__agent-wrap')).not.toBeNull()
+    expect(container.querySelector('.collapsed-bar__theme-avatar')).toBeNull()
     expect(container.querySelector('.collapsed-bar__icon-btn')).toBeNull()
     expect(container.querySelector('.collapsed-bar__counter-pill')).toBeNull()
     expect(container.querySelector('.collapsed-bar__status-row')).toBeNull()

@@ -3,7 +3,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { NotchPanel } from '../components/notch/NotchPanel'
 import { useConfigStore } from '../stores/configStore'
 import { useSessionStore } from '../stores/sessionStore'
-import { useThemeStore } from '../stores/themeStore'
 import type { OverlayItem, SessionState } from '../types/agent'
 import { MATCH_NOTCH_HEIGHT } from '../utils/islandLayout'
 import { isApplePlatform } from '../utils/platform'
@@ -141,8 +140,6 @@ describe('NotchPanel island shell', () => {
     tauriMocks.resizeNotch.mockResolvedValue({ anchorOffsetX: 0 })
     tauriMocks.startNotchDrag.mockResolvedValue(true)
     tauriMocks.endNotchDrag.mockResolvedValue(null)
-    useThemeStore.getState().loadThemes([])
-    useThemeStore.getState().setActiveTheme('default')
     useConfigStore.setState({
       allowHorizontalDrag: false,
       autoCollapse: false,

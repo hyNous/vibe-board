@@ -130,6 +130,8 @@ describe('settings island menu', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: /Display/ })).toHaveClass('active'))
     // 灵动岛效果只在总览页提供单一入口，Display 页不再重复配色卡与效果单选项。
     expect(screen.queryByText('settings.colorTheme')).not.toBeInTheDocument()
+    expect(container.querySelector('.pet-picker-block')).toBeNull()
+    expect(screen.queryByText('settings.activeTheme')).not.toBeInTheDocument()
     expect(container.querySelectorAll('.color-theme-cards')).toHaveLength(0)
     expect(screen.queryByRole('radio', { name: /磨砂玻璃/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('radiogroup', { name: '展示模式' })).not.toBeInTheDocument()

@@ -249,8 +249,6 @@
     "costModel": "비용 모델",
     "costModelDesc": "비용 추정에 사용할 모델 가격",
     "agentActivity": "에이전트 활동 세부 정보",
-    "activeTheme": "활성 테마",
-    "activeThemeDesc": "픽셀 인디케이터 및 색상의 시각적 스타일",
     "agentActivityDesc": "상세 보기에서 하위 에이전트 활동과 기록 진입점을 표시",
     "soundDesc": "알림 소리 및 오디오 피드백을 설정합니다.",
     "enableSounds": "소리 활성화",

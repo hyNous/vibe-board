@@ -1,45 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useThemeStore } from '../stores/themeStore'
-import type { ThemeConfig } from '../types/theme'
-
-const petTheme: ThemeConfig = {
-  name: 'codex-pet:test',
-  version: '1.0.0',
-  author: 'user',
-  provider: 'codex',
-  isCodexPet: true,
-  displayName: 'Test Pet',
-  pixelGrid: { cols: 5, rows: 5 },
-  priorityColors: {},
-  prioritySpeeds: {},
-  priorityPatterns: {},
-  character: {
-    spriteSheet: 'data:image/webp;base64,AAAA',
-    frameSize: { width: 192, height: 208 },
-    scale: 1,
-    animations: { idle: { row: 0, frames: 1, fps: 1 } },
-  },
-  sounds: { pack: '8bit' },
-}
 
 describe('themeStore', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
     localStorage.clear()
-    useThemeStore.getState().loadThemes([])
-    useThemeStore.getState().setActiveTheme('ink-amber')
-    useThemeStore.getState().setColorTheme('ink-amber')
-  })
-
-  it('does not persist again when selecting the active role theme', () => {
-    const setItem = vi.spyOn(Storage.prototype, 'setItem')
-
-    useThemeStore.getState().setActiveTheme('ink-amber')
-
-    expect(setItem).not.toHaveBeenCalled()
+    useThemeStore.setState({ colorTheme: 'midnight' })
   })
 
   it('does not persist again when selecting the active color theme', () => {
+    useThemeStore.getState().setColorTheme('ink-amber')
     const setItem = vi.spyOn(Storage.prototype, 'setItem')
 
     useThemeStore.getState().setColorTheme('ink-amber')
@@ -47,19 +17,24 @@ describe('themeStore', () => {
     expect(setItem).not.toHaveBeenCalled()
   })
 
-  it('includes the Vibe Board ink amber role theme as a built-in default', () => {
-    useThemeStore.getState().loadThemes([])
-    useThemeStore.getState().setActiveTheme('ink-amber')
+  it('persists only the color theme after role themes were removed', () => {
+    useThemeStore.getState().setColorTheme('warm-paper')
 
-    const state = useThemeStore.getState()
-    expect(state.themes.map((theme) => theme.name)).toContain('ink-amber')
-    expect(state.activeTheme.name).toBe('ink-amber')
+    const persisted = JSON.parse(localStorage.getItem('vibeboard-theme') ?? '{}')
+    expect(persisted.version).toBe(4)
+    expect(persisted.state).toEqual({ colorTheme: 'warm-paper' })
   })
 
-  it('deduplicates role themes loaded from repeated syncs', () => {
-    useThemeStore.getState().loadThemes([petTheme, petTheme])
+  it('drops a legacy role theme selection when rehydrating persisted state', async () => {
+    localStorage.setItem('vibeboard-theme', JSON.stringify({
+      version: 3,
+      state: { activeThemeName: 'codex-pet:nami', colorTheme: 'warm-paper' },
+    }))
 
-    const names = useThemeStore.getState().themes.map((theme) => theme.name)
-    expect(names.filter((name) => name === petTheme.name)).toHaveLength(1)
+    await useThemeStore.persist.rehydrate()
+
+    const state = useThemeStore.getState()
+    expect(state.colorTheme).toBe('warm-paper')
+    expect('activeThemeName' in state).toBe(false)
   })
 })

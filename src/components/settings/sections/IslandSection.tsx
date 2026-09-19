@@ -4,9 +4,6 @@ import { invoke } from '@tauri-apps/api/core'
 import { open as openDialog, ask as askDialog } from '@tauri-apps/plugin-dialog'
 import { useConfigStore } from '../../../stores/configStore'
 import { useThemeStore, COLOR_THEMES } from '../../../stores/themeStore'
-import type { ThemeConfig } from '../../../types/theme'
-import { SpriteCanvas } from '../../notch/SpriteCanvas'
-import { PRIORITY } from '../../../types/priority'
 import { CUSTOM_NOTCH_HEIGHT_MAX, CUSTOM_NOTCH_HEIGHT_MIN, getSideIslandDimensions, type SideIslandSize } from '../../../utils/islandLayout'
 import {
   formatShortcutKeyEvent,
@@ -18,7 +15,6 @@ import {
   setDisplayId, repositionNotch,
   previewIslandLayout, clearIslandLayoutPreview,
   registerGlobalShortcut, setGlobalActionShortcuts, setIslandFeatureFlags,
-  setActiveBackendTheme,
   runHookDoctor, uninstallAllHooks,
   getConfig, updateConfig as updateBackendConfig, listUsageProviders, authorizeUsageProvider,
 } from '../../../services/tauriApi'
@@ -599,11 +595,9 @@ function BehaviorTab() {
 
 // ── Display Tab ──
 function DisplayTab() {
-  const { t, i18n } = useTranslation()
+  const { t } = useTranslation()
   const config = useConfigStore()
   // 灵动岛配色只在总览页的两种效果中切换，Display 页不再重复提供配色入口。
-  const { themes, activeThemeName, setActiveTheme } = useThemeStore()
-  const isZh = i18n.language?.startsWith('zh')
   const [displays, setDisplays] = useState<BackendDisplayInfo[]>([])
   const previewTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
@@ -699,24 +693,6 @@ function DisplayTab() {
 
   return (
     <>
-      <SettingGroup label={t('settings.island.section.surface', { defaultValue: '展示形态' })}>
-        <div className="pet-picker-block">
-          <div className="pet-picker-block__header">
-            <div className="pet-picker-block__title">{t('settings.activeTheme')}</div>
-            <div className="pet-picker-block__desc">{t('settings.activeThemeDesc')}</div>
-          </div>
-          <ThemePicker
-            themes={themes}
-            activeThemeName={activeThemeName}
-            onSelect={(name) => {
-              setActiveTheme(name)
-              setActiveBackendTheme(name).catch((e) => console.error('Failed to persist active theme:', e))
-            }}
-            isZh={isZh}
-          />
-        </div>
-      </SettingGroup>
-
       <SettingGroup label={t('settings.island.section.displayPlacement', { defaultValue: '显示器位置' })}>
           <SettingRow label={t('settings.displayMonitor')} description={t('settings.displayMonitorDesc')}>
             <Dropdown value={displayMonitorValue} options={monitorOptions}
@@ -871,118 +847,6 @@ function DisplayTab() {
       </SettingGroup>
 
     </>
-  )
-}
-
-// ── Theme Pixel Preview (for themes without character sprites) ──
-
-function ThemePixelPreview({ theme }: { theme: ThemeConfig }) {
-  const colors = theme.priorityColors
-  if (!colors) {
-    return (
-      <span className="theme-picker__pixel-icon" aria-hidden="true">
-        <span /><span /><span /><span />
-      </span>
-    )
-  }
-  const fallback = '#888'
-  const grid = [
-    colors.idle ?? fallback, colors.working ?? fallback,
-    colors.thinking ?? fallback, colors.done ?? fallback,
-    colors.attention ?? fallback, colors.idle ?? fallback,
-    colors.done ?? fallback, colors.working ?? fallback,
-    colors.thinking ?? fallback,
-  ]
-  return (
-    <span className="theme-picker__pixel-grid" aria-hidden="true">
-      {grid.map((color, i) => (
-        <span key={i} style={{ background: color, opacity: i % 3 === 0 ? 1 : 0.7 }} />
-      ))}
-    </span>
-  )
-}
-
-// ── Theme Picker ──
-
-interface ThemePickerProps {
-  themes: ThemeConfig[]
-  activeThemeName: string
-  onSelect: (name: string) => void
-  isZh: boolean
-}
-
-function ThemePicker({ themes, activeThemeName, onSelect, isZh }: ThemePickerProps) {
-  const builtinThemes = themes.filter((th) => !th.isCodexPet)
-  const codexPetThemes = themes.filter((th) => th.isCodexPet)
-
-  const themeLabel = (th: ThemeConfig) => {
-    if (th.name === 'ink-amber') return isZh ? 'Vibe Board 经典' : 'Vibe Board Classic'
-    return th.displayName ?? th.name.charAt(0).toUpperCase() + th.name.slice(1).replace(/[-:]/g, ' ')
-  }
-
-  return (
-    <div className="pet-picker">
-      {builtinThemes.length > 0 && (
-        <div className="pet-picker__group">
-          <div className="pet-picker__group-label">{isZh ? '内置' : 'Built-in'}</div>
-          <div className="pet-picker__grid">
-            {builtinThemes.map((th) => (
-              <button
-                key={th.name}
-                type="button"
-                className={`pet-picker__card ${activeThemeName === th.name ? 'pet-picker__card--active' : ''}`}
-                aria-pressed={activeThemeName === th.name}
-                onClick={() => onSelect(th.name)}
-                title={th.description ?? themeLabel(th)}
-              >
-                <div className="pet-picker__thumb">
-                  {th.character ? (
-                    <SpriteCanvas
-                      theme={th}
-                      priority={PRIORITY.idle}
-                      size={56}
-                      enableIdleBehaviors={false}
-                      animationOverride="idle"
-                    />
-                  ) : (
-                    <ThemePixelPreview theme={th} />
-                  )}
-                </div>
-                <div className="pet-picker__name">{themeLabel(th)}</div>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-      {codexPetThemes.length > 0 && (
-        <div className="pet-picker__group">
-          <div className="pet-picker__group-label">codex</div>
-          <div className="pet-picker__grid">
-            {codexPetThemes.map((th) => (
-              <button
-                key={th.name}
-                type="button"
-                className={`pet-picker__card ${activeThemeName === th.name ? 'pet-picker__card--active' : ''}`}
-                aria-pressed={activeThemeName === th.name}
-                onClick={() => onSelect(th.name)}
-                title={th.description ?? themeLabel(th)}
-              >
-                <div className="pet-picker__thumb">
-                  <SpriteCanvas
-                    theme={th}
-                    priority={PRIORITY.idle}
-                    size={56}
-                    enableIdleBehaviors={false}
-                    animationOverride="idle"
-                  />
-                </div>
-                <div className="pet-picker__name">{themeLabel(th)}</div>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
   )
 }
 
