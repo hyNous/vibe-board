@@ -263,7 +263,6 @@ function ProjectInstallPanel({ detail }: { detail: ProjectDetail }) {
   }, [detail.agents])
   const [agentId, setAgentId] = useState(agentChoices[0]?.agentId ?? 'codex')
   const [skillId, setSkillId] = useState('')
-  const [packId, setPackId] = useState('')
   const [mode, setMode] = useState<'link' | 'copy'>(state.settings?.defaultDistributeMode || 'link')
   const [busy, setBusy] = useState(false)
 
@@ -276,31 +275,12 @@ function ProjectInstallPanel({ detail }: { detail: ProjectDetail }) {
     if (!skillId && state.skills[0]) setSkillId(state.skills[0].id)
   }, [skillId, state.skills])
 
-  useEffect(() => {
-    if (!packId && state.packs[0]) setPackId(state.packs[0].id)
-  }, [packId, state.packs])
-
   const installSkill = async () => {
     if (!skillId) return
     setBusy(true)
     state.setError(null)
     try {
       const next = await skillApiV2.installCenterSkillsToProject(detail.id, agentId, [skillId], mode)
-      useSkillStoreV2.setState({ selectedProjectDetail: next })
-      await state.loadProjects(true)
-    } catch (e) {
-      state.setError(String(e))
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const applyPack = async () => {
-    if (!packId) return
-    setBusy(true)
-    state.setError(null)
-    try {
-      const next = await skillApiV2.installSkillPackToProject(detail.id, agentId, packId, mode)
       useSkillStoreV2.setState({ selectedProjectDetail: next })
       await state.loadProjects(true)
     } catch (e) {
@@ -340,19 +320,6 @@ function ProjectInstallPanel({ detail }: { detail: ProjectDetail }) {
         </label>
         <button className="sm2__btn sm2__btn--primary" disabled={busy || !skillId} onClick={installSkill}>
           安装 Skill
-        </button>
-        <label>
-          <span>技能包</span>
-          <select className="sm2__select" value={packId} onChange={(event) => setPackId(event.target.value)} disabled={state.packs.length === 0}>
-            {state.packs.length === 0 ? (
-              <option value="">暂无技能包</option>
-            ) : state.packs.map((pack) => (
-              <option key={pack.id} value={pack.id}>{pack.name}</option>
-            ))}
-          </select>
-        </label>
-        <button className="sm2__btn" disabled={busy || !packId} onClick={applyPack}>
-          应用技能包
         </button>
       </div>
     </section>

@@ -3,7 +3,7 @@ import type { AgentOutputEvent, AgentProgramInfo } from '../services/agentApi'
 import { agentApi, seedAgentPrograms } from '../services/agentApi'
 
 export type AgentFilter = 'all' | 'installed' | 'available' | 'updates'
-export type AgentOperationName = 'install' | 'update' | 'uninstall' | 'open'
+export type AgentOperationName = 'uninstall' | 'open'
 export type AgentOperationStatus = 'idle' | 'running' | 'success' | 'error'
 
 export interface AgentOperationState {
@@ -132,8 +132,6 @@ export const useAgentStore = create<AgentState & AgentActions>()((set, get) => (
     }))
 
     try {
-      if (operation === 'install') await agentApi.install(agentId)
-      if (operation === 'update') await agentApi.update(agentId)
       if (operation === 'uninstall') await agentApi.uninstall(agentId)
       if (operation === 'open') {
         const agent = get().agents.find((item) => item.id === agentId)

@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 use std::sync::Mutex;
 
-use chrono::Utc;
 use rusqlite::{params, Connection, OptionalExtension};
 
 use super::models::{AgentRunRecord, TaskEventRecord, TaskRecord};
@@ -508,270 +507,66 @@ impl ControlTowerDatabase {
         )?;
         Ok(())
     }
-
-    pub fn create_demo_task_trace(&self) -> anyhow::Result<TaskRecord> {
-        let now_sec = Utc::now().timestamp();
-        let now_iso = Utc::now().to_rfc3339();
-        let now_ms = (now_sec as u64) * 1000;
-
-        let task_id = "task-demo-control-tower".to_string();
-        let trace_id = "trace-codex-orchestration-001".to_string();
-        let project = "control-tower".to_string();
-        let root_run_id = "run-demo-codex-root".to_string();
-        let child_run_id = "run-demo-dummy-child".to_string();
-
-        let mut conn = self.conn.lock().map_err(|e| anyhow::anyhow!("{e}"))?;
-        let tx = conn.transaction()?;
-
-        tx.execute(
-            r#"
-            INSERT INTO tasks (id, trace_id, project, title, status, created_at, updated_at)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
-            ON CONFLICT(id) DO UPDATE SET
-                trace_id = excluded.trace_id,
-                project = excluded.project,
-                title = excluded.title,
-                status = excluded.status,
-                updated_at = excluded.updated_at
-            "#,
-            params![
-                task_id,
-                trace_id,
-                project,
-                "Demo: Codex Orchestration",
-                "done",
-                now_iso,
-                now_iso
-            ],
-        )?;
-
-        tx.execute(
-            r#"
-            INSERT INTO agent_runs (
-                id, task_id, session_id, parent_run_id, agent, role,
-                dispatched_task, title, status, started_at, completed_at, created_at, updated_at
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
-            ON CONFLICT(id) DO UPDATE SET
-                session_id = excluded.session_id,
-                parent_run_id = excluded.parent_run_id,
-                agent = excluded.agent,
-                role = excluded.role,
-                dispatched_task = excluded.dispatched_task,
-                title = excluded.title,
-                status = excluded.status,
-                started_at = excluded.started_at,
-                completed_at = excluded.completed_at,
-                updated_at = excluded.updated_at
-            "#,
-            params![
-                root_run_id,
-                task_id,
-                "session-codex-root",
-                None::<String>,
-                "codex",
-                "orchestrator",
-                Some("Coordinate workspace changes and dispatch AST analysis"),
-                "Codex Root Run",
-                "done",
-                now_sec - 60,
-                Some(now_sec),
-                now_iso,
-                now_iso,
-            ],
-        )?;
-
-        tx.execute(
-            r#"
-            INSERT INTO agent_runs (
-                id, task_id, session_id, parent_run_id, agent, role,
-                dispatched_task, title, status, started_at, completed_at, created_at, updated_at
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
-            ON CONFLICT(id) DO UPDATE SET
-                session_id = excluded.session_id,
-                parent_run_id = excluded.parent_run_id,
-                agent = excluded.agent,
-                role = excluded.role,
-                dispatched_task = excluded.dispatched_task,
-                title = excluded.title,
-                status = excluded.status,
-                started_at = excluded.started_at,
-                completed_at = excluded.completed_at,
-                updated_at = excluded.updated_at
-            "#,
-            params![
-                child_run_id,
-                task_id,
-                "session-dummy-child",
-                Some(root_run_id.clone()),
-                "dummy",
-                "worker",
-                Some("Execute component AST inspection sub-routine"),
-                "Dummy Child",
-                "done",
-                now_sec - 45,
-                Some(now_sec - 15),
-                now_iso,
-                now_iso,
-            ],
-        )?;
-
-        let events = [
-            (
-                "evt-1",
-                &root_run_id,
-                now_ms - 60000,
-                "session",
-                "session.init",
-                "Codex Session Initialized",
-                Some("Root orchestration run started"),
-                Some("ready"),
-                Some(r#"{"agent":"codex","role":"orchestrator"}"#),
-            ),
-            (
-                "evt-2",
-                &root_run_id,
-                now_ms - 45000,
-                "subagent",
-                "subagent.dispatch",
-                "Dispatch Dummy Child",
-                Some("Dispatched nested Dummy Child worker"),
-                Some("processing"),
-                Some(r#"{"targetRunId":"run-demo-dummy-child","agent":"dummy"}"#),
-            ),
-            (
-                "evt-3",
-                &child_run_id,
-                now_ms - 45000,
-                "session",
-                "session.init",
-                "Dummy Child Initialized",
-                Some("Child worker started under Codex root"),
-                Some("ready"),
-                Some(r#"{"parentRunId":"run-demo-codex-root","agent":"dummy"}"#),
-            ),
-            (
-                "evt-4",
-                &child_run_id,
-                now_ms - 30000,
-                "tool",
-                "tool.exec",
-                "InspectAST: component graph",
-                Some("Analyzed component hierarchy"),
-                Some("done"),
-                Some(r#"{"tool":"InspectAST","target":"src/App.tsx"}"#),
-            ),
-            (
-                "evt-5",
-                &child_run_id,
-                now_ms - 15000,
-                "session",
-                "session.complete",
-                "Dummy Child Complete",
-                Some("Finished sub-routine analysis"),
-                Some("done"),
-                Some(r#"{"result":"success"}"#),
-            ),
-            (
-                "evt-6",
-                &root_run_id,
-                now_ms - 15000,
-                "subagent",
-                "subagent.complete",
-                "Dummy Child Completed",
-                Some("Dummy Child returned verification result"),
-                Some("done"),
-                Some(r#"{"fromRunId":"run-demo-dummy-child","status":"success"}"#),
-            ),
-            (
-                "evt-7",
-                &root_run_id,
-                now_ms,
-                "session",
-                "session.complete",
-                "Codex Root Run Complete",
-                Some("Finished orchestrating all workspace tasks"),
-                Some("done"),
-                Some(r#"{"status":"success"}"#),
-            ),
-        ];
-
-        for (id, run_id, ts, kind, event_type, title, detail, status, payload_json) in events {
-            tx.execute(
-                r#"
-                INSERT INTO task_events (id, task_id, run_id, timestamp_ms, kind, event_type, title, detail, status, payload_json, created_at)
-                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
-                ON CONFLICT(id) DO UPDATE SET
-                    kind = excluded.kind,
-                    event_type = excluded.event_type,
-                    title = excluded.title,
-                    detail = excluded.detail,
-                    status = excluded.status,
-                    payload_json = excluded.payload_json
-                "#,
-                params![id, task_id, run_id, ts as i64, kind, event_type, title, detail, status, payload_json, now_iso],
-            )?;
-        }
-
-        tx.commit()?;
-        drop(conn);
-
-        let tasks = self.get_all_tasks()?;
-        tasks
-            .into_iter()
-            .find(|t| t.id == task_id)
-            .ok_or_else(|| anyhow::anyhow!("Failed to retrieve created demo task"))
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::Utc;
 
-    #[test]
-    fn test_task_trace_metadata_linkage_and_persistence() {
-        let db = ControlTowerDatabase::open_in_memory().expect("in memory db");
-        let created = db.create_demo_task_trace().expect("create demo trace");
-
-        assert_eq!(created.id, "task-demo-control-tower");
-        assert_eq!(created.trace_id, "trace-codex-orchestration-001");
-        assert_eq!(created.project, "control-tower");
-        assert_eq!(created.runs.len(), 1);
-
-        let root_run = &created.runs[0];
-        assert_eq!(root_run.id, "run-demo-codex-root");
-        assert_eq!(root_run.session_id, "session-codex-root");
-        assert_eq!(root_run.role, "orchestrator");
-        assert_eq!(root_run.parent_run_id, None);
-        assert_eq!(root_run.children.len(), 1);
-        assert_eq!(root_run.events.len(), 4);
-
-        let child_run = &root_run.children[0];
-        assert_eq!(child_run.id, "run-demo-dummy-child");
-        assert_eq!(child_run.session_id, "session-dummy-child");
-        assert_eq!(child_run.role, "worker");
-        assert_eq!(
-            child_run.parent_run_id.as_deref(),
-            Some("run-demo-codex-root")
-        );
-        assert_eq!(child_run.children.len(), 0);
-        assert_eq!(child_run.events.len(), 3);
-        assert_eq!(child_run.events[1].event_type, "tool.exec");
-        assert!(child_run.events[1].payload_json.is_some());
-
-        let all_tasks = db.get_all_tasks().expect("get all tasks");
-        assert_eq!(all_tasks.len(), 1);
-        assert_eq!(all_tasks[0], created);
+    fn seed_task_with_runs(
+        db: &ControlTowerDatabase,
+        task_id: &str,
+        root_run_id: &str,
+        child_run_id: &str,
+    ) {
+        let conn = db.conn.lock().expect("lock");
+        let now = Utc::now().to_rfc3339();
+        conn.execute(
+            "INSERT INTO tasks (id, trace_id, project, title, status, created_at, updated_at)
+             VALUES (?1, 'trace-native-race', 'control-tower', 'Native race', 'running', ?2, ?2)",
+            params![task_id, now],
+        )
+        .expect("insert task");
+        for (index, (run_id, parent, role)) in [
+            (root_run_id, None::<&str>, "orchestrator"),
+            (child_run_id, Some(root_run_id), "worker"),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            conn.execute(
+                "INSERT INTO agent_runs (
+                    id, task_id, session_id, parent_run_id, agent, role,
+                    dispatched_task, title, status, started_at, completed_at, created_at, updated_at
+                 ) VALUES (?1, ?2, ?3, ?4, 'codex', ?5, NULL, ?6, 'running', ?7, NULL, ?8, ?8)",
+                params![
+                    run_id,
+                    task_id,
+                    format!("session-{run_id}"),
+                    parent,
+                    role,
+                    run_id,
+                    index as i64,
+                    now
+                ],
+            )
+            .expect("insert run");
+        }
     }
 
     #[test]
     fn native_blocking_state_wins_process_completion_race() {
         let db = ControlTowerDatabase::open_in_memory().expect("in memory db");
-        db.create_demo_task_trace().expect("create demo trace");
+        let task_id = "task-native-race";
+        let root_run_id = "run-native-root";
+        let child_run_id = "run-native-child";
+        seed_task_with_runs(&db, task_id, root_run_id, child_run_id);
         let now = Utc::now();
         let native_event = TaskEventRecord {
             id: "evt-native-waiting".to_string(),
-            task_id: "task-demo-control-tower".to_string(),
-            run_id: "run-demo-dummy-child".to_string(),
+            task_id: task_id.to_string(),
+            run_id: child_run_id.to_string(),
             timestamp_ms: now.timestamp_millis() as u64,
             kind: "native".to_string(),
             event_type: "native.PermissionRequest".to_string(),

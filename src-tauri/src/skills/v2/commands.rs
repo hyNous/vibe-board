@@ -8,7 +8,7 @@
 use crate::skills::v2::models::*;
 use crate::skills::v2::service::{
     AdoptBatchItem, AdoptBatchResult, ClaimOrigin, DeleteSkillTargetDistributionsResult,
-    DeleteUnmanagedAgentSkillsResult, Service, UpsertPackInput,
+    DeleteUnmanagedAgentSkillsResult, Service,
 };
 use crate::skills::v2::{diagnosis, snapshot};
 use std::sync::Arc;
@@ -32,11 +32,6 @@ pub fn skill_manager_init() -> Result<(), String> {
 #[tauri::command(async)]
 pub fn skill_manager_overview() -> Result<SkillManagerOverview, String> {
     Ok(svc()?.overview()?)
-}
-
-#[tauri::command(async)]
-pub fn skill_pack_picker_data() -> Result<SkillPackPickerData, String> {
-    svc()?.skill_pack_picker_data()
 }
 
 #[tauri::command(async)]
@@ -235,123 +230,6 @@ pub fn delete_skill_target_distributions(
 }
 
 #[tauri::command(async)]
-pub fn list_skill_packs_v2() -> Result<Vec<SkillPackSummary>, String> {
-    Ok(svc()?.list_skill_packs()?)
-}
-
-#[tauri::command(async)]
-pub fn get_skill_pack_detail(pack_id: String) -> Result<SkillPackDetail, String> {
-    Ok(svc()?.get_skill_pack_detail(&pack_id)?)
-}
-
-#[tauri::command(async)]
-pub fn execute_upsert_skill_pack(
-    pack: UpsertPackInput,
-    defer_sync: Option<bool>,
-) -> Result<SkillPackDetail, String> {
-    if defer_sync.unwrap_or(false) {
-        svc()?.upsert_skill_pack_deferred(pack)
-    } else {
-        svc()?.upsert_skill_pack(pack)
-    }
-}
-
-#[tauri::command(async)]
-pub fn preview_delete_skill_pack(pack_id: String) -> Result<DeleteSkillPackPreview, String> {
-    svc()?.preview_delete_skill_pack(&pack_id)
-}
-
-#[tauri::command(async)]
-pub fn execute_delete_skill_pack(pack_id: String) -> Result<(), String> {
-    svc()?.delete_skill_pack(&pack_id)
-}
-
-#[tauri::command(async)]
-pub fn preview_apply_skill_pack(
-    pack_id: String,
-    target_agents: Vec<String>,
-    requested_mode: String,
-) -> Result<DistributionPreview, String> {
-    let svc = svc()?;
-    let preview =
-        svc.preview_distribute_skill(pack_members(&svc, &pack_id)?, target_agents, requested_mode)?;
-    Ok(preview)
-}
-
-#[tauri::command(async)]
-pub fn execute_apply_skill_pack(
-    pack_id: String,
-    target_agents: Vec<String>,
-    requested_mode: String,
-    blocker_decisions: Option<Vec<DistributionBlockerDecision>>,
-) -> Result<DistributionPreview, String> {
-    svc()?.apply_skill_pack_with_decisions(
-        &pack_id,
-        target_agents,
-        requested_mode,
-        blocker_decisions.unwrap_or_default(),
-    )
-}
-
-#[tauri::command(async)]
-pub fn execute_sync_skill_pack_to_agents(
-    pack_id: String,
-    target_agents: Option<Vec<String>>,
-) -> Result<SkillPackSyncResult, String> {
-    svc()?.sync_skill_pack_to_agents(&pack_id, target_agents.unwrap_or_default())
-}
-
-#[tauri::command(async)]
-pub fn preview_remove_skill_pack_from_agent(
-    pack_id: String,
-    agent_id: String,
-) -> Result<RemovePackFromAgentPreview, String> {
-    svc()?.preview_remove_pack_from_agent(&pack_id, &agent_id)
-}
-
-#[tauri::command(async)]
-pub fn execute_remove_skill_pack_from_agent(
-    pack_id: String,
-    agent_id: String,
-) -> Result<crate::skills::v2::service::RevokeResult, String> {
-    svc()?.remove_skill_pack_from_agent(&pack_id, &agent_id)
-}
-
-#[tauri::command(async)]
-pub fn preview_remove_skill_from_pack(
-    pack_id: String,
-    skill_id: String,
-) -> Result<RemoveSkillFromPackPreview, String> {
-    svc()?.preview_remove_skill_from_pack(&pack_id, &skill_id)
-}
-
-#[tauri::command(async)]
-pub fn execute_remove_skill_from_pack(
-    pack_id: String,
-    skill_id: String,
-    also_remove_targets: bool,
-) -> Result<(), String> {
-    svc()?.remove_skill_from_pack(&pack_id, &skill_id, also_remove_targets)
-}
-
-#[tauri::command(async)]
-pub fn preview_move_direct_skill_to_pack(
-    target_id: String,
-    pack_id: String,
-) -> Result<MoveDirectSkillToPackPreview, String> {
-    svc()?.preview_move_direct_skill_to_pack(&target_id, &pack_id)
-}
-
-#[tauri::command(async)]
-pub fn execute_move_direct_skill_to_pack(
-    target_id: String,
-    pack_id: String,
-    blocker_decisions: Option<Vec<DistributionBlockerDecision>>,
-) -> Result<MoveDirectSkillToPackPreview, String> {
-    svc()?.move_direct_skill_to_pack(&target_id, &pack_id, blocker_decisions.unwrap_or_default())
-}
-
-#[tauri::command(async)]
 pub fn list_managed_agents_v2() -> Result<Vec<AgentSummary>, String> {
     Ok(svc()?.list_managed_agents()?)
 }
@@ -438,16 +316,6 @@ pub fn install_center_skills_to_project_v2(
 }
 
 #[tauri::command(async)]
-pub fn install_skill_pack_to_project_v2(
-    project_id: String,
-    agent_id: String,
-    pack_id: String,
-    requested_mode: String,
-) -> Result<ProjectDetail, String> {
-    svc()?.install_skill_pack_to_project(&project_id, &agent_id, &pack_id, requested_mode)
-}
-
-#[tauri::command(async)]
 pub fn run_skill_manager_diagnosis() -> Result<Vec<DiagnosisIssue>, String> {
     let svc = svc()?;
     svc.refresh()?;
@@ -507,13 +375,4 @@ pub fn open_skill_path(path: String) -> Result<(), String> {
 #[tauri::command(async)]
 pub fn reveal_skill_path(path: String) -> Result<(), String> {
     crate::skills::v2::fsutil::reveal_path(&path)
-}
-
-fn pack_members(svc: &Service, pack_id: &str) -> Result<Vec<String>, String> {
-    Ok(svc
-        .get_skill_pack_detail(pack_id)?
-        .members
-        .into_iter()
-        .map(|m| m.skill_id)
-        .collect())
 }

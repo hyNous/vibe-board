@@ -4,8 +4,7 @@
   "description": "Default permissions for Vibe Board",
   "windows": [
     "notch",
-    "settings",
-    "skill-pack-picker"
+    "settings"
   ],
   "permissions": [
     "core:default",

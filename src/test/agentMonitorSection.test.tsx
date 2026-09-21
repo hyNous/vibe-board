@@ -7,13 +7,11 @@ import { useSessionStore } from '../stores/sessionStore'
 
 const monitorMocks = vi.hoisted(() => ({
   getMonitorSessions: vi.fn(),
-  createDemoTaskTrace: vi.fn(),
   getTaskTraces: vi.fn(),
 }))
 
 vi.mock('../services/monitorApi', () => ({
   getMonitorSessions: monitorMocks.getMonitorSessions,
-  createDemoTaskTrace: monitorMocks.createDemoTaskTrace,
   getTaskTraces: monitorMocks.getTaskTraces,
 }))
 
@@ -82,8 +80,8 @@ describe('AgentMonitorSection', () => {
     expect(screen.queryByText('远程服务器')).not.toBeInTheDocument()
   })
 
-  it('creates demo task trace and displays Codex root run with nested Dummy Child and ordered events', async () => {
-    const demoTask = {
+  it('renders persisted task traces with nested runs and ordered events', async () => {
+    const persistedTask = {
       id: 'task-demo-control-tower',
       traceId: 'trace-codex-orchestration-001',
       project: 'control-tower',
@@ -216,22 +214,11 @@ describe('AgentMonitorSection', () => {
       createdAt: '2026-05-17T00:00:00Z',
     }
 
-    monitorMocks.getTaskTraces.mockResolvedValue([demoTask])
-    monitorMocks.createDemoTaskTrace.mockImplementation(async () => {
-      monitorMocks.getTaskTraces.mockResolvedValue([demoTask])
-      return demoTask
-    })
+    monitorMocks.getTaskTraces.mockResolvedValue([persistedTask])
 
     render(<AgentMonitorSection />)
 
-    const createBtn = screen.getByTestId('create-demo-task-trace-btn')
-    expect(createBtn).toBeInTheDocument()
-
-    fireEvent.click(createBtn)
-
-    await waitFor(() => expect(monitorMocks.createDemoTaskTrace).toHaveBeenCalled())
     await waitFor(() => expect(screen.getAllByText('Codex Root Run').length).toBeGreaterThan(0))
-    expect(screen.getByText('Demo Task Trace 已创建：包含 Codex 根任务与嵌套的 Dummy Child 子任务。')).toBeInTheDocument()
     expect(screen.getByText('Dummy Child')).toBeInTheDocument()
     expect(screen.getByText(/control-tower/)).toBeInTheDocument()
     expect(screen.getByText(/trace-codex-orchestration-001/)).toBeInTheDocument()

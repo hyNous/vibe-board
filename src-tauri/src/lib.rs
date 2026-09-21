@@ -1608,7 +1608,7 @@ fn menu_bar_icon() -> tauri::image::Image<'static> {
         .to_owned()
 }
 
-pub(crate) fn refresh_skill_pack_tray_menu(app: &tauri::AppHandle) -> Result<(), String> {
+pub(crate) fn refresh_tray_menu(app: &tauri::AppHandle) -> Result<(), String> {
     let language = app
         .try_state::<AppState>()
         .map(|state| state.config_store.get().language)
@@ -1618,117 +1618,6 @@ pub(crate) fn refresh_skill_pack_tray_menu(app: &tauri::AppHandle) -> Result<(),
         .tray_by_id(menu_bar::TRAY_ID)
         .ok_or_else(|| "Vibe Board tray icon is unavailable".to_string())?;
     tray.set_menu(Some(menu)).map_err(|error| error.to_string())
-}
-
-const SKILL_PACK_PICKER_WIDTH: f64 = 360.0;
-const SKILL_PACK_PICKER_HEIGHT: f64 = 460.0;
-
-fn show_skill_pack_picker(app: &tauri::AppHandle) -> Result<(), String> {
-    let handle = app.clone();
-    app.run_on_main_thread(move || {
-        let window = match handle.get_webview_window(menu_bar::SKILL_PACK_PICKER_ID) {
-            Some(existing) => existing,
-            None => match build_skill_pack_picker_window(&handle) {
-                Ok(window) => window,
-                Err(error) => {
-                    log::warn!("Failed to create skill pack picker: {error}");
-                    return;
-                }
-            },
-        };
-        position_skill_pack_picker(&window);
-        let _ = window.show();
-        let _ = window.set_focus();
-        let _ = window.emit("skill-pack-picker-shown", ());
-    })
-    .map_err(|error| error.to_string())
-}
-
-fn build_skill_pack_picker_window(app: &tauri::AppHandle) -> Result<tauri::WebviewWindow, String> {
-    let window = tauri::WebviewWindowBuilder::new(
-        app,
-        menu_bar::SKILL_PACK_PICKER_ID,
-        tauri::WebviewUrl::App("index.html".into()),
-    )
-    .title("Vibe Board Skill Packs")
-    .inner_size(SKILL_PACK_PICKER_WIDTH, SKILL_PACK_PICKER_HEIGHT)
-    .transparent(true)
-    .decorations(false)
-    .shadow(false)
-    .always_on_top(true)
-    .skip_taskbar(true)
-    .resizable(false)
-    .focused(false)
-    .accept_first_mouse(true)
-    .background_color(tauri::webview::Color(0, 0, 0, 0))
-    .visible(false)
-    .build()
-    .map_err(|error| format!("skill pack picker window: {error}"))?;
-
-    let window_for_event = window.clone();
-    window.on_window_event(move |event| {
-        if let tauri::WindowEvent::Focused(false) = event {
-            let _ = window_for_event.hide();
-        }
-    });
-
-    Ok(window)
-}
-
-fn position_skill_pack_picker(window: &tauri::WebviewWindow) {
-    let anchor = tray_icon_rect().lock().ok().and_then(|value| *value);
-    let monitors = window.available_monitors().unwrap_or_default();
-    let monitor = anchor
-        .and_then(|rect| {
-            monitors.iter().find(|monitor| {
-                let position = rect.position.to_physical::<f64>(monitor.scale_factor());
-                let monitor_position = monitor.position();
-                let monitor_size = monitor.size();
-                position.x >= monitor_position.x as f64
-                    && position.x < (monitor_position.x + monitor_size.width as i32) as f64
-                    && position.y >= monitor_position.y as f64
-                    && position.y < (monitor_position.y + monitor_size.height as i32) as f64
-            })
-        })
-        .cloned()
-        .or_else(|| window.primary_monitor().ok().flatten());
-    let Some(monitor) = monitor else {
-        return;
-    };
-    let scale = monitor.scale_factor();
-    let monitor_position = monitor.position();
-    let monitor_size = monitor.size();
-    let window_size = window.outer_size().unwrap_or_else(|_| {
-        tauri::PhysicalSize::new(
-            (SKILL_PACK_PICKER_WIDTH * scale).round() as u32,
-            (SKILL_PACK_PICKER_HEIGHT * scale).round() as u32,
-        )
-    });
-    let (anchor_x, anchor_bottom) = anchor
-        .map(|rect| {
-            let position = rect.position.to_physical::<f64>(scale);
-            let size = rect.size.to_physical::<f64>(scale);
-            (position.x + size.width / 2.0, position.y + size.height)
-        })
-        .unwrap_or_else(|| {
-            (
-                monitor_position.x as f64 + monitor_size.width as f64 / 2.0,
-                monitor_position.y as f64 + 28.0 * scale,
-            )
-        });
-    let inset = 8.0 * scale;
-    let min_x = monitor_position.x as f64 + inset;
-    let max_x =
-        monitor_position.x as f64 + monitor_size.width as f64 - window_size.width as f64 - inset;
-    let min_y = monitor_position.y as f64 + inset;
-    let max_y =
-        monitor_position.y as f64 + monitor_size.height as f64 - window_size.height as f64 - inset;
-    let x = (anchor_x - window_size.width as f64 / 2.0).clamp(min_x, max_x.max(min_x));
-    let y = (anchor_bottom + 6.0 * scale).clamp(min_y, max_y.max(min_y));
-    let _ = window.set_position(tauri::Position::Physical(tauri::PhysicalPosition::new(
-        x.round() as i32,
-        y.round() as i32,
-    )));
 }
 
 fn register_one_global_shortcut<F>(
@@ -3403,26 +3292,6 @@ async fn generate_skill_explanation_cmd(
 }
 
 #[tauri::command]
-async fn list_packs_cmd() -> Result<Vec<skills::SkillPack>, String> {
-    Ok(skills::registry::list_packs())
-}
-
-#[tauri::command]
-async fn create_pack_cmd(pack: skills::SkillPack) -> Result<(), String> {
-    skills::registry::create_pack(pack)
-}
-
-#[tauri::command]
-async fn update_pack_cmd(pack: skills::SkillPack) -> Result<(), String> {
-    skills::registry::update_pack(pack)
-}
-
-#[tauri::command]
-async fn delete_pack_cmd(id: String) -> Result<(), String> {
-    skills::registry::delete_pack(&id)
-}
-
-#[tauri::command]
 async fn list_collections_cmd() -> Result<Vec<skills::SkillCollection>, String> {
     Ok(skills::registry::list_collections())
 }
@@ -3461,11 +3330,6 @@ async fn batch_install_collection_cmd(
         skills: collection.skills,
         target_agents,
     };
-    skills::installer::apply_pack(&pack)
-}
-
-#[tauri::command]
-async fn apply_pack_cmd(pack: skills::SkillPack) -> Result<(), String> {
     skills::installer::apply_pack(&pack)
 }
 
@@ -4785,12 +4649,6 @@ pub fn run() {
                 })
                 .on_menu_event(|app, event| {
                     let menu_id = event.id().as_ref();
-                    if menu_id == menu_bar::SKILL_PACK_PICKER_ID {
-                        if let Err(error) = show_skill_pack_picker(app) {
-                            log::warn!("Failed to show skill pack picker: {error}");
-                        }
-                        return;
-                    }
                     match menu_id {
                         "show" => {
                             show_notch_window(app);
@@ -4903,7 +4761,6 @@ pub fn run() {
             commands::get_app_state_flags,
             commands::list_usage_providers,
             commands::authorize_usage_provider,
-            commands::send_message,
             commands::jump_to_terminal,
             commands::activate_session_host,
             commands::get_config,
@@ -4922,9 +4779,7 @@ pub fn run() {
             commands::get_chat_history_tail,
             commands::get_subagent_chat_history,
             commands::monitor::get_monitor_sessions,
-            control_tower::commands::create_demo_task_trace,
             control_tower::commands::get_task_traces,
-            control_tower::commands::dispatch_agent,
             commands::export_diagnostics,
             commands::add_engine_instance,
             commands::remove_engine_instance,
@@ -5025,17 +4880,12 @@ pub fn run() {
             read_skill_file_content,
             get_skill_explanation_cmd,
             generate_skill_explanation_cmd,
-            list_packs_cmd,
-            create_pack_cmd,
-            update_pack_cmd,
-            delete_pack_cmd,
             list_collections_cmd,
             upsert_collection_cmd,
             delete_collection_cmd,
             export_collection_cmd,
             import_collection_cmd,
             batch_install_collection_cmd,
-            apply_pack_cmd,
             configure_sync_cmd,
             push_sync_cmd,
             pull_sync_cmd,
@@ -5047,8 +4897,6 @@ pub fn run() {
             get_registry_metadata,
             agents::programs::agent_list,
             agents::programs::agent_refresh,
-            agents::programs::agent_install,
-            agents::programs::agent_update,
             agents::programs::agent_uninstall,
             agents::programs::agent_open_download,
             agents::programs::agent_open_app,
@@ -5058,7 +4906,6 @@ pub fn run() {
             skills::v2::commands::skill_manager_bootstrap,
             skills::v2::commands::skill_manager_init,
             skills::v2::commands::skill_manager_overview,
-            skills::v2::commands::skill_pack_picker_data,
             skills::v2::commands::skill_manager_refresh,
             skills::v2::commands::skill_manager_refresh_overview,
             skills::v2::commands::skill_manager_settings,
@@ -5087,20 +4934,6 @@ pub fn run() {
             skills::v2::commands::execute_sync_copy_target,
             skills::v2::commands::delete_skill_target_distribution,
             skills::v2::commands::delete_skill_target_distributions,
-            skills::v2::commands::list_skill_packs_v2,
-            skills::v2::commands::get_skill_pack_detail,
-            skills::v2::commands::execute_upsert_skill_pack,
-            skills::v2::commands::preview_delete_skill_pack,
-            skills::v2::commands::execute_delete_skill_pack,
-            skills::v2::commands::preview_apply_skill_pack,
-            skills::v2::commands::execute_apply_skill_pack,
-            skills::v2::commands::execute_sync_skill_pack_to_agents,
-            skills::v2::commands::preview_remove_skill_pack_from_agent,
-            skills::v2::commands::execute_remove_skill_pack_from_agent,
-            skills::v2::commands::preview_remove_skill_from_pack,
-            skills::v2::commands::execute_remove_skill_from_pack,
-            skills::v2::commands::preview_move_direct_skill_to_pack,
-            skills::v2::commands::execute_move_direct_skill_to_pack,
             skills::v2::commands::list_managed_agents_v2,
             skills::v2::commands::get_agent_detail_v2,
             skills::v2::commands::refresh_agent_skill_view_v2,
@@ -5114,7 +4947,6 @@ pub fn run() {
             skills::v2::commands::get_skill_project_detail_v2,
             skills::v2::commands::scan_skill_project_v2,
             skills::v2::commands::install_center_skills_to_project_v2,
-            skills::v2::commands::install_skill_pack_to_project_v2,
             skills::v2::commands::run_skill_manager_diagnosis,
             skills::v2::commands::list_diagnosis_issues,
             skills::v2::commands::preview_fix_diagnosis_issue,

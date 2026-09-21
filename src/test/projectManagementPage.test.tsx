@@ -29,9 +29,6 @@ function makeOverview(skill: SkillSummary): SkillManagerOverview {
     metrics: { centerSkillCount: 1, targetCount: 0, unmanagedCount: 0, issueCount: 0 },
     skills: [skill],
     agents: [],
-    packs: [
-      { id: 'default', name: '全量技能包', description: '', tags: [], memberCount: 1, appliedAgentCount: 0, healthy: true },
-    ],
     issues: [],
     settings: {
       centerPath: '~/.agentbro/skills',
@@ -94,7 +91,6 @@ describe('ProjectManagementPage', () => {
     useSkillStoreV2.setState({
       activeTab: 'projects',
       skills: [skill],
-      packs: makeOverview(skill).packs,
       projects: [project],
       selectedProjectId: null,
       selectedProjectDetail: null,

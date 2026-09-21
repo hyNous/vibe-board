@@ -7,8 +7,6 @@ import type {
   AgentSummary,
   AgentDetail,
   AgentSkillViewSnapshot,
-  SkillPackSummary,
-  SkillPackDetail,
   DiagnosisIssue,
   UnmanagedItemDto,
   DistributionPreview,
@@ -22,7 +20,7 @@ import { skillApiV2 } from '../services/skillApiV2'
 // result; it no longer selects between environments.
 export const LOCAL_RUNTIME_ENVIRONMENT_ID = 'local'
 
-export type SkillManagerTab = 'library' | 'install' | 'packs' | 'projects' | 'agents' | 'diagnostics' | 'settings'
+export type SkillManagerTab = 'library' | 'install' | 'projects' | 'agents' | 'diagnostics' | 'settings'
 export type SkillInstallTab = 'official' | 'agent' | 'local' | 'git'
 export type SkillViewMode = 'cards' | 'list'
 
@@ -45,14 +43,11 @@ interface SkillV2State {
   skills: SkillSummary[]
   selectedSkillId: string | null
   selectedSkillDetail: SkillDetail | null
-  selectedPackId: string | null
-  selectedPackDetail: SkillPackDetail | null
   selectedAgentId: string | null
   selectedAgentDetail: AgentDetail | null
   selectedProjectId: string | null
   selectedProjectDetail: ProjectDetail | null
   agents: AgentSummary[]
-  packs: SkillPackSummary[]
   projects: ProjectSummary[]
   issues: DiagnosisIssue[]
   unmanaged: UnmanagedItemDto[]
@@ -78,7 +73,6 @@ interface SkillV2Actions {
   setViewMode: (mode: SkillViewMode) => void
   setFilter: <K extends keyof SkillFilters>(key: K, value: SkillFilters[K]) => void
   selectSkill: (id: string | null) => Promise<void>
-  selectPack: (id: string | null) => Promise<void>
   selectAgent: (id: string | null) => Promise<void>
   loadAgentDetail: (agentId: string, force?: boolean) => Promise<void>
   applyAgentSkillViewSnapshot: (expectedRuntimeEnvironmentId: string, agentId: string, snapshot: AgentSkillViewSnapshot) => boolean
@@ -107,14 +101,11 @@ export const useSkillStoreV2 = create<SkillV2State & SkillV2Actions>((set, get) 
   skills: [],
   selectedSkillId: null,
   selectedSkillDetail: null,
-  selectedPackId: null,
-  selectedPackDetail: null,
   selectedAgentId: null,
   selectedAgentDetail: null,
   selectedProjectId: null,
   selectedProjectDetail: null,
   agents: [],
-  packs: [],
   projects: [],
   issues: [],
   unmanaged: [],
@@ -186,7 +177,6 @@ export const useSkillStoreV2 = create<SkillV2State & SkillV2Actions>((set, get) 
         overview,
         skills: overview.skills,
         agents: overview.agents,
-        packs: overview.packs,
         issues: overview.issues,
         unmanaged,
         settings: overview.settings,
@@ -216,7 +206,6 @@ export const useSkillStoreV2 = create<SkillV2State & SkillV2Actions>((set, get) 
         overview,
         skills: overview.skills,
         agents: overview.agents,
-        packs: overview.packs,
         issues: overview.issues,
         unmanaged,
         settings: overview.settings,
@@ -244,18 +233,6 @@ export const useSkillStoreV2 = create<SkillV2State & SkillV2Actions>((set, get) 
       const detail = await skillApiV2.getSkillDetail(id)
       if (get().runtimeEnvironmentId !== runtimeEnvironmentId) return
       set({ selectedSkillDetail: detail })
-    } catch (e) {
-      set({ error: String(e) })
-    }
-  },
-  selectPack: async (id) => {
-    const runtimeEnvironmentId = get().runtimeEnvironmentId
-    set({ selectedPackId: id, selectedPackDetail: null })
-    if (!id) return
-    try {
-      const detail = await skillApiV2.getPackDetail(id)
-      if (get().runtimeEnvironmentId !== runtimeEnvironmentId) return
-      set({ selectedPackDetail: detail })
     } catch (e) {
       set({ error: String(e) })
     }
@@ -308,7 +285,6 @@ export const useSkillStoreV2 = create<SkillV2State & SkillV2Actions>((set, get) 
       overview,
       skills: overview.skills,
       agents: overview.agents,
-      packs: overview.packs,
       issues: overview.issues,
       unmanaged: snapshot.unmanaged,
       settings: overview.settings,

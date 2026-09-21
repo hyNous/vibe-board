@@ -44,7 +44,7 @@ describe('agentApi seedAgentPrograms', () => {
     expect(agents.find((agent) => agent.id === 'doubao')?.appPath).toBe('/Applications/Doubao.app')
   })
 
-  it('checks Tauri runtime at call time for install actions', async () => {
+  it('checks Tauri runtime at call time for agent operations', async () => {
     vi.resetModules()
     delete (window as Window & { __TAURI_INTERNALS__?: unknown; isTauri?: boolean }).__TAURI_INTERNALS__
 
@@ -54,8 +54,8 @@ describe('agentApi seedAgentPrograms', () => {
       value: {},
     })
 
-    await agentApi.install('codex')
+    await agentApi.uninstall('codex')
 
-    expect(invoke).toHaveBeenCalledWith('agent_install', { agentId: 'codex' })
+    expect(invoke).toHaveBeenCalledWith('agent_uninstall', { agentId: 'codex' })
   })
 })

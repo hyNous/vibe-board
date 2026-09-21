@@ -1,7 +1,6 @@
 import { useSkillStoreV2 } from '../../stores/skillStoreV2'
 import { SkillLibraryPage } from './SkillLibraryPage'
 import { InstallPage } from './InstallPage'
-import { SkillPackPage } from './SkillPackPage'
 import { AgentManagementPage } from './AgentManagementPage'
 import { DiagnosisPage } from './DiagnosisPage'
 import { SettingsPageV2 } from './SettingsPageV2'
@@ -16,7 +15,6 @@ export function SkillManagerShell() {
     <div className="sm2-shell__page">
       {visibleTab === 'library' && <SkillLibraryPage />}
       {visibleTab === 'install' && <InstallPage />}
-      {visibleTab === 'packs' && <SkillPackPage />}
       {visibleTab === 'agents' && <AgentManagementPage />}
       {visibleTab === 'diagnostics' && <DiagnosisPage />}
       {visibleTab === 'settings' && <SettingsPageV2 />}

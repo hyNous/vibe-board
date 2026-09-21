@@ -114,24 +114,6 @@ pub async fn agent_refresh(state: State<'_, AppState>) -> Result<Vec<AgentProgra
 }
 
 #[tauri::command]
-pub async fn agent_install(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    agent_id: String,
-) -> Result<(), String> {
-    run_agent_command(app, &state.adapters, &agent_id, "install").await
-}
-
-#[tauri::command]
-pub async fn agent_update(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    agent_id: String,
-) -> Result<(), String> {
-    run_agent_command(app, &state.adapters, &agent_id, "update").await
-}
-
-#[tauri::command]
 pub async fn agent_uninstall(
     app: AppHandle,
     state: State<'_, AppState>,

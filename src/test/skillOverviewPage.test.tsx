@@ -92,7 +92,6 @@ const overview: SkillManagerOverview = {
   metrics: { centerSkillCount: 2, targetCount: 1, unmanagedCount: 0, issueCount: 0 },
   skills: [githubSkill, localSkill],
   agents,
-  packs: [],
   issues: [],
   settings,
 }

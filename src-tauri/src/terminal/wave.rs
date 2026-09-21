@@ -21,26 +21,6 @@ pub fn focus_block(_block_id: &str, _tab_id: &str, _jwt: &str) -> Result<(), Str
 }
 
 #[cfg(unix)]
-pub fn send_input(block_id: &str, jwt: &str, input: &str) -> Result<(), String> {
-    let mut client = WaveRpcClient::connect(jwt)?;
-    client.authenticate(jwt)?;
-    client.call(
-        "controllerinput",
-        serde_json::json!({
-            "blockid": block_id,
-            "inputdata64": base64::engine::general_purpose::STANDARD.encode(input.as_bytes()),
-        }),
-        None,
-    )?;
-    Ok(())
-}
-
-#[cfg(not(unix))]
-pub fn send_input(_block_id: &str, _jwt: &str, _input: &str) -> Result<(), String> {
-    Err("Wave terminal integration is only supported on Unix".to_string())
-}
-
-#[cfg(unix)]
 struct WaveRpcClient {
     writer: std::os::unix::net::UnixStream,
     reader: std::io::BufReader<std::os::unix::net::UnixStream>,

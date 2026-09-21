@@ -21,7 +21,6 @@ export interface SkillManagerSettings {
   linkFailPolicy: 'ask' | 'copy'
   startupScan: boolean
   showUnmanaged: boolean
-  autoSyncSkillPacks?: boolean
 }
 
 export interface InstalledAgentRef {
@@ -124,56 +123,6 @@ export interface AgentSummaryLite {
   iconKey: string
 }
 
-export interface SkillPackSummary {
-  id: string
-  name: string
-  description: string
-  tags: string[]
-  memberCount: number
-  appliedAgentCount: number
-  healthy: boolean
-  revision?: number
-  syncStatus?: 'synced' | 'pending' | 'syncing' | 'failed' | 'partial' | string
-  pendingSyncCount?: number
-  failedSyncCount?: number
-}
-
-export interface PackMember {
-  skillId: string
-  skillName: string
-  required: boolean
-  sortOrder: number
-  missing: boolean
-}
-
-export interface AppliedPackSummary {
-  packId: string
-  packName: string
-  memberCount: number
-  agentId?: string | null
-  displayName?: string | null
-  iconKey?: string | null
-  packRevision?: number
-  syncedRevision?: number
-  syncStatus?: 'synced' | 'pending' | 'syncing' | 'failed' | 'partial' | string
-  syncError?: string | null
-}
-
-export interface SkillPackDetail {
-  id: string
-  name: string
-  description: string
-  tags: string[]
-  members: PackMember[]
-  appliedAgents: AppliedPackSummary[]
-  revision?: number
-  syncStatus?: 'synced' | 'pending' | 'syncing' | 'failed' | 'partial' | string
-  pendingSyncCount?: number
-  failedSyncCount?: number
-  createdAt: string
-  updatedAt: string
-}
-
 export interface AgentHealthIssue {
   kind: string
   message: string
@@ -193,8 +142,6 @@ export interface AgentDetail {
   inheritsSharedSkills?: boolean
   inheritedManagedSkills: SkillTargetDetail[]
   inheritedUnmanagedSkills: UnmanagedItemDto[]
-  appliedPacks: AppliedPackSummary[]
-  availablePacks: SkillPackSummary[]
   health: AgentHealthIssue[]
 }
 
@@ -208,7 +155,6 @@ export interface SkillManagerOverview {
   metrics: SkillManagerMetrics
   skills: SkillSummary[]
   agents: AgentSummary[]
-  packs: SkillPackSummary[]
   issues: DiagnosisIssue[]
   settings: SkillManagerSettings
 }
@@ -217,13 +163,6 @@ export interface AgentSkillViewSnapshot {
   agentDetail: AgentDetail
   overview: SkillManagerOverview
   unmanaged: UnmanagedItemDto[]
-}
-
-export interface SkillPackPickerData {
-  agents: AgentSummary[]
-  packs: SkillPackSummary[]
-  appliedByAgent: Record<string, string[]>
-  defaultDistributeMode: 'link' | 'copy'
 }
 
 export interface ProjectSummary {
@@ -371,15 +310,6 @@ export interface DeleteCenterSkillPreview {
   warnings: string[]
 }
 
-export interface DeleteSkillPackPreview {
-  packId: string
-  packName: string
-  appliedAgents: string[]
-  affectedTargets: AffectedTarget[]
-  removable: boolean
-  warnings: string[]
-}
-
 export interface DeleteSkillTargetDistributionFailure {
   targetId: string
   error: string
@@ -398,57 +328,6 @@ export interface DeleteUnmanagedAgentSkillFailure {
 export interface DeleteUnmanagedAgentSkillsResult {
   deleted: number
   failures: DeleteUnmanagedAgentSkillFailure[]
-}
-
-export interface RemovePackFromAgentPreview {
-  packId: string
-  packName: string
-  agentId: string
-  displayName: string
-  affectedTargets: AffectedTarget[]
-  willRemoveTargets: number
-  willPreserveTargets: number
-}
-
-export interface RemoveSkillFromPackPreview {
-  packId: string
-  packName: string
-  skillId: string
-  skillName: string
-  affectedTargets: AffectedTarget[]
-  appliedAgentCount: number
-  canKeepStandalone: boolean
-  canRemoveTargets: boolean
-}
-
-export interface MoveDirectSkillToPackPreview {
-  targetId: string
-  skillId: string
-  skillName: string
-  agentId: string
-  displayName: string
-  packId: string
-  packName: string
-  alreadyMember: boolean
-  alreadyApplied: boolean
-  willAddToPack: boolean
-  otherMemberCount: number
-  distribution: DistributionPreview
-}
-
-export interface SkillPackSyncAgentResult {
-  agentId: string
-  displayName: string
-  status: 'synced' | 'failed' | string
-  error: string | null
-}
-
-export interface SkillPackSyncResult {
-  packId: string
-  packName: string
-  revision: number
-  status: 'synced' | 'pending' | 'failed' | 'partial' | string
-  agents: SkillPackSyncAgentResult[]
 }
 
 export interface UnmanagedItemDto {
@@ -572,22 +451,6 @@ export interface CopyTargetDiffPreview {
   files: CopyTargetDiffFile[]
 }
 
-export interface RevokeResult {
-  packId: string
-  agentId: string
-  removedClaims: number
-  removedTargets: number
-  preservedTargets: number
-}
-
-export interface UpsertPackInput {
-  id: string
-  name: string
-  description: string
-  tags: string[]
-  skillIds: string[]
-}
-
 export interface GitHubRepoPreview {
   repo: {
     owner: string
@@ -657,16 +520,6 @@ export const skillApiV2 = {
     isTauriRuntime()
       ? invoke<SkillManagerOverview>('skill_manager_overview')
       : Promise.resolve(demoOverview()),
-  getSkillPackPickerData: (): Promise<SkillPackPickerData> => {
-    if (isTauriRuntime()) return invoke<SkillPackPickerData>('skill_pack_picker_data')
-    const overview = demoOverview()
-    return Promise.resolve({
-      agents: overview.agents,
-      packs: overview.packs,
-      appliedByAgent: {} as Record<string, string[]>,
-      defaultDistributeMode: overview.settings.defaultDistributeMode,
-    })
-  },
   refresh: () => (isTauriRuntime() ? invoke<void>('skill_manager_refresh') : Promise.resolve()),
   refreshOverview: () =>
     isTauriRuntime()
@@ -867,40 +720,6 @@ export const skillApiV2 = {
       ? invoke<DeleteSkillTargetDistributionsResult>('delete_skill_target_distributions', { targetIds })
       : Promise.resolve({ deleted: targetIds.length, failures: [] }),
 
-  listPacks: () => (isTauriRuntime() ? invoke<SkillPackSummary[]>('list_skill_packs_v2') : Promise.resolve([])),
-  getPackDetail: (packId: string) =>
-    isTauriRuntime() ? invoke<SkillPackDetail>('get_skill_pack_detail', { packId }) : Promise.resolve(null as unknown as SkillPackDetail),
-  upsertPack: (pack: UpsertPackInput, options: { deferSync?: boolean } = {}) =>
-    isTauriRuntime()
-      ? invoke<SkillPackDetail>('execute_upsert_skill_pack', { pack, deferSync: options.deferSync ?? false })
-      : Promise.resolve(null as unknown as SkillPackDetail),
-  previewDeletePack: (packId: string) =>
-    isTauriRuntime() ? invoke<DeleteSkillPackPreview>('preview_delete_skill_pack', { packId }) : Promise.resolve({ packId, packName: packId, appliedAgents: [], affectedTargets: [], removable: true, warnings: [] }),
-  deletePack: (packId: string) =>
-    isTauriRuntime() ? invoke<void>('execute_delete_skill_pack', { packId }) : Promise.resolve(),
-  previewApplyPack: (packId: string, targetAgents: string[], requestedMode: 'link' | 'copy') =>
-    isTauriRuntime() ? invoke<DistributionPreview>('preview_apply_skill_pack', { packId, targetAgents, requestedMode }) : Promise.resolve({ skillIds: [], targetAgents, requestedMode, changes: [], blockers: [], blockerDecisions: [] }),
-  executeApplyPack: (packId: string, targetAgents: string[], requestedMode: 'link' | 'copy', blockerDecisions: DistributionBlockerDecision[] = []) =>
-    isTauriRuntime() ? invoke<DistributionPreview>('execute_apply_skill_pack', { packId, targetAgents, requestedMode, blockerDecisions }) : Promise.resolve({ skillIds: [], targetAgents, requestedMode, changes: [], blockers: [], blockerDecisions }),
-  syncPackToAgents: (packId: string, targetAgents: string[] = []) =>
-    isTauriRuntime() ? invoke<SkillPackSyncResult>('execute_sync_skill_pack_to_agents', { packId, targetAgents }) : Promise.resolve({ packId, packName: packId, revision: 1, status: 'synced', agents: [] }),
-  previewRemovePackFromAgent: (packId: string, agentId: string) =>
-    isTauriRuntime() ? invoke<RemovePackFromAgentPreview>('preview_remove_skill_pack_from_agent', { packId, agentId }) : Promise.resolve({ packId, packName: packId, agentId, displayName: agentId, affectedTargets: [], willRemoveTargets: 0, willPreserveTargets: 0 }),
-  removePackFromAgent: (packId: string, agentId: string) =>
-    isTauriRuntime() ? invoke<RevokeResult>('execute_remove_skill_pack_from_agent', { packId, agentId }) : Promise.resolve({ packId, agentId, removedClaims: 0, removedTargets: 0, preservedTargets: 0 }),
-  previewRemoveSkillFromPack: (packId: string, skillId: string) =>
-    isTauriRuntime() ? invoke<RemoveSkillFromPackPreview>('preview_remove_skill_from_pack', { packId, skillId }) : Promise.resolve({ packId, packName: packId, skillId, skillName: skillId, affectedTargets: [], appliedAgentCount: 0, canKeepStandalone: true, canRemoveTargets: true }),
-  removeSkillFromPack: (packId: string, skillId: string, alsoRemoveTargets: boolean) =>
-    isTauriRuntime() ? invoke<void>('execute_remove_skill_from_pack', { packId, skillId, alsoRemoveTargets }) : Promise.resolve(),
-  previewMoveDirectSkillToPack: (targetId: string, packId: string) =>
-    isTauriRuntime()
-      ? invoke<MoveDirectSkillToPackPreview>('preview_move_direct_skill_to_pack', { targetId, packId })
-      : Promise.resolve(null as unknown as MoveDirectSkillToPackPreview),
-  moveDirectSkillToPack: (targetId: string, packId: string, blockerDecisions: DistributionBlockerDecision[] = []) =>
-    isTauriRuntime()
-      ? invoke<MoveDirectSkillToPackPreview>('execute_move_direct_skill_to_pack', { targetId, packId, blockerDecisions })
-      : Promise.resolve(null as unknown as MoveDirectSkillToPackPreview),
-
   listAgents: () => (isTauriRuntime() ? invoke<AgentSummary[]>('list_managed_agents_v2') : Promise.resolve([])),
   getAgentDetail: (agentId: string) =>
     isTauriRuntime() ? invoke<AgentDetail>('get_agent_detail_v2', { agentId }) : Promise.resolve(null as unknown as AgentDetail),
@@ -946,10 +765,6 @@ export const skillApiV2 = {
   installCenterSkillsToProject: (projectId: string, agentId: string, skillIds: string[], requestedMode: 'link' | 'copy') =>
     isTauriRuntime()
       ? invoke<ProjectDetail>('install_center_skills_to_project_v2', { projectId, agentId, skillIds, requestedMode })
-      : Promise.resolve(demoProjectDetail(projectId)),
-  installSkillPackToProject: (projectId: string, agentId: string, packId: string, requestedMode: 'link' | 'copy') =>
-    isTauriRuntime()
-      ? invoke<ProjectDetail>('install_skill_pack_to_project_v2', { projectId, agentId, packId, requestedMode })
       : Promise.resolve(demoProjectDetail(projectId)),
 
   runDiagnosis: () => (isTauriRuntime() ? invoke<DiagnosisIssue[]>('run_skill_manager_diagnosis') : Promise.resolve([])),
@@ -1148,7 +963,6 @@ function demoOverview(): SkillManagerOverview {
     metrics: { centerSkillCount: 0, targetCount: 0, unmanagedCount: 0, issueCount: 0 },
     skills: [],
     agents: [],
-    packs: [],
     issues: [],
     settings: {
       centerPath: '~/.agents/skills',
@@ -1157,7 +971,6 @@ function demoOverview(): SkillManagerOverview {
       linkFailPolicy: 'ask',
       startupScan: true,
       showUnmanaged: true,
-      autoSyncSkillPacks: true,
     },
   }
 }

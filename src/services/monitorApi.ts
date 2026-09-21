@@ -1,6 +1,5 @@
 export {
   getMonitorSessions,
-  createDemoTaskTrace,
   getTaskTraces,
 } from './tauriApi'
 

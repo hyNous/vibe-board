@@ -69,8 +69,6 @@ function detail(id: string, displayName: string): AgentDetail {
     inheritsSharedSkills: false,
     inheritedManagedSkills: [],
     inheritedUnmanagedSkills: [],
-    appliedPacks: [],
-    availablePacks: [],
     health: [],
   }
 }
@@ -78,7 +76,6 @@ function detail(id: string, displayName: string): AgentDetail {
 const overview: SkillManagerOverview = {
   metrics: { centerSkillCount: 0, targetCount: 0, unmanagedCount: 0, issueCount: 0 },
   skills: [],
-  packs: [],
   issues: [],
   settings: {
     centerPath: '~/.agents/skills',
@@ -167,7 +164,9 @@ describe('Agent management inventory', () => {
     render(<AgentManagementPage />)
 
     expect(await screen.findByText('当前版本 未安装')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '安装此 Agent' })).toBeEnabled()
+    // 安装 / 更新按钮已移除；版本与路径继续以只读方式显示。
+    expect(screen.queryByRole('button', { name: '安装此 Agent' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '更新此 Agent' })).not.toBeInTheDocument()
     // 程序未安装，但本机发现了配置/Skills，扫描操作仍然可用。
     expect(screen.getByRole('button', { name: '重新扫描此 Agent' })).toBeEnabled()
     expect(screen.getByTitle('Codex · 仅发现配置').querySelector('.sm2-agent-inventory__status')).toHaveClass('sm2-agent-inventory__status--config-only')

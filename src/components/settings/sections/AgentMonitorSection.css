@@ -31,36 +31,6 @@
   gap: 8px;
 }
 
-.agent-monitor__demo-btn {
-  min-height: 30px;
-  padding: 0 12px;
-  border: 1px solid rgba(52, 199, 89, 0.4);
-  border-radius: 8px;
-  background: rgba(52, 199, 89, 0.08);
-  color: #248a3d;
-  cursor: pointer;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 650;
-  transition: all 0.15s ease;
-}
-
-.agent-monitor__demo-btn:hover:not(:disabled) {
-  background: rgba(52, 199, 89, 0.16);
-  border-color: rgba(52, 199, 89, 0.6);
-}
-
-.agent-monitor__demo-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.agent-monitor__notice--success {
-  border-color: rgba(52, 199, 89, 0.35);
-  background: rgba(52, 199, 89, 0.08);
-  color: #1b6d30;
-}
-
 .agent-monitor__refresh,
 .agent-monitor__detail-header button,
 .agent-monitor__pending button {

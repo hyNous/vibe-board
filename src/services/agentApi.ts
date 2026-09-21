@@ -227,14 +227,6 @@ export const agentApi = {
     ? invoke<AgentProgramInfo[]>('agent_refresh')
     : Promise.resolve(seedAgentPrograms()),
 
-  install: (agentId: string) => isTauriRuntime()
-    ? invoke('agent_install', { agentId })
-    : Promise.resolve(),
-
-  update: (agentId: string) => isTauriRuntime()
-    ? invoke('agent_update', { agentId })
-    : Promise.resolve(),
-
   uninstall: (agentId: string) => isTauriRuntime()
     ? invoke('agent_uninstall', { agentId })
     : Promise.resolve(),

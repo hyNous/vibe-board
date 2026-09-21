@@ -4,7 +4,6 @@
 
 import type { AgentRunState, AgentStatusSnapshot, RateLimitInfo, SessionNotice, SessionState } from '../types/agent'
 import type { SideIslandSize, IslandDragAnchor } from '../utils/islandLayout'
-import { useConfigStore } from '../stores/configStore'
 
 declare const __APP_VERSION__: string
 
@@ -369,25 +368,9 @@ export async function getMonitorSessions(): Promise<MonitorSessionSummary[]> {
 
 export type { TaskRecord, AgentRunRecord, TaskEventRecord } from '../types/taskTrace'
 
-export async function createDemoTaskTrace(): Promise<import('../types/taskTrace').TaskRecord> {
-  if (!isTauri()) {
-    throw new Error('Task trace persistence requires Tauri runtime')
-  }
-  return invoke<import('../types/taskTrace').TaskRecord>('create_demo_task_trace')
-}
-
 export async function getTaskTraces(): Promise<import('../types/taskTrace').TaskRecord[]> {
   if (!isTauri()) return []
   return invoke<import('../types/taskTrace').TaskRecord[]>('get_task_traces')
-}
-
-export async function sendMessage(sessionId: string, message: string): Promise<void> {
-  if (!isTauri()) {
-    console.log(`[mock] sendMessage(${sessionId}, "${message}")`)
-    return
-  }
-  const activateBeforeSend = useConfigStore.getState().jumpBeforeSend
-  return invoke('send_message', { sessionId, message, activateBeforeSend })
 }
 
 let jumpInFlight = false

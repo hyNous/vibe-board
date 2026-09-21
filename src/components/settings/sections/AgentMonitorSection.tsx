@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  createDemoTaskTrace,
   getMonitorSessions,
   getTaskTraces,
   type AgentRunRecord,
@@ -284,8 +283,6 @@ export function AgentMonitorSection() {
   const [error, setError] = useState('')
   const [tasks, setTasks] = useState<TaskRecord[]>([])
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null)
-  const [creatingDemo, setCreatingDemo] = useState(false)
-  const [demoNotice, setDemoNotice] = useState<string | null>(null)
   const [tasksLoading, setTasksLoading] = useState(false)
   const [tasksError, setTasksError] = useState('')
   const [taskFilter, setTaskFilter] = useState<TaskFilter>('active')
@@ -335,23 +332,6 @@ export function AgentMonitorSection() {
     }
   }, [])
 
-  const handleCreateDemoTrace = useCallback(async () => {
-    setCreatingDemo(true)
-    setTasksError('')
-    setDemoNotice(null)
-    try {
-      const createdTask = await createDemoTaskTrace()
-      await loadTasks(true)
-      const rootRunId = createdTask.runs?.[0]?.id ?? 'run-demo-codex-root'
-      setSelectedRunId(rootRunId)
-      setDemoNotice('Demo Task Trace 已创建：包含 Codex 根任务与嵌套的 Dummy Child 子任务。')
-    } catch (err) {
-      setTasksError(`创建 Demo Task Trace 失败: ${String(err)}`)
-    } finally {
-      setCreatingDemo(false)
-    }
-  }, [loadTasks])
-
   const loadSessions = useCallback(async (showSpinner = false) => {
     if (showSpinner) setLoading(true)
     setError('')
@@ -393,15 +373,6 @@ export function AgentMonitorSection() {
         <div className="agent-monitor__header-actions">
           <button
             type="button"
-            className="agent-monitor__demo-btn"
-            data-testid="create-demo-task-trace-btn"
-            disabled={creatingDemo}
-            onClick={handleCreateDemoTrace}
-          >
-            {creatingDemo ? '创建中...' : '+ 创建演示 Task Trace'}
-          </button>
-          <button
-            type="button"
             className="agent-monitor__refresh"
             onClick={() => {
               void loadSessions(true)
@@ -413,7 +384,6 @@ export function AgentMonitorSection() {
         </div>
       </header>
 
-      {demoNotice && <div className="agent-monitor__notice agent-monitor__notice--success">{demoNotice}</div>}
       {tasksError && <div className="agent-monitor__notice">{tasksError}</div>}
       {error && <div className="agent-monitor__notice">会话读取失败，已回退到前端 sessionStore：{error}</div>}
 
@@ -485,7 +455,7 @@ export function AgentMonitorSection() {
           {tasksLoading && tasks.length === 0 ? (
             <div className="agent-monitor__empty">正在读取任务链路...</div>
           ) : tasks.length === 0 ? (
-            <div className="agent-monitor__empty">暂无持久化任务，点击上方按钮创建演示任务链路。</div>
+            <div className="agent-monitor__empty">暂无持久化任务链路。</div>
           ) : visibleTasks.length === 0 ? (
             <div className="agent-monitor__empty">当前分类暂无任务。</div>
           ) : (

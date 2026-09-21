@@ -5,29 +5,12 @@
 pub enum NotificationEvent {
     SessionStart,
     SessionStop,
-    ToolUse {
-        tool_name: String,
-    },
-    Completion {
-        summary: String,
-    },
-    Error {
-        message: String,
-    },
-    WaitingApproval {
-        tool_name: String,
-        detail: Option<String>,
-    },
-    WaitingInput {
-        question: String,
-    },
-    PlanApproval {
-        title: String,
-    },
-    Custom {
-        title: String,
-        body: String,
-    },
+    ToolUse { tool_name: String },
+    Completion { summary: String },
+    Error { message: String },
+    WaitingInput { question: String },
+    PlanApproval { title: String },
+    Custom { title: String, body: String },
 }
 
 pub fn event_key(event: &NotificationEvent) -> &'static str {
@@ -37,7 +20,6 @@ pub fn event_key(event: &NotificationEvent) -> &'static str {
         NotificationEvent::ToolUse { .. } => "tool_use",
         NotificationEvent::Completion { .. } => "task_complete",
         NotificationEvent::Error { .. } => "error",
-        NotificationEvent::WaitingApproval { .. } => "waiting_approval",
         NotificationEvent::WaitingInput { .. } => "waiting_input",
         NotificationEvent::PlanApproval { .. } => "plan_approval",
         NotificationEvent::Custom { .. } => "custom",
@@ -93,9 +75,7 @@ fn event_color(event: &NotificationEvent) -> &'static str {
         NotificationEvent::Completion { .. } => "green",
         NotificationEvent::SessionStart => "blue",
         NotificationEvent::SessionStop => "grey",
-        NotificationEvent::WaitingApproval { .. }
-        | NotificationEvent::WaitingInput { .. }
-        | NotificationEvent::PlanApproval { .. } => "orange",
+        NotificationEvent::WaitingInput { .. } | NotificationEvent::PlanApproval { .. } => "orange",
         _ => "turquoise",
     }
 }
@@ -112,8 +92,6 @@ struct Labels {
     task_completed: &'static str,
     error: &'static str,
     error_body: &'static str,
-    needs_approval: &'static str,
-    needs_approval_body: &'static str,
     needs_input: &'static str,
     needs_input_body: &'static str,
     plan_approval: &'static str,
@@ -133,8 +111,6 @@ fn labels(language: &str) -> Labels {
             task_completed: "任务已完成",
             error: "发生错误",
             error_body: "会话发生错误",
-            needs_approval: "需要审批",
-            needs_approval_body: "会话需要审批",
             needs_input: "需要回答",
             needs_input_body: "会话需要回答",
             plan_approval: "计划审批",
@@ -151,8 +127,6 @@ fn labels(language: &str) -> Labels {
             task_completed: "タスクが完了しました",
             error: "エラー",
             error_body: "セッションでエラーが発生しました",
-            needs_approval: "承認待ち",
-            needs_approval_body: "セッションで承認が必要です",
             needs_input: "入力待ち",
             needs_input_body: "セッションで入力が必要です",
             plan_approval: "計画承認",
@@ -169,8 +143,6 @@ fn labels(language: &str) -> Labels {
             task_completed: "작업이 완료되었습니다",
             error: "오류",
             error_body: "세션에서 오류가 발생했습니다",
-            needs_approval: "승인 필요",
-            needs_approval_body: "세션에서 승인이 필요합니다",
             needs_input: "입력 필요",
             needs_input_body: "세션에서 입력이 필요합니다",
             plan_approval: "계획 승인",
@@ -187,8 +159,6 @@ fn labels(language: &str) -> Labels {
             task_completed: "Görev tamamlandı",
             error: "Hata",
             error_body: "Oturumda hata oluştu",
-            needs_approval: "Onay gerekli",
-            needs_approval_body: "Oturumda onay gerekli",
             needs_input: "Girdi gerekli",
             needs_input_body: "Oturumda girdi gerekli",
             plan_approval: "Plan onayı",
@@ -205,8 +175,6 @@ fn labels(language: &str) -> Labels {
             task_completed: "Task completed",
             error: "Error",
             error_body: "Error in session",
-            needs_approval: "Needs approval",
-            needs_approval_body: "Needs approval in session",
             needs_input: "Needs input",
             needs_input_body: "Needs input in session",
             plan_approval: "Plan approval",
@@ -264,20 +232,6 @@ fn event_to_text(
                 source, labels.error_body, short_id, message
             ),
         ),
-        NotificationEvent::WaitingApproval { tool_name, detail } => {
-            let detail = detail.as_deref().filter(|value| !value.trim().is_empty());
-            let body = match detail {
-                Some(detail) => format!(
-                    "**[{}]** {} `{}`\n\n{}",
-                    source, labels.needs_approval_body, short_id, detail
-                ),
-                None => format!(
-                    "**[{}]** {} `{}`\n\n> {}",
-                    source, labels.needs_approval_body, short_id, tool_name
-                ),
-            };
-            (format!("[{}] {}", source, labels.needs_approval), body)
-        }
         NotificationEvent::WaitingInput { question } => (
             format!("[{}] {}", source, labels.needs_input),
             format!(

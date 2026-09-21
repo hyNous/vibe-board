@@ -239,7 +239,17 @@ webhook `WaitingApproval` 通知模板、三类卡片与 `notch.tool.*` 的五�
 
 **Verification**：检查命令全绿；父级按第 1 条逐个 grep 命令名。
 
-**状态（2026-09-21）：M3a（MCP + Plugin）PASS，已合入；M3b 进行中。**
+**状态（2026-09-22）：M3 PASS WITH RISKS，M3a、M3b 均已合入。**
+
+M3b 父级独立验证：前端 40 文件 407 项全过，lint / build 通过；`cargo test --lib` 511 通过 / 23 失败，失败集合 ⊆ 已知名单；
+`release:check` ok；`invoke_handler` 中被删命令命中 0，`set_sound_pack`、`import_sound_pack` 仍注册。
+worker 修改了 `check-release-readiness.mjs` 的置顶窗口检查：原检查在 `lib.rs` 中搜索 `.always_on_top(true)`，唯一满足者是被删的
+技能包选择窗口；现同时接受 `tauri.conf.json` 中 `alwaysOnTop: true` 的窗口（灵动岛窗口即如此）。父级判定为**保持检查意图、
+改用准确依据**，不是放宽。
+**已记录的技术债（S2）**：v2 服务内部的技能包读写逻辑与表保留（与分发 claim 汇总交织，已无命令 / 界面可达）；
+`control_tower/db.rs` 的 `insert_child_run` 等 4 个方法已无调用者，新增 dead_code 警告。
+**移交 M6**：派发器删除后已无任何代码写入任务追踪库，但任务看板页仍读取 `get_task_traces` 并保留任务树渲染代码，
+该区块只会为空；另有 `jumpBeforeSend` 设置已无消费者。
 M3a 父级独立验证：前端 42 文件 461 项全过，lint / build 通过；`cargo test --lib` 523 通过 / 24 失败，失败集合 ⊆ 已知名单
 （8 项随被删功能消失或裁掉 MCP/Plugin 断言后转绿）；命令注册表 mcp/plugin 命中 0；`release:check` ok。
 worker 额外删除 `skills/codex_config.rs`：父级核实其全部公开函数只服务 MCP/Plugin；`profiles.rs` 中同名的 `set_plugin_enabled`
@@ -287,6 +297,9 @@ worker 额外删除 `skills/codex_config.rs`：父级核实其全部公开函数
 4. 灵动岛健康指示：自检全部通过时不显示；任一项失败时显示；点击展开六项自检结果。测试夹具覆盖两种状态。
 5. 用量 Provider 设置出现在「使用额度」页。
 6. 「派发框架」页显示已安装 Agent 的名称、版本、程序路径（只读），无更新 / 安装按钮。
+7. 任务看板页只保留「当前实时任务」：移除任务追踪（任务树）区块与 `get_task_traces` 命令，以及已无调用者的
+   `control_tower` 写入方法；`tasks.db` 文件与迁移逻辑保留（兼容旧安装）。
+8. 移除已无作用的设置控件：全局「批准 / 拒绝 / 跳过」快捷键、`autoApproveTools`、`jumpBeforeSend`；旧配置含这些字段时仍能加载。
 
 **Verification**：检查命令全绿；父级核对第 3 条清单。
 

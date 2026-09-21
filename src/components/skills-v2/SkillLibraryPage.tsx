@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { filteredSkills, useSkillStoreV2 } from '../../stores/skillStoreV2'
 import { skillApiV2 } from '../../services/skillApiV2'
-import type { SkillSummary, SkillPackSummary, DeleteCenterSkillPreview } from '../../services/skillApiV2'
+import type { SkillSummary, DeleteCenterSkillPreview } from '../../services/skillApiV2'
 import { AgentIconBadge } from './AgentIconBadge'
 import { DistributeDialog } from './DistributeDialog'
 import { SkillDetailSlider } from './SkillDetailSlider'
@@ -17,8 +17,6 @@ const STATUS_LABEL: Record<string, string> = {
   updateAvailable: '可更新',
 }
 
-const DEFAULT_SKILL_PACK_ID = 'default'
-
 type FilterSelectOption = {
   value: string
   label: string
@@ -27,7 +25,6 @@ type FilterSelectOption = {
 export function SkillLibraryPage() {
   const { t } = useTranslation()
   const state = useSkillStoreV2()
-  const setStoreError = state.setError
   const baseSkills = filteredSkills(state)
   const overview = state.overview
   const startupScanInFlight = state.startupScanInFlight
@@ -36,35 +33,12 @@ export function SkillLibraryPage() {
   const [selectedSkillIds, setSelectedSkillIds] = useState<Set<string>>(new Set())
   const [sliderSkillId, setSliderSkillId] = useState<string | null>(null)
   const [deletePreview, setDeletePreview] = useState<DeleteCenterSkillPreview | null>(null)
-  const [packFilter, setPackFilter] = useState('')
-  const [packMembersById, setPackMembersById] = useState<Record<string, string[]>>({})
-  const [packMembershipsLoading, setPackMembershipsLoading] = useState(false)
   const [busy, setBusy] = useState(false)
   const sources = useMemo(
     () => Array.from(new Set(state.skills.map((s) => s.sourceType).filter(Boolean))).sort(),
     [state.skills],
   )
-  const filterablePacks = useMemo(
-    () => state.packs.filter((pack) => pack.id !== DEFAULT_SKILL_PACK_ID),
-    [state.packs],
-  )
-  const skills = useMemo(() => {
-    if (!packFilter) return baseSkills
-    const memberIds = packMembersById[packFilter]
-    if (!memberIds) return []
-    const memberSet = new Set(memberIds)
-    return baseSkills.filter((skill) => memberSet.has(skill.id))
-  }, [baseSkills, packFilter, packMembersById])
-  const skillPacksById = useMemo(() => {
-    const next: Record<string, SkillPackSummary[]> = {}
-    for (const pack of filterablePacks) {
-      for (const skillId of packMembersById[pack.id] ?? []) {
-        if (!next[skillId]) next[skillId] = []
-        next[skillId].push(pack)
-      }
-    }
-    return next
-  }, [filterablePacks, packMembersById])
+  const skills = baseSkills
   const selectedSkills = useMemo(
     () => state.skills.filter((skill) => selectedSkillIds.has(skill.id)),
     [selectedSkillIds, state.skills],
@@ -86,59 +60,11 @@ export function SkillLibraryPage() {
     { value: '', label: '全部来源' },
     ...sources.map((source) => ({ value: source, label: skillSourceTypeLabel(t, source) })),
   ], [sources, t])
-  const packOptions = useMemo<FilterSelectOption[]>(() => [
-    { value: '', label: '全部技能包' },
-    ...filterablePacks.map((pack) => ({ value: pack.id, label: pack.name })),
-  ], [filterablePacks])
 
   useEffect(() => {
     state.init()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-
-  useEffect(() => {
-    let cancelled = false
-    if (filterablePacks.length === 0) {
-      setPackMembersById({})
-      setPackMembershipsLoading(false)
-      return
-    }
-
-    setPackMembersById({})
-    setPackMembershipsLoading(true)
-    void (async () => {
-      try {
-        const details = await Promise.all(
-          filterablePacks.map(async (pack) => ({
-            packId: pack.id,
-            detail: await skillApiV2.getPackDetail(pack.id),
-          })),
-        )
-        if (cancelled) return
-        const next: Record<string, string[]> = {}
-        for (const { packId, detail } of details) {
-          next[packId] = detail.members
-            .filter((member) => !member.missing)
-            .map((member) => member.skillId)
-        }
-        setPackMembersById(next)
-      } catch (e) {
-        if (!cancelled) setStoreError(String(e))
-      } finally {
-        if (!cancelled) setPackMembershipsLoading(false)
-      }
-    })()
-
-    return () => {
-      cancelled = true
-    }
-  }, [filterablePacks, setStoreError])
-
-  useEffect(() => {
-    if (packFilter && !filterablePacks.some((pack) => pack.id === packFilter)) {
-      setPackFilter('')
-    }
-  }, [filterablePacks, packFilter])
 
   useEffect(() => {
     setSelectedSkillIds((prev) => {
@@ -276,14 +202,6 @@ export function SkillLibraryPage() {
         </div>
         <div className="sm2__filter-controls">
           <FilterSelect
-            label="技能包"
-            value={packFilter}
-            options={packOptions}
-            onChange={setPackFilter}
-            disabled={filterablePacks.length === 0}
-            wide
-          />
-          <FilterSelect
             label="状态"
             value={state.filters.status}
             options={statusOptions}
@@ -344,8 +262,6 @@ export function SkillLibraryPage() {
               <SkillCard
                 key={s.id}
                 skill={s}
-                packs={skillPacksById[s.id] ?? []}
-                packMembershipsLoading={packMembershipsLoading}
                 batchMode={batchMode}
                 selected={selectedSkillIds.has(s.id)}
                 onToggleSelection={() => toggleSkillSelection(s.id)}
@@ -383,11 +299,6 @@ export function SkillLibraryPage() {
                 <div className="sm2__row-main">
                   <div className="sm2__row-title">{s.name}</div>
                   <div className="sm2__row-sub">{skillSourceTypeLabel(t, s.sourceType)} · {STATUS_LABEL[s.status] || s.status}</div>
-                  <SkillPackMembership
-                    packs={skillPacksById[s.id] ?? []}
-                    loading={packMembershipsLoading}
-                    compact
-                  />
                 </div>
                 <CopyDiffMarker count={copyDiffCount(s)} />
                 <AgentBadges skill={s} />
@@ -644,46 +555,14 @@ function CopyDiffMarker({ count }: { count: number }) {
   )
 }
 
-function SkillPackMembership({
-  packs,
-  loading,
-  compact = false,
-}: {
-  packs: SkillPackSummary[]
-  loading: boolean
-  compact?: boolean
-}) {
-  const label = packs.length > 0
-    ? `所属技能包：${packs.map((pack) => pack.name).join('、')}`
-    : loading ? '正在载入技能包归属' : '未加入技能包'
-
-  return (
-    <div
-      className={`sm2__skill-packs${compact ? ' sm2__skill-packs--compact' : ''}${packs.length === 0 ? ' sm2__skill-packs--empty' : ''}`}
-      aria-label={label}
-    >
-      <span className="sm2__skill-packs-label">技能包</span>
-      {packs.length > 0 ? packs.map((pack) => (
-        <span key={pack.id} className="sm2__skill-pack-chip" title={pack.name}>{pack.name}</span>
-      )) : (
-        <span className="sm2__skill-pack-empty">{loading ? '载入中…' : '未加入'}</span>
-      )}
-    </div>
-  )
-}
-
 function SkillCard({
   skill,
-  packs,
-  packMembershipsLoading,
   batchMode,
   selected,
   onToggleSelection,
   onClick,
 }: {
   skill: SkillSummary
-  packs: SkillPackSummary[]
-  packMembershipsLoading: boolean
   batchMode: boolean
   selected: boolean
   onToggleSelection: () => void
@@ -723,7 +602,6 @@ function SkillCard({
         <span className={`sm2__tag sm2__tag--${skill.status}`}>{STATUS_LABEL[skill.status] || skill.status}</span>
         <span className="sm2__tag">{skill.skillType}</span>
       </div>
-      <SkillPackMembership packs={packs} loading={packMembershipsLoading} />
       <div className="sm2__card-foot">
         {skill.installedAgents.length > 0 && (
           <div className="sm2__agents">

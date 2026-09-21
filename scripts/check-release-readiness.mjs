@@ -151,7 +151,11 @@ if (bundleTargets !== 'all' && (!explicitBundleTargets.includes('nsis') || !expl
 }
 requireContains('Windows build script', windowsBuildScript, "'nsis,msi'")
 requireContains('System tray runtime', runtimeSource, 'TrayIconBuilder')
-requireContains('Always-on-top window support', runtimeSource, '.always_on_top(true)')
+const alwaysOnTopWindows = Array.isArray(tauri.app?.windows)
+  && tauri.app.windows.some((window) => window.alwaysOnTop === true)
+if (!runtimeSource.includes('.always_on_top(true)') && !alwaysOnTopWindows) {
+  errors.push('Always-on-top window support is missing: expected .always_on_top(true) in src-tauri/src/lib.rs or an alwaysOnTop window in tauri.conf.json')
+}
 requireContains('Launch-at-login command', commandSource, 'set_launch_at_login')
 requireContains('Restart command', runtimeSource, 'request_restart')
 requireContains('Native notification plugin', runtimeSource, 'tauri_plugin_notification::init()')

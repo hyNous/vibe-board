@@ -24,7 +24,6 @@ function makeOverview(overrides: Partial<SkillManagerOverview> = {}): SkillManag
     metrics: { centerSkillCount: 0, targetCount: 0, unmanagedCount: 0, issueCount: 0 },
     skills: [],
     agents: [],
-    packs: [],
     issues: [],
     settings: {
       centerPath: '~/.agentbro/skills',
@@ -50,8 +49,6 @@ function makeAgentDetail(id: string): AgentDetail {
     skills: [],
     inheritedManagedSkills: [],
     inheritedUnmanagedSkills: [],
-    appliedPacks: [],
-    availablePacks: [],
     health: [],
   }
 }
@@ -139,7 +136,6 @@ describe('skillStoreV2 startup scan setting', () => {
       settings: null,
       skills: [],
       agents: [],
-      packs: [],
       issues: [],
       unmanaged: [],
       loading: false,
@@ -155,7 +151,6 @@ describe('skillStoreV2 startup scan setting', () => {
       metrics: { centerSkillCount: 0, targetCount: 0, unmanagedCount: 0, issueCount: 0 },
       skills: [],
       agents: [],
-      packs: [],
       issues: [],
       settings: {
         centerPath: '~/.agentbro/skills',
@@ -184,7 +179,6 @@ describe('skillStoreV2 startup scan setting', () => {
       metrics: { centerSkillCount: 1, targetCount: 0, unmanagedCount: 0, issueCount: 0 },
       skills: [makeSkill()],
       agents: [],
-      packs: [],
       issues: [],
       settings: {
         centerPath: '~/.agentbro/skills',
@@ -219,7 +213,6 @@ describe('skillStoreV2 startup scan setting', () => {
       metrics: { centerSkillCount: 0, targetCount: 0, unmanagedCount: 0, issueCount: 0 },
       skills: [],
       agents: [],
-      packs: [],
       issues: [],
       settings: {
         centerPath: '~/.agentbro/skills',
@@ -247,7 +240,6 @@ describe('skillStoreV2 refresh', () => {
       overview: null,
       skills: [],
       agents: [],
-      packs: [],
       issues: [],
       loading: false,
       error: null,
@@ -297,8 +289,8 @@ describe('skillStoreV2 refresh', () => {
 
 describe('skillStoreV2 tab navigation', () => {
   it('switches active tab', () => {
-    useSkillStoreV2.getState().setTab('packs')
-    expect(useSkillStoreV2.getState().activeTab).toBe('packs')
+    useSkillStoreV2.getState().setTab('library')
+    expect(useSkillStoreV2.getState().activeTab).toBe('library')
     useSkillStoreV2.getState().setTab('diagnostics')
     expect(useSkillStoreV2.getState().activeTab).toBe('diagnostics')
   })
@@ -357,7 +349,6 @@ describe('skillStoreV2 overview shape', () => {
       metrics: { centerSkillCount: 3, targetCount: 2, unmanagedCount: 1, issueCount: 1 },
       skills: [makeSkill()],
       agents: [],
-      packs: [],
       issues: [],
       settings: {
         centerPath: '~/.agentbro/skills',

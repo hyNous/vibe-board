@@ -71,7 +71,6 @@ function applyPersistedConfig(raw: string | null) {
 async function detectWindowLabel(): Promise<string> {
   // Check URL hash first (works in both Tauri and browser)
   if (window.location.hash === '#settings') return 'settings'
-  if (window.location.hash === '#skill-pack-picker') return 'skill-pack-picker'
 
   // In Tauri, use the real window label
   if (isTauri()) {
@@ -172,10 +171,6 @@ function App() {
 
   // Wait for detection
   if (windowLabel === null) return null
-
-  // The tray skill pack picker window is kept as a compatibility surface but
-  // is not rendered.
-  if (windowLabel === 'skill-pack-picker') return null
 
   // Settings window
   if (windowLabel === 'settings') {
