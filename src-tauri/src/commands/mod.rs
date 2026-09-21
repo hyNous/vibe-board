@@ -445,7 +445,6 @@ fn codex_app_server_refresh_interval_seconds(
 pub struct UsageProviderStatus {
     provider: String,
     label: String,
-    primary: bool,
     enabled: bool,
     available: bool,
     catalog_supported: bool,
@@ -501,7 +500,6 @@ pub async fn get_agent_statuses(
             .or_insert_with(|| AgentStatusSnapshot {
                 agent: agent.to_string(),
                 label: label.to_string(),
-                primary: false,
                 online: false,
                 last_seen_at: 0,
                 last_completed_at: None,
@@ -557,10 +555,6 @@ pub async fn get_agent_statuses(
 
     let mut result = statuses.into_values().collect::<Vec<_>>();
     result.sort_by_key(|snapshot| tracked_agent_rank(&snapshot.agent));
-    let primary_host = crate::data_dir::usage_host();
-    for snapshot in &mut result {
-        snapshot.primary = primary_host.as_deref() == Some(snapshot.agent.as_str());
-    }
     state.session_store.persist_agent_status_snapshots(&result);
     Ok(result)
 }
@@ -615,11 +609,6 @@ pub async fn list_usage_providers(
     providers.push(antigravity_usage_provider_status(enabled).await);
     providers.extend(catalog_unsupported_agent_usage_providers(enabled));
 
-    if let Some(primary) = crate::data_dir::usage_host() {
-        for provider in &mut providers {
-            provider.primary = provider.provider == primary;
-        }
-    }
     Ok(providers)
 }
 
@@ -730,7 +719,6 @@ async fn codex_usage_provider_status(enabled: bool, allow_live: bool) -> UsagePr
     UsageProviderStatus {
         provider: "codex".to_string(),
         label: "Codex".to_string(),
-        primary: false,
         enabled,
         available: snapshot.is_some(),
         catalog_supported: true,
@@ -764,7 +752,6 @@ fn claude_usage_provider_status(enabled: bool) -> UsageProviderStatus {
     UsageProviderStatus {
         provider: "claude-code".to_string(),
         label: "Claude Code".to_string(),
-        primary: false,
         enabled,
         available: snapshot.is_some(),
         catalog_supported: true,
@@ -843,7 +830,6 @@ async fn opencode_usage_provider_status(enabled: bool) -> UsageProviderStatus {
     UsageProviderStatus {
         provider: "opencode".to_string(),
         label: "OpenCode Go".to_string(),
-        primary: false,
         enabled,
         available: snapshot.is_some(),
         catalog_supported: true,
@@ -883,7 +869,6 @@ async fn antigravity_usage_provider_status(enabled: bool) -> UsageProviderStatus
     UsageProviderStatus {
         provider: "antigravity".to_string(),
         label: "Antigravity".to_string(),
-        primary: false,
         enabled,
         available: snapshot.is_some(),
         catalog_supported: true,
@@ -960,7 +945,6 @@ fn known_provider_status(
     UsageProviderStatus {
         provider: provider.to_string(),
         label: label.to_string(),
-        primary: false,
         enabled,
         available: false,
         catalog_supported,
@@ -3240,32 +3224,6 @@ fn open_codex_desktop_session_windows(session: &SessionState) -> Result<(), Stri
 }
 
 #[cfg(target_os = "windows")]
-fn activate_codex_desktop_windows() -> Result<(), String> {
-    let mut errors = Vec::new();
-    for app_id in crate::agents::executable::codex_desktop_app_user_model_ids() {
-        match open_windows_app_user_model_id(&app_id) {
-            Ok(()) => return Ok(()),
-            Err(err) => errors.push(format!("{app_id}: {err}")),
-        }
-    }
-    for path in crate::agents::executable::codex_desktop_app_candidates()
-        .into_iter()
-        .filter(|path| path.exists())
-    {
-        let target = path.to_string_lossy().to_string();
-        match open_windows_shell_target(&target) {
-            Ok(()) => return Ok(()),
-            Err(err) => errors.push(format!("{target}: {err}")),
-        }
-    }
-    Err(if errors.is_empty() {
-        "Codex Desktop was not found. Install or launch Codex Desktop, then try again.".to_string()
-    } else {
-        format!("Failed to activate Codex Desktop: {}", errors.join("; "))
-    })
-}
-
-#[cfg(target_os = "windows")]
 fn open_windows_app_user_model_id(app_id: &str) -> Result<(), String> {
     let app_id = clean_windows_app_user_model_id(app_id)
         .ok_or_else(|| format!("Invalid Windows app id: {app_id}"))?;
@@ -3897,82 +3855,6 @@ pub async fn simulate_hook_event(
 /// concurrently (e.g. from a user rage-clicking a stale "jump" button) can
 /// stack into a system-wide stall. We serialize and silently drop overlap.
 static JUMP_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-
-fn session_has_desktop_host(session: &SessionState) -> bool {
-    is_codex_desktop_session(session) || app_host_bundle_id(session).is_some()
-}
-
-#[cfg(target_os = "windows")]
-fn activate_session_process_window(process_id: u32) -> bool {
-    let tree = crate::terminal::process_tree::build_tree();
-    let mut current = process_id;
-    while current != 0 {
-        if crate::platform::host_visibility::activate_process_window(current) {
-            return true;
-        }
-        let Some(parent) = tree.get(&current).map(|process| process.ppid) else {
-            break;
-        };
-        if parent == current {
-            break;
-        }
-        current = parent;
-    }
-    false
-}
-
-#[tauri::command]
-pub async fn activate_session_host(
-    app: tauri::AppHandle,
-    state: State<'_, AppState>,
-    session_id: String,
-) -> Result<bool, String> {
-    release_notch_keyboard_focus(&app);
-    let session = state
-        .session_store
-        .get_session(&session_id)
-        .ok_or_else(|| format!("Session {} not found", session_id))?;
-
-    if !session_has_desktop_host(&session) {
-        return Ok(false);
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        if is_codex_desktop_session(&session) {
-            activate_codex_desktop_windows()?;
-            return Ok(true);
-        }
-        if session.pid.is_some_and(activate_session_process_window) {
-            return Ok(true);
-        }
-        return Err(format!(
-            "Failed to activate the desktop window for {}",
-            session.agent_type
-        ));
-    }
-
-    #[cfg(target_os = "macos")]
-    {
-        if is_codex_desktop_session(&session) {
-            return if activate_codex_desktop_app(session.pid) {
-                Ok(true)
-            } else {
-                Err("Failed to activate Codex Desktop".to_string())
-            };
-        }
-        let bundle_id = app_host_bundle_id(&session)
-            .ok_or_else(|| "Session has no desktop app metadata".to_string())?;
-        open_bundle_id(bundle_id)?;
-        return Ok(true);
-    }
-
-    #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
-    {
-        let _ = session;
-        Ok(false)
-    }
-}
 
 #[tauri::command]
 pub async fn jump_to_terminal(
@@ -4996,20 +4878,17 @@ pub async fn update_config(
     if !config.notch_vertical_offset.is_finite() {
         config.notch_vertical_offset = 0.0;
     }
-    config.host_agent = config.host_agent.and_then(|agent| {
-        let agent = agent.trim().to_string();
-        (!agent.is_empty() && agent.len() <= 64).then_some(agent)
-    });
-    config.child_agents = config
-        .child_agents
+    config.auto_launch_agents = config
+        .auto_launch_agents
         .into_iter()
         .map(|agent| agent.trim().to_string())
         .filter(|agent| !agent.is_empty() && agent.len() <= 64)
         .take(32)
         .collect();
-    if let Some(host) = config.host_agent.as_deref() {
-        config.child_agents.retain(|agent| agent != host);
-    }
+    let mut seen_launch_agents = std::collections::HashSet::new();
+    config
+        .auto_launch_agents
+        .retain(|agent| seen_launch_agents.insert(agent.clone()));
     config.codex_app_server_sync_configured = true;
     let previous = state.config_store.get();
     state.config_store.update(config.clone())?;
@@ -6670,6 +6549,112 @@ pub async fn verify_engine_path(path: String) -> Result<bool, String> {
     Ok(expanded.is_dir())
 }
 
+#[cfg(target_os = "windows")]
+fn activate_codex_desktop_windows() -> Result<(), String> {
+    let mut errors = Vec::new();
+    for app_id in crate::agents::executable::codex_desktop_app_user_model_ids() {
+        match open_windows_app_user_model_id(&app_id) {
+            Ok(()) => return Ok(()),
+            Err(err) => errors.push(format!("{app_id}: {err}")),
+        }
+    }
+    for path in crate::agents::executable::codex_desktop_app_candidates()
+        .into_iter()
+        .filter(|path| path.exists())
+    {
+        let target = path.to_string_lossy().to_string();
+        match open_windows_shell_target(&target) {
+            Ok(()) => return Ok(()),
+            Err(err) => errors.push(format!("{target}: {err}")),
+        }
+    }
+    Err(if errors.is_empty() {
+        "Codex Desktop was not found. Install or launch Codex Desktop, then try again.".to_string()
+    } else {
+        format!("Failed to activate Codex Desktop: {}", errors.join("; "))
+    })
+}
+
+fn session_has_desktop_host(session: &SessionState) -> bool {
+    is_codex_desktop_session(session) || app_host_bundle_id(session).is_some()
+}
+
+#[cfg(target_os = "windows")]
+fn activate_session_process_window(process_id: u32) -> bool {
+    let tree = crate::terminal::process_tree::build_tree();
+    let mut current = process_id;
+    while current != 0 {
+        if crate::platform::host_visibility::activate_process_window(current) {
+            return true;
+        }
+        let Some(parent) = tree.get(&current).map(|process| process.ppid) else {
+            break;
+        };
+        if parent == current {
+            break;
+        }
+        current = parent;
+    }
+    false
+}
+
+/// Bring the desktop app window that hosts this session to the front (for example
+/// Codex Desktop). "Host" here means the app window running the session; it is
+/// unrelated to the retired "host agent" concept removed in M4. Returns `false`
+/// for CLI-only sessions so the task board can tell the user to open the CLI.
+#[tauri::command]
+pub async fn activate_session_host(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    session_id: String,
+) -> Result<bool, String> {
+    release_notch_keyboard_focus(&app);
+    let session = state
+        .session_store
+        .get_session(&session_id)
+        .ok_or_else(|| format!("Session {} not found", session_id))?;
+
+    if !session_has_desktop_host(&session) {
+        return Ok(false);
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        if is_codex_desktop_session(&session) {
+            activate_codex_desktop_windows()?;
+            return Ok(true);
+        }
+        if session.pid.is_some_and(activate_session_process_window) {
+            return Ok(true);
+        }
+        return Err(format!(
+            "Failed to activate the desktop window for {}",
+            session.agent_type
+        ));
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        if is_codex_desktop_session(&session) {
+            return if activate_codex_desktop_app(session.pid) {
+                Ok(true)
+            } else {
+                Err("Failed to activate Codex Desktop".to_string())
+            };
+        }
+        let bundle_id = app_host_bundle_id(&session)
+            .ok_or_else(|| "Session has no desktop app metadata".to_string())?;
+        open_bundle_id(bundle_id)?;
+        return Ok(true);
+    }
+
+    #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
+    {
+        let _ = session;
+        Ok(false)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
@@ -7364,19 +7349,6 @@ mod tests {
         )));
     }
 
-    #[test]
-    fn task_activation_distinguishes_desktop_hosts_from_cli_sessions() {
-        let mut desktop = session("opencode", "OpenCode", None);
-        desktop.term_bundle_id = Some("ai.opencode.desktop".to_string());
-        assert!(session_has_desktop_host(&desktop));
-
-        assert!(!session_has_desktop_host(&session(
-            "antigravity",
-            "Windows Terminal",
-            Some("CONPTY")
-        )));
-    }
-
     #[cfg(target_os = "windows")]
     #[test]
     fn windows_app_user_model_id_strips_notification_query() {
@@ -7992,5 +7964,18 @@ mod tests {
         assert_eq!(summary.today.sessions, 1);
 
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn task_activation_distinguishes_desktop_hosts_from_cli_sessions() {
+        let mut desktop = session("opencode", "OpenCode", None);
+        desktop.term_bundle_id = Some("ai.opencode.desktop".to_string());
+        assert!(session_has_desktop_host(&desktop));
+
+        assert!(!session_has_desktop_host(&session(
+            "antigravity",
+            "Windows Terminal",
+            Some("CONPTY")
+        )));
     }
 }

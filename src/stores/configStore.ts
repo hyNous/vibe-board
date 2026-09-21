@@ -159,9 +159,7 @@ interface ConfigState {
   shortcutPlatformDefaultsMigrated: boolean
   customHooksPath: string
   setupWizardCompleted: boolean
-  hostAgent: string | null
-  childAgents: string[]
-  autoStartOnHostSession: boolean
+  autoLaunchAgents: string[]
 
   // Shortcuts
   shortcuts: ShortcutBinding[]
@@ -537,9 +535,7 @@ export const useConfigStore = create<ConfigStore>()(
   shortcutPlatformDefaultsMigrated: true,
   customHooksPath: '',
   setupWizardCompleted: false,
-  hostAgent: null,
-  childAgents: [],
-  autoStartOnHostSession: true,
+  autoLaunchAgents: [],
 
   // Shortcuts
   shortcuts: defaultShortcuts,

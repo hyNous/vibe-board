@@ -26,7 +26,7 @@
 Vibe Board 常驻屏幕顶部或左右边缘，展开后按顺序显示当前任务、Agent 在线状态与额度。它解决的是三个日常问题：
 
 - 多个 Agent 并行时，不用切窗口就能看到每个任务的对话名称和运行状态。
-- 点击任务可以恢复并置顶对应的桌面 Agent；纯 CLI Agent 会提示手动打开终端。
+- 点击任务可以跳到对应的终端，桌面版 Agent 会打开并置顶其应用窗口。
 - 有 token 就显示 token；没有就显示 Provider quota 和重置时间，不生成价格估算。
 
 看板外观默认纯黑，可切换磨砂玻璃；侧边停靠有三档尺寸：64×132（窄，默认）、72×148（标准）、80×168（宽）。
@@ -34,9 +34,9 @@ Vibe Board 常驻屏幕顶部或左右边缘，展开后按顺序显示当前任
 ## Windows 安装（x64，未签名）
 
 1. 从 [GitHub Releases](https://github.com/hyNous/agent-island/releases) 下载最新安装包，或直接使用仓库内的 [Vibe Board-latest-setup.exe](./releases/Vibe%20Board-latest-setup.exe)。
-2. 安装并启动 Vibe Board。首次启动进入设置向导：扫描本机已安装的 Agent，选择一个宿主 Agent，按需选择子 Agent，然后“批准并完成设置”。
-3. 向导会安装所选 Hook、保存启动选项并重新校验；校验失败会留在向导中提示错误。之后打开宿主 Agent 的新会话即可连接。
-4. 需要调整时，在 **Settings → General → Agent connection** 重新选择宿主、子 Agent 或重新校验。
+2. 安装并启动 Vibe Board。首次启动进入设置向导：扫描本机已安装的 Agent，勾选要接入的 Agent，再按需逐个打开「会话开始时拉起看板」开关，然后“批准并完成设置”。
+3. 向导会安装所选 Hook、保存启动选项并重新校验；校验失败会留在向导中提示错误。之后这些 Agent 的新会话即可连接看板（自动拉起默认关闭，由你逐个打开）。
+4. 需要调整时，在 **Settings → General → Agent connection** 重新选择要接入的 Agent 或重新校验。
 
 安装包是未签名的 Windows x64 构建，SmartScreen 可能要求确认；自动更新未启用，发布采用 GitHub Releases 手动下载。Vibe Board 有自己的版本与发布流程，不跟随上游发版，也没有 Homebrew 或其他包管理器渠道，详见 [发布与版本策略](./RELEASING.md)。完整的首次设置、权限边界和迁移说明见 [产品安装与首次设置说明](./docs/product-setup.md)。
 

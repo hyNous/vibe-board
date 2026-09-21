@@ -26,7 +26,7 @@
 Vibe Board lives at the top or side edge of the screen. Expanding it shows the current task, agent online state, and usage. It solves three everyday problems:
 
 - Several agents running at once stay distinguishable through conversation titles and execution states, without switching windows.
-- Clicking a task restores and foregrounds its desktop agent; CLI-only agents show a manual reminder to open the terminal.
+- Clicking a task jumps to its terminal; desktop agents open and foreground their app window.
 - When token data is available it is shown directly; otherwise the UI shows provider quota and reset time without inventing a price estimate.
 
 The default look is solid black, with a frosted-glass effect available. The board docks to the top or either side edge, and the side dock has three sizes: 64×132 (narrow, default), 72×148 (standard), and 80×168 (wide).
@@ -34,8 +34,8 @@ The default look is solid black, with a frosted-glass effect available. The boar
 ## Windows install (x64, unsigned)
 
 1. Download the latest package from [GitHub Releases](https://github.com/hyNous/agent-island/releases), or use the checked-in [Vibe Board-latest-setup.exe](./releases/Vibe%20Board-latest-setup.exe).
-2. Install and launch Vibe Board. The first run opens the setup wizard: it scans the agents installed on the machine, then you pick one host agent and any child agents and approve setup.
-3. The wizard installs the selected hooks, saves startup options, and verifies the result; a failed check stays in the wizard with an error. New sessions of the host agent connect after that.
+2. Install and launch Vibe Board. The first run opens the setup wizard: it scans the agents installed on the machine, then you pick the agents to connect and approve setup.
+3. The wizard installs the selected hooks, saves startup options, and verifies the result; a failed check stays in the wizard with an error. Sessions of the connected agents then reach the board (starting the board on session start is off by default and enabled per agent).
 4. To change the choice later, rerun **Settings → General → Agent connection**.
 
 The installer is an unsigned Windows x64 build, so SmartScreen may ask for confirmation. Automatic updates are disabled; releases are downloaded manually from GitHub. The full first-run, permission, and migration notes are in [Product setup](docs/product-setup.md).

@@ -181,9 +181,9 @@ fn connect() -> Option<Stream> {
     None
 }
 
-/// Start Vibe Board on the first host session when the desktop app is not
-/// already listening. The executable marker is written by the app itself, so
-/// no credentials or host-specific paths need to be embedded in a plugin.
+/// Start Vibe Board on the first session of an Agent whose per-Agent launch
+/// switch is enabled. The executable marker is written by the app itself, so
+/// no credentials or machine-specific paths need to be embedded.
 fn ensure_agent_island_running() {
     for _ in 0..3 {
         if connect().is_some() {
@@ -220,31 +220,33 @@ fn ensure_agent_island_running() {
     }
 }
 
-/// Honor the first-run host selection without requiring a separately
-/// registered Node plugin. Hooks for child agents still remain passive.
-fn maybe_start_configured_host(source: &str, event: &str) {
+/// Whether `source`'s SessionStart should start Vibe Board under `config`.
+fn agent_should_launch_board(
+    config: &vibe_board_lib::config::AppConfig,
+    source: &str,
+    event: &str,
+) -> bool {
     if event != "SessionStart" {
-        return;
+        return false;
     }
+    let source = source.trim();
+    config
+        .auto_launch_agents
+        .iter()
+        .any(|agent| agent.eq_ignore_ascii_case(source))
+}
 
-    let config = vibe_board_lib::config::ConfigStore::new().get();
-    let Some(host) = config
-        .host_agent
-        .as_deref()
-        .and_then(vibe_board_lib::data_dir::normalize_usage_host)
-    else {
-        return;
-    };
-    if !config.auto_start_on_host_session
-        || vibe_board_lib::data_dir::normalize_usage_host(source) != Some(host)
-    {
-        return;
+/// Honor the per-Agent "start Vibe Board on session start" switches. The
+/// launcher is injected so tests can substitute a stub for the real spawn.
+fn maybe_start_configured_agent(
+    config: &vibe_board_lib::config::AppConfig,
+    source: &str,
+    event: &str,
+    start: impl FnOnce(),
+) {
+    if agent_should_launch_board(config, source, event) {
+        start();
     }
-
-    if let Err(error) = vibe_board_lib::data_dir::set_usage_host(host) {
-        eprintln!("Vibe Board host marker failed: {error}");
-    }
-    ensure_agent_island_running();
 }
 
 /// Forward one event to Vibe Board and return immediately. The board never
@@ -501,15 +503,6 @@ fn main() {
         .unwrap_or_else(|| "claude-code".to_string());
     let forced_event = arg_value("--event");
 
-    if let Some(host) = arg_value("--host") {
-        if let Some(normalized) = vibe_board_lib::data_dir::normalize_usage_host(&host) {
-            if let Err(error) = vibe_board_lib::data_dir::set_usage_host(normalized) {
-                eprintln!("Vibe Board host marker failed: {error}");
-            }
-            ensure_agent_island_running();
-        }
-    }
-
     // Read all stdin
     let mut input = String::new();
     if io::stdin().read_to_string(&mut input).is_err() {
@@ -537,7 +530,10 @@ fn main() {
         .or_else(|| string_field(&data, &["hook_event_name", "event", "hookType"]))
         .map(normalize_hook_event)
         .unwrap_or("");
-    maybe_start_configured_host(&source, hook_event);
+    if hook_event == "SessionStart" {
+        let config = vibe_board_lib::config::ConfigStore::new().get();
+        maybe_start_configured_agent(&config, &source, hook_event, ensure_agent_island_running);
+    }
     let event_payload = cline_event_payload(&source, hook_event, &data);
     let cwd = string_field(&data, &["cwd"])
         .or_else(|| first_string_array_field(&data, "workspaceRoots"))
@@ -1237,5 +1233,48 @@ mod tests {
     fn invalid_input_without_forced_event_is_ignored() {
         assert!(hook_input_data("", None).is_none());
         assert!(hook_input_data("not json", None).is_none());
+    }
+
+    fn launch_config(agents: &[&str]) -> vibe_board_lib::config::AppConfig {
+        vibe_board_lib::config::AppConfig {
+            auto_launch_agents: agents.iter().map(|agent| agent.to_string()).collect(),
+            ..vibe_board_lib::config::AppConfig::default()
+        }
+    }
+
+    #[test]
+    fn session_start_starts_the_board_only_for_the_enabled_agent() {
+        use std::cell::Cell;
+
+        let config = launch_config(&["codex"]);
+        let starts = Cell::new(0);
+        maybe_start_configured_agent(&config, "codex", "SessionStart", || {
+            starts.set(starts.get() + 1)
+        });
+        assert_eq!(starts.get(), 1, "the enabled Agent must start the board");
+
+        maybe_start_configured_agent(&config, "claude-code", "SessionStart", || {
+            starts.set(starts.get() + 1)
+        });
+        assert_eq!(starts.get(), 1, "a disabled Agent must not start the board");
+
+        maybe_start_configured_agent(&config, "codex", "UserPromptSubmit", || {
+            starts.set(starts.get() + 1)
+        });
+        assert_eq!(starts.get(), 1, "only SessionStart may start the board");
+    }
+
+    #[test]
+    fn fresh_config_never_starts_the_board() {
+        use std::cell::Cell;
+
+        let config = vibe_board_lib::config::AppConfig::default();
+        let started = Cell::new(false);
+        maybe_start_configured_agent(&config, "codex", "SessionStart", || started.set(true));
+
+        assert!(
+            !started.get(),
+            "every automatic launch must be opted into per Agent"
+        );
     }
 }

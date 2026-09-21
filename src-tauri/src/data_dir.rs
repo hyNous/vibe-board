@@ -52,14 +52,6 @@ pub fn resolve_home_entry(relative: &str) -> PathBuf {
     current
 }
 
-/// Read the first existing legacy copy of a home-relative file.
-pub fn read_legacy_home_file(relative: &str) -> Option<String> {
-    legacy_homes()
-        .into_iter()
-        .map(|legacy| legacy.join(relative))
-        .find_map(|path| std::fs::read_to_string(path).ok())
-}
-
 pub fn executable_marker_path() -> PathBuf {
     vibeboard_home().join("vibeboard.path")
 }
@@ -69,10 +61,6 @@ fn legacy_executable_marker_paths() -> [PathBuf; 2] {
         legacy_agent_island_home().join("agent-island.path"),
         legacy_agentbro_home().join("agentbro.path"),
     ]
-}
-
-pub fn usage_host_path() -> PathBuf {
-    vibeboard_home().join("usage-host")
 }
 
 pub fn remember_executable(path: &Path) -> std::io::Result<()> {
@@ -91,34 +79,6 @@ pub fn read_executable_marker() -> Option<String> {
                 .into_iter()
                 .find_map(|path| std::fs::read_to_string(path).ok())
         })
-}
-
-pub fn normalize_usage_host(provider: &str) -> Option<&'static str> {
-    match provider.trim().to_ascii_lowercase().as_str() {
-        "codex" | "openai.codex" => Some("codex"),
-        "claude" | "claude-code" | "anthropic" => Some("claude-code"),
-        "opencode" | "open-code" => Some("opencode"),
-        "antigravity" | "agy" => Some("antigravity"),
-        _ => None,
-    }
-}
-
-pub fn usage_host() -> Option<String> {
-    std::fs::read_to_string(usage_host_path())
-        .ok()
-        .or_else(|| read_legacy_home_file("usage-host"))
-        .and_then(|value| normalize_usage_host(&value).map(str::to_string))
-}
-
-pub fn set_usage_host(provider: &str) -> std::io::Result<()> {
-    let host = normalize_usage_host(provider).ok_or_else(|| {
-        std::io::Error::new(std::io::ErrorKind::InvalidInput, "unsupported usage host")
-    })?;
-    let marker = usage_host_path();
-    if let Some(parent) = marker.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    std::fs::write(marker, host.as_bytes())
 }
 
 /// Move `old` to `new` once. Returns `Ok(true)` when the file was moved and
@@ -428,8 +388,8 @@ mod tests {
     #[cfg(target_os = "windows")]
     use super::copy_legacy_webview_local_storage;
     use super::{
-        ensure_no_orphan_sqlite_sidecars, migrate_file, migrate_sqlite, normalize_usage_host,
-        sqlite_sidecar_path, sqlite_staging_path,
+        ensure_no_orphan_sqlite_sidecars, migrate_file, migrate_sqlite, sqlite_sidecar_path,
+        sqlite_staging_path,
     };
     use std::io;
     use std::path::{Path, PathBuf};
@@ -482,15 +442,6 @@ mod tests {
         let conn = rusqlite::Connection::open(path).expect("open db");
         conn.query_row("SELECT body FROM notes", [], |row| row.get(0))
             .expect("read note")
-    }
-
-    #[test]
-    fn normalizes_supported_usage_hosts() {
-        assert_eq!(normalize_usage_host("Codex"), Some("codex"));
-        assert_eq!(normalize_usage_host("claude"), Some("claude-code"));
-        assert_eq!(normalize_usage_host("open-code"), Some("opencode"));
-        assert_eq!(normalize_usage_host("agy"), Some("antigravity"));
-        assert_eq!(normalize_usage_host("unknown"), None);
     }
 
     #[test]

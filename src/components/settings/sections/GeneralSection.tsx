@@ -12,11 +12,10 @@ import { GlassButton } from '../../shared'
 
 export function GeneralSection() {
   const { t, i18n } = useTranslation()
-  const { language, launchAtLogin, hostAgent, childAgents, updateConfig } = useConfigStore(useShallow((state) => ({
+  const { language, launchAtLogin, autoLaunchAgents, updateConfig } = useConfigStore(useShallow((state) => ({
     language: state.language,
     launchAtLogin: state.launchAtLogin,
-    hostAgent: state.hostAgent,
-    childAgents: state.childAgents,
+    autoLaunchAgents: state.autoLaunchAgents,
     updateConfig: state.updateConfig,
   })))
   const [reconfiguring, setReconfiguring] = useState(false)
@@ -84,12 +83,13 @@ export function GeneralSection() {
         </SettingRow>
         <SettingRow
           label={t('settings.agentConnection', { defaultValue: 'Agent connection' })}
-          description={t('settings.agentConnectionDesc', { defaultValue: 'Choose which local Agent wakes Vibe Board and which child Agents are monitored.' })}
+          description={t('settings.agentConnectionDesc', { defaultValue: 'Choose which local Agents connect to Vibe Board and which ones may start it on session start.' })}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
             <span style={{ color: 'var(--settings-text-secondary)', fontSize: 12 }}>
-              {hostAgent ?? t('settings.notConfigured', { defaultValue: 'Not configured' })}
-              {childAgents.length > 0 && ` · ${childAgents.length} ${t('settings.childAgents', { defaultValue: 'child' })}`}
+              {autoLaunchAgents.length > 0
+                ? `${autoLaunchAgents.length} ${t('settings.autoLaunchAgents', { defaultValue: 'Agent(s) start Vibe Board on session start' })}`
+                : t('settings.notConfigured', { defaultValue: 'Not configured' })}
             </span>
             <GlassButton variant="secondary" onClick={reopenSetupWizard} disabled={reconfiguring}>
               {reconfiguring ? t('settings.opening', { defaultValue: 'Opening…' }) : t('settings.configure', { defaultValue: 'Configure' })}

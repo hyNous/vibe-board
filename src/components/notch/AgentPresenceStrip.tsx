@@ -77,8 +77,6 @@ export function AgentPresenceStrip({
   }, [])
 
   const rows = Object.values(statuses).sort((a, b) => {
-    const primaryOrder = Number(Boolean(b.primary)) - Number(Boolean(a.primary))
-    if (primaryOrder !== 0) return primaryOrder
     const aIndex = DISPLAY_ORDER.indexOf(a.agent)
     const bIndex = DISPLAY_ORDER.indexOf(b.agent)
     if (aIndex !== bIndex) {
@@ -104,7 +102,6 @@ export function AgentPresenceStrip({
           <div className="agent-presence-strip__row" key={status.agent}>
             <span className={`agent-presence-strip__dot ${status.online ? 'agent-presence-strip__dot--online' : ''}`} />
             <span className="agent-presence-strip__name">{status.label}</span>
-            {status.primary && <span className="agent-presence-strip__primary">宿主</span>}
             <span className="agent-presence-strip__state">
               {status.online
                 ? t('notch.agentOnline', { defaultValue: '在线' })

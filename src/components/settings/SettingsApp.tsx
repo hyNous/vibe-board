@@ -96,9 +96,7 @@ export function SettingsApp({ onClose }: SettingsAppProps) {
         if (cancelled) return
         useConfigStore.setState({
           setupWizardCompleted: config.setupWizardCompleted ?? false,
-          hostAgent: config.hostAgent ?? null,
-          childAgents: Array.isArray(config.childAgents) ? config.childAgents : [],
-          autoStartOnHostSession: config.autoStartOnHostSession ?? true,
+          autoLaunchAgents: Array.isArray(config.autoLaunchAgents) ? config.autoLaunchAgents : [],
         })
       })
       .catch(() => {})

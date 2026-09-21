@@ -261,7 +261,10 @@ worker 额外删除 `skills/codex_config.rs`：父级核实其全部公开函数
 **Scope**：删除宿主概念与 `plugins/vibe-board-host`；「会话开始时拉起看板」改为每个 Agent 一个开关，默认全关；开机自启保持默认关。
 
 **Acceptance Criteria**
-1. 后端不再读写 `host_agent`、`child_agents`、`auto_start_on_host_session`，不再使用 `usage_host` 标记文件；`activate_session_host` 命令注销。含这些旧字段的 `config.json` 能正常加载且字段不被写回（兼容测试）。
+1. 后端不再读写 `host_agent`、`child_agents`、`auto_start_on_host_session`，不再使用 `usage_host` 标记文件。含这些旧字段的 `config.json` 能正常加载且字段不被写回（兼容测试）。
+   **更正（2026-09-22）**：本条原文要求注销 `activate_session_host`，是父级写基准时**按名称误判**。该命令的作用是把承载会话的桌面 App 窗口
+   （如 Codex Desktop）调到前台，即「点任务唤回桌面 Agent」这一核心功能；纯命令行会话时返回 false 以提示用户手动打开 CLI。它与「宿主 Agent」
+   概念无关，**必须保留**。M4 执行时据此误删，父级已原样恢复（见下方状态）。
 2. 全新配置下：`launch_at_login` 为关；没有任何 Agent 的「会话开始时拉起」为开（测试断言）。
 3. 升级用户：旧配置中的 `autoStartOnHostSession: true` **不**转换为任何 Agent 的开关（测试断言）。
 4. bridge 收到某 Agent 的 `SessionStart` 时，当且仅当该 Agent 的开关打开才尝试拉起看板（配置夹具测试，拉起动作以桩替代）。
@@ -270,6 +273,21 @@ worker 额外删除 `skills/codex_config.rs`：父级核实其全部公开函数
 7. `plugins/vibe-board-host` 目录、`.agents/plugins/marketplace.json` 中的对应条目及其安装代码移除。
 
 **Verification**：检查命令全绿；父级 grep `hostAgent|host_agent|usage_host|宿主|vibe-board-host`，除兼容测试与迁移夹具外为零。
+
+**状态（2026-09-22）：PASS WITH RISKS，已合入。**
+父级独立验证：前端 40 文件 407 项全过，lint / build 通过；`cargo test --lib` 513 通过 / 23 失败，失败集合 ⊆ 已知名单；
+bridge 测试 9/9（含「仅开关打开的 Agent 触发拉起」「全新配置从不拉起」）；配置兼容测试证明含旧宿主字段且
+`autoStartOnHostSession: true` 的旧配置可加载、旧字段不写回、不产生任何拉起开关；宿主字样残留仅在兼容测试中；`release:check` ok。
+
+**父级复核中发现并修正的回归（由基准错误导致）**：基准原 AC1 要求注销 `activate_session_host`，worker 照做，并把任务点击改为
+`jump_to_terminal`、删除「纯命令行会话请手动打开 CLI」提示。该命令实为「点任务唤回桌面 Agent」的核心功能（见 AC1 更正）。
+父级已从 `76c6534` 原样恢复：4 个后端函数、命令注册、`activateSessionHost` 包装、`TaskBoard` 点击行为与提示、提示样式、
+五语言两条文案、2 条测试；恢复后 `TaskBoard.tsx`、`NotchPanel.css`、`taskBoard.test.tsx` 与恢复前版本**零差异**。
+函数上补注释说明此处 host 指承载会话的 App 窗口，与已删除的宿主概念无关。
+
+**风险记录**：向导的「会话拉起开关」与桌面版提示无自动化界面测试，已读代码核对（默认值取自空的 `autoLaunchAgents`，
+未选 Agent 时开关禁用），待维护者目视。向导全部文案为内联中英双语（改动前即如此，39 处），不走五语言文件——既有债务，
+与 M9 教程「第一版中英」一致。
 
 ### M5 — Skill 管理改造
 

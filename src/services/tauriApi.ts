@@ -160,7 +160,6 @@ export interface MonitorSessionSummary {
 export interface UsageProviderStatus {
   provider: string
   label: string
-  primary: boolean
   enabled: boolean
   available: boolean
   catalogSupported: boolean
@@ -277,9 +276,7 @@ export interface BackendConfig {
   shortcutSkip: string
   shortcutSkipEnabled: boolean
   setupWizardCompleted: boolean
-  hostAgent: string | null
-  childAgents: string[]
-  autoStartOnHostSession: boolean
+  autoLaunchAgents: string[]
 }
 
 export interface BackendDisplayInfo {
@@ -375,6 +372,11 @@ export async function getTaskTraces(): Promise<import('../types/taskTrace').Task
 
 let jumpInFlight = false
 
+export async function activateSessionHost(sessionId: string): Promise<boolean> {
+  if (!isTauri()) return false
+  return invoke<boolean>('activate_session_host', { sessionId })
+}
+
 export async function jumpToTerminal(sessionId: string): Promise<void> {
   if (!isTauri()) {
     console.log(`[mock] jumpToTerminal(${sessionId})`)
@@ -389,11 +391,6 @@ export async function jumpToTerminal(sessionId: string): Promise<void> {
   } finally {
     jumpInFlight = false
   }
-}
-
-export async function activateSessionHost(sessionId: string): Promise<boolean> {
-  if (!isTauri()) return false
-  return invoke<boolean>('activate_session_host', { sessionId })
 }
 
 // ── Config Commands ──────────────────────────────────────────────
@@ -448,9 +445,7 @@ export async function getConfig(): Promise<BackendConfig> {
       shortcutSkip: 'CommandOrControl+Shift+S',
       shortcutSkipEnabled: false,
       setupWizardCompleted: false,
-      hostAgent: null,
-      childAgents: [],
-      autoStartOnHostSession: true,
+      autoLaunchAgents: [],
     }
   }
   return invoke<BackendConfig>('get_config')

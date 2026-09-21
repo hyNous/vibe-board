@@ -76,7 +76,6 @@ type ProviderCoverageStats = {
   id: CoverageId
   label: string
   status: UsageProviderStatus | null
-  primary: boolean
   quota: RateLimitInfo | null
   tokens: number
   tokenUpdatedAt: number | null
@@ -111,12 +110,11 @@ function ProviderCoverage({
       id: provider.id,
       label: provider.label,
       status,
-      primary: status?.primary ?? false,
       quota,
       tokens,
       tokenUpdatedAt,
     }
-  }).sort((a, b) => Number(b.primary) - Number(a.primary)), [agentStatuses, snapshots, statuses])
+  }), [agentStatuses, snapshots, statuses])
 
   return (
     <section className="unified-usage__provider-card">
@@ -125,8 +123,7 @@ function ProviderCoverage({
           <h3>Provider Coverage</h3>
           <p>
             每个 Provider 独立显示真实 token 或 quota。Usage 列是该 Provider 下每个 Agent
-            <strong>最近一次会话</strong>的 token 之和，不是当天或历史全部会话的累计；安装插件并启动宿主 Agent
-            后，宿主会标记为“宿主”，子 Agent 数据保持不变。
+            <strong>最近一次会话</strong>的 token 之和，不是当天或历史全部会话的累计。
           </p>
         </div>
         {loading && <span className="unified-usage__provider-loading">读取中...</span>}
@@ -150,7 +147,6 @@ function ProviderCoverage({
                 <tr key={row.id}>
                   <td>
                     <strong>{row.label}</strong>
-                    {row.primary && <span className="unified-usage__provider-badge">宿主</span>}
                   </td>
                   <td>{usage}</td>
                   <td>{quota || 'Unknown'}</td>
@@ -220,15 +216,6 @@ export function UnifiedUsageSection() {
     })
     .filter(Boolean)
     .join(' / ')
-  const primaryProvider = providerStatuses.find((status) => status.primary) ?? null
-  const primaryQuotaSummary = primaryProvider
-    ? quotaSnapshots
-      .filter((snapshot) => coverageIdForProvider(snapshot.provider ?? snapshot.providerLabel ?? '') === coverageIdForProvider(primaryProvider.provider))
-      .map((snapshot) => formatQuotaRemaining(snapshot))
-      .filter(Boolean)
-      .join(' / ')
-    : ''
-  const headlineQuota = primaryQuotaSummary || quotaSummary
 
   return (
     <section className="unified-usage">
@@ -260,9 +247,8 @@ export function UnifiedUsageSection() {
       {view === 'overview' && (
         <>
           <div className="unified-usage__summary">
-            <div><span>{lastSessionTokenTotal > 0 ? 'Last Session Tokens' : primaryProvider ? 'Host Quota Remaining' : 'Quota Remaining'}</span><strong>{lastSessionTokenTotal > 0 ? formatTokens(lastSessionTokenTotal) : headlineQuota || 'Unknown'}</strong><em>{lastSessionTokenTotal > 0 ? '每个 Agent 最近一次会话之和' : primaryProvider?.label ?? 'provider usage reader'}</em></div>
+            <div><span>{lastSessionTokenTotal > 0 ? 'Last Session Tokens' : 'Quota Remaining'}</span><strong>{lastSessionTokenTotal > 0 ? formatTokens(lastSessionTokenTotal) : quotaSummary || 'Unknown'}</strong><em>{lastSessionTokenTotal > 0 ? '每个 Agent 最近一次会话之和' : 'provider usage reader'}</em></div>
             <div><span>Active Providers</span><strong>{providerStatuses.length > 0 ? `${availableProviders} / ${providerStatuses.length}` : '未采集'}</strong><em>可用 Provider / 已登记</em></div>
-            <div><span>Plugin Host</span><strong>{primaryProvider?.label ?? '未绑定'}</strong><em>{primaryProvider ? '最近一次宿主会话' : '启动已安装插件的 Agent 后自动绑定'}</em></div>
           </div>
           <ProviderCoverage statuses={providerStatuses} snapshots={quotaSnapshots} agentStatuses={agentStatuses} loading={providerLoading} error={providerError} />
           <CodexUsageSection showHeader={false} />

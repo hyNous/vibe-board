@@ -65,7 +65,7 @@ describe('AgentMonitorSection', () => {
     expect(screen.getByTestId('live-task-session-1')).toBeInTheDocument()
     expect(screen.getByTestId('live-task-session-antigravity')).toBeInTheDocument()
     expect(screen.getByText('Live Antigravity task')).toBeInTheDocument()
-    expect(screen.getByText('宿主和其他 Agent 的独立 session 都会显示；嵌套 subagent 计入宿主的子任务数，不重复计数。')).toBeInTheDocument()
+    expect(screen.getByText('每个 Agent 的独立 session 都会显示；嵌套 subagent 计入所属会话的子任务数，不重复计数。')).toBeInTheDocument()
     expect(monitorMocks.getTaskTraces).toHaveBeenCalled()
   })
 

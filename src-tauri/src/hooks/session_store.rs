@@ -194,8 +194,6 @@ impl RateLimitInfo {
 pub struct AgentStatusSnapshot {
     pub agent: String,
     pub label: String,
-    #[serde(default)]
-    pub primary: bool,
     pub online: bool,
     pub last_seen_at: i64,
     pub last_completed_at: Option<i64>,
@@ -718,7 +716,6 @@ impl SessionStore {
                 .or_insert_with(|| AgentStatusSnapshot {
                     agent: agent.clone(),
                     label: label.clone(),
-                    primary: false,
                     online: false,
                     last_seen_at: now,
                     last_completed_at: None,

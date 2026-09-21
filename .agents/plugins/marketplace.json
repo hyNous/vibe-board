@@ -3,18 +3,5 @@
   "interface": {
     "displayName": "Vibe Board (Local)"
   },
-  "plugins": [
-    {
-      "name": "vibe-board-host",
-      "source": {
-        "source": "local",
-        "path": "./plugins/vibe-board-host"
-      },
-      "policy": {
-        "installation": "AVAILABLE",
-        "authentication": "ON_INSTALL"
-      },
-      "category": "Productivity"
-    }
-  ]
+  "plugins": []
 }

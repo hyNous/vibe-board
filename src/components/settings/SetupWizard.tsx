@@ -17,8 +17,6 @@ import { PlatformIcon } from '../platform/PlatformIcon'
 
 type WizardStep = 'welcome' | 'agents' | 'options' | 'applying' | 'done'
 
-const HOST_AGENT_IDS = new Set(['codex', 'claude-code', 'opencode', 'antigravity'])
-
 function readableError(error: unknown): string {
   if (error instanceof Error) return error.message
   if (typeof error === 'string') return error
@@ -28,14 +26,14 @@ function readableError(error: unknown): string {
   return String(error)
 }
 
-function defaultHost(tools: DetectedTool[]): string | null {
-  return tools.find((tool) => HOST_AGENT_IDS.has(tool.name) && tool.status === 'Available')?.name ?? null
-}
-
 function hookStatusFor(statuses: HookStatus[], agent: string): HookStatus | undefined {
   return statuses.find((status) =>
     status.toolId === agent || status.adapterId === agent || status.name === agent,
   )
+}
+
+function isHookInstalled(status: HookStatus | undefined): boolean {
+  return Boolean(status && (status.installed || status.installStatus === 'installed'))
 }
 
 interface SetupWizardProps {
@@ -50,9 +48,8 @@ export function SetupWizard({ onClose }: SetupWizardProps) {
   const [step, setStep] = useState<WizardStep>('welcome')
   const [tools, setTools] = useState<DetectedTool[]>([])
   const [loadingTools, setLoadingTools] = useState(true)
-  const [hostAgent, setHostAgent] = useState<string | null>(config.hostAgent)
-  const [childAgents, setChildAgents] = useState<string[]>(config.childAgents)
-  const [autoStartOnHostSession, setAutoStartOnHostSession] = useState(config.autoStartOnHostSession)
+  const [selectedAgents, setSelectedAgents] = useState<string[]>([])
+  const [launchAgents, setLaunchAgents] = useState<string[]>(config.autoLaunchAgents)
   const [launchAtLogin, setLaunchAtLogin] = useState(config.launchAtLogin)
   const [error, setError] = useState<string | null>(null)
   const [warnings, setWarnings] = useState<string[]>([])
@@ -61,14 +58,28 @@ export function SetupWizard({ onClose }: SetupWizardProps) {
   useEffect(() => {
     let cancelled = false
     detectTools()
-      .then((detected) => {
+      .then(async (detected) => {
         if (cancelled) return
         setTools(detected)
         const availableIds = new Set(
           detected.filter((tool) => tool.status === 'Available').map((tool) => tool.name),
         )
-        setHostAgent((current) => availableIds.has(current ?? '') ? current : defaultHost(detected))
-        setChildAgents((current) => current.filter((agent) => availableIds.has(agent)))
+        let statuses: HookStatus[] = []
+        try {
+          statuses = await getAllHookStatus()
+        } catch {
+          statuses = []
+        }
+        if (cancelled) return
+        setSelectedAgents((current) => {
+          const kept = current.filter((agent) => availableIds.has(agent))
+          if (kept.length > 0) return kept
+          return detected
+            .filter((tool) => availableIds.has(tool.name))
+            .filter((tool) => isHookInstalled(hookStatusFor(statuses, tool.name)))
+            .map((tool) => tool.name)
+        })
+        setLaunchAgents((current) => current.filter((agent) => availableIds.has(agent)))
       })
       .catch((reason) => {
         if (!cancelled) setError(readableError(reason))
@@ -87,17 +98,18 @@ export function SetupWizard({ onClose }: SetupWizardProps) {
     () => tools.filter((tool) => tool.status === 'Installed'),
     [tools],
   )
-  const hostTools = useMemo(
-    () => availableTools.filter((tool) => HOST_AGENT_IDS.has(tool.name)),
-    [availableTools],
-  )
-  const childToolOptions = useMemo(
-    () => availableTools.filter((tool) => tool.name !== hostAgent),
-    [availableTools, hostAgent],
-  )
 
-  const toggleChild = (agent: string) => {
-    setChildAgents((current) => current.includes(agent)
+  const toggleAgent = (agent: string) => {
+    if (selectedAgents.includes(agent)) {
+      setSelectedAgents((current) => current.filter((candidate) => candidate !== agent))
+      setLaunchAgents((current) => current.filter((candidate) => candidate !== agent))
+      return
+    }
+    setSelectedAgents((current) => [...current, agent])
+  }
+
+  const toggleLaunch = (agent: string) => {
+    setLaunchAgents((current) => current.includes(agent)
       ? current.filter((candidate) => candidate !== agent)
       : [...current, agent])
   }
@@ -122,10 +134,6 @@ export function SetupWizard({ onClose }: SetupWizardProps) {
     setWarnings([])
     setCompletedConfig(null)
     try {
-      const selectedChildren = childAgents.filter((agent) => agent !== hostAgent)
-      const selectedAgents = [hostAgent, ...selectedChildren].filter(
-        (agent): agent is string => Boolean(agent),
-      )
       const backend = await getConfig()
       const setupWarnings: string[] = []
       let effectiveLaunchAtLogin = launchAtLogin
@@ -143,19 +151,23 @@ export function SetupWizard({ onClose }: SetupWizardProps) {
       const nextConfig = {
         ...backend,
         setupWizardCompleted: false,
-        hostAgent,
-        childAgents: selectedChildren,
-        autoStartOnHostSession,
+        autoLaunchAgents: launchAgents.filter((agent) => selectedAgents.includes(agent)),
         launchAtLogin: effectiveLaunchAtLogin,
       }
 
       await updateBackendConfig(nextConfig)
 
       if (isTauri()) {
-        const previousAgents = [backend.hostAgent, ...(backend.childAgents ?? [])].filter(
-          (agent): agent is string => Boolean(agent),
-        )
-        for (const agent of previousAgents.filter((agent) => !selectedAgents.includes(agent))) {
+        let previousStatuses: HookStatus[] = []
+        try {
+          previousStatuses = await getAllHookStatus()
+        } catch {
+          previousStatuses = []
+        }
+        const previouslyInstalled = tools
+          .filter((tool) => isHookInstalled(hookStatusFor(previousStatuses, tool.name)))
+          .map((tool) => tool.name)
+        for (const agent of previouslyInstalled.filter((agent) => !selectedAgents.includes(agent))) {
           try {
             await uninstallAgentHook(agent)
           } catch (reason) {
@@ -178,8 +190,7 @@ export function SetupWizard({ onClose }: SetupWizardProps) {
         try {
           const statuses = selectedAgents.length > 0 ? await getAllHookStatus() : []
           const notInstalled = selectedAgents.filter((agent) => {
-            const status = hookStatusFor(statuses, agent)
-            return !status || (!status.installed && status.installStatus !== 'installed')
+            return !isHookInstalled(hookStatusFor(statuses, agent))
           })
           if (notInstalled.length > 0) {
             setupWarnings.push(text(
@@ -197,9 +208,7 @@ export function SetupWizard({ onClose }: SetupWizardProps) {
 
       setWarnings(setupWarnings)
       setCompletedConfig({ ...nextConfig, setupWizardCompleted: true })
-      config.updateConfig('hostAgent', hostAgent)
-      config.updateConfig('childAgents', selectedChildren)
-      config.updateConfig('autoStartOnHostSession', autoStartOnHostSession)
+      config.updateConfig('autoLaunchAgents', nextConfig.autoLaunchAgents)
       config.updateConfig('launchAtLogin', effectiveLaunchAtLogin)
       setStep('done')
     } catch (reason) {
@@ -247,8 +256,8 @@ export function SetupWizard({ onClose }: SetupWizardProps) {
             <h1 id="setup-wizard-title">{text('让 Vibe Board 跟着你的 Agent 工作', 'Connect Vibe Board to your Agents')}</h1>
             <p className="setup-wizard__lead">
               {text(
-                '向导会读取本机已安装的 Agent，帮助你选择一个宿主 Agent 和可选的子 Agent，然后安装本地 Hook，让任务状态能自动同步到桌面。',
-                'This wizard finds Agents installed on this computer, lets you choose a host and optional child Agents, then installs local hooks so task state can reach the desktop automatically.',
+                '向导会读取本机已安装的 Agent，帮助你选择要接入的 Agent 并安装本地 Hook，让任务状态能自动同步到桌面。',
+                'This wizard finds Agents installed on this computer, lets you choose which ones to connect, then installs local hooks so task state can reach the desktop automatically.',
               )}
             </p>
             <div className="setup-wizard__trust-list">
@@ -266,9 +275,9 @@ export function SetupWizard({ onClose }: SetupWizardProps) {
         {step === 'agents' && (
           <div className="setup-wizard__content">
             <p className="setup-wizard__eyebrow">01 / 02</p>
-            <h1>{text('选择宿主与子 Agent', 'Choose a host and child Agents')}</h1>
+            <h1>{text('选择要接入的 Agent', 'Choose the Agents to connect')}</h1>
             <p className="setup-wizard__lead">
-              {text('宿主 Agent 的 SessionStart 会唤醒 Vibe Board；子 Agent 只同步任务状态，不会负责启动组件。', 'The host Agent wakes Vibe Board on SessionStart. Child Agents are monitored but do not start the component.')}
+              {text('勾选要接入的 Agent，Vibe Board 会为它们安装本地 Hook。每个 Agent 可以单独决定是否在会话开始时拉起看板。', 'Pick the Agents to connect; Vibe Board installs their local hooks. Each Agent can separately start Vibe Board when its session begins.')}
             </p>
             {loadingTools ? (
               <div className="setup-wizard__loading">{text('正在读取本机 Agent…', 'Scanning local Agents…')}</div>
@@ -292,49 +301,39 @@ export function SetupWizard({ onClose }: SetupWizardProps) {
                     </ul>
                   </div>
                 )}
-                <div className="setup-wizard__section-label">{text('宿主 Agent（单选）', 'Host Agent (choose one)')}</div>
+                <div className="setup-wizard__section-label">{text('要接入的 Agent（可多选）', 'Agents to connect (multi-select)')}</div>
                 <div className="setup-wizard__agent-list">
-                  {hostTools.map((tool) => (
-                    <label className={`setup-wizard__agent-card ${hostAgent === tool.name ? 'is-selected' : ''}`} key={tool.name}>
-                      <input
-                        type="radio"
-                        name="vibe-board-host"
-                        value={tool.name}
-                        checked={hostAgent === tool.name}
-                        onChange={() => {
-                          setHostAgent(tool.name)
-                          setChildAgents((current) => current.filter((agent) => agent !== tool.name))
-                        }}
-                      />
-                      <PlatformIcon agentId={tool.name} displayName={tool.displayName} size={30} />
-                      <span className="setup-wizard__agent-copy"><strong>{tool.displayName}</strong><small>{statusLabel(tool.status)}</small></span>
-                    </label>
-                  ))}
-                </div>
-                {hostTools.length === 0 && (
-                  <div className="setup-wizard__empty">
-                    {text('没有发现可作为宿主的 Codex、Claude Code、OpenCode 或 Antigravity。你可以稍后安装 Agent，再从设置重新运行向导。', 'No supported host Agent (Codex, Claude Code, OpenCode, or Antigravity) was found. Install one later and rerun this wizard from Settings.')}
-                  </div>
-                )}
-                {childToolOptions.length > 0 && (
-                  <>
-                    <div className="setup-wizard__section-label">{text('子 Agent（可多选）', 'Child Agents (optional)')}</div>
-                    <div className="setup-wizard__agent-list setup-wizard__agent-list--children">
-                      {childToolOptions.map((tool) => (
-                        <label className={`setup-wizard__agent-card ${childAgents.includes(tool.name) ? 'is-selected' : ''}`} key={tool.name}>
-                          <input type="checkbox" checked={childAgents.includes(tool.name)} onChange={() => toggleChild(tool.name)} />
+                  {availableTools.map((tool) => {
+                    const selected = selectedAgents.includes(tool.name)
+                    const launch = launchAgents.includes(tool.name)
+                    return (
+                      <div className={`setup-wizard__agent-card ${selected ? 'is-selected' : ''}`} key={tool.name}>
+                        <label className="setup-wizard__agent-select">
+                          <input type="checkbox" checked={selected} onChange={() => toggleAgent(tool.name)} />
                           <PlatformIcon agentId={tool.name} displayName={tool.displayName} size={30} />
                           <span className="setup-wizard__agent-copy"><strong>{tool.displayName}</strong><small>{statusLabel(tool.status)}</small></span>
                         </label>
-                      ))}
-                    </div>
-                  </>
+                        <label className={`setup-wizard__agent-launch ${selected ? '' : 'is-disabled'}`}>
+                          <input type="checkbox" checked={launch} disabled={!selected} onChange={() => toggleLaunch(tool.name)} />
+                          <span>{text('会话开始时拉起看板', 'Start Vibe Board on session start')}</span>
+                        </label>
+                      </div>
+                    )
+                  })}
+                </div>
+                {availableTools.length === 0 && (
+                  <div className="setup-wizard__empty">
+                    {text('没有发现可接入的 Agent。你可以稍后安装 Agent，再从设置重新运行向导。', 'No connectable Agent was found. Install one later and rerun this wizard from Settings.')}
+                  </div>
                 )}
+                <p className="setup-wizard__note">
+                  {text('注意：桌面版 Agent 可能不触发「会话开始」事件，为它们打开此开关可能不生效。', 'Note: desktop Agents may not emit session-start events, so this switch may have no effect for them.')}
+                </p>
               </>
             )}
             <div className="setup-wizard__actions">
               <GlassButton variant="ghost" onClick={() => setStep('welcome')}>{text('返回', 'Back')}</GlassButton>
-              <GlassButton variant="primary" disabled={loadingTools || (hostTools.length > 0 && !hostAgent)} onClick={() => setStep('options')}>{text('下一步', 'Continue')} <span aria-hidden="true">→</span></GlassButton>
+              <GlassButton variant="primary" disabled={loadingTools} onClick={() => setStep('options')}>{text('下一步', 'Continue')} <span aria-hidden="true">→</span></GlassButton>
             </div>
           </div>
         )}
@@ -348,15 +347,10 @@ export function SetupWizard({ onClose }: SetupWizardProps) {
             </p>
             <div className="setup-wizard__options">
               <label className="setup-wizard__option">
-                <input type="checkbox" checked={autoStartOnHostSession} onChange={(event) => setAutoStartOnHostSession(event.target.checked)} />
-                <span><strong>{text('宿主启动时自动打开 Vibe Board', 'Start Vibe Board with the host')}</strong><small>{text('宿主 Agent 新建会话时自动唤醒桌面组件。', 'Wake the desktop component when the host starts a new session.')}</small></span>
-              </label>
-              <label className="setup-wizard__option">
                 <input type="checkbox" checked={launchAtLogin} onChange={(event) => setLaunchAtLogin(event.target.checked)} />
-                <span><strong>{text('登录 Windows 时启动 Vibe Board', 'Start Vibe Board at Windows login')}</strong><small>{text('适合希望组件常驻托盘、等待宿主会话的情况。', 'Useful when you want the component ready in the tray before a host session starts.')}</small></span>
+                <span><strong>{text('登录 Windows 时启动 Vibe Board', 'Start Vibe Board at Windows login')}</strong><small>{text('适合希望组件常驻托盘、等待会话的情况。', 'Useful when you want the component ready in the tray before a session starts.')}</small></span>
               </label>
             </div>
-            {hostAgent && <div className="setup-wizard__selection-summary"><span>{text('宿主', 'Host')}</span><strong>{tools.find((tool) => tool.name === hostAgent)?.displayName ?? hostAgent}</strong><span>{text('子 Agent', 'Children')}</span><strong>{childAgents.length || text('未选择', 'None')}</strong></div>}
             {error && <div className="setup-wizard__error" role="alert">{error}</div>}
             <div className="setup-wizard__actions">
               <GlassButton variant="ghost" onClick={() => setStep('agents')}>{text('返回', 'Back')}</GlassButton>
@@ -369,7 +363,7 @@ export function SetupWizard({ onClose }: SetupWizardProps) {
           <div className="setup-wizard__content setup-wizard__content--centered">
             <div className="setup-wizard__spinner" aria-hidden="true" />
             <h1>{text('正在完成配置…', 'Applying setup…')}</h1>
-            <p className="setup-wizard__lead">{text('正在安装 Hook、保存宿主选择并校验连接，请稍候。', 'Installing hooks, saving your host choice, and checking the connection.')}</p>
+            <p className="setup-wizard__lead">{text('正在安装 Hook 并保存设置，请稍候。', 'Installing hooks and saving your setup.')}</p>
           </div>
         )}
 
@@ -378,7 +372,7 @@ export function SetupWizard({ onClose }: SetupWizardProps) {
             <div className="setup-wizard__success">✓</div>
             <p className="setup-wizard__eyebrow">READY</p>
             <h1>{text('配置完成', 'You are ready')}</h1>
-            <p className="setup-wizard__lead">{text('以后打开宿主 Agent 的新会话时，Vibe Board 会自动连接。你仍可以在设置 → 通用中重新配置宿主和子 Agent。', 'New sessions from the host Agent will now connect automatically. You can change the host and child Agents later in Settings → General.')}</p>
+            <p className="setup-wizard__lead">{text('接入的 Agent 会把任务状态同步到看板。你仍可以在设置 → 通用中重新配置要接入的 Agent。', 'Connected Agents now report task state to the board. You can change them later in Settings → General.')}</p>
             {error && <div className="setup-wizard__error" role="alert">{error}</div>}
             {warnings.length > 0 && (
               <div className="setup-wizard__warning" role="status">

@@ -30,7 +30,6 @@ function provider(overrides: Partial<UsageProviderStatus> = {}): UsageProviderSt
   return {
     provider: 'codex',
     label: 'Codex',
-    primary: true,
     enabled: true,
     available: true,
     catalogSupported: true,
@@ -49,7 +48,6 @@ function agentStatus(overrides: Partial<AgentStatusSnapshot> = {}): AgentStatusS
   return {
     agent: 'codex',
     label: 'Codex',
-    primary: true,
     online: true,
     lastSeenAt: Date.now(),
     lastCompletedAt: null,
@@ -84,7 +82,6 @@ describe('UnifiedUsageSection token aggregation', () => {
       agentStatus({
         agent: 'claude-code',
         label: 'Claude Code',
-        primary: false,
         tokens: { input: 2000, output: 1000, cacheRead: 0, cacheCreate: 0 },
       }),
     ])
@@ -130,9 +127,11 @@ describe('UnifiedUsageSection token aggregation', () => {
 
     await renderUsage()
 
-    expect(await screen.findByText('Host Quota Remaining')).toBeInTheDocument()
+    expect(await screen.findByText('Quota Remaining')).toBeInTheDocument()
+    expect(screen.queryByText('Host Quota Remaining')).not.toBeInTheDocument()
     expect(screen.queryByText('Last Session Tokens')).not.toBeInTheDocument()
     // Shown both in the headline tile and in the provider coverage row.
+    expect(await screen.findByText('Codex 5h 60% · 7d 80%')).toBeInTheDocument()
     expect(screen.getAllByText('5h 60% · 7d 80%').length).toBeGreaterThan(0)
   })
 

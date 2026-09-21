@@ -391,7 +391,7 @@ export function AgentMonitorSection() {
         <div className="agent-monitor__live-tasks-header">
           <div>
             <h3>当前实时任务 <em>{liveTaskSessions.length}</em></h3>
-            <p>宿主和其他 Agent 的独立 session 都会显示；嵌套 subagent 计入宿主的子任务数，不重复计数。</p>
+            <p>每个 Agent 的独立 session 都会显示；嵌套 subagent 计入所属会话的子任务数，不重复计数。</p>
           </div>
           <span>{codexAppServerLive ? 'Codex 已连接' : 'Codex 未连接'} · {sessions.length} 个已同步会话</span>
         </div>
@@ -401,7 +401,7 @@ export function AgentMonitorSection() {
           <div className="agent-monitor__empty">
             {codexAppServerLive
               ? `当前没有正在运行或等待中的任务（已同步 ${sessions.length} 个会话）。`
-              : '当前没有可用的 Codex 实时同步连接。若 Codex 正在处理，请先在设置 → 通用完成宿主/Hook 配置并重启 Vibe Board。'}
+              : '当前没有可用的 Codex 实时同步连接。若 Codex 正在处理，请先在设置中完成 Hook 配置并重启 Vibe Board。'}
           </div>
         ) : (
           <div className="agent-monitor__live-task-list">

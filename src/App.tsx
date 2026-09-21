@@ -33,7 +33,7 @@ const BACKEND_MANAGED_CONFIG_KEYS = new Set<keyof ReturnType<typeof useConfigSto
   'analyticsEnabled', 'analyticsConsentPromptCompleted',
   'followFocus', 'quietHours', 'idleTimeoutMinutes',
   'idleInteractionRoutingEnabled', 'idleInteractionRoutingMinutes',
-  'setupWizardCompleted', 'hostAgent', 'childAgents', 'autoStartOnHostSession',
+  'setupWizardCompleted', 'autoLaunchAgents',
 ])
 
 const CONFIG_STORAGE_KEY = 'vibeboard-config'

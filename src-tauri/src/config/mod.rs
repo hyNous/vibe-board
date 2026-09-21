@@ -225,15 +225,10 @@ pub struct AppConfig {
     /// Whether the first-run Agent integration setup has been completed.
     #[serde(default)]
     pub setup_wizard_completed: bool,
-    /// Adapter name whose session starts Vibe Board when auto-start is enabled.
+    /// Adapter names whose SessionStart starts Vibe Board when it is not
+    /// already running. Empty by default: every automatic behavior is opt-in.
     #[serde(default)]
-    pub host_agent: Option<String>,
-    /// Adapter names monitored as child agents.
-    #[serde(default)]
-    pub child_agents: Vec<String>,
-    /// Start Vibe Board when the configured host emits SessionStart.
-    #[serde(default = "default_true")]
-    pub auto_start_on_host_session: bool,
+    pub auto_launch_agents: Vec<String>,
 }
 
 fn default_display_id() -> String {
@@ -379,9 +374,7 @@ impl Default for AppConfig {
             permission_shortcut_defaults_migrated: true,
             enabled_agents: Vec::new(),
             setup_wizard_completed: false,
-            host_agent: None,
-            child_agents: Vec::new(),
-            auto_start_on_host_session: true,
+            auto_launch_agents: Vec::new(),
         }
     }
 }
@@ -634,9 +627,90 @@ mod tests {
         assert!(config.analytics_enabled);
         assert!(!config.analytics_consent_prompt_completed);
         assert!(!config.setup_wizard_completed);
-        assert!(config.host_agent.is_none());
-        assert!(config.child_agents.is_empty());
-        assert!(config.auto_start_on_host_session);
+        assert!(!config.launch_at_login);
+        assert!(config.auto_launch_agents.is_empty());
+    }
+
+    #[test]
+    fn ignores_removed_host_agent_fields_without_writing_them_back() {
+        let base = std::env::temp_dir().join(format!(
+            "vibeboard-config-legacy-host-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("system time")
+                .as_nanos()
+        ));
+        let path = base.join("vibeboard").join("config.json");
+        std::fs::create_dir_all(path.parent().expect("config parent")).expect("config dir");
+        let mut legacy = serde_json::to_value(AppConfig::default()).expect("serialize config");
+        let object = legacy.as_object_mut().expect("config object");
+        object.insert("hostAgent".to_string(), serde_json::json!("codex"));
+        object.insert(
+            "childAgents".to_string(),
+            serde_json::json!(["claude-code"]),
+        );
+        object.insert(
+            "autoStartOnHostSession".to_string(),
+            serde_json::json!(true),
+        );
+        std::fs::write(
+            &path,
+            serde_json::to_string_pretty(&legacy).expect("serialize legacy config"),
+        )
+        .expect("write legacy config");
+
+        let loaded = super::ConfigStore::load_from_disk(&path).expect("load legacy config");
+
+        assert!(
+            loaded.auto_launch_agents.is_empty(),
+            "the removed auto-start flag must not convert into a per-Agent switch"
+        );
+        let store = super::ConfigStore {
+            config: std::sync::Arc::new(std::sync::RwLock::new(loaded)),
+            config_path: path.clone(),
+            app_handle: None,
+        };
+        store.update(store.get()).expect("save config");
+
+        let written = std::fs::read_to_string(&path).expect("read saved config");
+        assert!(!written.contains("hostAgent"), "{written}");
+        assert!(!written.contains("childAgents"), "{written}");
+        assert!(!written.contains("autoStartOnHostSession"), "{written}");
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn auto_launch_agents_defaults_to_empty_when_field_is_missing() {
+        let mut value = serde_json::to_value(AppConfig::default()).expect("serialize config");
+        value
+            .as_object_mut()
+            .expect("config object")
+            .remove("autoLaunchAgents");
+
+        let config: AppConfig = serde_json::from_value(value).expect("deserialize legacy config");
+
+        assert!(config.auto_launch_agents.is_empty());
+    }
+
+    #[test]
+    fn auto_launch_agents_roundtrips_through_serde() {
+        let config = AppConfig {
+            auto_launch_agents: vec!["claude-code".to_string(), "codex".to_string()],
+            ..AppConfig::default()
+        };
+        let value = serde_json::to_value(&config).expect("serialize config");
+        assert_eq!(
+            value
+                .get("autoLaunchAgents")
+                .and_then(|v| v.as_array())
+                .map(Vec::len),
+            Some(2)
+        );
+
+        let restored: AppConfig = serde_json::from_value(value).expect("deserialize config");
+
+        assert_eq!(restored.auto_launch_agents, vec!["claude-code", "codex"]);
     }
 
     #[test]

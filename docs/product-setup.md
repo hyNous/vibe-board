@@ -6,12 +6,12 @@
 
 1. 运行安装包并启动 Vibe Board。
 2. 首次启动进入“首次设置”向导。向导只读取本机 Agent 的可执行文件和常见配置目录，用于判断哪些 Agent 可连接。
-3. 选择一个宿主 Agent。宿主的 `SessionStart` 负责唤醒桌面组件；Codex、Claude Code、OpenCode 和 Antigravity 可作为宿主。
-4. 按需选择子 Agent。子 Agent 会安装实时 Hook 并独立显示状态，但不会负责启动 Vibe Board。
-5. 确认自动启动和 Windows 登录启动选项，点击“批准并完成设置”。
+3. 勾选要接入的 Agent（可多选）。Vibe Board 会为选中的 Agent 安装本地 Hook。
+4. 按需逐个打开「会话开始时拉起看板」开关。开关默认关闭，由用户自己打开；桌面版 Agent 可能不触发「会话开始」事件，对它们打开此开关可能不生效。
+5. 确认登录启动选项，点击“批准并完成设置”。
 6. 向导安装已选择的 Hook，保存配置，并重新读取 Hook 状态进行校验。校验失败时会留在向导中显示错误，不会把失败状态标记为完成。
 
-首次设置完成后，打开宿主 Agent 的新会话即可触发连接。后续在 **Settings → General → Agent connection** 可以重新选择宿主、调整子 Agent、关闭宿主自动启动，或重新执行安装校验。
+首次设置完成后，接入的 Agent 新会话会连接看板；只有用户为某个 Agent 打开拉起开关后，该 Agent 的会话开始才会尝试启动 Vibe Board。后续在 **Settings → General → Agent connection** 可以重新选择要接入的 Agent 或重新执行安装校验。
 
 ## 用户需要批准什么
 
@@ -31,10 +31,6 @@
 - Skill 中心：`%USERPROFILE%\.agents\skills\`
 
 把安装包复制到另一台 Windows 电脑后，首次启动会在新电脑重新扫描和配置，不会依赖原电脑的绝对路径。用户需要在新电脑上重新批准 Agent Hook；已有账号凭据仍由对应 Agent 自己管理。
-
-## 手动插件方式
-
-`plugins/vibe-board-host/` 是兼容已有 Codex/Claude Code 插件工作流的可选清单。普通安装优先使用应用内向导；只有在用户明确希望由 Agent 插件管理宿主 Hook 时，才需要手动注册它。
 
 ## 平台范围
 

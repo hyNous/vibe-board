@@ -314,9 +314,7 @@ function applyBackendConfig(config: BackendConfig) {
     idleInteractionRoutingEnabled: config.idleInteractionRoutingEnabled ?? false,
     idleInteractionRoutingMinutes: config.idleInteractionRoutingMinutes ?? 5,
     setupWizardCompleted: config.setupWizardCompleted ?? false,
-    hostAgent: config.hostAgent ?? null,
-    childAgents: Array.isArray(config.childAgents) ? config.childAgents : [],
-    autoStartOnHostSession: config.autoStartOnHostSession ?? true,
+    autoLaunchAgents: Array.isArray(config.autoLaunchAgents) ? config.autoLaunchAgents : [],
   })
 
   if (config.language) {
