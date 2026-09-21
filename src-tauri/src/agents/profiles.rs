@@ -1311,12 +1311,20 @@ fn expected_command(profile: &AgentIntegrationProfile) -> Result<String, HookIns
 }
 
 fn agentbro_command_is_current(profile: &AgentIntegrationProfile, command: &str) -> bool {
+    let bridge = hook_manager::bridge_binary_path();
+    command_matches_bridge_path(profile, command, &bridge)
+}
+
+fn command_matches_bridge_path(
+    profile: &AgentIntegrationProfile,
+    command: &str,
+    bridge: &Path,
+) -> bool {
     if !is_agentbro_command(command) {
         return false;
     }
 
-    let bridge = hook_manager::bridge_binary_path();
-    let bridge_path = bridge.display().to_string();
+    let bridge_path = hook_manager::hook_command_path(bridge);
     if !command.contains(&bridge_path) {
         return false;
     }
@@ -1684,7 +1692,10 @@ pub fn managed_bridge_command_labeled(
             args.extend(["--engine-label".to_string(), label.to_string()]);
         }
         if let Some(root) = config_root {
-            args.extend(["--config-root".to_string(), root.to_string()]);
+            args.extend([
+                "--config-root".to_string(),
+                hook_manager::hook_command_path_value(root),
+            ]);
         }
     }
     args.extend(profile.extra_args.iter().map(|arg| arg.to_string()));
@@ -1714,7 +1725,7 @@ fn bridge_args_json(
 ) -> Result<String, Box<dyn std::error::Error>> {
     let bridge = hook_manager::ensure_bridge_binary()?;
     let mut args = vec![
-        bridge.display().to_string(),
+        hook_manager::hook_command_path(&bridge),
         "--source".to_string(),
         profile.source.to_string(),
     ];
@@ -4559,5 +4570,305 @@ name = "also keep"
             "the default plugin directory must survive a custom install"
         );
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn legacy_backslash_bridge_commands_are_not_current() {
+        let bridge = Path::new(r"C:\Users\John Doe\.vibeboard\bin\vibe-board-bridge.exe");
+        let legacy = r"C:\Users\John Doe\.vibeboard\bin\vibe-board-bridge.exe --source claude-code";
+
+        for profile in [claude_code_profile(), codex_profile()] {
+            assert!(
+                !command_matches_bridge_path(&profile, legacy, bridge),
+                "a backslash command must not count as current for {}",
+                profile.id
+            );
+        }
+        assert!(command_matches_bridge_path(
+            &claude_code_profile(),
+            "\"C:/Users/John Doe/.vibeboard/bin/vibe-board-bridge.exe\" --source claude-code",
+            bridge
+        ));
+        assert!(command_matches_bridge_path(
+            &codex_profile(),
+            "C:/Users/John Doe/.vibeboard/bin/vibe-board-bridge.exe --source codex",
+            bridge
+        ));
+        assert!(!command_matches_bridge_path(
+            &codex_profile(),
+            "C:/Users/John Doe/.vibeboard/bin/vibe-board-bridge.exe --source claude-code",
+            bridge
+        ));
+    }
+
+    #[test]
+    fn reinstall_replaces_legacy_managed_hook_and_preserves_user_entries() {
+        let profile = claude_code_profile();
+        let suffix = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!(
+            "vibeboard-legacy-hook-repair-{}-{suffix}.json",
+            std::process::id()
+        ));
+        let legacy_command =
+            r"C:\Users\me\.vibeboard\bin\vibe-board-bridge.exe --source claude-code";
+        let user_group = serde_json::json!({
+            "matcher": "Bash",
+            "hooks": [{ "type": "command", "command": "/usr/local/bin/personal-hook --flag" }]
+        });
+        let settings = serde_json::json!({
+            "theme": "dark",
+            "hooks": {
+                "SessionStart": [
+                    { "hooks": [{ "type": "command", "command": legacy_command }] },
+                    user_group.clone()
+                ],
+                "PreToolUse": [
+                    user_group.clone(),
+                    { "hooks": [{ "type": "command", "command": legacy_command, "timeout": 30 }] }
+                ]
+            }
+        });
+        std::fs::write(&path, serde_json::to_string_pretty(&settings).unwrap()).unwrap();
+
+        let current_command =
+            "C:/Users/me/.vibeboard/bin/vibe-board-bridge.exe --source claude-code";
+        update_nested_json_hooks(&profile, &path, current_command).unwrap();
+
+        let updated: Value =
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        let serialized_user_group = serde_json::to_string(&user_group).unwrap();
+        let mut preserved_user_groups = 0usize;
+        let mut managed_commands = Vec::new();
+        for entries in updated["hooks"].as_object().unwrap().values() {
+            for group in entries.as_array().unwrap() {
+                if serde_json::to_string(group).unwrap() == serialized_user_group {
+                    preserved_user_groups += 1;
+                }
+                let mut commands = Vec::new();
+                collect_json_agentbro_commands(group, &mut commands);
+                if !commands.is_empty() {
+                    managed_commands.push(commands);
+                }
+            }
+        }
+
+        assert_eq!(
+            preserved_user_groups, 2,
+            "both user hook groups must survive the reinstall unchanged"
+        );
+        assert!(
+            !managed_commands.is_empty(),
+            "the reinstall must write current managed entries"
+        );
+        for commands in &managed_commands {
+            assert_eq!(
+                commands,
+                &vec![current_command.to_string()],
+                "every surviving managed entry must use the current command"
+            );
+        }
+
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[cfg(target_os = "windows")]
+    fn locate_built_bridge_binary() -> Option<PathBuf> {
+        let exe = std::env::current_exe().ok()?;
+        let deps_dir = exe.parent()?;
+        let profile_dir = deps_dir.parent()?;
+        let target_dir = profile_dir.parent()?;
+        let candidates = [
+            deps_dir.join("vibe-board-bridge.exe"),
+            profile_dir.join("vibe-board-bridge.exe"),
+            profile_dir.join("vibe-board-bridge"),
+            profile_dir
+                .join("vibe-board-bridge-resource")
+                .join("vibe-board-bridge.exe"),
+            profile_dir
+                .join("vibe-board-bridge-resource")
+                .join("vibe-board-bridge"),
+            target_dir
+                .join("vibe-board-bridge-resource")
+                .join("vibe-board-bridge.exe"),
+            target_dir
+                .join("vibe-board-bridge-resource")
+                .join("vibe-board-bridge"),
+            target_dir.join("release").join("vibe-board-bridge.exe"),
+            target_dir.join("release").join("vibe-board-bridge"),
+        ];
+        candidates.into_iter().find(|path| path.is_file())
+    }
+
+    #[cfg(target_os = "windows")]
+    fn bash_candidates() -> Vec<PathBuf> {
+        let mut candidates = vec![PathBuf::from("bash")];
+        for key in ["ProgramFiles", "ProgramFiles(x86)", "LocalAppData"] {
+            if let Ok(base) = std::env::var(key) {
+                candidates.push(PathBuf::from(base).join("Git").join("bin").join("bash.exe"));
+            }
+        }
+        if let Ok(output) = std::process::Command::new("where.exe").arg("git").output() {
+            if output.status.success() {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                if let Some(git) = stdout.lines().map(str::trim).find(|line| !line.is_empty()) {
+                    let mut dir = Path::new(git).parent().map(Path::to_path_buf);
+                    for _ in 0..4 {
+                        let Some(current) = dir else { break };
+                        candidates.push(current.join("bin").join("bash.exe"));
+                        candidates.push(current.join("usr").join("bin").join("bash.exe"));
+                        dir = current.parent().map(Path::to_path_buf);
+                    }
+                }
+            }
+        }
+        candidates
+    }
+
+    #[cfg(target_os = "windows")]
+    fn usable_bash(bridge: &Path) -> Option<PathBuf> {
+        let script =
+            hook_manager::bridge_command_parts(bridge, &["--version".to_string()]).join(" ");
+        bash_candidates().into_iter().find(|candidate| {
+            std::process::Command::new(candidate)
+                .arg("-c")
+                .arg(&script)
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status()
+                .map(|status| status.success())
+                .unwrap_or(false)
+        })
+    }
+
+    #[cfg(target_os = "windows")]
+    fn run_hook_command(
+        mut runner: std::process::Command,
+        home: &Path,
+        hook_port: u16,
+        event: &str,
+    ) -> std::process::Output {
+        use std::io::Write;
+
+        let mut child = runner
+            .env("VIBEBOARD_HOME", home)
+            .env("HOME", home)
+            .env("VIBEBOARD_HOOK_PORT", hook_port.to_string())
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .expect("spawn hook command");
+        if let Some(stdin) = child.stdin.as_mut() {
+            stdin.write_all(event.as_bytes()).expect("write hook event");
+        }
+        drop(child.stdin.take());
+        child.wait_with_output().expect("wait for hook command")
+    }
+
+    #[cfg(target_os = "windows")]
+    fn invocation_records(path: &Path) -> Vec<Value> {
+        std::fs::read_to_string(path)
+            .map(|content| {
+                content
+                    .lines()
+                    .filter_map(|line| serde_json::from_str(line).ok())
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn generated_hook_command_runs_in_bash_and_cmd_with_isolated_home() {
+        use std::os::windows::process::CommandExt;
+
+        let Some(source_bridge) = locate_built_bridge_binary() else {
+            eprintln!(
+                "skipping hook command execution test: no built vibe-board-bridge binary found under target/; run `corepack pnpm build:bridge` first"
+            );
+            return;
+        };
+
+        let suffix = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let home = std::env::temp_dir().join(format!(
+            "vibeboard m1 hook exec {}-{suffix}",
+            std::process::id()
+        ));
+        let bridge = home
+            .join(".vibeboard")
+            .join("bin")
+            .join("vibe-board-bridge.exe");
+        std::fs::create_dir_all(bridge.parent().expect("bridge parent")).expect("bridge dir");
+        std::fs::copy(&source_bridge, &bridge).expect("copy bridge");
+
+        let args = vec!["--source".to_string(), "claude-code".to_string()];
+        let command = hook_manager::bridge_command_parts(&bridge, &args).join(" ");
+        assert!(
+            !command.contains('\\'),
+            "generated hook command must not contain backslashes: {command}"
+        );
+
+        let hook_port = {
+            let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("reserve port");
+            listener.local_addr().expect("local addr").port()
+        };
+        let event = r#"{"hook_event_name":"PreToolUse","session_id":"m1-hook-exec","tool_name":"Bash","tool_input":{}}"#;
+        let log = home
+            .join(".vibeboard")
+            .join("hooks")
+            .join("invocations.jsonl");
+
+        let mut cmd_runner = std::process::Command::new("cmd.exe");
+        cmd_runner.arg("/c").raw_arg(&command);
+        let cmd_output = run_hook_command(cmd_runner, &home, hook_port, event);
+        assert!(
+            cmd_output.status.success(),
+            "cmd /c failed: {:?}\n{}",
+            cmd_output.status,
+            String::from_utf8_lossy(&cmd_output.stderr)
+        );
+        let records = invocation_records(&log);
+        assert_eq!(
+            records.len(),
+            1,
+            "cmd run must append exactly one invocation record: {records:?}"
+        );
+        assert_eq!(records[0]["source"], "claude-code");
+        assert_eq!(records[0]["event"], "PreToolUse");
+        assert_eq!(records[0]["session_id"], "m1-hook-exec");
+
+        match usable_bash(&bridge) {
+            Some(bash) => {
+                let mut bash_runner = std::process::Command::new(&bash);
+                bash_runner.arg("-c").arg(&command);
+                let bash_output = run_hook_command(bash_runner, &home, hook_port, event);
+                assert!(
+                    bash_output.status.success(),
+                    "bash -c failed: {:?}\n{}",
+                    bash_output.status,
+                    String::from_utf8_lossy(&bash_output.stderr)
+                );
+                assert_eq!(
+                    invocation_records(&log).len(),
+                    2,
+                    "bash run must append exactly one invocation record"
+                );
+            }
+            None => {
+                eprintln!(
+                    "skipping bash half of hook command execution test: no installed bash could run a Windows executable"
+                );
+            }
+        }
+
+        let _ = std::fs::remove_dir_all(&home);
     }
 }

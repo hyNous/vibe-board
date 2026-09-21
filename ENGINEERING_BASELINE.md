@@ -174,6 +174,13 @@ Antigravity）的取数方式真实不同，且现有「一家一个定制函数
 5. 以上 2–4 条有自动化测试覆盖；第 2 条的 bash 执行测试在未安装 bash 的环境下跳过并注明原因，而不是失败。
 
 **Verification**：检查命令全绿；父级另在本机用 bash 与 cmd 各执行一次新生成的命令并核对记录。
+
+**状态（2026-09-21）：PASS WITH RISKS，代码已合入，待维护者真机验证 S1。**
+父级独立验证：`cargo fmt --check` 通过；`cargo test --lib` 552 通过 / 32 失败，失败集合与已知名单完全一致；
+`release:check` ok；在带空格的隔离目录中以 Git Bash 与 `cmd /d /s /c` 分别执行新命令，均退出码 0 并写入记录，
+真实记录未被写入。风险记录：第 4 条在「条目内容」层面满足——JSON 配置会被安装器整体重新排版
+（既有行为，非 M1 引入），因此整个文件并非逐字节不变。另：本机 PATH 上的 `bash` 是 WSL，
+不能执行 Windows 程序；测试会自动改用 Git Bash。
 **维护者真机**：升级后在「Hook 诊断」重新安装，开一个 Claude Code 会话，确认 `invocations.jsonl` 出现 `claude-code` 记录（S1）。
 
 ### M2 — 审批删除 + Hook 瘦身（必须同批）

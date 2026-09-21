@@ -320,16 +320,35 @@ pub fn endpoint_env_assignments() -> Vec<String> {
 }
 
 pub fn bridge_command_parts(bridge: &Path, args: &[String]) -> Vec<String> {
+    let executable = hook_command_path(bridge);
     let mut parts = if cfg!(target_os = "windows") {
-        vec![command_quote(&bridge.display().to_string())]
+        vec![command_quote(&executable)]
     } else {
         let mut parts = vec!["/usr/bin/env".to_string()];
         parts.extend(endpoint_env_assignments());
-        parts.push(command_quote(&bridge.display().to_string()));
+        parts.push(command_quote(&executable));
         parts
     };
     parts.extend(args.iter().map(|arg| command_quote(arg)));
     parts
+}
+
+/// Render a filesystem path for embedding in a managed hook command.
+/// On Windows, agents run hook commands through shells that treat `\` as an
+/// escape character (Git Bash, cmd-launched tooling), so managed commands use
+/// forward slashes; Windows accepts them in process paths.
+pub fn hook_command_path(path: &Path) -> String {
+    hook_command_path_value(&path.display().to_string())
+}
+
+/// Same normalization as [`hook_command_path`] for callers that already hold a
+/// path-like string (for example `--config-root` values).
+pub fn hook_command_path_value(value: &str) -> String {
+    if cfg!(target_os = "windows") {
+        value.replace('\\', "/")
+    } else {
+        value.to_string()
+    }
 }
 
 /// Ensure the bridge binary is deployed to ~/.vibeboard/bin.
@@ -576,5 +595,35 @@ mod tests {
         assert!(bridge_binary_is_current_at(&bridge, None));
 
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn hook_command_path_uses_forward_slashes_and_quotes_spaces() {
+        let bridge = Path::new(r"C:\Users\John Doe\.vibeboard\bin\vibe-board-bridge.exe");
+        let args = vec!["--source".to_string(), "claude-code".to_string()];
+
+        let command = bridge_command_parts(bridge, &args).join(" ");
+
+        assert_eq!(
+            command,
+            "\"C:/Users/John Doe/.vibeboard/bin/vibe-board-bridge.exe\" --source claude-code"
+        );
+        assert!(
+            !command.contains('\\'),
+            "managed hook commands must not contain backslashes: {command}"
+        );
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn hook_command_path_leaves_space_free_paths_unquoted() {
+        let bridge = Path::new(r"C:\Users\me\.vibeboard\bin\vibe-board-bridge.exe");
+        let args = vec!["--source".to_string(), "claude-code".to_string()];
+
+        assert_eq!(
+            bridge_command_parts(bridge, &args).join(" "),
+            "C:/Users/me/.vibeboard/bin/vibe-board-bridge.exe --source claude-code"
+        );
     }
 }

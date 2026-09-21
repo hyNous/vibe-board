@@ -6152,6 +6152,36 @@ pub struct HookDoctorReport {
     pub checks: Vec<HookDoctorCheck>,
 }
 
+fn installed_hooks_check(installed_names: &[String], needing_repair: &[String]) -> HookDoctorCheck {
+    let status = if installed_names.is_empty() || !needing_repair.is_empty() {
+        "warn"
+    } else {
+        "ok"
+    };
+    let detail = if installed_names.is_empty() {
+        "No adapter configs contain Vibe Board hooks".to_string()
+    } else if needing_repair.is_empty() {
+        format!(
+            "{} adapter configs contain Vibe Board hooks: {}",
+            installed_names.len(),
+            installed_names.join(", ")
+        )
+    } else {
+        format!(
+            "{} adapter configs contain Vibe Board hooks; {} need reinstall: {}",
+            installed_names.len(),
+            needing_repair.len(),
+            needing_repair.join(", ")
+        )
+    };
+    HookDoctorCheck {
+        id: "installed-hooks".to_string(),
+        label: "Installed hooks".to_string(),
+        status: status.to_string(),
+        detail,
+    }
+}
+
 #[tauri::command]
 pub async fn run_hook_doctor(state: State<'_, AppState>) -> Result<HookDoctorReport, String> {
     let mut checks = Vec::new();
@@ -6204,31 +6234,29 @@ pub async fn run_hook_doctor(state: State<'_, AppState>) -> Result<HookDoctorRep
         detail: endpoint.tcp_addr(),
     });
 
-    let installed_hook_names = state
-        .adapters
-        .iter()
-        .filter(|adapter| adapter.hooks_installed())
-        .map(|adapter| adapter.display_name().to_string())
-        .collect::<Vec<_>>();
-    checks.push(HookDoctorCheck {
-        id: "installed-hooks".to_string(),
-        label: "Installed hooks".to_string(),
-        status: if installed_hook_names.is_empty() {
-            "warn"
-        } else {
-            "ok"
+    let mut installed_hook_names = Vec::new();
+    let mut hooks_needing_repair = Vec::new();
+    for adapter in &state.adapters {
+        if !adapter.hooks_installed() {
+            continue;
         }
-        .to_string(),
-        detail: if installed_hook_names.is_empty() {
-            "No adapter configs contain Vibe Board hooks".to_string()
-        } else {
-            format!(
-                "{} adapter configs contain Vibe Board hooks: {}",
-                installed_hook_names.len(),
-                installed_hook_names.join(", ")
-            )
-        },
-    });
+        installed_hook_names.push(adapter.display_name().to_string());
+        let Some(profile) = crate::agents::profiles::profile_for_agent(adapter.name()) else {
+            continue;
+        };
+        let health = crate::agents::profiles::install_health_for_profile(&profile);
+        if health.is_present() && health != crate::agents::profiles::HookInstallHealth::Installed {
+            hooks_needing_repair.push(format!(
+                "{} ({})",
+                adapter.display_name(),
+                health.as_status_str()
+            ));
+        }
+    }
+    checks.push(installed_hooks_check(
+        &installed_hook_names,
+        &hooks_needing_repair,
+    ));
 
     let bridge_invocations = recent_bridge_invocations(50);
     checks.push(HookDoctorCheck {
@@ -8186,7 +8214,7 @@ mod tests {
         codex_desktop_send_message_script, codex_desktop_send_message_without_activation_script,
         codex_phase_from_thread, codex_request_user_input_output, codex_token_counts_from_line,
         codex_turn_steer_payload, fallback_terminal_app_name, handle_codex_app_server_request,
-        is_codex_desktop_session, is_ide_terminal_session, is_uuid_like,
+        installed_hooks_check, is_codex_desktop_session, is_ide_terminal_session, is_uuid_like,
         load_codex_token_usage_summary_from_root, parse_antigravity_usage_payload,
         parse_opencode_usage_payload, parse_subagent_chat_history_for_session,
         qoder_app_send_message_script, read_codex_session_meta_from_path,
@@ -8220,6 +8248,30 @@ mod tests {
         );
         session.tty = tty.map(ToString::to_string);
         session
+    }
+
+    #[test]
+    fn installed_hooks_check_flags_adapter_entries_that_need_repair() {
+        let check = installed_hooks_check(
+            &["Claude Code".to_string()],
+            &["Claude Code (needs_reinstall)".to_string()],
+        );
+
+        assert_eq!(check.id, "installed-hooks");
+        assert_eq!(check.status, "warn");
+        assert!(
+            check.detail.contains("need reinstall"),
+            "detail must call out the repair: {}",
+            check.detail
+        );
+        assert!(check.detail.contains("Claude Code (needs_reinstall)"));
+
+        let healthy = installed_hooks_check(&["Claude Code".to_string()], &[]);
+        assert_eq!(healthy.status, "ok");
+
+        let none_installed = installed_hooks_check(&[], &[]);
+        assert_eq!(none_installed.status, "warn");
+        assert!(none_installed.detail.contains("No adapter configs"));
     }
 
     #[test]
