@@ -1,11 +1,8 @@
 pub mod agent_paths;
-pub mod codex_config;
 pub mod config_file_editor;
 pub mod explanation;
 pub mod frontmatter;
 pub mod installer;
-pub mod mcp_management;
-pub mod plugin_management;
 pub mod registry;
 pub mod scanner;
 pub mod sync;
@@ -18,8 +15,6 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "camelCase")]
 pub enum SkillType {
     Skill,
-    Plugin,
-    Mcp,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -166,32 +161,6 @@ pub struct SyncConfig {
 pub struct TargetConfig {
     pub agent: String,
     pub install_mode: InstallMode,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct McpServerConfig {
-    pub name: String,
-    pub command: String,
-    #[serde(default)]
-    pub args: Vec<String>,
-    #[serde(default)]
-    pub env: std::collections::HashMap<String, String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct McpValidationResult {
-    pub valid: bool,
-    pub message: String,
-    pub warnings: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PluginInstallRequest {
-    pub source: String,
-    pub agent: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -491,40 +460,6 @@ mod tests {
     fn scans_mcp_and_round_trips_backup() {
         let _guard = lock_home();
         let home = TempHome::new("skills-backup");
-        fs::create_dir_all(home.path.join(".codex")).expect("create codex config dir");
-        installer::upsert_mcp_server(
-            "codex",
-            &McpServerConfig {
-                name: "fixture".to_string(),
-                command: "node".to_string(),
-                args: vec!["server.js".to_string()],
-                env: std::collections::HashMap::new(),
-            },
-        )
-        .expect("write codex mcp config");
-
-        let mcp_items = scanner::scan_agent("codex");
-        assert!(
-            mcp_items.iter().any(|skill| skill.id == "mcp:fixture"
-                && matches!(skill.skill_type, SkillType::Mcp)
-                && skill.agents[0].enabled),
-            "codex MCP config should be scanned"
-        );
-        installer::toggle_skill("mcp:fixture", "codex", false).expect("disable MCP server");
-        let mcp_items = scanner::scan_agent("codex");
-        assert!(
-            mcp_items
-                .iter()
-                .any(|skill| skill.id == "mcp:fixture" && !skill.agents[0].enabled),
-            "disabled MCP server should scan as disabled"
-        );
-        installer::remove_mcp_server("codex", "fixture").expect("remove MCP server");
-        assert!(
-            !scanner::scan_agent("codex")
-                .iter()
-                .any(|skill| skill.id == "mcp:fixture"),
-            "removed MCP server should disappear from scan results"
-        );
 
         let central_skill = write_skill(&agent_paths::agentbro_skills_dir(), "central", "central");
         registry::add_source("central", central_skill.to_str().expect("central path"))
@@ -551,43 +486,6 @@ mod tests {
     }
 
     #[test]
-    fn scans_and_toggles_claude_plugins_without_real_home() {
-        let _guard = lock_home();
-        let home = TempHome::new("plugins");
-        let plugin = home
-            .path
-            .join(".claude/plugins/cache/test-publisher/test-plugin/1.0.0");
-        fs::create_dir_all(plugin.join(".claude-plugin")).expect("create plugin manifest dir");
-        fs::write(
-            plugin.join(".claude-plugin/plugin.json"),
-            r#"{"name":"test-plugin","displayName":"Test Plugin","description":"Plugin fixture","version":"1.0.0"}"#,
-        )
-        .expect("write plugin manifest");
-        fs::write(
-            home.path.join(".claude/settings.json"),
-            r#"{"enabledPlugins":{"test-plugin":false}}"#,
-        )
-        .expect("write settings");
-
-        let plugins = scanner::scan_agent("claude-code");
-        assert!(
-            plugins.iter().any(|skill| skill.id == "plugin:test-plugin"
-                && matches!(skill.skill_type, SkillType::Plugin)
-                && !skill.agents[0].enabled),
-            "plugin should scan disabled state from enabledPlugins"
-        );
-
-        installer::toggle_skill("plugin:test-plugin", "claude-code", true).expect("enable plugin");
-        let plugins = scanner::scan_agent("claude-code");
-        assert!(
-            plugins
-                .iter()
-                .any(|skill| skill.id == "plugin:test-plugin" && skill.agents[0].enabled),
-            "plugin toggle should update enabledPlugins"
-        );
-    }
-
-    #[test]
     fn scans_and_manages_zcode_native_config() {
         let _guard = lock_home();
         let home = TempHome::new("zcode-config");
@@ -596,34 +494,10 @@ mod tests {
             "fixture-dir",
             "fixture-skill",
         );
-        let plugin = home
-            .path
-            .join(".zcode/cli/plugins/cache/official/test-plugin/1.0.0");
-        fs::create_dir_all(plugin.join(".zcode-plugin")).expect("create ZCode plugin");
-        fs::write(
-            plugin.join(".zcode-plugin/plugin.json"),
-            r#"{"name":"test-plugin","displayName":"Test Plugin","version":"1.0.0"}"#,
-        )
-        .expect("write ZCode plugin manifest");
         fs::create_dir_all(home.path.join(".zcode/cli")).expect("create ZCode config dir");
         fs::write(
             home.path.join(".zcode/cli/config.json"),
             serde_json::to_string(&serde_json::json!({
-                "mcp": {
-                    "servers": {
-                        "fixture": {
-                            "type": "stdio",
-                            "command": "node",
-                            "args": ["server.js"],
-                            "enabled": false
-                        }
-                    }
-                },
-                "plugins": {
-                    "enabledPlugins": {
-                        "test-plugin@official": false
-                    }
-                },
                 "skill": {
                     skill.display().to_string(): { "enable": false }
                 }
@@ -638,31 +512,8 @@ mod tests {
                 && matches!(item.skill_type, SkillType::Skill)
                 && !item.agents[0].enabled
         }));
-        assert!(scanned.iter().any(|item| {
-            item.id == "mcp:fixture"
-                && matches!(item.skill_type, SkillType::Mcp)
-                && !item.agents[0].enabled
-        }));
-        assert!(scanned.iter().any(|item| {
-            item.id == "plugin:test-plugin@official"
-                && matches!(item.skill_type, SkillType::Plugin)
-                && !item.agents[0].enabled
-        }));
 
         installer::toggle_skill("fixture-skill", "zcode", true).expect("enable ZCode skill");
-        installer::toggle_skill("mcp:fixture", "zcode", true).expect("enable ZCode MCP");
-        installer::toggle_skill("plugin:test-plugin@official", "zcode", true)
-            .expect("enable ZCode plugin");
-        installer::upsert_mcp_server(
-            "zcode",
-            &McpServerConfig {
-                name: "added".to_string(),
-                command: "node".to_string(),
-                args: vec!["added.js".to_string()],
-                env: std::collections::HashMap::new(),
-            },
-        )
-        .expect("add ZCode MCP");
 
         let config: serde_json::Value = serde_json::from_str(
             &fs::read_to_string(home.path.join(".zcode/cli/config.json"))
@@ -670,77 +521,12 @@ mod tests {
         )
         .unwrap();
         assert_eq!(config["skill"][skill.display().to_string()]["enable"], true);
-        assert_eq!(config["mcp"]["servers"]["fixture"]["enabled"], true);
-        assert_eq!(
-            config["plugins"]["enabledPlugins"]["test-plugin@official"],
-            true
-        );
-        assert_eq!(config["mcp"]["servers"]["added"]["type"], "stdio");
-        assert_eq!(config["mcp"]["servers"]["added"]["enabled"], true);
-
-        installer::remove_mcp_server("zcode", "added").expect("remove ZCode MCP");
-        assert!(scanner::scan_agent("zcode")
-            .iter()
-            .all(|item| item.id != "mcp:added"));
-    }
-
-    #[test]
-    fn installs_codex_plugin_and_scans_disabled_state() {
-        let _guard = lock_home();
-        let home = TempHome::new("plugin-marketplace");
-        let plugin_source = home.path.join("sources/context-plugin");
-        fs::create_dir_all(plugin_source.join(".codex-plugin"))
-            .expect("create plugin manifest dir");
-        fs::write(
-            plugin_source.join(".codex-plugin/plugin.json"),
-            r#"{"name":"context-plugin","displayName":"Context Plugin","description":"Plugin fixture","version":"2.0.0"}"#,
-        )
-        .expect("write plugin manifest");
-
-        let installed_id = installer::install_plugin(&PluginInstallRequest {
-            source: plugin_source.display().to_string(),
-            agent: "codex".to_string(),
-        })
-        .expect("install codex plugin");
-        fs::write(
-            home.path.join(".codex/config.toml"),
-            r#"[plugins."context-plugin@agentbro"]
-enabled = false
-"#,
-        )
-        .expect("write codex plugin config");
-        assert_eq!(installed_id, "plugin:context-plugin");
-        assert!(
-            scanner::scan_agent("codex")
-                .iter()
-                .any(|skill| skill.id == "plugin:context-plugin"
-                    && matches!(skill.skill_type, SkillType::Plugin)
-                    && !skill.agents[0].enabled),
-            "installed codex plugin should scan TOML disabled state"
-        );
     }
 
     #[test]
     fn validates_mcp_and_resolves_pending_sync_conflicts() {
         let _guard = lock_home();
         let home = TempHome::new("sync-conflicts");
-        fs::create_dir_all(home.path.join(".codex")).expect("create codex config dir");
-        installer::upsert_mcp_server(
-            "codex",
-            &McpServerConfig {
-                name: "shell-fixture".to_string(),
-                command: "sh".to_string(),
-                args: vec!["-c".to_string(), "echo ok".to_string()],
-                env: std::collections::HashMap::new(),
-            },
-        )
-        .expect("write mcp");
-        let validation =
-            installer::validate_mcp_server("codex", "shell-fixture").expect("validate mcp");
-        assert!(
-            validation.valid,
-            "shell command should validate on macOS/Linux"
-        );
 
         registry::create_pack(SkillPack {
             id: "pack-one".to_string(),

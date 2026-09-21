@@ -112,8 +112,6 @@ pub struct ProjectSummary {
     pub last_scanned_at: Option<String>,
     pub detected_agent_count: usize,
     pub skill_count: usize,
-    pub mcp_count: usize,
-    pub plugin_count: usize,
     pub instruction_count: usize,
     pub issue_count: usize,
 }
@@ -136,11 +134,7 @@ pub struct ProjectAgentDetail {
     pub icon_key: String,
     pub skills_dirs: Vec<String>,
     pub config_paths: Vec<String>,
-    pub mcp_config_paths: Vec<String>,
-    pub plugin_config_paths: Vec<String>,
     pub skills: Vec<ProjectSkillItem>,
-    pub mcp_servers: Vec<McpServerStatus>,
-    pub plugins: Vec<PluginStatus>,
     pub health: Vec<ProjectHealthIssue>,
 }
 
@@ -279,8 +273,6 @@ pub struct AgentDetail {
     pub latest_version: Option<String>,
     pub skills_dir: Option<String>,
     pub config_path: Option<String>,
-    pub mcp_config_path: Option<String>,
-    pub plugin_dir: Option<String>,
     pub agent_dir: Option<String>,
     pub skills: Vec<SkillTargetDetail>,
     pub inherits_shared_skills: bool,
@@ -288,8 +280,6 @@ pub struct AgentDetail {
     pub inherited_unmanaged_skills: Vec<UnmanagedItemDto>,
     pub applied_packs: Vec<AppliedPackSummary>,
     pub available_packs: Vec<SkillPackSummary>,
-    pub mcp_servers: Vec<McpServerStatus>,
-    pub plugins: Vec<PluginStatus>,
     pub health: Vec<AgentHealthIssue>,
 }
 
@@ -358,26 +348,6 @@ pub struct PackMember {
     pub required: bool,
     pub sort_order: i64,
     pub missing: bool,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct McpServerStatus {
-    pub name: String,
-    pub command: String,
-    pub args: Vec<String>,
-    pub valid: bool,
-    pub message: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PluginStatus {
-    pub id: String,
-    pub name: String,
-    pub version: Option<String>,
-    pub enabled: bool,
-    pub source: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

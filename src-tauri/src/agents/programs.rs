@@ -1738,7 +1738,6 @@ mod tests {
             config_dir: Some(config_root.clone()),
             settings_file: Some(format!("{config_root}/settings.json")),
             mcp_config: Some(format!("{config_root}/settings.json")),
-            plugin_dir: Some(format!("{config_root}/plugins/cache")),
         }
     }
 

@@ -1,5 +1,5 @@
 use super::{agent_paths, installer, registry, scanner};
-use super::{ConflictResolution, InstallMode, SkillType, SyncPreview, SyncResult, TargetConfig};
+use super::{ConflictResolution, InstallMode, SyncPreview, SyncResult, TargetConfig};
 use std::fs;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
@@ -329,16 +329,7 @@ pub fn execute_agent_sync(from: &str, to: &str) -> Result<(), String> {
 
     for skill in &from_skills {
         if !to_ids.contains(&skill.id) {
-            if matches!(skill.skill_type, SkillType::Mcp) {
-                if let Some(server_name) = skill.id.strip_prefix("mcp:") {
-                    let Some(server) = scanner::read_mcp_server_config(from, server_name) else {
-                        continue;
-                    };
-                    installer::upsert_mcp_server(to, &server)?;
-                }
-            } else {
-                installer::install_skill(&skill.file_path, &targets, &InstallMode::Direct)?;
-            }
+            installer::install_skill(&skill.file_path, &targets, &InstallMode::Direct)?;
         }
     }
 

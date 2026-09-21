@@ -60,8 +60,6 @@ pub struct CustomAgentEntry {
     pub settings_file: Option<String>,
     #[serde(default)]
     pub mcp_config: Option<String>,
-    #[serde(default)]
-    pub plugin_dir: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -79,8 +77,6 @@ pub struct CustomAgentConfig {
     pub settings_file: Option<String>,
     #[serde(default)]
     pub mcp_config: Option<String>,
-    #[serde(default)]
-    pub plugin_dir: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -97,8 +93,6 @@ pub struct UpdateCustomAgentConfig {
     pub settings_file: Option<String>,
     #[serde(default)]
     pub mcp_config: Option<String>,
-    #[serde(default)]
-    pub plugin_dir: Option<String>,
 }
 
 pub fn load() -> Metadata {
@@ -377,7 +371,6 @@ pub fn add_custom_agent(config: CustomAgentConfig) -> Result<CustomAgentEntry, S
         config_dir: config.config_dir.map(|value| normalize_path(&value)),
         settings_file: config.settings_file.map(|value| normalize_path(&value)),
         mcp_config: config.mcp_config.map(|value| normalize_path(&value)),
-        plugin_dir: config.plugin_dir.map(|value| normalize_path(&value)),
     };
     meta.custom_agents.push(entry.clone());
     save(&meta)?;
@@ -409,7 +402,6 @@ pub fn update_custom_agent(
     entry.config_dir = config.config_dir.map(|value| normalize_path(&value));
     entry.settings_file = config.settings_file.map(|value| normalize_path(&value));
     entry.mcp_config = config.mcp_config.map(|value| normalize_path(&value));
-    entry.plugin_dir = config.plugin_dir.map(|value| normalize_path(&value));
     let updated = entry.clone();
     save(&meta)?;
     Ok(updated)

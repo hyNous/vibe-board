@@ -4895,57 +4895,13 @@ fn agent_detail_reports_mcp_plugins_and_path_health() {
     let (_home, svc, _lock) = fresh_service("agent-detail-health");
     let claude_dir = svc.home.join(".claude");
     fs::create_dir_all(&claude_dir).unwrap();
-    fs::write(
-        claude_dir.join("settings.json"),
-        serde_json::json!({
-            "mcpServers": {
-                "filesystem": { "command": "npx", "args": ["-y", "@modelcontextprotocol/server-filesystem"] },
-                "broken": { "args": ["missing-command"] }
-            }
-        })
-        .to_string(),
-    )
-    .unwrap();
-
-    let plugin_manifest =
-        claude_dir.join("plugins/cache/agentbro/reviewer/.claude-plugin/plugin.json");
-    fs::create_dir_all(plugin_manifest.parent().unwrap()).unwrap();
-    fs::write(
-        &plugin_manifest,
-        serde_json::json!({
-            "name": "reviewer",
-            "displayName": "Reviewer Tools",
-            "version": "1.2.3"
-        })
-        .to_string(),
-    )
-    .unwrap();
+    fs::write(claude_dir.join("settings.json"), "{}").unwrap();
 
     let detail = svc.get_agent_detail("claude-code").unwrap();
     assert_eq!(
         detail.config_path,
         Some(claude_dir.join("settings.json").display().to_string())
     );
-    assert_eq!(
-        detail.plugin_dir,
-        Some(claude_dir.join("plugins/cache").display().to_string())
-    );
-    let filesystem = detail
-        .mcp_servers
-        .iter()
-        .find(|server| server.name == "filesystem")
-        .expect("filesystem mcp server");
-    assert!(filesystem.valid);
-    assert_eq!(filesystem.command, "npx");
-    assert!(detail
-        .mcp_servers
-        .iter()
-        .any(|server| server.name == "broken" && !server.valid));
-    assert!(detail.plugins.iter().any(|plugin| {
-        plugin.id == "reviewer"
-            && plugin.name == "Reviewer Tools"
-            && plugin.version.as_deref() == Some("1.2.3")
-    }));
     assert!(detail
         .health
         .iter()
@@ -4959,62 +4915,13 @@ fn antigravity_agent_detail_uses_official_customization_paths() {
     let skills_dir = config_dir.join("skills");
     fs::create_dir_all(&skills_dir).unwrap();
     fs::write(config_dir.join("hooks.json"), "{}").unwrap();
-    fs::write(
-        config_dir.join("mcp_config.json"),
-        serde_json::json!({
-            "mcpServers": {
-                "filesystem": {
-                    "command": "npx",
-                    "args": ["-y", "@modelcontextprotocol/server-filesystem"]
-                }
-            }
-        })
-        .to_string(),
-    )
-    .unwrap();
-    let plugin_root = config_dir.join("plugins/reviewer");
-    fs::create_dir_all(&plugin_root).unwrap();
-    fs::write(
-        plugin_root.join("plugin.json"),
-        serde_json::json!({
-            "name": "reviewer",
-            "displayName": "Reviewer Tools",
-            "version": "1.0.0"
-        })
-        .to_string(),
-    )
-    .unwrap();
 
     let detail = svc.get_agent_detail("antigravity").unwrap();
-    let inventory = crate::skills::plugin_management::list_plugins(&svc, "antigravity").unwrap();
 
     assert_eq!(detail.skills_dir, Some(skills_dir.display().to_string()));
     assert_eq!(
         detail.config_path,
         Some(config_dir.join("hooks.json").display().to_string())
-    );
-    assert_eq!(
-        detail.mcp_config_path,
-        Some(config_dir.join("mcp_config.json").display().to_string())
-    );
-    assert_eq!(
-        detail.plugin_dir,
-        Some(config_dir.join("plugins").display().to_string())
-    );
-    assert!(detail
-        .mcp_servers
-        .iter()
-        .any(|server| server.name == "filesystem" && server.valid));
-    assert!(detail.plugins.iter().any(|plugin| {
-        plugin.id == "reviewer"
-            && plugin.name == "Reviewer Tools"
-            && plugin.enabled
-            && plugin.version.as_deref() == Some("1.0.0")
-    }));
-    assert!(!inventory.capabilities.editable);
-    assert_eq!(
-        inventory.config_path, None,
-        "Antigravity plugins are auto-discovered and have no documented enable config"
     );
 }
 
@@ -5055,61 +4962,6 @@ fn agent_detail_does_not_refresh_unrelated_agents() {
     assert_eq!(count_unrelated_rows(), 0);
     svc.get_agent_detail("claude-code").unwrap();
     assert_eq!(count_unrelated_rows(), 0);
-}
-
-#[test]
-fn agent_detail_reads_zcode_nested_mcp_and_plugins() {
-    let (_home, svc, _lock) = fresh_service("zcode-agent-detail");
-    let zcode_dir = svc.home.join(".zcode/cli");
-    fs::create_dir_all(&zcode_dir).unwrap();
-    fs::write(
-        zcode_dir.join("config.json"),
-        serde_json::json!({
-            "mcp": {
-                "servers": {
-                    "filesystem": {
-                        "type": "stdio",
-                        "command": "npx",
-                        "args": ["-y", "@modelcontextprotocol/server-filesystem"],
-                        "enabled": true
-                    }
-                }
-            },
-            "plugins": {
-                "enabledPlugins": {
-                    "reviewer@official": false
-                }
-            }
-        })
-        .to_string(),
-    )
-    .unwrap();
-    let plugin_manifest =
-        zcode_dir.join("plugins/cache/official/reviewer/1.2.3/.zcode-plugin/plugin.json");
-    fs::create_dir_all(plugin_manifest.parent().unwrap()).unwrap();
-    fs::write(
-        &plugin_manifest,
-        serde_json::json!({
-            "name": "reviewer",
-            "displayName": "Reviewer Tools",
-            "version": "1.2.3"
-        })
-        .to_string(),
-    )
-    .unwrap();
-
-    let detail = svc.get_agent_detail("zcode").unwrap();
-    assert!(detail
-        .mcp_servers
-        .iter()
-        .any(|server| server.name == "filesystem" && server.command == "npx"));
-    assert!(detail.plugins.iter().any(|plugin| {
-        plugin.id == "reviewer@official"
-            && plugin.name == "Reviewer Tools"
-            && plugin.version.as_deref() == Some("1.2.3")
-            && !plugin.enabled
-            && plugin.source.as_deref() == Some("zcode-plugin:official")
-    }));
 }
 
 #[test]
@@ -5345,309 +5197,13 @@ fn agent_detail_reports_codex_toml_config_paths() {
     let (_home, svc, _lock) = fresh_service("codex-config-paths");
     let codex_dir = svc.home.join(".codex");
     fs::create_dir_all(&codex_dir).unwrap();
-    fs::write(
-        codex_dir.join("config.toml"),
-        r#"[mcp_servers.filesystem]
-command = "npx"
-args = ["-y", "@modelcontextprotocol/server-filesystem"]
-
-[plugins."documents@openai-primary-runtime"]
-enabled = true
-
-[plugins."archived@openai-curated"]
-enabled = false
-"#,
-    )
-    .unwrap();
-    let plugin_manifest = codex_dir.join(
-        "plugins/cache/openai-primary-runtime/documents/26.614.11602/.codex-plugin/plugin.json",
-    );
-    fs::create_dir_all(plugin_manifest.parent().unwrap()).unwrap();
-    fs::write(
-        &plugin_manifest,
-        serde_json::json!({
-            "name": "documents",
-            "version": "26.614.11602",
-            "interface": { "displayName": "Documents" }
-        })
-        .to_string(),
-    )
-    .unwrap();
-    let disabled_plugin_manifest =
-        codex_dir.join("plugins/cache/openai-curated/archived/0.1.0/.codex-plugin/plugin.json");
-    fs::create_dir_all(disabled_plugin_manifest.parent().unwrap()).unwrap();
-    fs::write(
-        &disabled_plugin_manifest,
-        serde_json::json!({
-            "name": "archived",
-            "version": "0.1.0",
-            "interface": { "displayName": "Archived Plugin" }
-        })
-        .to_string(),
-    )
-    .unwrap();
+    fs::write(codex_dir.join("config.toml"), "model = \"gpt-5\"\n").unwrap();
 
     let detail = svc.get_agent_detail("codex").unwrap();
     assert_eq!(
         detail.config_path,
         Some(codex_dir.join("config.toml").display().to_string())
     );
-    assert_eq!(
-        detail.mcp_config_path,
-        Some(codex_dir.join("config.toml").display().to_string())
-    );
-    assert_eq!(
-        detail.plugin_dir,
-        Some(codex_dir.join("plugins/cache").display().to_string())
-    );
-    assert!(detail
-        .mcp_servers
-        .iter()
-        .any(|server| server.name == "filesystem" && server.command == "npx"));
-    assert!(detail.plugins.iter().any(|plugin| {
-        plugin.id == "documents@openai-primary-runtime"
-            && plugin.name == "Documents"
-            && plugin.version.as_deref() == Some("26.614.11602")
-            && plugin.enabled
-            && plugin.source.as_deref() == Some("codex-plugin:openai-primary-runtime")
-    }));
-    assert!(detail
-        .plugins
-        .iter()
-        .any(|plugin| plugin.id == "archived@openai-curated" && !plugin.enabled));
-}
-
-#[test]
-fn codex_plugin_inventory_ignores_cache_only_plugins_and_toggles_safely() {
-    let (_home, svc, _lock) = fresh_service("codex-plugin-management");
-    let codex_dir = svc.home.join(".codex");
-    fs::create_dir_all(&codex_dir).unwrap();
-    fs::write(
-        codex_dir.join("config.toml"),
-        r#"[plugins."documents@openai-primary-runtime"]
-enabled = true
-
-[plugins."archived@openai-curated"]
-enabled = false
-"#,
-    )
-    .unwrap();
-
-    for (source, id, version) in [
-        ("openai-primary-runtime", "documents", "26.723.12215"),
-        ("openai-curated", "archived", "0.1.0"),
-        ("openai-curated", "cached-only", "0.2.0"),
-    ] {
-        let manifest = codex_dir.join(format!(
-            "plugins/cache/{source}/{id}/{version}/.codex-plugin/plugin.json"
-        ));
-        fs::create_dir_all(manifest.parent().unwrap()).unwrap();
-        fs::write(
-            &manifest,
-            serde_json::json!({
-                "name": id,
-                "version": version,
-                "description": format!("{id} plugin description"),
-                "author": { "name": "AgentBro Test" },
-                "interface": { "displayName": id }
-            })
-            .to_string(),
-        )
-        .unwrap();
-        if id == "documents" {
-            let root = manifest.parent().unwrap().parent().unwrap();
-            fs::create_dir_all(root.join("skills/documents")).unwrap();
-            fs::write(root.join("skills/documents/SKILL.md"), "test").unwrap();
-        }
-    }
-
-    let inventory = crate::skills::plugin_management::list_plugins(&svc, "codex").unwrap();
-    assert_eq!(inventory.plugins.len(), 2);
-    assert!(inventory
-        .plugins
-        .iter()
-        .any(|plugin| plugin.id == "documents@openai-primary-runtime" && plugin.enabled));
-    assert!(!inventory
-        .plugins
-        .iter()
-        .any(|plugin| plugin.id == "cached-only@openai-curated"));
-
-    let detail = crate::skills::plugin_management::get_plugin_detail(
-        &svc,
-        "codex",
-        "documents@openai-primary-runtime",
-    )
-    .unwrap();
-    assert_eq!(
-        detail.description.as_deref(),
-        Some("documents plugin description")
-    );
-    assert_eq!(detail.author.as_deref(), Some("AgentBro Test"));
-    assert!(detail
-        .install_path
-        .as_deref()
-        .is_some_and(|path| path.ends_with("documents/26.723.12215")));
-    assert!(detail.file_count >= 4);
-    assert!(detail.files.is_some());
-
-    let updated = crate::skills::plugin_management::set_plugin_enabled(
-        &svc,
-        "codex",
-        "documents@openai-primary-runtime",
-        &inventory.revision,
-        false,
-    )
-    .unwrap();
-    assert!(updated
-        .plugins
-        .iter()
-        .any(|plugin| plugin.id == "documents@openai-primary-runtime" && !plugin.enabled));
-    let config = fs::read_to_string(codex_dir.join("config.toml")).unwrap();
-    assert_eq!(
-        crate::skills::codex_config::parse_plugin_enabled_config(&config)
-            .get("documents@openai-primary-runtime"),
-        Some(&false)
-    );
-}
-
-#[test]
-fn claude_plugin_inventory_toggles_the_source_qualified_config_key() {
-    let (_home, svc, _lock) = fresh_service("claude-plugin-management");
-    let claude_dir = svc.home.join(".claude");
-    fs::create_dir_all(&claude_dir).unwrap();
-    fs::write(
-        claude_dir.join("settings.json"),
-        serde_json::json!({
-            "enabledPlugins": {
-                "reviewer@agentbro": true
-            }
-        })
-        .to_string(),
-    )
-    .unwrap();
-    let manifest =
-        claude_dir.join("plugins/cache/agentbro/reviewer/1.2.3/.claude-plugin/plugin.json");
-    fs::create_dir_all(manifest.parent().unwrap()).unwrap();
-    fs::write(
-        manifest,
-        serde_json::json!({
-            "name": "reviewer",
-            "displayName": "Reviewer Tools",
-            "version": "1.2.3"
-        })
-        .to_string(),
-    )
-    .unwrap();
-
-    let inventory = crate::skills::plugin_management::list_plugins(&svc, "claude-code").unwrap();
-    assert!(inventory
-        .plugins
-        .iter()
-        .any(|plugin| plugin.id == "reviewer@agentbro" && plugin.enabled));
-    crate::skills::plugin_management::set_plugin_enabled(
-        &svc,
-        "claude-code",
-        "reviewer@agentbro",
-        &inventory.revision,
-        false,
-    )
-    .unwrap();
-
-    let settings: serde_json::Value =
-        serde_json::from_str(&fs::read_to_string(claude_dir.join("settings.json")).unwrap())
-            .unwrap();
-    assert_eq!(settings["enabledPlugins"]["reviewer@agentbro"], false);
-}
-
-#[test]
-fn agent_detail_reports_workbuddy_plugins_without_marketplace_noise() {
-    let (_home, svc, _lock) = fresh_service("workbuddy-plugins");
-    let workbuddy_dir = svc.home.join(".workbuddy");
-    fs::create_dir_all(&workbuddy_dir).unwrap();
-    fs::write(
-        workbuddy_dir.join("settings.json"),
-        serde_json::json!({
-            "enabledPlugins": {
-                "weixinpay@workbuddy-builtin": true,
-                "playwright-cli@codebuddy-plugins-official": true,
-                "disabled-one@codebuddy-plugins-official": false
-            }
-        })
-        .to_string(),
-    )
-    .unwrap();
-
-    let plugin_manifest = workbuddy_dir.join(
-        "plugins/marketplaces/codebuddy-plugins-official/plugins/playwright-cli/.codebuddy-plugin/plugin.json",
-    );
-    fs::create_dir_all(plugin_manifest.parent().unwrap()).unwrap();
-    fs::write(
-        &plugin_manifest,
-        serde_json::json!({
-            "name": "playwright-cli",
-            "displayName": "Playwright CLI",
-            "version": "0.1.0"
-        })
-        .to_string(),
-    )
-    .unwrap();
-
-    let disabled_manifest = workbuddy_dir.join(
-        "plugins/marketplaces/codebuddy-plugins-official/plugins/disabled-one/.codebuddy-plugin/plugin.json",
-    );
-    fs::create_dir_all(disabled_manifest.parent().unwrap()).unwrap();
-    fs::write(
-        &disabled_manifest,
-        serde_json::json!({
-            "name": "disabled-one",
-            "displayName": "Disabled One",
-            "version": "0.0.1"
-        })
-        .to_string(),
-    )
-    .unwrap();
-
-    let unused_manifest = workbuddy_dir.join(
-        "plugins/marketplaces/codebuddy-plugins-official/plugins/market-only/.codebuddy-plugin/plugin.json",
-    );
-    fs::create_dir_all(unused_manifest.parent().unwrap()).unwrap();
-    fs::write(
-        &unused_manifest,
-        serde_json::json!({
-            "name": "market-only",
-            "displayName": "Market Only",
-            "version": "9.9.9"
-        })
-        .to_string(),
-    )
-    .unwrap();
-
-    let detail = svc.get_agent_detail("workbuddy").unwrap();
-    assert_eq!(
-        detail.plugin_dir,
-        Some(workbuddy_dir.join("plugins").display().to_string())
-    );
-    assert_eq!(detail.plugins.len(), 3);
-    assert!(detail.plugins.iter().any(|plugin| {
-        plugin.id == "weixinpay@workbuddy-builtin"
-            && plugin.name == "weixinpay"
-            && plugin.enabled
-            && plugin.source.as_deref() == Some("workbuddy-plugin:workbuddy-builtin")
-    }));
-    assert!(detail.plugins.iter().any(|plugin| {
-        plugin.id == "playwright-cli@codebuddy-plugins-official"
-            && plugin.name == "Playwright CLI"
-            && plugin.version.as_deref() == Some("0.1.0")
-            && plugin.enabled
-            && plugin.source.as_deref() == Some("workbuddy-plugin:codebuddy-plugins-official")
-    }));
-    assert!(detail.plugins.iter().any(|plugin| {
-        plugin.id == "disabled-one@codebuddy-plugins-official" && !plugin.enabled
-    }));
-    assert!(!detail
-        .plugins
-        .iter()
-        .any(|plugin| plugin.id == "market-only"));
 }
 
 #[test]
@@ -5688,46 +5244,6 @@ fn kimi_code_agent_detail_discovers_managed_resources() {
     );
     fs::create_dir_all(kimi_home.join("agents")).unwrap();
     fs::write(kimi_home.join("agents/reviewer.md"), "# Reviewer").unwrap();
-    fs::write(
-        kimi_home.join("mcp.json"),
-        serde_json::json!({
-            "mcpServers": {
-                "stdio": { "command": "npx", "args": ["-y", "server"] },
-                "remote": { "type": "http", "url": "https://example.com/mcp" }
-            }
-        })
-        .to_string(),
-    )
-    .unwrap();
-
-    let plugin_root = kimi_home.join("plugins/managed/review-plugin");
-    fs::create_dir_all(&plugin_root).unwrap();
-    fs::write(
-        plugin_root.join("kimi.plugin.json"),
-        serde_json::json!({
-            "name": "review-plugin",
-            "version": "1.2.3",
-            "interface": { "displayName": "Review Plugin" }
-        })
-        .to_string(),
-    )
-    .unwrap();
-    fs::write(
-        kimi_home.join("plugins/installed.json"),
-        serde_json::json!({
-            "version": 1,
-            "plugins": [{
-                "id": "review-plugin",
-                "root": plugin_root,
-                "source": "github",
-                "enabled": true,
-                "originalSource": "moonshot/review-plugin",
-                "installedAt": "2026-01-01T00:00:00Z"
-            }]
-        })
-        .to_string(),
-    )
-    .unwrap();
 
     svc.refresh().unwrap();
     let detail = svc.get_agent_detail("kimi").unwrap();
@@ -5740,31 +5256,9 @@ fn kimi_code_agent_detail_discovers_managed_resources() {
         Some(kimi_home.join("config.toml").display().to_string())
     );
     assert_eq!(
-        detail.mcp_config_path,
-        Some(kimi_home.join("mcp.json").display().to_string())
-    );
-    assert_eq!(
-        detail.plugin_dir,
-        Some(kimi_home.join("plugins/managed").display().to_string())
-    );
-    assert_eq!(
         detail.agent_dir,
         Some(kimi_home.join("agents").display().to_string())
     );
-    assert!(detail
-        .mcp_servers
-        .iter()
-        .any(|server| server.name == "stdio" && server.command == "npx" && server.valid));
-    assert!(detail.mcp_servers.iter().any(|server| {
-        server.name == "remote" && server.command == "https://example.com/mcp" && server.valid
-    }));
-    assert!(detail.plugins.iter().any(|plugin| {
-        plugin.id == "review-plugin"
-            && plugin.name == "Review Plugin"
-            && plugin.version.as_deref() == Some("1.2.3")
-            && plugin.enabled
-            && plugin.source.as_deref() == Some("kimi-plugin:moonshot/review-plugin")
-    }));
 }
 
 #[test]
@@ -5824,15 +5318,13 @@ fn custom_agent_metadata_is_listed_and_uses_declared_paths() {
     let root = svc.home.join(".codefuse/engine/cc");
     let skills_dir = root.join("skills");
     let settings_file = root.join("settings.json");
-    let plugin_dir = root.join("plugins/cache");
     write_skill(
         &skills_dir,
         "internal-review",
         "internal-review",
         Some("v1"),
     );
-    fs::create_dir_all(&plugin_dir).unwrap();
-    fs::write(&settings_file, r#"{"mcpServers":{}}"#).unwrap();
+    fs::write(&settings_file, "{}").unwrap();
     fs::create_dir_all(svc.home.join(".agentbro")).unwrap();
     fs::write(
         svc.home.join(".agentbro/metadata.json"),
@@ -5845,9 +5337,7 @@ fn custom_agent_metadata_is_listed_and_uses_declared_paths() {
                 "iconName": "claude-code",
                 "isEnabled": true,
                 "configDir": root.display().to_string(),
-                "settingsFile": settings_file.display().to_string(),
-                "mcpConfig": settings_file.display().to_string(),
-                "pluginDir": plugin_dir.display().to_string()
+                "settingsFile": settings_file.display().to_string()
             }]
         })
         .to_string(),
@@ -5872,11 +5362,6 @@ fn custom_agent_metadata_is_listed_and_uses_declared_paths() {
         detail.config_path,
         Some(settings_file.display().to_string())
     );
-    assert_eq!(
-        detail.mcp_config_path,
-        Some(settings_file.display().to_string())
-    );
-    assert_eq!(detail.plugin_dir, Some(plugin_dir.display().to_string()));
 }
 
 #[test]
@@ -6018,35 +5503,13 @@ fn project_inventory_scans_codex_and_claude_resources() {
         Some("claude"),
     );
     fs::create_dir_all(root.join(".codex")).unwrap();
-    fs::write(
-        root.join(".codex/config.toml"),
-        r#"[mcp_servers.context7]
-command = "npx"
-args = ["-y", "@upstash/context7-mcp"]
-
-[plugins."documents@openai-primary-runtime"]
-enabled = true
-"#,
-    )
-    .unwrap();
-    fs::write(
-        root.join(".mcp.json"),
-        serde_json::json!({
-            "mcpServers": {
-                "filesystem": { "command": "npx", "args": ["-y", "@modelcontextprotocol/server-filesystem"] }
-            }
-        })
-        .to_string(),
-    )
-    .unwrap();
+    fs::write(root.join(".codex/config.toml"), "model = \"gpt-5\"\n").unwrap();
     fs::write(root.join("AGENTS.md"), "# Repo instructions").unwrap();
     fs::write(root.join(".claude/CLAUDE.md"), "# Claude instructions").unwrap();
 
     let detail = svc.add_project(root.display().to_string()).unwrap();
     assert_eq!(detail.summary.detected_agent_count, 2);
     assert_eq!(detail.summary.skill_count, 2);
-    assert_eq!(detail.summary.mcp_count, 2);
-    assert_eq!(detail.summary.plugin_count, 1);
     assert_eq!(detail.summary.instruction_count, 2);
 
     let codex = detail
@@ -6055,14 +5518,6 @@ enabled = true
         .find(|agent| agent.agent_id == "codex")
         .expect("codex project agent");
     assert!(codex.skills.iter().any(|skill| skill.id == "codex-review"));
-    assert!(codex
-        .mcp_servers
-        .iter()
-        .any(|server| server.name == "context7" && server.command == "npx"));
-    assert!(codex
-        .plugins
-        .iter()
-        .any(|plugin| plugin.id == "documents@openai-primary-runtime" && plugin.enabled));
 
     let claude = detail
         .agents
@@ -6070,10 +5525,6 @@ enabled = true
         .find(|agent| agent.agent_id == "claude-code")
         .expect("claude project agent");
     assert!(claude.skills.iter().any(|skill| skill.id == "claude-docs"));
-    assert!(claude
-        .mcp_servers
-        .iter()
-        .any(|server| server.name == "filesystem"));
 }
 
 #[test]
@@ -6092,21 +5543,10 @@ fn project_inventory_scans_kimi_code_resources() {
         "# Project reviewer",
     )
     .unwrap();
-    fs::write(
-        root.join(".kimi-code/mcp.json"),
-        serde_json::json!({
-            "mcpServers": {
-                "remote": { "type": "sse", "url": "https://example.com/sse" }
-            }
-        })
-        .to_string(),
-    )
-    .unwrap();
 
     let detail = svc.add_project(root.display().to_string()).unwrap();
     assert_eq!(detail.summary.detected_agent_count, 1);
     assert_eq!(detail.summary.skill_count, 1);
-    assert_eq!(detail.summary.mcp_count, 1);
     let kimi = detail
         .agents
         .iter()
@@ -6116,10 +5556,6 @@ fn project_inventory_scans_kimi_code_resources() {
         .skills
         .iter()
         .any(|skill| skill.id == "kimi-project-review"));
-    assert!(kimi
-        .mcp_servers
-        .iter()
-        .any(|server| server.name == "remote" && server.command == "https://example.com/sse"));
     assert!(kimi
         .config_paths
         .iter()

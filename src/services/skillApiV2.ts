@@ -174,218 +174,6 @@ export interface SkillPackDetail {
   updatedAt: string
 }
 
-export interface McpServerStatus {
-  name: string
-  command: string
-  args: string[]
-  valid: boolean
-  message: string
-}
-
-export type McpTransport = 'stdio' | 'http' | 'sse'
-
-export interface McpConfigValue {
-  key: string
-  value: string | null
-  secret: boolean
-  configured: boolean
-}
-
-export interface McpServerDraft {
-  name: string
-  transport: McpTransport
-  command: string | null
-  args: string[]
-  env: McpConfigValue[]
-  cwd: string | null
-  url: string | null
-  headers: McpConfigValue[]
-}
-
-export interface McpServerEntry extends McpServerDraft {
-  enabled: boolean
-  disabledByAgentbro: boolean
-  valid: boolean
-  message: string
-  warnings: string[]
-  configPath: string
-  editable: boolean
-  sourceKind: string
-}
-
-export interface McpCapabilities {
-  editable: boolean
-  supportsStdio: boolean
-  supportsHttp: boolean
-  supportsSse: boolean
-  supportsNativeToggle: boolean
-}
-
-export interface McpInventory {
-  agentId: string
-  configPath: string | null
-  revision: string
-  capabilities: McpCapabilities
-  servers: McpServerEntry[]
-}
-
-export interface McpValidationResultV2 {
-  valid: boolean
-  message: string
-  warnings: string[]
-}
-
-export interface McpConnectionTestResult {
-  success: boolean
-  category: string
-  message: string
-  latencyMs: number
-  protocolVersion: string | null
-  serverName: string | null
-  serverVersion: string | null
-  toolCount: number | null
-}
-
-export interface McpInspectionCapabilities {
-  tools: boolean
-  resources: boolean
-  prompts: boolean
-  logging: boolean
-}
-
-export interface McpInspectionToolAnnotations {
-  readOnly: boolean | null
-  destructive: boolean | null
-  idempotent: boolean | null
-  openWorld: boolean | null
-}
-
-export interface McpInspectionInput {
-  name: string
-  valueType: string
-  description: string | null
-  required: boolean
-}
-
-export interface McpInspectionTool {
-  name: string
-  title: string | null
-  description: string | null
-  inputs: McpInspectionInput[]
-  inputSchema: Record<string, unknown>
-  outputSchema: Record<string, unknown> | null
-  annotations: McpInspectionToolAnnotations
-  hasAnnotations: boolean
-}
-
-export interface McpInspectionResource {
-  uri: string
-  name: string
-  title: string | null
-  description: string | null
-  mimeType: string | null
-  size: number | null
-}
-
-export interface McpInspectionPromptArgument {
-  name: string
-  description: string | null
-  required: boolean
-}
-
-export interface McpInspectionPrompt {
-  name: string
-  title: string | null
-  description: string | null
-  arguments: McpInspectionPromptArgument[]
-}
-
-export interface McpInspectionStep {
-  phase: string
-  status: string
-  durationMs: number
-  message: string
-}
-
-export interface McpInspectionReport {
-  inspectionId: string
-  status: 'connected' | 'partial' | 'failed' | 'cancelled'
-  category: string
-  summary: string
-  inspectedAtMs: number
-  durationMs: number
-  protocolVersion: string | null
-  serverName: string | null
-  serverVersion: string | null
-  transport: McpTransport
-  capabilities: McpInspectionCapabilities
-  tools: McpInspectionTool[]
-  resources: McpInspectionResource[]
-  prompts: McpInspectionPrompt[]
-  steps: McpInspectionStep[]
-  warnings: string[]
-  suggestions: string[]
-}
-
-export interface McpOperationResult {
-  operationId: string
-  kind: 'tool' | 'prompt'
-  name: string
-  category: 'success' | 'tool_error'
-  durationMs: number
-  result: unknown
-  warnings: string[]
-}
-
-export interface PluginStatus {
-  id: string
-  name: string
-  version: string | null
-  enabled: boolean
-  source: string | null
-}
-
-export interface PluginInventory {
-  agentId: string
-  configPath: string | null
-  revision: string
-  capabilities: {
-    editable: boolean
-    requiresNewSession: boolean
-  }
-  plugins: PluginStatus[]
-}
-
-export interface PluginFileNode {
-  name: string
-  nodeType: 'file' | 'directory' | 'symlink'
-  path: string
-  children: PluginFileNode[] | null
-  omittedCount: number | null
-}
-
-export interface PluginDetail extends PluginStatus {
-  description: string | null
-  author: string | null
-  homepage: string | null
-  license: string | null
-  installPath: string | null
-  manifestPath: string | null
-  files: PluginFileNode | null
-  fileCount: number
-  truncated: boolean
-}
-
-export interface PluginFileContent {
-  path: string
-  kind: 'text' | 'image' | 'binary'
-  mimeType: string | null
-  content: string | null
-  dataBase64: string | null
-  size: number
-  truncated: boolean
-}
-
 export interface AgentHealthIssue {
   kind: string
   message: string
@@ -400,8 +188,6 @@ export interface AgentDetail {
   latestVersion: string | null
   skillsDir: string | null
   configPath: string | null
-  mcpConfigPath: string | null
-  pluginDir: string | null
   agentDir?: string | null
   skills: SkillTargetDetail[]
   inheritsSharedSkills?: boolean
@@ -409,8 +195,6 @@ export interface AgentDetail {
   inheritedUnmanagedSkills: UnmanagedItemDto[]
   appliedPacks: AppliedPackSummary[]
   availablePacks: SkillPackSummary[]
-  mcpServers: McpServerStatus[]
-  plugins: PluginStatus[]
   health: AgentHealthIssue[]
 }
 
@@ -451,8 +235,6 @@ export interface ProjectSummary {
   lastScannedAt: string | null
   detectedAgentCount: number
   skillCount: number
-  mcpCount: number
-  pluginCount: number
   instructionCount: number
   issueCount: number
 }
@@ -488,11 +270,7 @@ export interface ProjectAgentDetail {
   iconKey: string
   skillsDirs: string[]
   configPaths: string[]
-  mcpConfigPaths: string[]
-  pluginConfigPaths: string[]
   skills: ProjectSkillItem[]
-  mcpServers: McpServerStatus[]
-  plugins: PluginStatus[]
   health: ProjectHealthIssue[]
 }
 
@@ -727,7 +505,7 @@ export interface DiagnosisIssue {
   fixKind: 'auto' | 'confirm' | 'manual' | 'info'
   title: string
   detail: string
-  entityType: 'skill' | 'target' | 'pack' | 'agent' | 'mcp' | 'plugin' | 'snapshot'
+  entityType: 'skill' | 'target' | 'pack' | 'agent' | 'snapshot'
   entityId: string | null
   actions: DiagnosisAction[]
 }
@@ -870,144 +648,6 @@ export interface GitHubSkillSyncResult {
   currentHash: string
   updated: boolean
   syncedAt: string
-}
-
-function demoMcpInventory(agent: string): McpInventory {
-  return {
-    agentId: agent,
-    configPath: null,
-    revision: 'demo',
-    capabilities: {
-      editable: false,
-      supportsStdio: false,
-      supportsHttp: false,
-      supportsSse: false,
-      supportsNativeToggle: false,
-    },
-    servers: [],
-  }
-}
-
-function demoPluginInventory(agentId: string): PluginInventory {
-  return {
-    agentId,
-    configPath: null,
-    revision: 'demo-read-only',
-    capabilities: {
-      editable: false,
-      requiresNewSession: true,
-    },
-    plugins: [],
-  }
-}
-
-function demoMcpInspectionReport(
-  serverName: string,
-  inspectionId: string,
-): McpInspectionReport {
-  return {
-    inspectionId,
-    status: 'connected',
-    category: 'connected',
-    summary: 'Connected · 2 tools · 1 resource · 1 prompt',
-    inspectedAtMs: Date.now(),
-    durationMs: 46,
-    protocolVersion: '2025-11-25',
-    serverName,
-    serverVersion: '1.0.0',
-    transport: 'stdio',
-    capabilities: {
-      tools: true,
-      resources: true,
-      prompts: true,
-      logging: false,
-    },
-    tools: [
-      {
-        name: 'search',
-        title: 'Search',
-        description: 'Search the connected knowledge base.',
-        inputs: [
-          {
-            name: 'query',
-            valueType: 'string',
-            description: 'Search query',
-            required: true,
-          },
-        ],
-        inputSchema: {
-          type: 'object',
-          properties: {
-            query: {
-              type: 'string',
-              description: 'Search query',
-            },
-          },
-          required: ['query'],
-        },
-        outputSchema: null,
-        annotations: {
-          readOnly: true,
-          destructive: false,
-          idempotent: true,
-          openWorld: false,
-        },
-        hasAnnotations: true,
-      },
-      {
-        name: 'publish',
-        title: 'Publish',
-        description: 'Publish a prepared item.',
-        inputs: [],
-        inputSchema: {
-          type: 'object',
-          additionalProperties: false,
-        },
-        outputSchema: null,
-        annotations: {
-          readOnly: false,
-          destructive: true,
-          idempotent: false,
-          openWorld: true,
-        },
-        hasAnnotations: true,
-      },
-    ],
-    resources: [
-      {
-        uri: 'demo://knowledge',
-        name: 'Knowledge base',
-        title: null,
-        description: 'Connected demo knowledge base.',
-        mimeType: 'application/json',
-        size: null,
-      },
-    ],
-    prompts: [
-      {
-        name: 'summarize',
-        title: 'Summarize',
-        description: 'Prepare a concise summary.',
-        arguments: [
-          {
-            name: 'topic',
-            description: 'Topic to summarize',
-            required: true,
-          },
-        ],
-      },
-    ],
-    steps: [
-      { phase: 'connect', status: 'success', durationMs: 8, message: 'MCP process started' },
-      { phase: 'initialize', status: 'success', durationMs: 15, message: 'Protocol negotiation completed' },
-      { phase: 'tools', status: 'success', durationMs: 9, message: 'Discovered 2 tools' },
-      { phase: 'resources', status: 'success', durationMs: 7, message: 'Discovered 1 resource' },
-      { phase: 'prompts', status: 'success', durationMs: 5, message: 'Discovered 1 prompt' },
-      { phase: 'shutdown', status: 'success', durationMs: 2, message: 'Inspection session closed' },
-    ],
-    warnings: [],
-    suggestions: [],
-  }
 }
 
 export const skillApiV2 = {
@@ -1290,130 +930,6 @@ export const skillApiV2 = {
           expectedRevision,
         })
       : Promise.resolve({ path, content, revision: `${expectedRevision}-saved` }),
-  listPluginInventory: (agentId: string) =>
-    isTauriRuntime()
-      ? invoke<PluginInventory>('list_plugin_inventory_v2', { agentId })
-      : Promise.resolve(demoPluginInventory(agentId)),
-  getPluginDetail: (agentId: string, pluginId: string) =>
-    isTauriRuntime()
-      ? invoke<PluginDetail>('get_plugin_detail_v2', { agentId, pluginId })
-      : Promise.reject(new Error('Plugin details are only available in the Vibe Board app.')),
-  readPluginFile: (agentId: string, pluginId: string, relativePath: string) =>
-    isTauriRuntime()
-      ? invoke<PluginFileContent>('read_plugin_file_v2', { agentId, pluginId, relativePath })
-      : Promise.reject(new Error('Plugin files are only available in the Vibe Board app.')),
-  setPluginEnabled: (agentId: string, pluginId: string, revision: string, enabled: boolean) =>
-    isTauriRuntime()
-      ? invoke<PluginInventory>('set_plugin_enabled_v2', { agentId, pluginId, revision, enabled })
-      : Promise.resolve(demoPluginInventory(agentId)),
-  listMcpInventory: (agent: string) =>
-    isTauriRuntime()
-      ? invoke<McpInventory>('list_mcp_inventory_cmd', { agent })
-      : Promise.resolve(demoMcpInventory(agent)),
-  validateMcpServerDraft: (agent: string, server: McpServerDraft, originalName?: string | null) =>
-    isTauriRuntime()
-      ? invoke<McpValidationResultV2>('validate_mcp_server_draft_cmd', {
-          agent,
-          server,
-          originalName: originalName ?? null,
-        })
-      : Promise.resolve({ valid: true, message: 'MCP configuration is valid', warnings: [] }),
-  saveMcpServer: (agent: string, server: McpServerDraft, revision: string, originalName?: string | null) =>
-    isTauriRuntime()
-      ? invoke<McpInventory>('save_mcp_server_cmd', {
-          agent,
-          server,
-          revision,
-          originalName: originalName ?? null,
-        })
-      : Promise.resolve(demoMcpInventory(agent)),
-  setMcpServerEnabled: (agent: string, serverName: string, revision: string, enabled: boolean) =>
-    isTauriRuntime()
-      ? invoke<McpInventory>('set_mcp_server_enabled_cmd', { agent, serverName, revision, enabled })
-      : Promise.resolve(demoMcpInventory(agent)),
-  deleteMcpServer: (agent: string, serverName: string, revision: string) =>
-    isTauriRuntime()
-      ? invoke<McpInventory>('delete_mcp_server_v2_cmd', { agent, serverName, revision })
-      : Promise.resolve(demoMcpInventory(agent)),
-  testMcpServerConnection: (agent: string, serverName: string) =>
-    isTauriRuntime()
-      ? invoke<McpConnectionTestResult>('test_mcp_server_connection_cmd', { agent, serverName })
-      : Promise.resolve({
-          success: false,
-          category: 'unavailable',
-          message: 'Connection testing requires the Vibe Board desktop app',
-          latencyMs: 0,
-          protocolVersion: null,
-          serverName: null,
-          serverVersion: null,
-          toolCount: null,
-        }),
-  inspectMcpServer: (agent: string, serverName: string, inspectionId: string) =>
-    isTauriRuntime()
-      ? invoke<McpInspectionReport>('inspect_mcp_server_cmd', { agent, serverName, inspectionId })
-      : Promise.resolve(demoMcpInspectionReport(serverName, inspectionId)),
-  cancelMcpInspection: (inspectionId: string) =>
-    isTauriRuntime()
-      ? invoke<void>('cancel_mcp_inspection_cmd', { inspectionId })
-      : Promise.resolve(),
-  callMcpTool: (
-    agent: string,
-    serverName: string,
-    operationId: string,
-    toolName: string,
-    argumentsValue: Record<string, unknown>,
-  ) =>
-    isTauriRuntime()
-      ? invoke<McpOperationResult>('call_mcp_tool_cmd', {
-        agent,
-        serverName,
-        operationId,
-        toolName,
-        arguments: argumentsValue,
-      })
-      : Promise.resolve({
-        operationId,
-        kind: 'tool' as const,
-        name: toolName,
-        category: 'success' as const,
-        durationMs: 24,
-        result: {
-          content: [{ type: 'text', text: 'Demo tool result' }],
-          isError: false,
-        },
-        warnings: [],
-      }),
-  getMcpPrompt: (
-    agent: string,
-    serverName: string,
-    operationId: string,
-    promptName: string,
-    argumentsValue: Record<string, string>,
-  ) =>
-    isTauriRuntime()
-      ? invoke<McpOperationResult>('get_mcp_prompt_cmd', {
-        agent,
-        serverName,
-        operationId,
-        promptName,
-        arguments: argumentsValue,
-      })
-      : Promise.resolve({
-        operationId,
-        kind: 'prompt' as const,
-        name: promptName,
-        category: 'success' as const,
-        durationMs: 18,
-        result: {
-          description: 'Demo prompt preview',
-          messages: [{ role: 'user', content: { type: 'text', text: 'Demo prompt message' } }],
-        },
-        warnings: [],
-      }),
-  cancelMcpOperation: (operationId: string) =>
-    isTauriRuntime()
-      ? invoke<void>('cancel_mcp_operation_cmd', { operationId })
-      : Promise.resolve(),
   listUnmanaged: () => (isTauriRuntime() ? invoke<UnmanagedItemDto[]>('list_unmanaged_v2') : Promise.resolve([])),
   listAgentSkillInventory: () =>
     isTauriRuntime() ? invoke<AgentSkillInventoryAgent[]>('list_agent_skill_inventory_v2') : Promise.resolve(demoAgentInventory()),
@@ -1549,8 +1065,6 @@ function demoProjectSummaries(): ProjectSummary[] {
     lastScannedAt: detail.lastScannedAt,
     detectedAgentCount: detail.detectedAgentCount,
     skillCount: detail.skillCount,
-    mcpCount: detail.mcpCount,
-    pluginCount: detail.pluginCount,
     instructionCount: detail.instructionCount,
     issueCount: detail.issueCount,
   }]
@@ -1567,8 +1081,6 @@ function demoProjectDetail(rootPath: string): ProjectDetail {
     lastScannedAt: now,
     detectedAgentCount: 2,
     skillCount: 3,
-    mcpCount: 2,
-    pluginCount: 1,
     instructionCount: 2,
     issueCount: 1,
     agents: [
@@ -1578,8 +1090,6 @@ function demoProjectDetail(rootPath: string): ProjectDetail {
         iconKey: 'codex',
         skillsDirs: [`${rootPath}/.agents/skills`],
         configPaths: [`${rootPath}/.codex/config.toml`],
-        mcpConfigPaths: [`${rootPath}/.codex/config.toml`],
-        pluginConfigPaths: [`${rootPath}/.codex/config.toml`],
         skills: [
           {
             id: 'release-review',
@@ -1602,12 +1112,6 @@ function demoProjectDetail(rootPath: string): ProjectDetail {
             importable: true,
           },
         ],
-        mcpServers: [
-          { name: 'context7', command: 'npx', args: ['-y', '@upstash/context7-mcp'], valid: true, message: 'configured' },
-        ],
-        plugins: [
-          { id: 'documents@openai-primary-runtime', name: 'documents@openai-primary-runtime', version: null, enabled: true, source: 'project-config' },
-        ],
         health: [],
       },
       {
@@ -1616,8 +1120,6 @@ function demoProjectDetail(rootPath: string): ProjectDetail {
         iconKey: 'claude-code',
         skillsDirs: [`${rootPath}/.claude/skills`],
         configPaths: [`${rootPath}/.claude/settings.json`],
-        mcpConfigPaths: [`${rootPath}/.mcp.json`],
-        pluginConfigPaths: [`${rootPath}/.claude/settings.json`],
         skills: [
           {
             id: 'docs-editor',
@@ -1630,10 +1132,6 @@ function demoProjectDetail(rootPath: string): ProjectDetail {
             importable: true,
           },
         ],
-        mcpServers: [
-          { name: 'filesystem', command: 'npx', args: ['-y', '@modelcontextprotocol/server-filesystem'], valid: true, message: 'configured' },
-        ],
-        plugins: [],
         health: [{ agentId: 'claude-code', kind: 'center_diff', message: 'docs-editor differs from center library', severity: 'warning' }],
       },
     ],

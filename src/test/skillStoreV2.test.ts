@@ -47,15 +47,11 @@ function makeAgentDetail(id: string): AgentDetail {
     latestVersion: null,
     skillsDir: null,
     configPath: null,
-    mcpConfigPath: null,
-    pluginDir: null,
     skills: [],
     inheritedManagedSkills: [],
     inheritedUnmanagedSkills: [],
     appliedPacks: [],
     availablePacks: [],
-    mcpServers: [],
-    plugins: [],
     health: [],
   }
 }

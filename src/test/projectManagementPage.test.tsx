@@ -54,8 +54,6 @@ function makeProject(): ProjectDetail {
     lastScannedAt: '2026-06-19T00:00:00Z',
     detectedAgentCount: 1,
     skillCount: 1,
-    mcpCount: 1,
-    pluginCount: 1,
     instructionCount: 1,
     issueCount: 0,
     agents: [
@@ -65,8 +63,6 @@ function makeProject(): ProjectDetail {
         iconKey: 'codex',
         skillsDirs: ['/Users/me/agentbro/.agents/skills'],
         configPaths: ['/Users/me/agentbro/.codex/config.toml'],
-        mcpConfigPaths: ['/Users/me/agentbro/.codex/config.toml'],
-        pluginConfigPaths: ['/Users/me/agentbro/.codex/config.toml'],
         skills: [
           {
             id: 'project-review',
@@ -78,12 +74,6 @@ function makeProject(): ProjectDetail {
             status: 'projectOnly',
             importable: true,
           },
-        ],
-        mcpServers: [
-          { name: 'context7', command: 'npx', args: ['-y', '@upstash/context7-mcp'], valid: true, message: 'configured' },
-        ],
-        plugins: [
-          { id: 'documents@openai-primary-runtime', name: 'documents@openai-primary-runtime', version: null, enabled: true, source: 'project-config' },
         ],
         health: [],
       },
@@ -128,12 +118,6 @@ describe('ProjectManagementPage', () => {
 
     fireEvent.click(screen.getByText('Skills (1)'))
     expect(screen.getByText('project-review')).toBeInTheDocument()
-
-    fireEvent.click(screen.getByText('MCP (1)'))
-    expect(screen.getByText('context7')).toBeInTheDocument()
-
-    fireEvent.click(screen.getByText('Plugins (1)'))
-    expect(screen.getAllByText('documents@openai-primary-runtime').length).toBeGreaterThan(0)
 
     fireEvent.click(screen.getByRole('button', { name: '安装 Skill' }))
 

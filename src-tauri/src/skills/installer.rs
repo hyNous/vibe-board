@@ -1,8 +1,5 @@
 use super::{agent_paths, zcode_config};
-use super::{
-    GitHubSkillPreview, InstallMode, McpServerConfig, McpValidationResult, PluginInstallRequest,
-    TargetConfig,
-};
+use super::{GitHubSkillPreview, InstallMode, TargetConfig};
 use base64::{engine::general_purpose, Engine as _};
 use std::collections::HashSet;
 use std::fs;
@@ -447,56 +444,6 @@ fn parse_frontmatter_text(content: &str) -> std::collections::HashMap<String, St
     crate::skills::frontmatter::parse_content(content)
         .into_iter()
         .collect()
-}
-
-pub fn install_plugin(request: &PluginInstallRequest) -> Result<String, String> {
-    let (src, temp_root) = resolve_install_source(&request.source)?;
-    if !src.exists() {
-        return Err(format!("Plugin source not found: {}", request.source));
-    }
-    let manifest = read_plugin_manifest(&src).ok_or_else(|| {
-        "Plugin source must contain .claude-plugin/plugin.json or .codex-plugin/plugin.json"
-            .to_string()
-    })?;
-    let plugin_id = manifest
-        .get("name")
-        .and_then(|value| value.as_str())
-        .filter(|value| !value.trim().is_empty())
-        .map(ToString::to_string)
-        .ok_or_else(|| "Plugin manifest missing name".to_string())?;
-    let version = manifest
-        .get("version")
-        .and_then(|value| value.as_str())
-        .filter(|value| !value.trim().is_empty())
-        .unwrap_or("local");
-    let dest = plugin_install_root(&request.agent)?
-        .join("vibeboard")
-        .join(&plugin_id)
-        .join(version);
-    copy_recursive(&src, &dest)?;
-    super::registry::add_source(&format!("plugin:{plugin_id}"), &request.source)?;
-    if let Some(root) = temp_root {
-        let _ = fs::remove_dir_all(root);
-    }
-    Ok(format!("plugin:{plugin_id}"))
-}
-
-fn plugin_install_root(agent: &str) -> Result<PathBuf, String> {
-    let home = dirs::home_dir().unwrap_or_else(std::env::temp_dir);
-    match agent {
-        "claude-code" => Ok(home.join(".claude").join("plugins").join("cache")),
-        "codex" => Ok(home.join(".codex").join("plugins").join("cache")),
-        _ => Err(format!("Plugin install is not supported for {agent}")),
-    }
-}
-
-fn read_plugin_manifest(path: &Path) -> Option<serde_json::Value> {
-    [".claude-plugin/plugin.json", ".codex-plugin/plugin.json"]
-        .iter()
-        .map(|relative| path.join(relative))
-        .find(|candidate| candidate.exists())
-        .and_then(|candidate| fs::read_to_string(candidate).ok())
-        .and_then(|content| serde_json::from_str(&content).ok())
 }
 
 fn temp_install_dir() -> Result<PathBuf, String> {
@@ -1592,12 +1539,6 @@ fn find_skill_index_for_rewrite(skill_path: &Path) -> Option<PathBuf> {
 }
 
 pub fn toggle_skill(skill_id: &str, agent: &str, enabled: bool) -> Result<(), String> {
-    if let Some(server_name) = skill_id.strip_prefix("mcp:") {
-        return toggle_mcp_server(server_name, agent, enabled);
-    }
-    if let Some(plugin_id) = skill_id.strip_prefix("plugin:") {
-        return toggle_plugin(plugin_id, agent, enabled);
-    }
     if agent == "zcode" {
         return toggle_zcode_skill(skill_id, enabled);
     }
@@ -1667,174 +1608,6 @@ fn find_zcode_skill_path(skill_dirs: &[PathBuf], skill_id: &str) -> Option<PathB
         }
     }
     None
-}
-
-fn toggle_plugin(plugin_id: &str, agent: &str, enabled: bool) -> Result<(), String> {
-    let settings_path = agent_paths::paths_for_agent(agent)
-        .settings_file
-        .ok_or_else(|| format!("Agent {} has no settings file", agent))?;
-    let mut json = read_json_object(&settings_path)?;
-    if agent == "zcode" {
-        zcode_config::enabled_plugins_mut(&mut json)?
-            .insert(plugin_id.to_string(), serde_json::Value::Bool(enabled));
-    } else {
-        let enabled_plugins = json
-            .as_object_mut()
-            .ok_or("Settings is not an object")?
-            .entry("enabledPlugins")
-            .or_insert_with(|| serde_json::json!({}));
-        enabled_plugins
-            .as_object_mut()
-            .ok_or("enabledPlugins is not an object")?
-            .insert(plugin_id.to_string(), serde_json::Value::Bool(enabled));
-    }
-    write_json_object(&settings_path, &json)
-}
-
-pub fn upsert_mcp_server(agent: &str, server: &McpServerConfig) -> Result<(), String> {
-    if server.name.trim().is_empty() {
-        return Err("MCP server name cannot be empty".to_string());
-    }
-    if server.command.trim().is_empty() {
-        return Err("MCP command cannot be empty".to_string());
-    }
-
-    let config_path = agent_paths::paths_for_agent(agent)
-        .mcp_config
-        .ok_or_else(|| format!("Agent {} has no MCP config file", agent))?;
-    let mut json = read_json_object(&config_path)?;
-    let mut value = serde_json::json!({
-        "command": server.command,
-        "args": server.args,
-    });
-    if !server.env.is_empty() {
-        value["env"] = serde_json::to_value(&server.env).map_err(|e| e.to_string())?;
-    }
-    let servers = if agent == "zcode" {
-        value["type"] = serde_json::json!("stdio");
-        value["enabled"] = serde_json::json!(true);
-        zcode_config::mcp_servers_mut(&mut json)?
-    } else {
-        json.as_object_mut()
-            .ok_or("MCP config is not an object")?
-            .entry("mcpServers")
-            .or_insert_with(|| serde_json::json!({}))
-            .as_object_mut()
-            .ok_or("mcpServers is not an object")?
-    };
-    servers.insert(server.name.clone(), value);
-    write_json_object(&config_path, &json)
-}
-
-pub fn validate_mcp_server(agent: &str, server_name: &str) -> Result<McpValidationResult, String> {
-    let server = super::scanner::read_mcp_server_config(agent, server_name)
-        .ok_or_else(|| format!("MCP server not found: {server_name}"))?;
-    validate_mcp_config(&server)
-}
-
-pub fn validate_mcp_config(server: &McpServerConfig) -> Result<McpValidationResult, String> {
-    let mut warnings = Vec::new();
-    let command = server.command.trim();
-    if command.is_empty() {
-        return Ok(McpValidationResult {
-            valid: false,
-            message: "MCP command is empty".to_string(),
-            warnings,
-        });
-    }
-    if !command_available(command) {
-        return Ok(McpValidationResult {
-            valid: false,
-            message: format!("Command not found: {command}"),
-            warnings,
-        });
-    }
-    if command == "docker" && !server.args.iter().any(|arg| arg == "run") {
-        warnings.push("Docker MCP 配置通常需要包含 run 参数。".to_string());
-    }
-    if (command == "npx" || command == "npm") && server.args.is_empty() {
-        warnings.push("Node MCP 配置缺少包名参数。".to_string());
-    }
-    for (key, value) in &server.env {
-        if value.trim().is_empty() {
-            warnings.push(format!("环境变量 {key} 为空。"));
-        }
-    }
-    Ok(McpValidationResult {
-        valid: true,
-        message: "MCP 配置可被本机启动器解析。".to_string(),
-        warnings,
-    })
-}
-
-fn command_available(command: &str) -> bool {
-    let path = Path::new(command);
-    if path.components().count() > 1 || path.is_absolute() {
-        return path.exists();
-    }
-    std::env::var_os("PATH")
-        .map(|paths| {
-            std::env::split_paths(&paths)
-                .map(|dir| dir.join(command))
-                .any(|candidate| candidate.exists())
-        })
-        .unwrap_or(false)
-}
-
-pub fn remove_mcp_server(agent: &str, server_name: &str) -> Result<(), String> {
-    let config_path = agent_paths::paths_for_agent(agent)
-        .mcp_config
-        .ok_or_else(|| format!("Agent {} has no MCP config file", agent))?;
-    if !config_path.exists() {
-        return Ok(());
-    }
-    let mut json = read_json_object(&config_path)?;
-    if agent == "zcode" {
-        if let Some(servers) = json
-            .pointer_mut("/mcp/servers")
-            .and_then(serde_json::Value::as_object_mut)
-        {
-            servers.remove(server_name);
-        }
-    } else {
-        for key in ["mcpServers", "mcp_servers"] {
-            if let Some(servers) = json.get_mut(key).and_then(|value| value.as_object_mut()) {
-                servers.remove(server_name);
-            }
-        }
-    }
-    write_json_object(&config_path, &json)
-}
-
-fn toggle_mcp_server(server_name: &str, agent: &str, enabled: bool) -> Result<(), String> {
-    let config_path = agent_paths::paths_for_agent(agent)
-        .mcp_config
-        .ok_or_else(|| format!("Agent {} has no MCP config file", agent))?;
-    let mut json = read_json_object(&config_path)?;
-    if agent == "zcode" {
-        let server = zcode_config::mcp_servers_mut(&mut json)?
-            .get_mut(server_name)
-            .ok_or_else(|| format!("MCP server not found: {server_name}"))?;
-        server
-            .as_object_mut()
-            .ok_or_else(|| format!("Invalid ZCode MCP server: {server_name}"))?
-            .insert("enabled".to_string(), serde_json::Value::Bool(enabled));
-        return write_json_object(&config_path, &json);
-    }
-    let disabled = json
-        .as_object_mut()
-        .ok_or("MCP config is not an object")?
-        .entry("disabledMcpServers")
-        .or_insert_with(|| serde_json::json!([]));
-    let server = serde_json::Value::String(server_name.to_string());
-    if let Some(list) = disabled.as_array_mut() {
-        if enabled {
-            list.retain(|item| item != &server);
-        } else if !list.contains(&server) {
-            list.push(server);
-        }
-    }
-    write_json_object(&config_path, &json)
 }
 
 fn read_json_object(path: &Path) -> Result<serde_json::Value, String> {

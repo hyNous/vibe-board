@@ -314,19 +314,6 @@ pub fn legacy_agentbro_skills_dir() -> PathBuf {
     home().join(".agentbro").join("skills")
 }
 
-pub fn plugin_cache_dir(agent: &str) -> Option<PathBuf> {
-    let h = home();
-    match agent {
-        "claude-code" => Some(h.join(".claude").join("plugins").join("cache")),
-        "codex" => Some(h.join(".codex").join("plugins").join("cache")),
-        "kimi" | "kimi-code-cli" => Some(kimi_code_home_for(&h).join("plugins").join("managed")),
-        "workbuddy" => Some(h.join(".workbuddy").join("plugins")),
-        "zcode" => Some(h.join(".zcode").join("cli").join("plugins").join("cache")),
-        "antigravity" => Some(h.join(".gemini").join("config").join("plugins")),
-        _ => custom_agent_plugin_dir(agent),
-    }
-}
-
 pub fn central_skill_dirs() -> Vec<PathBuf> {
     vec![central_skills_dir(), legacy_agentbro_skills_dir()]
 }
@@ -367,14 +354,6 @@ fn custom_agent_paths(agent: &str) -> Option<SkillPaths> {
         skill_dirs: vec![skill_dir],
         mcp_config,
         settings_file,
-    })
-}
-
-fn custom_agent_plugin_dir(agent: &str) -> Option<PathBuf> {
-    let entry = custom_agent_entry(agent)?;
-    custom_agent_path(&entry, &["pluginDir", "plugin_dir"]).or_else(|| {
-        custom_agent_path(&entry, &["configDir", "config_dir"])
-            .map(|dir| dir.join("plugins").join("cache"))
     })
 }
 

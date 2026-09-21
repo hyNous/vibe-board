@@ -239,6 +239,13 @@ webhook `WaitingApproval` 通知模板、三类卡片与 `notch.tool.*` 的五�
 
 **Verification**：检查命令全绿；父级按第 1 条逐个 grep 命令名。
 
+**状态（2026-09-21）：M3a（MCP + Plugin）PASS，已合入；M3b 进行中。**
+M3a 父级独立验证：前端 42 文件 461 项全过，lint / build 通过；`cargo test --lib` 523 通过 / 24 失败，失败集合 ⊆ 已知名单
+（8 项随被删功能消失或裁掉 MCP/Plugin 断言后转绿）；命令注册表 mcp/plugin 命中 0；`release:check` ok。
+worker 额外删除 `skills/codex_config.rs`：父级核实其全部公开函数只服务 MCP/Plugin；`profiles.rs` 中同名的 `set_plugin_enabled`
+是本地函数（Hook 插件激活），OpenCode / Hermes Hook 安装测试均通过。保留了 MCP **工具调用的观察显示**（属观察功能，正确）。
+遗留：`SkillManagerV2.css` 中约 463 处 `.sm2__mcp-*` / `.sm2__plugin-*` 死样式，并入 M3b 机械清理。
+
 ### M4 — 宿主移除 + 启动行为
 
 **Scope**：删除宿主概念与 `plugins/vibe-board-host`；「会话开始时拉起看板」改为每个 Agent 一个开关，默认全关；开机自启保持默认关。

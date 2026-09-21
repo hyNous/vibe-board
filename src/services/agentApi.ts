@@ -40,7 +40,6 @@ export interface CustomAgentConfig {
   configDir?: string | null
   settingsFile?: string | null
   mcpConfig?: string | null
-  pluginDir?: string | null
 }
 
 export interface UpdateCustomAgentConfig {
@@ -51,7 +50,6 @@ export interface UpdateCustomAgentConfig {
   configDir?: string | null
   settingsFile?: string | null
   mcpConfig?: string | null
-  pluginDir?: string | null
 }
 
 export interface AgentOutputEvent {

@@ -52,7 +52,7 @@ fn resolve_editable_path(
     let requested = crate::skills::v2::fsutil::normalized_path(
         &crate::skills::v2::fsutil::expand_tilde(requested_path.trim()),
     );
-    let allowed = [detail.config_path, detail.mcp_config_path];
+    let allowed = [detail.config_path];
     let matched = allowed.into_iter().flatten().find_map(|candidate| {
         if is_url(&candidate) {
             return None;
@@ -72,6 +72,117 @@ fn resolve_editable_path(
 fn is_url(value: &str) -> bool {
     let value = value.to_ascii_lowercase();
     value.starts_with("http://") || value.starts_with("https://")
+}
+
+fn validate_toml_shape(content: &str) -> Result<(), String> {
+    let mut brackets = 0isize;
+    for line in content.lines() {
+        let clean = strip_toml_comment(line);
+        if clean.trim_start().starts_with('[')
+            && toml_bracket_delta(&clean) == 0
+            && parse_toml_table_path(&clean).is_none()
+            && !clean.trim_start().starts_with("[[")
+        {
+            return Err(format!("Invalid TOML table header: {}", clean.trim()));
+        }
+        brackets += toml_bracket_delta(&clean);
+        if brackets < 0 {
+            return Err("Unbalanced TOML brackets".to_string());
+        }
+    }
+    if brackets != 0 {
+        return Err("Unbalanced TOML brackets".to_string());
+    }
+    Ok(())
+}
+
+fn parse_toml_table_path(line: &str) -> Option<Vec<String>> {
+    let trimmed = line.trim();
+    if !trimmed.starts_with('[') || !trimmed.ends_with(']') || trimmed.starts_with("[[") {
+        return None;
+    }
+    split_toml_path(&trimmed[1..trimmed.len().saturating_sub(1)])
+}
+
+fn split_toml_path(value: &str) -> Option<Vec<String>> {
+    let mut parts = Vec::new();
+    let mut current = String::new();
+    let mut quoted = false;
+    let mut escaped = false;
+    for ch in value.chars() {
+        if quoted {
+            if escaped {
+                current.push(ch);
+                escaped = false;
+            } else if ch == '\\' {
+                escaped = true;
+            } else if ch == '"' {
+                quoted = false;
+            } else {
+                current.push(ch);
+            }
+        } else if ch == '"' {
+            quoted = true;
+        } else if ch == '.' {
+            if current.trim().is_empty() {
+                return None;
+            }
+            parts.push(current.trim().to_string());
+            current.clear();
+        } else {
+            current.push(ch);
+        }
+    }
+    if quoted || current.trim().is_empty() {
+        return None;
+    }
+    parts.push(current.trim().to_string());
+    Some(parts)
+}
+
+fn strip_toml_comment(line: &str) -> String {
+    let mut quoted = false;
+    let mut escaped = false;
+    for (index, ch) in line.char_indices() {
+        if quoted {
+            if escaped {
+                escaped = false;
+            } else if ch == '\\' {
+                escaped = true;
+            } else if ch == '"' {
+                quoted = false;
+            }
+        } else if ch == '"' {
+            quoted = true;
+        } else if ch == '#' {
+            return line[..index].to_string();
+        }
+    }
+    line.to_string()
+}
+
+fn toml_bracket_delta(line: &str) -> isize {
+    let mut depth = 0;
+    let mut quoted = false;
+    let mut escaped = false;
+    for ch in line.chars() {
+        if quoted {
+            if escaped {
+                escaped = false;
+            } else if ch == '\\' {
+                escaped = true;
+            } else if ch == '"' {
+                quoted = false;
+            }
+        } else if ch == '"' {
+            quoted = true;
+        } else if ch == '[' {
+            depth += 1;
+        } else if ch == ']' {
+            depth -= 1;
+        }
+    }
+    depth
 }
 
 fn ensure_supported_config_file(path: &Path) -> Result<(), String> {
@@ -175,8 +286,7 @@ fn validate_content(path: &Path, content: &str) -> Result<(), String> {
         "json" => serde_json::from_str::<serde_json::Value>(content)
             .map(|_| ())
             .map_err(|error| format!("Invalid JSON: {error}")),
-        "toml" => crate::skills::mcp_management::validate_toml_shape(content)
-            .map_err(|error| format!("Invalid TOML: {error}")),
+        "toml" => validate_toml_shape(content).map_err(|error| format!("Invalid TOML: {error}")),
         _ => Err("Only JSON and TOML configuration files can be edited in Vibe Board.".to_string()),
     }
 }

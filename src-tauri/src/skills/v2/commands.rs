@@ -393,46 +393,6 @@ pub fn write_agent_config_file_v2(
 }
 
 #[tauri::command(async)]
-pub fn list_plugin_inventory_v2(
-    agent_id: String,
-) -> Result<crate::skills::plugin_management::PluginInventory, String> {
-    let svc = svc()?;
-    crate::skills::plugin_management::list_plugins(&svc, &agent_id)
-}
-
-#[tauri::command(async)]
-pub fn get_plugin_detail_v2(
-    agent_id: String,
-    plugin_id: String,
-) -> Result<crate::skills::plugin_management::PluginDetail, String> {
-    let svc = svc()?;
-    crate::skills::plugin_management::get_plugin_detail(&svc, &agent_id, &plugin_id)
-}
-
-#[tauri::command(async)]
-pub fn read_plugin_file_v2(
-    agent_id: String,
-    plugin_id: String,
-    relative_path: String,
-) -> Result<crate::skills::plugin_management::PluginFileContent, String> {
-    let svc = svc()?;
-    crate::skills::plugin_management::read_plugin_file(&svc, &agent_id, &plugin_id, &relative_path)
-}
-
-#[tauri::command(async)]
-pub fn set_plugin_enabled_v2(
-    agent_id: String,
-    plugin_id: String,
-    revision: String,
-    enabled: bool,
-) -> Result<crate::skills::plugin_management::PluginInventory, String> {
-    let svc = svc()?;
-    crate::skills::plugin_management::set_plugin_enabled(
-        &svc, &agent_id, &plugin_id, &revision, enabled,
-    )
-}
-
-#[tauri::command(async)]
 pub fn list_unmanaged_v2() -> Result<Vec<UnmanagedItemDto>, String> {
     Ok(svc()?.list_unmanaged()?)
 }

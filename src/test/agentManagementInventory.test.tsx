@@ -64,8 +64,6 @@ function detail(id: string, displayName: string): AgentDetail {
     latestVersion: null,
     skillsDir: null,
     configPath: null,
-    mcpConfigPath: null,
-    pluginDir: null,
     agentDir: null,
     skills: [],
     inheritsSharedSkills: false,
@@ -73,8 +71,6 @@ function detail(id: string, displayName: string): AgentDetail {
     inheritedUnmanagedSkills: [],
     appliedPacks: [],
     availablePacks: [],
-    mcpServers: [],
-    plugins: [],
     health: [],
   }
 }

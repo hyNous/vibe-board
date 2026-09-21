@@ -1745,13 +1745,9 @@ impl Service {
         let instructions = project_instruction_files(&root);
         let mut issue_count = 0;
         let mut skill_count = 0;
-        let mut mcp_count = 0;
-        let mut plugin_count = 0;
         for agent in &agents {
             issue_count += agent.health.len();
             skill_count += agent.skills.len();
-            mcp_count += agent.mcp_servers.len();
-            plugin_count += agent.plugins.len();
         }
         if !root.is_dir() {
             issue_count += 1;
@@ -1765,8 +1761,6 @@ impl Service {
             last_scanned_at: row.last_scanned_at.clone(),
             detected_agent_count: agents.len(),
             skill_count,
-            mcp_count,
-            plugin_count,
             instruction_count: instructions.len(),
             issue_count,
         })
@@ -1788,7 +1782,8 @@ impl Service {
             health.push(ProjectHealthIssue {
                 agent_id: None,
                 kind: "project_no_agent_config".to_string(),
-                message: "No project-level Agent skills, MCP, plugin config, or instruction files were detected.".to_string(),
+                message: "No project-level Agent skills or instruction files were detected."
+                    .to_string(),
                 severity: "info".to_string(),
             });
         }
@@ -1877,15 +1872,8 @@ impl Service {
         let skills_dir = root.join(".claude").join("skills");
         let settings = root.join(".claude").join("settings.json");
         let local_settings = root.join(".claude").join("settings.local.json");
-        let mcp_json = root.join(".mcp.json");
         let skills = scan_project_skills(agent_id, &skills_dir, center_hashes)?;
-        let mut config_paths = existing_paths(&[settings.clone(), local_settings.clone()]);
-        let mcp_config_paths = existing_paths(&[mcp_json.clone(), settings.clone()]);
-        let plugin_config_paths = existing_paths(&[settings.clone(), local_settings.clone()]);
-        let mut mcp_servers = read_json_mcp_servers_path(&mcp_json);
-        mcp_servers.extend(read_json_mcp_servers_path(&settings));
-        let mut plugins = read_claude_project_plugins_path(&settings);
-        plugins.extend(read_claude_project_plugins_path(&local_settings));
+        let mut config_paths = existing_paths(&[settings.clone(), local_settings]);
         let mut health = Vec::new();
         if skills_dir.exists() && skills.is_empty() {
             health.push(project_agent_issue(
@@ -1903,8 +1891,6 @@ impl Service {
             config_paths.retain(|path| path != &settings.display().to_string());
         }
         let detected = !skills.is_empty()
-            || !mcp_servers.is_empty()
-            || !plugins.is_empty()
             || !config_paths.is_empty()
             || root.join(".claude").join("CLAUDE.md").is_file()
             || root.join("CLAUDE.md").is_file();
@@ -1917,11 +1903,7 @@ impl Service {
             icon_key: agent_meta::icon_key(agent_id),
             skills_dirs: existing_paths(&[skills_dir]),
             config_paths,
-            mcp_config_paths,
-            plugin_config_paths,
             skills,
-            mcp_servers,
-            plugins,
             health,
         }))
     }
@@ -1936,11 +1918,7 @@ impl Service {
         let config = root.join(".codex").join("config.toml");
         let hooks = root.join(".codex").join("hooks.json");
         let skills = scan_project_skills(agent_id, &skills_dir, center_hashes)?;
-        let config_paths = existing_paths(&[config.clone(), hooks]);
-        let mcp_config_paths = existing_paths(std::slice::from_ref(&config));
-        let plugin_config_paths = existing_paths(std::slice::from_ref(&config));
-        let mcp_servers = read_toml_mcp_servers_path(&config);
-        let plugins = read_codex_project_plugins_path(&config);
+        let config_paths = existing_paths(&[config, hooks]);
         let mut health = Vec::new();
         if skills_dir.exists() && skills.is_empty() {
             health.push(project_agent_issue(
@@ -1950,8 +1928,6 @@ impl Service {
             ));
         }
         let detected = !skills.is_empty()
-            || !mcp_servers.is_empty()
-            || !plugins.is_empty()
             || !config_paths.is_empty()
             || root.join("AGENTS.md").is_file()
             || root.join("AGENTS.override.md").is_file();
@@ -1964,11 +1940,7 @@ impl Service {
             icon_key: agent_meta::icon_key(agent_id),
             skills_dirs: existing_paths(&[skills_dir]),
             config_paths,
-            mcp_config_paths,
-            plugin_config_paths,
             skills,
-            mcp_servers,
-            plugins,
             health,
         }))
     }
@@ -1980,14 +1952,11 @@ impl Service {
     ) -> Result<Option<ProjectAgentDetail>, String> {
         let agent_id = "kimi";
         let kimi_skills_dir = root.join(".kimi-code").join("skills");
-        let mcp_json = root.join(".kimi-code").join("mcp.json");
         let kimi_agents_dir = root.join(".kimi-code").join("agents");
         let shared_agents_dir = root.join(".agents").join("agents");
 
         let skills = scan_project_skills(agent_id, &kimi_skills_dir, center_hashes)?;
         let config_paths = existing_paths(&[kimi_agents_dir.clone(), shared_agents_dir.clone()]);
-        let mcp_config_paths = existing_paths(std::slice::from_ref(&mcp_json));
-        let mcp_servers = read_json_mcp_servers_path(&mcp_json);
         let mut health = Vec::new();
         if kimi_skills_dir.exists() && skills.is_empty() {
             health.push(project_agent_issue(
@@ -1996,18 +1965,7 @@ impl Service {
                 &kimi_skills_dir,
             ));
         }
-        if mcp_json.exists() && !mcp_json.is_file() {
-            health.push(project_agent_issue(
-                agent_id,
-                "invalid_mcp_config_path",
-                &mcp_json,
-            ));
-        }
-        let detected = !skills.is_empty()
-            || !mcp_servers.is_empty()
-            || !config_paths.is_empty()
-            || mcp_json.exists()
-            || kimi_skills_dir.exists();
+        let detected = !skills.is_empty() || !config_paths.is_empty() || kimi_skills_dir.exists();
         if !detected {
             return Ok(None);
         }
@@ -2017,11 +1975,7 @@ impl Service {
             icon_key: agent_meta::icon_key(agent_id),
             skills_dirs: existing_paths(&[kimi_skills_dir]),
             config_paths,
-            mcp_config_paths,
-            plugin_config_paths: Vec::new(),
             skills,
-            mcp_servers,
-            plugins: Vec::new(),
             health,
         }))
     }
@@ -5475,17 +5429,10 @@ impl Service {
 
         let applied_packs = self.applied_packs_for_agent(agent_id)?;
         let available_packs = self.list_skill_packs()?;
-        let mcp_servers = crate::skills::v2::diagnosis::read_mcp_servers(self, agent_id);
-        let plugins = crate::skills::v2::diagnosis::read_plugins(self, agent_id);
         let health = crate::skills::v2::diagnosis::agent_health(self, agent_id);
         let agent_paths = crate::skills::agent_paths::paths_for_agent(agent_id);
         let kimi_home = (agent_id == "kimi")
             .then(|| crate::skills::agent_paths::kimi_code_home_for(&self.home));
-        let mcp_config_path = kimi_home
-            .as_ref()
-            .map(|home| home.join("mcp.json"))
-            .or(agent_paths.mcp_config)
-            .map(|path| path.display().to_string());
         let config_path = kimi_home
             .as_ref()
             .map(|home| home.join("config.toml"))
@@ -5496,11 +5443,6 @@ impl Service {
                 })
             })
             .or(agent_paths.settings_file)
-            .map(|path| path.display().to_string());
-        let plugin_dir = kimi_home
-            .as_ref()
-            .map(|home| home.join("plugins").join("managed"))
-            .or_else(|| crate::skills::agent_paths::plugin_cache_dir(agent_id))
             .map(|path| path.display().to_string());
         let agent_dir = kimi_home
             .as_ref()
@@ -5514,8 +5456,6 @@ impl Service {
             latest_version,
             skills_dir,
             config_path,
-            mcp_config_path,
-            plugin_dir,
             agent_dir,
             skills,
             inherits_shared_skills,
@@ -5523,8 +5463,6 @@ impl Service {
             inherited_unmanaged_skills,
             applied_packs,
             available_packs,
-            mcp_servers,
-            plugins,
             health,
         })
     }
@@ -6476,115 +6414,6 @@ fn project_agent_skills_dir(root: &Path, agent_id: &str) -> Result<PathBuf, Stri
             "Project-level skills are not supported for {other} yet."
         )),
     }
-}
-
-fn read_json_mcp_servers_path(path: &Path) -> Vec<McpServerStatus> {
-    let Ok(content) = std::fs::read_to_string(path) else {
-        return Vec::new();
-    };
-    let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) else {
-        return Vec::new();
-    };
-    let Some(servers) = json
-        .get("mcpServers")
-        .or_else(|| json.get("mcp_servers"))
-        .and_then(|value| value.as_object())
-    else {
-        return Vec::new();
-    };
-    servers
-        .iter()
-        .map(|(name, cfg)| {
-            let command = cfg
-                .get("command")
-                .and_then(|value| value.as_str())
-                .or_else(|| cfg.get("url").and_then(|value| value.as_str()))
-                .unwrap_or("")
-                .to_string();
-            let args = cfg
-                .get("args")
-                .and_then(|value| value.as_array())
-                .map(|items| {
-                    items
-                        .iter()
-                        .filter_map(|item| item.as_str().map(str::to_string))
-                        .collect()
-                })
-                .unwrap_or_default();
-            let valid = !command.is_empty();
-            McpServerStatus {
-                name: name.clone(),
-                command,
-                args,
-                valid,
-                message: if valid {
-                    "configured".to_string()
-                } else {
-                    "missing command".to_string()
-                },
-            }
-        })
-        .collect()
-}
-
-fn read_toml_mcp_servers_path(path: &Path) -> Vec<McpServerStatus> {
-    crate::skills::codex_config::read_mcp_servers_path(path)
-        .into_iter()
-        .map(|server| {
-            let valid = !server.command.is_empty();
-            McpServerStatus {
-                name: server.name,
-                command: server.command,
-                args: server.args,
-                valid,
-                message: if valid {
-                    "configured".to_string()
-                } else {
-                    "missing command".to_string()
-                },
-            }
-        })
-        .collect()
-}
-
-fn read_claude_project_plugins_path(path: &Path) -> Vec<PluginStatus> {
-    let Ok(content) = std::fs::read_to_string(path) else {
-        return Vec::new();
-    };
-    let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) else {
-        return Vec::new();
-    };
-    let Some(plugins) = json
-        .get("enabledPlugins")
-        .and_then(|value| value.as_object())
-    else {
-        return Vec::new();
-    };
-    plugins
-        .iter()
-        .filter_map(|(id, enabled)| {
-            enabled.as_bool().map(|enabled| PluginStatus {
-                id: id.clone(),
-                name: id.clone(),
-                version: None,
-                enabled,
-                source: Some("project-settings".to_string()),
-            })
-        })
-        .collect()
-}
-
-fn read_codex_project_plugins_path(path: &Path) -> Vec<PluginStatus> {
-    crate::skills::codex_config::read_project_plugins_path(path)
-        .into_iter()
-        .map(|plugin| PluginStatus {
-            id: plugin.id.clone(),
-            name: plugin.id,
-            version: None,
-            enabled: plugin.enabled,
-            source: Some("project-config".to_string()),
-        })
-        .collect()
 }
 
 fn sources_match_for_candidate(

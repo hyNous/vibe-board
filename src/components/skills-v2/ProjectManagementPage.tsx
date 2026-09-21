@@ -4,7 +4,7 @@ import { skillApiV2 } from '../../services/skillApiV2'
 import type { ProjectAgentDetail, ProjectDetail, ProjectSkillItem } from '../../services/skillApiV2'
 import { AgentIconBadge } from './AgentIconBadge'
 
-type ProjectTab = 'overview' | 'skills' | 'mcp' | 'plugins' | 'instructions' | 'config'
+type ProjectTab = 'overview' | 'skills' | 'instructions' | 'config'
 
 export function ProjectManagementPage() {
   const state = useSkillStoreV2()
@@ -63,7 +63,7 @@ export function ProjectManagementPage() {
       <div className="sm2__header sm2__header--stacked">
         <div>
           <h2 className="sm2__title">项目</h2>
-          <p className="sm2__header-subtitle">按项目查看 Claude / Codex 的 Skills、技能包、MCP、插件与指令文件。</p>
+          <p className="sm2__header-subtitle">按项目查看 Claude / Codex 的 Skills、技能包与指令文件。</p>
         </div>
         <div className="sm2__tabs">
           <button className="sm2__btn" disabled={busy || state.projectDetailLoading} onClick={refreshProjects}>
@@ -101,7 +101,7 @@ export function ProjectManagementPage() {
           {state.projects.length === 0 ? (
             <div className="sm2__project-empty">
               <strong>还没有导入项目</strong>
-              <span>粘贴项目根目录后，Vibe Board 会扫描项目级 Skills、MCP、插件和指令文件。</span>
+              <span>粘贴项目根目录后，Vibe Board 会扫描项目级 Skills 和指令文件。</span>
             </div>
           ) : filteredProjects.length === 0 ? (
             <div className="sm2__empty sm2__empty--compact">没有匹配的项目</div>
@@ -116,7 +116,7 @@ export function ProjectManagementPage() {
                   <strong>{project.name}</strong>
                   <code>{project.rootPath}</code>
                   <span>
-                    {project.detectedAgentCount} Agent · {project.skillCount} Skills · {project.mcpCount + project.pluginCount} MCP/插件
+                    {project.detectedAgentCount} Agent · {project.skillCount} Skills
                   </span>
                 </button>
               ))}
@@ -169,8 +169,6 @@ function ProjectDetailView({
   const tabs: Array<{ id: ProjectTab; label: string }> = [
     { id: 'overview', label: '概览' },
     { id: 'skills', label: `Skills (${detail.skillCount})` },
-    { id: 'mcp', label: `MCP (${detail.mcpCount})` },
-    { id: 'plugins', label: `Plugins (${detail.pluginCount})` },
     { id: 'instructions', label: `指令 (${detail.instructionCount})` },
     { id: 'config', label: '路径' },
   ]
@@ -225,8 +223,6 @@ function ProjectDetailView({
       <div className="sm2__project-stat-grid">
         <ProjectStat value={detail.detectedAgentCount} label="Agent" />
         <ProjectStat value={detail.skillCount} label="Skills" />
-        <ProjectStat value={detail.mcpCount} label="MCP" />
-        <ProjectStat value={detail.pluginCount} label="Plugins" />
         <ProjectStat value={detail.instructionCount} label="指令文件" />
       </div>
 
@@ -247,8 +243,6 @@ function ProjectDetailView({
       <div className="sm2__subtab-body">
         {tab === 'overview' && <ProjectOverview agents={visibleAgents} />}
         {tab === 'skills' && <ProjectSkills agents={visibleAgents} />}
-        {tab === 'mcp' && <ProjectMcp agents={visibleAgents} />}
-        {tab === 'plugins' && <ProjectPlugins agents={visibleAgents} />}
         {tab === 'instructions' && <ProjectInstructions detail={detail} agentFilter={agentFilter} />}
         {tab === 'config' && <ProjectConfig agents={visibleAgents} />}
       </div>
@@ -372,16 +366,12 @@ function ProjectOverview({ agents }: { agents: ProjectAgentDetail[] }) {
       <div className="sm2__project-matrix-head">
         <span>Agent</span>
         <span>Skills</span>
-        <span>MCP</span>
-        <span>Plugins</span>
         <span>配置</span>
       </div>
       {agents.map((agent) => (
         <div key={agent.agentId} className="sm2__project-matrix-row">
           <strong><AgentIconBadge iconKey={agent.iconKey} title={agent.displayName} size={22} />{agent.displayName}</strong>
           <span>{agent.skills.length}</span>
-          <span>{agent.mcpServers.length}</span>
-          <span>{agent.plugins.length}</span>
           <code>{agent.configPaths[0] || agent.skillsDirs[0] || '未检测'}</code>
         </div>
       ))}
@@ -453,44 +443,6 @@ function ProjectSkills({ agents }: { agents: ProjectAgentDetail[] }) {
   )
 }
 
-function ProjectMcp({ agents }: { agents: ProjectAgentDetail[] }) {
-  const servers = agents.flatMap((agent) => agent.mcpServers.map((server) => ({ agent, server })))
-  if (servers.length === 0) return <div className="sm2__empty sm2__empty--compact">没有项目级 MCP 配置</div>
-  return (
-    <div className="sm2__project-object-list">
-      {servers.map(({ agent, server }) => (
-        <div key={`${agent.agentId}:${server.name}`} className="sm2__project-object-row">
-          <AgentIconBadge iconKey={agent.iconKey} title={agent.displayName} size={22} />
-          <div>
-            <strong>{server.name}</strong>
-            <span>{server.valid ? 'configured' : server.message}</span>
-            <code>{[server.command, ...server.args].filter(Boolean).join(' ')}</code>
-          </div>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-function ProjectPlugins({ agents }: { agents: ProjectAgentDetail[] }) {
-  const plugins = agents.flatMap((agent) => agent.plugins.map((plugin) => ({ agent, plugin })))
-  if (plugins.length === 0) return <div className="sm2__empty sm2__empty--compact">没有项目级 Plugin 配置</div>
-  return (
-    <div className="sm2__project-object-list">
-      {plugins.map(({ agent, plugin }) => (
-        <div key={`${agent.agentId}:${plugin.id}`} className="sm2__project-object-row">
-          <AgentIconBadge iconKey={agent.iconKey} title={agent.displayName} size={22} />
-          <div>
-            <strong>{plugin.name || plugin.id}</strong>
-            <span>{plugin.enabled ? '已启用' : '已禁用'}{plugin.source ? ` · ${plugin.source}` : ''}</span>
-            <code>{plugin.id}</code>
-          </div>
-        </div>
-      ))}
-    </div>
-  )
-}
-
 function ProjectInstructions({ detail, agentFilter }: { detail: ProjectDetail; agentFilter: string }) {
   const files = agentFilter === 'all'
     ? detail.instructions
@@ -517,8 +469,6 @@ function ProjectConfig({ agents }: { agents: ProjectAgentDetail[] }) {
   const paths = agents.flatMap((agent) => [
     ...agent.skillsDirs.map((path) => ({ agent, label: 'Skills 目录', path })),
     ...agent.configPaths.map((path) => ({ agent, label: '配置', path })),
-    ...agent.mcpConfigPaths.map((path) => ({ agent, label: 'MCP 配置', path })),
-    ...agent.pluginConfigPaths.map((path) => ({ agent, label: 'Plugin 配置', path })),
   ])
   if (paths.length === 0) return <div className="sm2__empty sm2__empty--compact">没有检测到项目级路径</div>
   return (

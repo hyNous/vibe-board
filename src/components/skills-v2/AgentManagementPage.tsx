@@ -4166,8 +4166,6 @@ function hookMatchesAgent(hook: HookStatus, detail: AgentDetail, program: AgentP
     agentId,
     detail.displayName,
     detail.configPath,
-    detail.mcpConfigPath,
-    detail.pluginDir,
     detail.skillsDir,
     program?.configDir,
     program?.skillsDir,

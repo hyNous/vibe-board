@@ -2172,8 +2172,6 @@ describe('Skill detail slider + agent page render without crashing', () => {
     latestVersion: null,
     skillsDir: '/c',
     configPath: '/c/config.json',
-    mcpConfigPath: '/c/mcp.json',
-    pluginDir: '/c/plugins',
     skills: [
       {
         id: 'target-1',
@@ -2195,8 +2193,6 @@ describe('Skill detail slider + agent page render without crashing', () => {
     inheritedUnmanagedSkills: [],
     appliedPacks: [],
     availablePacks: [],
-    mcpServers: [],
-    plugins: [],
     health: [],
   }
 
@@ -2706,8 +2702,6 @@ describe('Skill detail slider + agent page render without crashing', () => {
       iconKey: 'claude-code',
       skillsDir: '/Users/me/.codefuse/engine/cc/skills',
       configPath: '/Users/me/.codefuse/engine/cc/settings.json',
-      mcpConfigPath: '/Users/me/.codefuse/engine/cc/settings.json',
-      pluginDir: '/Users/me/.codefuse/engine/cc/plugins/cache',
       skills: [],
     }
     useSkillStoreV2.setState({
@@ -5339,17 +5333,10 @@ describe('Skill detail slider + agent page render without crashing', () => {
     expect(screen.queryByText('hidden-skill')).not.toBeInTheDocument()
   })
 
-  it('keeps MCP and plugin management out while retaining config and health details', async () => {
+  it('retains config and health details', async () => {
     useSkillStoreV2.setState({
       selectedAgentDetail: {
         ...agentDetail,
-        mcpServers: [
-          { name: 'filesystem', command: 'npx', args: ['-y', '@modelcontextprotocol/server-filesystem'], valid: true, message: 'configured' },
-          { name: 'broken', command: '', args: [], valid: false, message: 'missing command' },
-        ],
-        plugins: [
-          { id: 'reviewer', name: 'Reviewer Tools', version: '1.2.3', enabled: true, source: 'claude-plugin' },
-        ],
         health: [
           { kind: 'skills_dir_missing', message: 'Skills directory does not exist: /c/skills', severity: 'warning' },
         ],
@@ -5359,13 +5346,10 @@ describe('Skill detail slider + agent page render without crashing', () => {
     render(<AgentManagementPage />)
 
     expect(screen.getByText('Skills directory does not exist: /c/skills')).toBeInTheDocument()
-    expect(screen.queryByText('MCP (2)')).not.toBeInTheDocument()
-    expect(screen.queryByText('Plugins (1)')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByText('路径与设置'))
     expect(screen.getByText('/c')).toBeInTheDocument()
     expect(screen.getByText('/c/config.json')).toBeInTheDocument()
-    expect(screen.queryByText('/c/mcp.json')).not.toBeInTheDocument()
   })
 
   it('shows live program versions and config paths in the config tab', async () => {
@@ -5374,7 +5358,6 @@ describe('Skill detail slider + agent page render without crashing', () => {
       version: null,
       latestVersion: null,
       configPath: '/Users/me/.claude/settings.json',
-      pluginDir: '/Users/me/.claude/plugins/cache',
     }
     useSkillStoreV2.setState({
       selectedAgentDetail: liveDetail,
@@ -5392,7 +5375,6 @@ describe('Skill detail slider + agent page render without crashing', () => {
     fireEvent.click(screen.getByText('路径与设置'))
     await waitFor(() => expect(container.querySelectorAll('.sm2__config-facts > div')[1]).toHaveTextContent('2.1.179'))
     expect(screen.getByText('/Users/me/.claude/settings.json')).toBeInTheDocument()
-    expect(screen.queryByText('/Users/me/.claude/plugins/cache')).not.toBeInTheDocument()
   })
 
   it('formats, validates, edits, and reveals an Agent config resource', async () => {
@@ -5495,8 +5477,6 @@ describe('Skill detail slider + agent page render without crashing', () => {
       displayName: 'CodeFuse Claude Code',
       skillsDir: '/Users/me/.codefuse/engine/cc/skills',
       configPath: '/Users/me/.codefuse/engine/cc/settings.json',
-      mcpConfigPath: '/Users/me/.codefuse/engine/cc/settings.json',
-      pluginDir: '/Users/me/.codefuse/engine/cc/plugins/cache',
       skills: [],
     }
     useSkillStoreV2.setState({
