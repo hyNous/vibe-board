@@ -1,0 +1,34 @@
+# Windows 上 cargo test --lib 的既有失败名单（基线 c86f601，2026-09-21 采集：546 通过 / 32 失败 / 3 忽略）
+# 原因：测试自身假设 POSIX 路径分隔符、可写 $HOME 或符号链接权限。里程碑验收要求失败集合是本名单的子集。
+agents::claude_code::tests::config_dir_env_accepts_absolute_path
+agents::programs::tests::linux_app_candidates_do_not_use_macos_bundles
+control_tower::agentctl::tests::fake_child_updates_run_lifecycle
+skills::installer::tests::collect_skill_previews_includes_root_and_nested_skills
+skills::tests::installs_codex_plugin_and_scans_disabled_state
+skills::tests::installs_scans_toggles_and_uninstalls_without_real_home
+skills::tests::persists_collections_scan_roots_and_discovers_obsidian_skills
+skills::tests::scans_and_manages_zcode_native_config
+skills::tests::scans_and_toggles_claude_plugins_without_real_home
+skills::tests::scans_central_skills_dirs
+skills::tests::scans_mcp_and_round_trips_backup
+skills::tests::validates_mcp_and_resolves_pending_sync_conflicts
+skills::v2::tests::add_center_skill_can_link_to_local_source
+skills::v2::tests::agent_detail_reads_zcode_nested_mcp_and_plugins
+skills::v2::tests::agent_detail_reports_codex_toml_config_paths
+skills::v2::tests::agent_detail_reports_mcp_plugins_and_path_health
+skills::v2::tests::agent_detail_reports_workbuddy_plugins_without_marketplace_noise
+skills::v2::tests::antigravity_agent_detail_uses_official_customization_paths
+skills::v2::tests::codex_plugin_inventory_ignores_cache_only_plugins_and_toggles_safely
+skills::v2::tests::custom_agent_metadata_is_listed_and_uses_declared_paths
+skills::v2::tests::delete_center_skill_can_remove_agent_installs
+skills::v2::tests::delete_center_skill_preview_lists_targets
+skills::v2::tests::diagnosis_flags_broken_link_and_unmanaged
+skills::v2::tests::doubao_scans_builtin_skills_as_read_only_and_keeps_user_skills_manageable
+skills::v2::tests::kimi_code_agent_detail_discovers_managed_resources
+skills::v2::tests::kimi_does_not_claim_agentbro_center_skills
+skills::v2::tests::local_parent_import_matches_existing_child_source
+skills::v2::tests::openclaw_scans_configured_workspace_skills
+skills::v2::tests::project_inventory_scans_kimi_code_resources
+skills::v2::tests::settings_migrate_existing_custom_center_into_fixed_agentbro_center
+skills::v2::tests::settings_round_trip
+skills::v2::tests::shared_agents_skills_dir_is_scanned_as_own_target
