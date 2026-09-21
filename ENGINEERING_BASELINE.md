@@ -198,9 +198,34 @@ Antigravity）的取数方式真实不同，且现有「一家一个定制函数
 
 **Verification**：检查命令全绿；父级复核 `grep -rn "21_600\|respond_permission\|PermissionCard"` 除「断言不存在」的测试外为零。
 
+**状态（2026-09-21）：PASS WITH RISKS，已合入。**
+父级独立验证：前端 lint / build 通过，`test:run` 44 文件 470 项全过（由 519 降至 470，被删测试逐条核对均只覆盖被删功能）；
+`cargo fmt --check`、`cargo check --all-targets` 通过；`cargo test --lib` 541 通过 / 32 失败，失败集合与已知名单一致；
+`release:check` ok。**自写假看板实测**：对提问工具、普通工具、Gemini BeforeTool、权限请求、Antigravity 五种输入，
+bridge 均连上「只接受不回复」的服务端并在 0.3 秒内退出，退出码 0，stdout 无任何审批决定（Antigravity 输出 `{}` 为其协议所需的空回应）。
+
+**父级复核中发现并修复的 S1 安全遗留（C-SEC）**：旧版安装 Gemini Hook 时会把 `security.permissions.mode` 写为 `auto`，
+使 Gemini 不再自行询问、改由看板审批框拦截。M2 删除审批后，已安装用户的 Gemini 将**无任何确认地执行所有工具**。
+已修复：重装或卸载 Gemini Hook 时，若该文件原本含 Vibe Board 托管的 Gemini Hook，则撤销 `mode: "auto"`；
+从未装过托管 Hook 的文件中用户自设的 `auto` 保留。三条测试覆盖。
+
+**Plan Drift（UNJUSTIFIED，轻微）**：worker 删除了浏览器开发专用的 `ClaudeHookUiLab` 调试台，其中含空岛、回复提示、
+多会话等非审批场景。不影响用户，可从 `b87f5c4` 恢复；UI 改版若需要调试台可取回。
+
+**已确认无风险**：Codex app-server 的审批请求不再被回应——但前端已无任何调用「向 Agent 发消息」的入口，
+看板不会发起 Codex 回合，因此不会收到需它回应的审批请求。
+
+**遗留给后续里程碑的死代码**（已不产生任何行为）：
+- M3：`send_message` 命令、前端 `sendMessage`、`sessionCapabilities` 的 Composer 能力判断、`claude_code::send_message_to_terminal`
+  等「向 Agent 发消息」整套代码（属「与 Agent 对话」非目标，前端已无入口）；webhook 模板中的 `WaitingApproval` 通知；
+  五语言中三类卡片与 `notch.tool.*` 的文案键。
+- M6：设置页中的全局「批准 / 拒绝 / 跳过」快捷键与 `autoApproveTools` 控件（已无作用）。
+
 ### M3 — 删除非目标模块
 
-**Scope**：MCP 管理、Plugin 管理、Agent 更新 / 安装操作、技能包（v1 `*_pack_cmd` 与 v2 `*skill_pack*` 两套，含托盘技能包选择器）、`agentctl` 与任务追踪演示。**声音包（`import_sound_pack`、`set_sound_pack`）不在范围内，必须保留。**
+**Scope**：MCP 管理、Plugin 管理、Agent 更新 / 安装操作、技能包（v1 `*_pack_cmd` 与 v2 `*skill_pack*` 两套，含托盘技能包选择器）、`agentctl` 与任务追踪演示；
+以及 M2 复核时发现的死代码：「向 Agent 发消息」整套（`send_message` 命令、`sendMessage`、Composer 能力判断、`send_message_to_terminal`）、
+webhook `WaitingApproval` 通知模板、三类卡片与 `notch.tool.*` 的五语言文案键。**声音包（`import_sound_pack`、`set_sound_pack`）不在范围内，必须保留。**
 
 **建议拆成两个派发包**：(a) MCP + Plugin；(b) 技能包 + Agent 更新安装 + `agentctl`。
 

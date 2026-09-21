@@ -19,8 +19,6 @@ pub struct MonitorSessionSummary {
     pub last_tool_name: Option<String>,
     pub last_tool_target: Option<String>,
     pub last_tool_status: Option<String>,
-    pub waiting_user: bool,
-    pub pending_kind: Option<String>,
     pub subagent_count: usize,
     pub active_tool_count: usize,
     pub title: Option<String>,
@@ -37,16 +35,11 @@ pub async fn get_monitor_sessions(
         .map(session_summary)
         .collect();
 
-    sessions.sort_by(|a, b| {
-        b.waiting_user
-            .cmp(&a.waiting_user)
-            .then_with(|| b.started_at.cmp(&a.started_at))
-    });
+    sessions.sort_by(|a, b| b.started_at.cmp(&a.started_at));
     Ok(sessions)
 }
 
 fn session_summary(session: SessionState) -> MonitorSessionSummary {
-    let pending_kind = pending_kind(&session);
     let token_total = session.tokens.input
         + session.tokens.output
         + session.tokens.cache_read
@@ -66,8 +59,6 @@ fn session_summary(session: SessionState) -> MonitorSessionSummary {
         last_tool_name: session.last_tool_name,
         last_tool_target: session.last_tool_target,
         last_tool_status: session.last_tool_status,
-        waiting_user: pending_kind.is_some(),
-        pending_kind,
         subagent_count: session.subagents.len(),
         active_tool_count: session
             .active_tools
@@ -78,25 +69,11 @@ fn session_summary(session: SessionState) -> MonitorSessionSummary {
     }
 }
 
-fn pending_kind(session: &SessionState) -> Option<String> {
-    if session.pending_permission.is_some() {
-        return Some("permission".to_string());
-    }
-    if session.pending_question.is_some() {
-        return Some("question".to_string());
-    }
-    if session.pending_plan.is_some() {
-        return Some("plan".to_string());
-    }
-    None
-}
-
 fn phase_label(phase: &SessionPhase) -> &'static str {
     match phase {
         SessionPhase::Ready => "ready",
         SessionPhase::Idle => "idle",
         SessionPhase::Processing => "processing",
-        SessionPhase::WaitingApproval => "waiting_approval",
         SessionPhase::WaitingInput => "waiting_input",
         SessionPhase::Compacting => "compacting",
         SessionPhase::Done => "done",

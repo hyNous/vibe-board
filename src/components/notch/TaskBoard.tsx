@@ -11,7 +11,6 @@ const VISIBLE_TASK_STATUSES = new Set<AgentRunStatus>([
   'starting',
   'running',
   'waiting_input',
-  'waiting_permission',
   'blocked',
   'rate_limited',
   'error',
@@ -70,8 +69,6 @@ export function TaskBoard({
         return t('notch.working')
       case 'waiting_input':
         return t('notch.waitingInput')
-      case 'waiting_permission':
-        return t('notch.needsApproval')
       case 'blocked':
         return t('notch.blocked')
       case 'rate_limited':

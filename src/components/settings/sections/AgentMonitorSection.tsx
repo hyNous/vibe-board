@@ -32,8 +32,6 @@ function phaseLabel(phase?: string) {
     case 'starting':
     case 'running':
     case 'processing': return '运行中'
-    case 'waiting_approval': return '等审批'
-    case 'waiting_permission': return '等审批'
     case 'waiting_input': return '等输入'
     case 'blocked': return '已阻塞'
     case 'compacting': return '压缩上下文'
@@ -62,9 +60,6 @@ const COMPLETED_STATUSES = new Set(['done', 'completed'])
 const FAILED_STATUSES = new Set(['error', 'failed', 'failure', 'interrupted', 'cancelled'])
 const BLOCKING_STATUSES = new Set([
   'waiting',
-  'waiting_approval',
-  'waiting_for_approval',
-  'waiting_permission',
   'waiting_input',
   'waiting_for_input',
   'blocked',
@@ -254,13 +249,6 @@ function formatOptionalTokens(value: number | null) {
 }
 
 function summaryFromSession(session: SessionState): MonitorSessionSummary {
-  const pendingKind = session.pendingPermission
-    ? 'permission'
-    : session.pendingQuestion
-      ? 'question'
-      : session.planContent
-        ? 'plan'
-        : null
   return {
     id: session.id,
     agentType: session.agentType,
@@ -275,15 +263,13 @@ function summaryFromSession(session: SessionState): MonitorSessionSummary {
     lastToolName: session.lastToolName ?? null,
     lastToolTarget: session.lastToolTarget ?? null,
     lastToolStatus: session.lastToolStatus ?? null,
-    waitingUser: pendingKind !== null,
-    pendingKind,
     subagentCount: session.subagents.length,
     activeToolCount: session.activeTools.filter((tool) => tool.status === 'running').length,
     title: session.sessionTitle ?? null,
   }
 }
 
-const LIVE_TASK_PHASES = new Set(['processing', 'compacting', 'waiting_approval', 'waiting_input'])
+const LIVE_TASK_PHASES = new Set(['processing', 'compacting', 'waiting_input'])
 
 function jsonObject(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
@@ -325,7 +311,7 @@ export function AgentMonitorSection() {
   }, [taskFilter, tasks])
   const liveTaskSessions = useMemo(() => sessions
     .filter((session) => LIVE_TASK_PHASES.has(session.phase))
-    .sort((a, b) => Number(b.waitingUser) - Number(a.waitingUser) || b.startedAt - a.startedAt), [sessions])
+    .sort((a, b) => b.startedAt - a.startedAt), [sessions])
   const selectedTaskMetrics = selectedRunItem ? taskMetrics(selectedRunItem.task) : null
 
   const loadTasks = useCallback(async (showSpinner = false) => {

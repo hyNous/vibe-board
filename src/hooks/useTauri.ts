@@ -32,25 +32,6 @@ function listenForTauriEvent<T>(
 
 // ── Transform Backend → Frontend ─────────────────────────────────
 
-function parseDiff(raw: string | null): DiffContent | undefined {
-  if (!raw) return undefined
-  try {
-    return JSON.parse(raw) as DiffContent
-  } catch {
-    // Treat as raw unified diff text
-    return {
-      filePath: 'diff',
-      lines: raw.split('\n').map((line, i) => ({
-        type: line.startsWith('+') ? 'add' as const
-          : line.startsWith('-') ? 'remove' as const
-          : 'context' as const,
-        lineNumber: i + 1,
-        content: line.replace(/^[+-] ?/, ''),
-      })),
-    }
-  }
-}
-
 function parseToolInput(raw?: string | null): Record<string, unknown> | undefined {
   if (!raw) return undefined
   try {
@@ -142,25 +123,6 @@ export function transformSession(bs: BackendSession): SessionState {
     contextWindow: bs.contextWindow ?? undefined,
     lastMainAgentAt: bs.lastMainAgentAt ?? undefined,
     cacheTtlMs: bs.cacheTtlMs ?? undefined,
-    pendingPermission: bs.pendingPermission ? {
-      toolUseId: bs.pendingPermission.toolUseId ?? undefined,
-      toolName: bs.pendingPermission.toolName,
-      toolInput: bs.pendingPermission.toolInput,
-      diff: parseDiff(bs.pendingPermission.diff),
-      options: bs.pendingPermission.options ?? undefined,
-    } : undefined,
-    pendingQuestion: bs.pendingQuestion ? {
-      ...bs.pendingQuestion,
-      descriptions: bs.pendingQuestion.descriptions ?? undefined,
-      header: bs.pendingQuestion.header ?? undefined,
-      multiSelect: bs.pendingQuestion.multiSelect || undefined,
-      toolUseId: bs.pendingQuestion.toolUseId ?? undefined,
-      source: bs.pendingQuestion.source ?? undefined,
-      responseMode: bs.pendingQuestion.responseMode ?? undefined,
-    } : undefined,
-    planTitle: bs.pendingPlan?.title ?? undefined,
-    planContent: bs.pendingPlan?.content ?? undefined,
-    planPermissions: bs.pendingPlan?.permissions ?? undefined,
     lastToolName: bs.lastToolName ?? undefined,
     lastToolTarget: bs.lastToolTarget ?? undefined,
     lastToolStatus: (bs.lastToolStatus as ToolStatus) ?? undefined,

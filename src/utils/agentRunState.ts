@@ -20,11 +20,8 @@ function actionLabel(toolName?: string, toolTarget?: string): string | undefined
   return toolTarget ? `${toolName}: ${toolTarget}` : toolName
 }
 
-export function statusFromSession(session: Pick<SessionState, 'phase' | 'pendingPermission' | 'pendingQuestion' | 'planTitle' | 'planContent'>): AgentRunStatus {
-  if (session.pendingPermission || session.planTitle || session.planContent || session.phase === 'waiting_approval') {
-    return 'waiting_permission'
-  }
-  if (session.pendingQuestion || session.phase === 'waiting_input') return 'waiting_input'
+export function statusFromSession(session: Pick<SessionState, 'phase'>): AgentRunStatus {
+  if (session.phase === 'waiting_input') return 'waiting_input'
   if (session.phase === 'processing' || session.phase === 'compacting') return 'running'
   if (session.phase === 'error') return 'error'
   if (session.phase === 'done') return 'completed'
@@ -65,12 +62,6 @@ export function agentRunEventFromLegacy(event: AgentEvent): AgentRunEvent | unde
       return TERMINAL_TOOL_STATUSES.has(event.status as Extract<ToolStatus, 'success' | 'error' | 'interrupted'>)
         ? { type: 'tool_finished', toolName: event.toolName, toolTarget: event.toolTarget, status: event.status as Extract<ToolStatus, 'success' | 'error' | 'interrupted'> }
         : { type: 'tool_started', toolName: event.toolName, toolTarget: event.toolTarget }
-    case 'permission_request':
-      return { type: 'permission_requested', toolName: event.toolName }
-    case 'ask_question':
-      return { type: 'waiting_input', question: event.question }
-    case 'plan_request':
-      return { type: 'permission_requested' }
     case 'task_complete':
       return { type: 'completed', summary: event.summary }
     case 'error':
@@ -132,8 +123,6 @@ export function applyAgentRunEvent(
       }
     case 'waiting_input':
       return { ...previous, status: 'waiting_input', phase: 'waiting_input', currentAction: event.question, updatedAt }
-    case 'permission_requested':
-      return { ...previous, status: 'waiting_permission', phase: 'waiting_approval', currentAction: event.toolName, updatedAt }
     case 'rate_limited':
       return { ...previous, status: 'rate_limited', phase: event.phase ?? previous.phase, currentAction: event.currentAction ?? previous.currentAction, updatedAt }
     case 'error':

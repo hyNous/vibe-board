@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { OverlayItem, SessionState } from '../types/agent'
-import { deriveIslandInteraction, getFollowFocusVisibleSessions, sessionNeedsAttention } from '../utils/islandInteraction'
+import type { SessionState } from '../types/agent'
+import { deriveIslandInteraction, getFollowFocusVisibleSessions } from '../utils/islandInteraction'
 
 function session(overrides: Partial<SessionState>): SessionState {
   return {
@@ -19,16 +19,6 @@ function session(overrides: Partial<SessionState>): SessionState {
   }
 }
 
-function overlay(type: OverlayItem['type']): OverlayItem {
-  return {
-    id: `${type}-1`,
-    sessionId: 's1',
-    type,
-    data: {},
-    createdAt: 0,
-  }
-}
-
 describe('deriveIslandInteraction', () => {
   it('keeps minimal mode hidden during ordinary processing', () => {
     const state = deriveIslandInteraction({
@@ -44,11 +34,11 @@ describe('deriveIslandInteraction', () => {
     expect(state.hasRunningSession).toBe(true)
   })
 
-  it('shows compact state in minimal mode for blocking requests', () => {
+  it('shows compact state in minimal mode while waiting for input', () => {
     const state = deriveIslandInteraction({
-      sessions: [session({ phase: 'waiting_approval' })],
+      sessions: [session({ phase: 'waiting_input' })],
       panelState: 'collapsed',
-      activeOverlay: overlay('permission'),
+      activeOverlay: null,
       interactionMode: 'minimal',
       persistentIdleHidden: false,
       wakeSilenced: false,
@@ -114,11 +104,11 @@ describe('deriveIslandInteraction', () => {
     expect(state.isHidden).toBe(true)
   })
 
-  it('keeps blocking requests visible while ESC silence is active', () => {
+  it('keeps waiting sessions visible while ESC silence is active', () => {
     const state = deriveIslandInteraction({
       sessions: [session({ phase: 'waiting_input' })],
       panelState: 'collapsed',
-      activeOverlay: overlay('question'),
+      activeOverlay: null,
       interactionMode: 'persistent',
       persistentIdleHidden: false,
       wakeSilenced: true,
@@ -126,21 +116,6 @@ describe('deriveIslandInteraction', () => {
 
     expect(state.outerState).toBe('compact')
     expect(state.hasBlockingSignal).toBe(true)
-  })
-
-  it('treats plan approval metadata as attention even before phase catches up', () => {
-    const state = deriveIslandInteraction({
-      sessions: [session({ phase: 'processing', planContent: '1. Ship the fix' })],
-      panelState: 'collapsed',
-      activeOverlay: null,
-      interactionMode: 'persistent',
-      persistentIdleHidden: false,
-      wakeSilenced: false,
-    })
-
-    expect(sessionNeedsAttention(session({ phase: 'processing', planContent: '1. Ship the fix' }))).toBe(true)
-    expect(state.hasBlockingSignal).toBe(true)
-    expect(state.outerState).toBe('compact')
   })
 
   it('treats unfinished tasks as attention signals', () => {

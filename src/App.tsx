@@ -9,7 +9,6 @@ import { isTauri } from './services/tauriApi'
 import { primaryModifierPressed } from './utils/platform'
 import './styles/globals.css'
 
-const ClaudeHookUiLab = lazy(() => import('./components/dev/ClaudeHookUiLab').then((module) => ({ default: module.ClaudeHookUiLab })))
 const NotchPanel = lazy(() => import('./components/notch/NotchPanel').then((module) => ({ default: module.NotchPanel })))
 const SettingsApp = lazy(() => import('./components/settings/SettingsApp').then((module) => ({ default: module.SettingsApp })))
 
@@ -217,10 +216,6 @@ function App() {
       <Suspense fallback={null}><NotchPanel /></Suspense>
     </div>
   )
-
-  if (!isTauri() && windowLabel === 'notch') {
-    return <Suspense fallback={notchWindow}><ClaudeHookUiLab>{notchWindow}</ClaudeHookUiLab></Suspense>
-  }
 
   // Notch window (default)
   return notchWindow

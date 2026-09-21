@@ -4,7 +4,7 @@ export type AppEnergyMode = 'active' | 'idle-visible' | 'quiet-background'
 
 type SessionEnergyInput = Pick<SessionState, 'phase'> & Partial<Pick<SessionState, 'activeTools' | 'subagents' | 'tasks'>>
 
-const ACTIVE_PHASES = new Set(['processing', 'compacting', 'waiting_input', 'waiting_approval'])
+const ACTIVE_PHASES = new Set(['processing', 'compacting', 'waiting_input'])
 const TERMINAL_PHASES = new Set(['done', 'interrupted'])
 
 export function getAppEnergyMode(sessions: Array<SessionEnergyInput>): AppEnergyMode {

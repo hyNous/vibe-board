@@ -4,7 +4,6 @@ const phaseToStatus: Record<SessionPhase, string> = {
   ready: 'active',
   idle: 'idle',
   processing: 'active',
-  waiting_approval: 'waiting',
   waiting_input: 'waiting',
   compacting: 'active',
   done: 'active',

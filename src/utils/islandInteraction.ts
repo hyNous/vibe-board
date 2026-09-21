@@ -25,12 +25,6 @@ export interface IslandInteractionSnapshot {
   isHidden: boolean
 }
 
-const BLOCKING_OVERLAYS = new Set(['permission', 'question', 'plan'])
-
-export function isBlockingOverlay(overlay: OverlayItem | null): boolean {
-  return overlay ? BLOCKING_OVERLAYS.has(overlay.type) : false
-}
-
 export function isNonBlockingOverlay(overlay: OverlayItem | null): boolean {
   return overlay?.type === 'completion' || overlay?.type === 'response' || overlay?.type === 'compacting'
 }
@@ -47,15 +41,10 @@ export function sessionHasVisibleActivity(session: SessionState): boolean {
 
 export function sessionNeedsAttention(session: SessionState): boolean {
   const status = session.runState?.status ?? statusFromSession(session)
-  return status === 'waiting_permission'
-    || status === 'waiting_input'
+  return status === 'waiting_input'
     || status === 'error'
-    || session.phase === 'waiting_approval'
     || session.phase === 'waiting_input'
     || session.phase === 'error'
-    || Boolean(session.pendingPermission)
-    || Boolean(session.pendingQuestion)
-    || Boolean(session.planTitle || session.planContent)
     || hasUnfinishedTasks(session)
 }
 
@@ -73,7 +62,7 @@ export function deriveIslandInteraction(input: IslandInteractionInput): IslandIn
   const hasRunningSession = sessions.some(sessionHasVisibleActivity)
   const hasWaitingSession = sessions.some(sessionNeedsAttention)
   const hasErrorSession = sessions.some((session) => session.phase === 'error')
-  const hasBlockingSignal = hasWaitingSession || hasErrorSession || isBlockingOverlay(activeOverlay)
+  const hasBlockingSignal = hasWaitingSession || hasErrorSession
   const hasNonBlockingOverlay = isNonBlockingOverlay(activeOverlay)
   const hasActiveSession = hasRunningSession || hasWaitingSession || hasErrorSession
 

@@ -4,21 +4,18 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { useSessionStore, selectSessionList, selectPanelState, selectRateLimits, selectUsageSnapshots, selectAgentStatuses, selectActiveOverlay } from '../../stores/sessionStore'
 import { useConfigStore } from '../../stores/configStore'
 import { useUpdateStore } from '../../stores/updateStore'
-import { respondPermission, respondQuestion, respondPlan, respondAutoApprove, sendMessage, jumpToTerminal, resizeNotch, setNotchOpacity, performHaptic, setNotchFocusable, setNotchIgnoreCursorEvents, openSettingsWindow, startNotchDrag, endNotchDrag, isCursorOverNotch, isTerminalFocused, isTauri } from '../../services/tauriApi'
+import { jumpToTerminal, resizeNotch, setNotchOpacity, performHaptic, setNotchFocusable, setNotchIgnoreCursorEvents, openSettingsWindow, startNotchDrag, endNotchDrag, isCursorOverNotch, isTerminalFocused, isTauri } from '../../services/tauriApi'
 import { computePriority } from '../../types/priority'
-import type { OverlayItem, PanelState } from '../../types/agent'
-import { deriveIslandInteraction, getFollowFocusVisibleSessions, isBlockingOverlay, isNonBlockingOverlay, sessionHasVisibleActivity, sessionNeedsAttention } from '../../utils/islandInteraction'
+import type { PanelState } from '../../types/agent'
+import { deriveIslandInteraction, getFollowFocusVisibleSessions, isNonBlockingOverlay, sessionHasVisibleActivity, sessionNeedsAttention } from '../../utils/islandInteraction'
 import { getCollapsedIslandHeight, getIslandDragAnchor, getSideIslandDimensions, NOTCH_SHELL_SIDE_EXTENSION, type SideIslandSize } from '../../utils/islandLayout'
-import { getBlockingOverlayPanelHeight, getReadableNotificationHeight, isCompactPermissionPrompt } from '../../utils/notificationLayout'
+import { getReadableNotificationHeight } from '../../utils/notificationLayout'
 import { shortcutMatchesEvent } from '../../utils/keyboardShortcuts'
 import { primaryModifierPressed } from '../../utils/platform'
 import { energyIntervalMs, getAppEnergyMode, shouldSilenceAfterWake } from '../../utils/energyPolicy'
 import { CollapsedBar } from './CollapsedBar'
 import { UpdateBanner } from './UpdateBanner'
 import { TaskBoard } from './TaskBoard'
-import { PermissionCard } from '../overlay/PermissionCard'
-import { PlanApprovalCard } from '../overlay/PlanApprovalCard'
-import { QuestionCard } from '../overlay/QuestionCard'
 import { PixelCursor } from './PixelCursor'
 import './NotchPanel.css'
 
@@ -41,12 +38,6 @@ const MAX_WAKE_SILENCE_MS = 60_000
 const contentTransition = {
   duration: 0.2,
   ease: 'easeOut' as const,
-}
-
-function clearPermissionAfter(sessionId: string, work: Promise<void>) {
-  work
-    .then(() => useSessionStore.getState().clearPermission(sessionId))
-    .catch((error) => console.warn('[notch] permission response failed:', error))
 }
 
 const NOTCH_HIT_SLOP_X_COLLAPSED = 48
@@ -83,21 +74,6 @@ function isDragIgnoredTarget(target: EventTarget | null): boolean {
   )
 }
 
-function getInputFocusTarget(target: EventTarget | null): HTMLElement | null {
-  if (!(target instanceof Element)) return null
-  const focusTarget = target.closest('input, textarea, select, [contenteditable="true"]')
-  if (!(focusTarget instanceof HTMLElement)) return null
-  if (
-    (focusTarget instanceof HTMLInputElement
-      || focusTarget instanceof HTMLTextAreaElement
-      || focusTarget instanceof HTMLSelectElement)
-    && focusTarget.disabled
-  ) {
-    return null
-  }
-  return focusTarget
-}
-
 function buildNotchShellClipPath(width: number, height: number, state: string, positionMode: string): string {
   const collapsed = state === 'micro' || state === 'compact'
   const sideDocked = positionMode === 'left' || positionMode === 'right'
@@ -108,66 +84,6 @@ function buildNotchShellClipPath(width: number, height: number, state: string, p
   if (positionMode === 'left') return `inset(0 round 0 ${baseRadius}px ${baseRadius}px 0)`
   if (positionMode === 'right') return `inset(0 round ${baseRadius}px 0 0 ${baseRadius}px)`
   return `inset(0 round 0 0 ${baseRadius}px ${baseRadius}px)`
-}
-
-function OverlayRenderer({ overlay, onDismiss, onShowSessions, sessionCount, onDraftStateChange }: { overlay: OverlayItem; onDismiss: () => void; onShowSessions?: () => void; sessionCount?: number; onDraftStateChange?: (hasDraft: boolean) => void }) {
-  const session = useSessionStore((s) => s.sessions[overlay.sessionId])
-  if (!session) return null
-
-  switch (overlay.type) {
-    case 'permission':
-      return (
-        <PermissionCard
-          overlay={overlay}
-          session={session}
-          onAllow={() => { clearPermissionAfter(session.id, respondPermission(session.id, true)) }}
-          onAllowAlways={() => { clearPermissionAfter(session.id, respondPermission(session.id, true, true)) }}
-          onAutoApprove={() => { clearPermissionAfter(session.id, respondAutoApprove(session.id)) }}
-          onShowSessions={onShowSessions}
-          onDeny={(message?: string) => {
-            if (message) sendMessage(session.id, message)
-            clearPermissionAfter(session.id, respondPermission(session.id, false))
-          }}
-          onDismiss={onDismiss}
-          onDraftStateChange={onDraftStateChange}
-          sessionCount={sessionCount}
-        />
-      )
-    case 'plan':
-      return (
-        <PlanApprovalCard
-          overlay={overlay}
-          session={session}
-          onSendFeedback={(msg) => { respondPlan(session.id, 'feedback', msg); useSessionStore.getState().clearPlan(session.id); onDismiss() }}
-          onManualReview={() => { respondPlan(session.id, 'manual'); useSessionStore.getState().clearPlan(session.id); onDismiss() }}
-          onAcceptEdits={() => { respondPlan(session.id, 'acceptEdits'); useSessionStore.getState().clearPlan(session.id); onDismiss() }}
-          onAutoApprove={() => { respondPlan(session.id, 'bypassPermissions'); useSessionStore.getState().clearPlan(session.id); onDismiss() }}
-          onJumpToTerminal={() => jumpToTerminal(session.id).catch((error) => console.warn('[notch] jumpToTerminal:', error))}
-          onShowSessions={onShowSessions}
-          onDismiss={onDismiss}
-          onDraftStateChange={onDraftStateChange}
-          sessionCount={sessionCount}
-        />
-      )
-    case 'question':
-      return (
-        <QuestionCard
-          overlay={overlay}
-          session={session}
-          onAnswer={(answer) => { respondQuestion(session.id, answer); useSessionStore.getState().clearQuestion(session.id) }}
-          onShowSessions={onShowSessions}
-          onDismiss={onDismiss}
-          onDraftStateChange={onDraftStateChange}
-          sessionCount={sessionCount}
-        />
-      )
-    case 'response':
-    case 'completion':
-    case 'compacting':
-      return null
-    default:
-      return null
-  }
 }
 
 type IslandLayoutPreview = {
@@ -226,7 +142,6 @@ export function NotchPanel() {
   const usageSnapshots = useSessionStore(selectUsageSnapshots)
   const agentStatuses = useSessionStore(selectAgentStatuses)
   const activeOverlay = useSessionStore(selectActiveOverlay)
-  const dismissOverlay = useSessionStore((s) => s.dismissOverlay)
   const updateAvailableVersion = useUpdateStore((s) => s.availableVersion)
   const updateDismissedVersion = useUpdateStore((s) => s.dismissedVersion)
   const showUpdateBanner = Boolean(updateAvailableVersion) && updateAvailableVersion !== updateDismissedVersion
@@ -257,15 +172,9 @@ export function NotchPanel() {
   const [focusedSessionIds, setFocusedSessionIds] = useState<Set<string> | null>(null)
   const [preparingOpen, setPreparingOpen] = useState(false)
   const [keepCompactAfterActive, setKeepCompactAfterActive] = useState(false)
-  const [hasInputDraft, setHasInputDraft] = useState(false)
   const dragPointerIdRef = useRef<number | null>(null)
   const dragCandidateRef = useRef<{ pointerId: number; startX: number; startY: number } | null>(null)
   const nativeHoverProbeRef = useRef({ width: 420, height: 52, anchorOffsetX: 0, anchorOffsetY: 0 })
-  const hasInputDraftRef = useRef(false)
-
-  useEffect(() => {
-    hasInputDraftRef.current = hasInputDraft
-  }, [hasInputDraft])
 
   useEffect(() => {
     if (idleTimeoutMinutes <= 0 && sessionTimeoutMinutes <= 0) return
@@ -482,7 +391,6 @@ export function NotchPanel() {
 
   // Auto-expand on new blocking attention, and collapse shortly after it resolves.
   const prevAttentionRef = useRef(0)
-  const prevBlockingOverlayIdRef = useRef<string | null>(null)
   const collapseTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   useEffect(() => {
     if (collapseTimerRef.current) {
@@ -490,12 +398,9 @@ export function NotchPanel() {
       collapseTimerRef.current = undefined
     }
 
-    const blockingOverlayId = activeOverlay && isBlockingOverlay(activeOverlay) ? activeOverlay.id : null
     const previousAttentionCount = prevAttentionRef.current
     const hasNewAttention = blockingAttentionCount > prevAttentionRef.current
-    const hasNewBlockingOverlay = Boolean(blockingOverlayId && blockingOverlayId !== prevBlockingOverlayIdRef.current)
-    const suppressedBlockingOverlay = Boolean(activeOverlay?.suppressed && activeOverlay && isBlockingOverlay(activeOverlay))
-    if ((hasNewAttention || hasNewBlockingOverlay) && !suppressedBlockingOverlay) {
+    if (hasNewAttention) {
       interactionLockUntilRef.current = Math.max(interactionLockUntilRef.current, Date.now() + 1200)
       if (panelState === 'collapsed') {
         setNotchOpacity(1).catch(() => {})
@@ -506,34 +411,31 @@ export function NotchPanel() {
     if (blockingAttentionCount === 0 && previousAttentionCount > 0 && panelState === 'hover') {
       collapseTimerRef.current = setTimeout(() => {
         const current = useSessionStore.getState().panelState
-        if (current === 'hover' && !hasInputDraftRef.current) setPanelState('collapsed')
+        if (current === 'hover') setPanelState('collapsed')
       }, 800)
     }
 
     prevAttentionRef.current = blockingAttentionCount
-    prevBlockingOverlayIdRef.current = blockingOverlayId
 
     return () => {
       if (collapseTimerRef.current) clearTimeout(collapseTimerRef.current)
     }
-  }, [activeOverlay, blockingAttentionCount, panelState, setPanelState])
+  }, [blockingAttentionCount, panelState, setPanelState])
 
   // Auto-expand the notch once per version when a new update is detected, so the
-  // banner is seen without the user opening anything. Yields to blocking
-  // overlays (approvals/questions) and never re-pops the same version this run.
+  // banner is seen without the user opening anything. Never re-pops the same
+  // version this run.
   const autoExpandedUpdateVersionRef = useRef<string | null>(null)
   useEffect(() => {
     if (!showUpdateBanner || !updateAvailableVersion) return
     if (autoExpandedUpdateVersionRef.current === updateAvailableVersion) return
-    const blockingActive = Boolean(activeOverlay && isBlockingOverlay(activeOverlay))
-    if (blockingActive) return
     autoExpandedUpdateVersionRef.current = updateAvailableVersion
     if (panelState === 'collapsed') {
       interactionLockUntilRef.current = Math.max(interactionLockUntilRef.current, Date.now() + 1200)
       setNotchOpacity(1).catch(() => {})
       setPanelState('hover')
     }
-  }, [showUpdateBanner, updateAvailableVersion, activeOverlay, panelState, setPanelState])
+  }, [showUpdateBanner, updateAvailableVersion, panelState, setPanelState])
 
   // Persistent mode hides only after the configured no-active-session delay.
   useEffect(() => {
@@ -549,7 +451,6 @@ export function NotchPanel() {
       || keepCompactAfterActive
       || activeOverlay
       || panelState !== 'collapsed'
-      || hasInputDraft
     ) {
       setPersistentIdleHidden(false)
       return
@@ -562,7 +463,7 @@ export function NotchPanel() {
     return () => {
       if (idleHideTimerRef.current) clearTimeout(idleHideTimerRef.current)
     }
-  }, [activeOverlay, autoHideNoSessions, hasInputDraft, interaction.hasActiveSession, interactionMode, keepCompactAfterActive, noSessionsHideDelay, panelState])
+  }, [activeOverlay, autoHideNoSessions, interaction.hasActiveSession, interactionMode, keepCompactAfterActive, noSessionsHideDelay, panelState])
 
   useEffect(() => {
     // Keep the native transparent window alive for hover hit-testing. Minimal
@@ -647,20 +548,10 @@ export function NotchPanel() {
     flushNativeIgnoreCursorEvents()
   }, [flushNativeIgnoreCursorEvents])
 
-  const focusNotchForHover = useCallback((options?: { allowNonBlockingOverlay?: boolean; focusTarget?: HTMLElement | null }) => {
+  const focusNotchForHover = useCallback((options?: { allowNonBlockingOverlay?: boolean }) => {
     const overlay = useSessionStore.getState().activeOverlay
-    const focusTarget = options?.focusTarget ?? null
-    if (overlay && isNonBlockingOverlay(overlay) && !options?.allowNonBlockingOverlay && !focusTarget) return
-    setNotchFocusable(true)
-      .then(() => {
-        if (!focusTarget) return
-        window.requestAnimationFrame(() => {
-          if (document.contains(focusTarget)) focusTarget.focus({ preventScroll: true })
-        })
-      })
-      .catch(() => {
-        if (focusTarget && document.contains(focusTarget)) focusTarget.focus({ preventScroll: true })
-      })
+    if (overlay && isNonBlockingOverlay(overlay) && !options?.allowNonBlockingOverlay) return
+    setNotchFocusable(true).catch(() => {})
   }, [])
 
   const finishPreparedOpen = useCallback(() => {
@@ -732,7 +623,6 @@ export function NotchPanel() {
       openPrepareFrameRef.current = undefined
     }
     setPreparingOpen(false)
-    if (hasInputDraftRef.current) return
     const currentOverlay = useSessionStore.getState().activeOverlay
     if (currentOverlay && isNonBlockingOverlay(currentOverlay)) {
       dismissNonBlockingOverlay(currentOverlay.id, { collapse: true })
@@ -740,7 +630,6 @@ export function NotchPanel() {
     }
     const currentPanelState = useSessionStore.getState().panelState
     if (currentPanelState === 'hover' || currentPanelState === 'expanded') {
-      if (hasInputDraftRef.current) return
       setNotchFocusable(false).catch(() => {})
       setPanelState('collapsed')
     }
@@ -750,10 +639,7 @@ export function NotchPanel() {
     if (!islandEnabled || event.button !== 0) return
 
     requestNativeIgnoreCursorEvents(false, { force: true })
-    focusNotchForHover({
-      allowNonBlockingOverlay: true,
-      focusTarget: getInputFocusTarget(event.target),
-    })
+    focusNotchForHover({ allowNonBlockingOverlay: true })
 
     if (isDragIgnoredTarget(event.target)) return
 
@@ -916,34 +802,6 @@ export function NotchPanel() {
         return
       }
 
-      const active = store.activeSessionId ? store.sessions[store.activeSessionId] : null
-
-      // Approve action
-      const approveBinding = findShortcut('approve-action')
-      if (approveBinding && shortcutMatchesEvent(approveBinding.keys, e) && active?.phase === 'waiting_approval') {
-        e.preventDefault()
-        if (active.planContent || active.planTitle) {
-          respondPlan(active.id, 'acceptEdits')
-          useSessionStore.getState().clearPlan(active.id)
-        } else {
-          clearPermissionAfter(active.id, respondPermission(active.id, true))
-        }
-        return
-      }
-
-      // Reject action
-      const rejectBinding = findShortcut('reject-action')
-      if (rejectBinding && shortcutMatchesEvent(rejectBinding.keys, e) && active?.phase === 'waiting_approval') {
-        e.preventDefault()
-        if (active.planContent || active.planTitle) {
-          respondPlan(active.id, 'manual')
-          useSessionStore.getState().clearPlan(active.id)
-        } else {
-          clearPermissionAfter(active.id, respondPermission(active.id, false))
-        }
-        return
-      }
-
       const nextBinding = findShortcut('next-session')
       if (nextBinding && shortcutMatchesEvent(nextBinding.keys, e)) {
         e.preventDefault()
@@ -972,18 +830,6 @@ export function NotchPanel() {
         const sid = store.activeSessionId
         if (sid) jumpToTerminal(sid)
         return
-      }
-
-      // Primary modifier + 1/2/3 selects an option.
-      const num = parseInt(e.key, 10)
-      if (primaryModifierPressed(e) && num >= 1 && num <= 3) {
-        const activeQuestion = active?.pendingQuestion
-        const options = active && !activeQuestion?.multiSelect ? activeQuestion?.options : undefined
-        if (active && options && options[num - 1]) {
-          e.preventDefault()
-          respondQuestion(active.id, options[num - 1])
-          useSessionStore.getState().clearQuestion(active.id)
-        }
       }
     }
 
@@ -1024,25 +870,6 @@ export function NotchPanel() {
     }
   }, [dismissNonBlockingOverlay, handleCollapse, requestNativeIgnoreCursorEvents])
 
-  const showBlockingOverlayAsSessionList = useCallback(() => {
-    if (openPrepareTimerRef.current) {
-      clearTimeout(openPrepareTimerRef.current)
-      openPrepareTimerRef.current = undefined
-    }
-    if (openPrepareFrameRef.current != null) {
-      window.cancelAnimationFrame(openPrepareFrameRef.current)
-      openPrepareFrameRef.current = undefined
-    }
-    const overlay = useSessionStore.getState().activeOverlay
-    if (overlay) {
-      useSessionStore.getState().dismissOverlay(overlay.id)
-    }
-    nativeHoverInsideRef.current = true
-    setPreparingOpen(false)
-    setNotchFocusable(true).catch(() => {})
-    setPanelState('hover')
-  }, [setPanelState])
-
   const collapsedWidthScale = useConfigStore((s) => s.collapsedWidthScale)
   const notchHeightMode = useConfigStore((s) => s.notchHeightMode)
   const customNotchHeight = useConfigStore((s) => s.customNotchHeight)
@@ -1074,25 +901,7 @@ export function NotchPanel() {
   const isSideNotch = notchPositionMode === 'left' || notchPositionMode === 'right'
   const sideCollapsed = isSideNotch && effectivePanelState === 'collapsed'
   const sideIslandDimensions = getSideIslandDimensions(layoutPreview?.sideIslandSize ?? sideIslandSize)
-  const hasBlockingOverlayContent = Boolean(
-    !layoutPreview
-    && activeOverlay
-    && isBlockingOverlay(activeOverlay)
-    && effectivePanelState !== 'collapsed'
-  )
-  const usesWideApprovalOverlay = hasBlockingOverlayContent
-    && (activeOverlay?.type === 'permission' || activeOverlay?.type === 'plan' || activeOverlay?.type === 'question')
-  const usesCompactPermissionOverlay = hasBlockingOverlayContent
-    && activeOverlay?.type === 'permission'
-    && isCompactPermissionPrompt(activeOverlay.data)
   const expandedPanelContentWidth = isCompact ? panelMaxWidth : Math.min(760, panelMaxWidth + 50)
-  const compactPermissionPanelWidth = Math.min(600, expandedPanelContentWidth)
-  const approvalPanelWidth = typeof window === 'undefined'
-    ? (usesCompactPermissionOverlay ? compactPermissionPanelWidth : expandedPanelContentWidth)
-    : Math.min(
-        usesCompactPermissionOverlay ? compactPermissionPanelWidth : expandedPanelContentWidth,
-        Math.max(360, window.innerWidth - 24),
-      )
   const collapsedHeight = getCollapsedIslandHeight(notchHeightMode, customNotchHeight)
   const regularContentWidth = previewMode === 'micro'
     ? microPillWidth
@@ -1100,25 +909,15 @@ export function NotchPanel() {
         ? Math.round(compactPillWidth * (collapsedWidthScale / 100))
         : previewMode === 'expanded' || previewMode === 'completion'
           ? expandedPanelContentWidth
-          : effectivePanelState === 'collapsed'
-            ? isMicro
-              ? microPillWidth
-              : Math.round(compactPillWidth * (collapsedWidthScale / 100))
-            : usesWideApprovalOverlay
-              ? approvalPanelWidth
+            : effectivePanelState === 'collapsed'
+              ? isMicro
+                ? microPillWidth
+                : Math.round(compactPillWidth * (collapsedWidthScale / 100))
               : expandedPanelContentWidth
   const contentWidth = sideCollapsed ? sideIslandDimensions.contentWidth : regularContentWidth
 
   const statusBarHeight = effectivePanelState !== 'collapsed' ? 32 : 0
   const readableCompletionCardHeight = getReadableNotificationHeight(completionCardHeight, maxPanelHeight || 600)
-  const blockingOverlayMaxHeight = activeOverlay?.type === 'plan'
-    ? Math.max(maxPanelHeight || 600, 600)
-    : maxPanelHeight || 600
-  const blockingOverlayPanelHeight = getBlockingOverlayPanelHeight(
-    activeOverlay?.type,
-    activeOverlay?.data,
-    blockingOverlayMaxHeight,
-  )
   const effectiveDetailPanelMaxHeight = layoutPreview?.detailPanelMaxHeight ?? detailPanelMaxHeight
   const expandedPreviewHeight = Math.min(
     HOVER_PANEL_HEIGHT,
@@ -1131,13 +930,11 @@ export function NotchPanel() {
           ? Math.min(Math.max(statusBarHeight + readableCompletionCardHeight + 72, 220), maxPanelHeight || 600)
           : previewMode === 'expanded'
             ? expandedPreviewHeight
-            : hasBlockingOverlayContent
-              ? blockingOverlayPanelHeight
-              : effectivePanelState === 'collapsed'
-                ? collapsedHeight
-                : effectivePanelState === 'hover'
-                  ? Math.min(Math.max(HOVER_PANEL_HEIGHT, HOVER_PANEL_MIN_HEIGHT), maxPanelHeight || 600)
-                  : (effectiveDetailPanelMaxHeight || 500)
+            : effectivePanelState === 'collapsed'
+              ? collapsedHeight
+              : effectivePanelState === 'hover'
+                ? Math.min(Math.max(HOVER_PANEL_HEIGHT, HOVER_PANEL_MIN_HEIGHT), maxPanelHeight || 600)
+                : (effectiveDetailPanelMaxHeight || 500)
   const panelHeight = sideCollapsed ? sideIslandDimensions.panelHeight : regularPanelHeight
 
   const visualState = previewMode === 'micro'
@@ -1148,17 +945,11 @@ export function NotchPanel() {
           ? 'feedback'
           : previewMode === 'expanded'
             ? 'expanded'
-            : hasBlockingOverlayContent && activeOverlay?.type === 'permission'
-              ? 'alert_permission'
-              : hasBlockingOverlayContent && activeOverlay?.type === 'question'
-                ? 'alert_question'
-                : hasBlockingOverlayContent && activeOverlay?.type === 'plan'
-                  ? 'alert_plan'
-                    : effectivePanelState === 'collapsed'
-                      ? (isMicro ? 'micro' : 'compact')
-                      : effectivePanelState === 'expanded'
-                        ? 'expanded'
-                        : 'hover'
+            : effectivePanelState === 'collapsed'
+              ? (isMicro ? 'micro' : 'compact')
+              : effectivePanelState === 'expanded'
+                ? 'expanded'
+                : 'hover'
   const shellSideExtension = NOTCH_SHELL_SIDE_EXTENSION
   const shellWidth = contentWidth + shellSideExtension * 2
   const notchShellClipPath = buildNotchShellClipPath(
@@ -1181,9 +972,7 @@ export function NotchPanel() {
   const hitboxPadX = usesVisibleCollapsedHitbox || isSideNotch ? 0 : hitSlopX
   const maxHostSlopX = Math.max(NOTCH_HIT_SLOP_X_COLLAPSED, NOTCH_HIT_SLOP_X_EXPANDED)
   const maxHostSlopY = Math.max(NOTCH_HIT_SLOP_Y_COLLAPSED, NOTCH_HIT_SLOP_Y_EXPANDED)
-  const expandedHostContentWidth = usesWideApprovalOverlay
-    ? approvalPanelWidth
-    : expandedPanelContentWidth
+  const expandedHostContentWidth = expandedPanelContentWidth
   const expandedHostPanelHeight = Math.max(maxPanelHeight || 600, detailPanelMaxHeight || 500)
   const stableHostHitboxWidth = expandedHostContentWidth + shellSideExtension * 2 + maxHostSlopX * 2
   const stableHostHitboxHeight = expandedHostPanelHeight + maxHostSlopY
@@ -1586,43 +1375,21 @@ export function NotchPanel() {
           )}
           <PixelCursor priority={activePriority} visible={pixelCursorEnabled && panelState !== 'collapsed'} />
 
-              {!hasBlockingOverlayContent && (
-                <CollapsedBar
-                  sessions={displayedSessions}
-                  panelState={preparingOpen ? 'collapsed' : effectivePanelState}
-                  rateLimits={rateLimits}
-                  usageSnapshots={usageSnapshots}
-                  onCollapse={handleCollapse}
-                  isMicro={isMicro}
-                  focusFilteredEmpty={focusFilteredEmpty}
-                />
-              )}
+              <CollapsedBar
+                sessions={displayedSessions}
+                panelState={preparingOpen ? 'collapsed' : effectivePanelState}
+                rateLimits={rateLimits}
+                usageSnapshots={usageSnapshots}
+                onCollapse={handleCollapse}
+                isMicro={isMicro}
+                focusFilteredEmpty={focusFilteredEmpty}
+              />
 
-              {showUpdateBanner && updateAvailableVersion && !preparingOpen && !hasBlockingOverlayContent && effectivePanelState !== 'collapsed' && (
+              {showUpdateBanner && updateAvailableVersion && !preparingOpen && effectivePanelState !== 'collapsed' && (
                 <UpdateBanner version={updateAvailableVersion} />
               )}
 
               <AnimatePresence mode="wait">
-                {!preparingOpen && hasBlockingOverlayContent && activeOverlay && (
-                  <motion.div
-                    key={`alert-${activeOverlay.id}`}
-                    className="notch-panel__alert-content"
-                    data-overlay-type={activeOverlay.type}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={scaledContentTransition}
-                  >
-                    <OverlayRenderer
-                      overlay={activeOverlay}
-                      onDismiss={() => dismissOverlay(activeOverlay.id)}
-                      onShowSessions={showBlockingOverlayAsSessionList}
-                      onDraftStateChange={setHasInputDraft}
-                      sessionCount={displayedSessions.length}
-                    />
-                  </motion.div>
-                )}
-
                 {!preparingOpen && layoutPreview && (previewMode === 'expanded' || previewMode === 'completion') && (
                   <motion.div
                     key={`layout-preview-${previewMode}`}
@@ -1635,7 +1402,7 @@ export function NotchPanel() {
                   </motion.div>
                 )}
 
-                {!preparingOpen && !layoutPreview && !hasBlockingOverlayContent && effectivePanelState === 'hover' && (
+                {!preparingOpen && !layoutPreview && effectivePanelState === 'hover' && (
                   <motion.div
                     key="hover"
                     className="notch-panel__hover-content"

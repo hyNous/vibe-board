@@ -182,10 +182,6 @@ function isInternalCodexTitle(title: string | undefined | null): boolean {
 
 export function isPassiveSession(session: SessionState): boolean {
   return PASSIVE_PHASES.has(session.phase)
-    && !session.pendingPermission
-    && !session.pendingQuestion
-    && !session.planTitle
-    && !session.planContent
     && !session.activeTools.some((tool) => tool.status === 'running')
     && !session.subagents.some((agent) => agent.status === 'running')
 }

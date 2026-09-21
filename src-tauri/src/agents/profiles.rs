@@ -150,7 +150,7 @@ pub const BASIC_AGENT_EVENTS: &[HookEventDescriptor] = &[
 ];
 
 pub const ANTIGRAVITY_EVENTS: &[HookEventDescriptor] = &[
-    matcher_event("PreToolUse", "*", Some(21_600)),
+    matcher_event("PreToolUse", "*", None),
     matcher_event("PostToolUse", "*", None),
     plain_event("PreInvocation"),
     plain_event("PostInvocation"),
@@ -175,7 +175,7 @@ pub const CODEBUDDY_EVENTS: &[HookEventDescriptor] = &[
 pub const GEMINI_EVENTS: &[HookEventDescriptor] = &[
     matcher_event("SessionStart", "*", None),
     matcher_event("SessionEnd", "*", None),
-    matcher_event("BeforeTool", "*", Some(21_600)),
+    matcher_event("BeforeTool", "*", None),
     matcher_event("AfterTool", "*", None),
     matcher_event("BeforeAgent", "*", None),
     matcher_event("AfterAgent", "*", None),
@@ -185,9 +185,6 @@ pub const COPILOT_EVENTS: &[HookEventDescriptor] = &[
     plain_event("agentStop"),
     plain_event("errorOccurred"),
     plain_event("notification"),
-    plain_event("permissionRequest"),
-    plain_event("postToolUseFailure"),
-    plain_event("preCompact"),
     plain_event("preToolUse"),
     plain_event("sessionStart"),
     plain_event("sessionEnd"),
@@ -233,11 +230,6 @@ pub const CLINE_EVENTS: &[HookEventDescriptor] = &[
         template: HookEntryTemplate::Plain,
         timeout: Some(5),
     },
-    HookEventDescriptor {
-        name: "PreCompact",
-        template: HookEntryTemplate::Plain,
-        timeout: Some(5),
-    },
 ];
 
 pub const SNAKE_SESSION_TOOL_EVENTS: &[HookEventDescriptor] = &[
@@ -253,8 +245,6 @@ pub const OPENCODE_EVENTS: &[HookEventDescriptor] = &[
     plain_event("UserPromptSubmit"),
     plain_event("PreToolUse"),
     plain_event("PostToolUse"),
-    plain_event("PostToolUseFailure"),
-    plain_event("PermissionRequest"),
     plain_event("Stop"),
     plain_event("SubagentStart"),
     plain_event("SubagentStop"),
@@ -272,7 +262,6 @@ pub const HERMES_EVENTS: &[HookEventDescriptor] = &[
     plain_event("UserPromptSubmit"),
     plain_event("PreToolUse"),
     plain_event("PostToolUse"),
-    plain_event("PostToolUseFailure"),
     plain_event("Notification"),
     plain_event("Stop"),
 ];
@@ -306,20 +295,15 @@ pub const KIRO_EVENTS: &[HookEventDescriptor] = &[
 ];
 
 pub const CLAUDE_CODE_EVENTS: &[HookEventDescriptor] = &[
+    plain_event("SessionStart"),
+    plain_event("SessionEnd"),
     plain_event("UserPromptSubmit"),
     matcher_event("PreToolUse", "*", None),
     matcher_event("PostToolUse", "*", None),
-    matcher_event("PostToolUseFailure", "*", None),
-    matcher_event("PermissionRequest", "*", Some(21_600)),
-    matcher_event("PermissionDenied", "*", None),
     matcher_event("Notification", "*", None),
     plain_event("Stop"),
     plain_event("SubagentStart"),
     plain_event("SubagentStop"),
-    plain_event("SessionStart"),
-    plain_event("SessionEnd"),
-    plain_event("PreCompact"),
-    plain_event("PostCompact"),
 ];
 
 pub const CODEX_EVENTS: &[HookEventDescriptor] = &[
@@ -344,21 +328,6 @@ pub const CODEX_EVENTS: &[HookEventDescriptor] = &[
         timeout: Some(5),
     },
     HookEventDescriptor {
-        name: "PostToolUseFailure",
-        template: HookEntryTemplate::Plain,
-        timeout: Some(5),
-    },
-    HookEventDescriptor {
-        name: "PermissionRequest",
-        template: HookEntryTemplate::Plain,
-        timeout: Some(21_600),
-    },
-    HookEventDescriptor {
-        name: "PermissionDenied",
-        template: HookEntryTemplate::Plain,
-        timeout: Some(5),
-    },
-    HookEventDescriptor {
         name: "Notification",
         template: HookEntryTemplate::Plain,
         timeout: Some(5),
@@ -379,13 +348,10 @@ pub const QWEN_EVENTS: &[HookEventDescriptor] = &[
     plain_event("UserPromptSubmit"),
     matcher_event("PreToolUse", "*", None),
     matcher_event("PostToolUse", "*", None),
-    matcher_event("PostToolUseFailure", "*", None),
-    matcher_event("PermissionRequest", "*", Some(21_600)),
     matcher_event("Notification", "*", None),
     plain_event("Stop"),
     plain_event("SessionStart"),
     plain_event("SessionEnd"),
-    plain_event("PreCompact"),
     plain_event("SubagentStart"),
     plain_event("SubagentStop"),
 ];
@@ -420,21 +386,6 @@ pub const KIMI_EVENTS: &[HookEventDescriptor] = &[
     },
     HookEventDescriptor {
         name: "PostToolUse",
-        template: HookEntryTemplate::Matcher(""),
-        timeout: None,
-    },
-    HookEventDescriptor {
-        name: "PostToolUseFailure",
-        template: HookEntryTemplate::Matcher(""),
-        timeout: None,
-    },
-    HookEventDescriptor {
-        name: "PermissionRequest",
-        template: HookEntryTemplate::Matcher(""),
-        timeout: None,
-    },
-    HookEventDescriptor {
-        name: "PermissionResult",
         template: HookEntryTemplate::Matcher(""),
         timeout: None,
     },
@@ -474,16 +425,6 @@ pub const KIMI_EVENTS: &[HookEventDescriptor] = &[
         timeout: None,
     },
     HookEventDescriptor {
-        name: "PreCompact",
-        template: HookEntryTemplate::Matcher(""),
-        timeout: None,
-    },
-    HookEventDescriptor {
-        name: "PostCompact",
-        template: HookEntryTemplate::Matcher(""),
-        timeout: None,
-    },
-    HookEventDescriptor {
         name: "Interrupt",
         template: HookEntryTemplate::Plain,
         timeout: None,
@@ -494,13 +435,10 @@ pub const QODER_EVENTS: &[HookEventDescriptor] = &[
     plain_event("UserPromptSubmit"),
     matcher_event("PreToolUse", "*", None),
     matcher_event("PostToolUse", "*", None),
-    matcher_event("PostToolUseFailure", "*", None),
-    matcher_event("PermissionRequest", "*", None),
     matcher_event("Notification", "*", None),
     plain_event("Stop"),
     plain_event("SessionStart"),
     plain_event("SessionEnd"),
-    plain_event("PreCompact"),
     plain_event("SubagentStart"),
     plain_event("SubagentStop"),
 ];
@@ -509,16 +447,11 @@ pub const WORKBUDDY_EVENTS: &[HookEventDescriptor] = &[
     plain_event("UserPromptSubmit"),
     matcher_event("PreToolUse", "*", None),
     matcher_event("PostToolUse", "*", None),
-    matcher_event("PostToolUseFailure", "*", None),
-    matcher_event("PermissionRequest", "*", Some(21_600)),
-    matcher_event("PermissionDenied", "*", None),
     matcher_event("Notification", "*", None),
     plain_event("Stop"),
     plain_event("StopFailure"),
     plain_event("SessionStart"),
     plain_event("SessionEnd"),
-    plain_event("PreCompact"),
-    plain_event("PostCompact"),
     plain_event("SubagentStart"),
     plain_event("SubagentStop"),
 ];
@@ -527,13 +460,7 @@ pub const ZCODE_EVENTS: &[HookEventDescriptor] = &[
     plain_event("SessionStart"),
     plain_event("UserPromptSubmit"),
     plain_event("PreToolUse"),
-    HookEventDescriptor {
-        name: "PermissionRequest",
-        template: HookEntryTemplate::Plain,
-        timeout: Some(21_600),
-    },
     plain_event("PostToolUse"),
-    plain_event("PostToolUseFailure"),
     plain_event("Stop"),
 ];
 
@@ -1923,6 +1850,44 @@ fn remove_json_hooks(
     hook_manager::write_json_config(path, &settings)
 }
 
+fn settings_have_managed_hooks(settings: &Value, profile: &AgentIntegrationProfile) -> bool {
+    settings
+        .get("hooks")
+        .and_then(Value::as_object)
+        .is_some_and(|hooks| {
+            hooks
+                .values()
+                .filter_map(Value::as_array)
+                .flatten()
+                .any(|group| json_hook_contains_profile(group, profile))
+        })
+}
+
+/// Earlier releases set Gemini's `security.permissions.mode` to `"auto"` so the
+/// blocking BeforeTool hook was the only permission gate. That gate is gone, so
+/// a leftover `"auto"` would let Gemini run every tool without asking. Revert it
+/// only when the file already carried Vibe Board's managed Gemini hooks, which
+/// is when Vibe Board is the one that wrote it; a user's own setting on a file
+/// Vibe Board never touched is left alone.
+fn revert_legacy_gemini_auto_permissions(
+    settings: &mut Value,
+    profile: &AgentIntegrationProfile,
+    had_managed_hooks: bool,
+) {
+    if profile.id != "gemini" || !had_managed_hooks {
+        return;
+    }
+    let Some(permissions) = settings
+        .pointer_mut("/security/permissions")
+        .and_then(Value::as_object_mut)
+    else {
+        return;
+    };
+    if permissions.get("mode").and_then(Value::as_str) == Some("auto") {
+        permissions.remove("mode");
+    }
+}
+
 fn flat_json_hook_entry(entry: JsonHookEntry, event: &HookEventDescriptor, command: &str) -> Value {
     let command = match entry {
         JsonHookEntry::CommandOnly => command_for_event(command, event),
@@ -1957,6 +1922,8 @@ fn update_nested_json_hooks(
     if !settings.get("hooks").is_some_and(|hooks| hooks.is_object()) {
         settings["hooks"] = serde_json::json!({});
     }
+    let had_managed_hooks = settings_have_managed_hooks(&settings, profile);
+    revert_legacy_gemini_auto_permissions(&mut settings, profile, had_managed_hooks);
     strip_json_hooks_for_profile(&mut settings, profile);
     let hooks = settings["hooks"].as_object_mut().expect("hooks is object");
 
@@ -1984,24 +1951,6 @@ fn update_nested_json_hooks(
         groups.push(group);
     }
 
-    // For Gemini: bypass native permission prompts so AgentBro's BeforeTool
-    // hook is the sole permission gate (avoids double prompts).
-    if profile.id == "gemini" {
-        if let Some(root) = settings.as_object_mut() {
-            let security = root
-                .entry("security".to_string())
-                .or_insert_with(|| serde_json::json!({}));
-            if let Some(sec_obj) = security.as_object_mut() {
-                let permissions = sec_obj
-                    .entry("permissions".to_string())
-                    .or_insert_with(|| serde_json::json!({}));
-                if let Some(perm_obj) = permissions.as_object_mut() {
-                    perm_obj.insert("mode".to_string(), serde_json::json!("auto"));
-                }
-            }
-        }
-    }
-
     hook_manager::write_json_config(path, &settings)?;
     Ok(settings)
 }
@@ -2014,6 +1963,8 @@ fn remove_nested_json_hooks(
         return Ok(());
     }
     let mut settings = hook_manager::read_json_config(path);
+    let had_managed_hooks = settings_have_managed_hooks(&settings, profile);
+    revert_legacy_gemini_auto_permissions(&mut settings, profile, had_managed_hooks);
     strip_json_hooks_for_profile(&mut settings, profile);
     hook_manager::write_json_config(path, &settings)
 }
@@ -4062,7 +4013,7 @@ name = "also keep"
             updated["hooks"]["PreToolUse"][0]["matcher"],
             serde_json::json!("*")
         );
-        assert!(updated["hooks"].get("PermissionRequest").is_some());
+        assert!(updated["hooks"].get("PermissionRequest").is_none());
 
         let _ = std::fs::remove_file(path);
     }
@@ -4129,10 +4080,9 @@ name = "also keep"
         assert!(updated["hooks"]["events"]["PreToolUse"][0]
             .get("matcher")
             .is_none());
-        assert_eq!(
-            updated["hooks"]["events"]["PermissionRequest"][0]["hooks"][0]["timeout"],
-            21_600
-        );
+        assert!(updated["hooks"]["events"]
+            .get("PermissionRequest")
+            .is_none());
         for event in ZCODE_EVENTS {
             assert!(
                 updated["hooks"]["events"].get(event.name).is_some(),
@@ -4345,9 +4295,6 @@ name = "also keep"
             "UserPromptSubmit",
             "PreToolUse",
             "PostToolUse",
-            "PostToolUseFailure",
-            "PermissionRequest",
-            "PermissionResult",
             "Notification",
             "Stop",
             "StopFailure",
@@ -4355,14 +4302,26 @@ name = "also keep"
             "SessionEnd",
             "SubagentStart",
             "SubagentStop",
-            "PreCompact",
-            "PostCompact",
             "Interrupt",
         ] {
             assert!(
                 rendered.contains(&format!("event = \"{}\"", event)),
                 "missing event {} in rendered output:\n{}",
                 event,
+                rendered
+            );
+        }
+        for removed in &[
+            "PostToolUseFailure",
+            "PermissionRequest",
+            "PermissionResult",
+            "PreCompact",
+            "PostCompact",
+        ] {
+            assert!(
+                !rendered.contains(&format!("event = \"{}\"", removed)),
+                "removed event {} must not be installed:\n{}",
+                removed,
                 rendered
             );
         }
@@ -4471,6 +4430,64 @@ name = "also keep"
                 "hook events for {} must come from its own profile",
                 adapter.name()
             );
+        }
+    }
+
+    #[test]
+    fn claude_code_profile_installs_exactly_the_observed_events() {
+        let names: Vec<&str> = CLAUDE_CODE_EVENTS.iter().map(|event| event.name).collect();
+
+        assert_eq!(
+            names,
+            vec![
+                "SessionStart",
+                "SessionEnd",
+                "UserPromptSubmit",
+                "PreToolUse",
+                "PostToolUse",
+                "Notification",
+                "Stop",
+                "SubagentStart",
+                "SubagentStop",
+            ]
+        );
+    }
+
+    #[test]
+    fn no_profile_event_table_keeps_approval_events_or_blocking_timeouts() {
+        const REMOVED_EVENTS: [&str; 8] = [
+            "PermissionRequest",
+            "PermissionResult",
+            "PermissionDenied",
+            "PostToolUseFailure",
+            "PreCompact",
+            "PostCompact",
+            "permissionRequest",
+            "postToolUseFailure",
+        ];
+        // Hook timeouts are seconds in JSON configs and milliseconds in Kiro's
+        // agent file; the old approval wait was 21_600 in either unit's range.
+        const MAX_REASONABLE_TIMEOUT: u64 = 10_000;
+
+        for adapter in crate::agents::all_adapters() {
+            let profile = profile_for_agent(adapter.name()).expect("profile for adapter");
+            for event in profile.events {
+                assert!(
+                    !REMOVED_EVENTS.contains(&event.name),
+                    "{} must not install the removed event {}",
+                    profile.id,
+                    event.name
+                );
+                if let Some(timeout) = event.timeout {
+                    assert!(
+                        timeout <= MAX_REASONABLE_TIMEOUT,
+                        "{} event {} keeps a blocking timeout of {}",
+                        profile.id,
+                        event.name,
+                        timeout
+                    );
+                }
+            }
         }
     }
 
@@ -4675,7 +4692,81 @@ name = "also keep"
         let _ = std::fs::remove_file(path);
     }
 
-    #[cfg(target_os = "windows")]
+    #[test]
+    fn reinstall_removes_managed_entries_for_removed_events() {
+        use std::io::Write;
+
+        let profile = claude_code_profile();
+        let suffix = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let home = std::env::temp_dir().join(format!(
+            "vibeboard removed hooks {}-{suffix}",
+            std::process::id()
+        ));
+        let path = home.join(".claude").join("settings.json");
+        std::fs::create_dir_all(path.parent().expect("settings parent")).expect("settings dir");
+        let managed = "C:/Users/me/.vibeboard/bin/vibe-board-bridge.exe --source claude-code";
+        let user_group = serde_json::json!({
+            "matcher": "Bash",
+            "hooks": [{ "type": "command", "command": "/usr/local/bin/personal-hook --flag" }]
+        });
+        let settings = serde_json::json!({
+            "theme": "dark",
+            "hooks": {
+                "PermissionRequest": [
+                    { "hooks": [{ "type": "command", "command": managed }] }
+                ],
+                "PreCompact": [
+                    { "hooks": [{ "type": "command", "command": managed }] }
+                ],
+                "PostCompact": [
+                    { "hooks": [{ "type": "command", "command": managed }] }
+                ],
+                "PreToolUse": [
+                    user_group.clone(),
+                    { "hooks": [{ "type": "command", "command": managed }] }
+                ]
+            }
+        });
+        {
+            let mut file = std::fs::File::create(&path).expect("settings file");
+            file.write_all(serde_json::to_string_pretty(&settings).unwrap().as_bytes())
+                .expect("write settings");
+        }
+
+        update_nested_json_hooks(&profile, &path, managed).unwrap();
+
+        let updated: Value =
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        let hooks = updated["hooks"].as_object().expect("hooks object");
+        for removed in ["PermissionRequest", "PreCompact", "PostCompact"] {
+            assert!(
+                hooks.get(removed).is_none(),
+                "managed entries for removed event {removed} must be gone: {hooks:?}"
+            );
+        }
+        let mut preserved = 0usize;
+        for entries in hooks.values() {
+            for group in entries.as_array().expect("event hook list") {
+                if serde_json::to_string(group).unwrap()
+                    == serde_json::to_string(&user_group).unwrap()
+                {
+                    preserved += 1;
+                }
+            }
+        }
+        assert_eq!(preserved, 1, "user hook group must survive unchanged");
+        assert_eq!(
+            hooks.len(),
+            CLAUDE_CODE_EVENTS.len(),
+            "only the nine managed events may remain: {hooks:?}"
+        );
+
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
     fn locate_built_bridge_binary() -> Option<PathBuf> {
         let exe = std::env::current_exe().ok()?;
         let deps_dir = exe.parent()?;
@@ -4770,7 +4861,6 @@ name = "also keep"
         child.wait_with_output().expect("wait for hook command")
     }
 
-    #[cfg(target_os = "windows")]
     fn invocation_records(path: &Path) -> Vec<Value> {
         std::fs::read_to_string(path)
             .map(|content| {
@@ -4870,5 +4960,210 @@ name = "also keep"
         }
 
         let _ = std::fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn bridge_forwards_without_waiting_for_any_board_response() {
+        use std::io::Write;
+        use std::net::TcpListener;
+        use std::time::{Duration, Instant};
+
+        let Some(bridge) = locate_built_bridge_binary() else {
+            eprintln!(
+                "skipping bridge response test: no built vibe-board-bridge binary found under target/; run `corepack pnpm build:bridge` first"
+            );
+            return;
+        };
+
+        let suffix = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let home = std::env::temp_dir().join(format!(
+            "vibeboard m2 bridge {}-{suffix}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&home).expect("isolated home");
+
+        // Accept connections but never reply, like a board that is stuck.
+        let listener = TcpListener::bind("127.0.0.1:0").expect("fake board listener");
+        let port = listener.local_addr().expect("listener addr").port();
+        std::thread::spawn(move || {
+            let mut held = Vec::new();
+            for _ in 0..4 {
+                match listener.accept() {
+                    Ok((stream, _)) => held.push(stream),
+                    Err(_) => break,
+                }
+            }
+            std::thread::sleep(Duration::from_secs(5));
+            drop(held);
+        });
+
+        let cases = [
+            (
+                "claude-code",
+                r#"{"hook_event_name":"PreToolUse","session_id":"m2-pretool","tool_name":"AskUserQuestion","tool_input":{"questions":[{"question":"Pick one","options":[{"label":"A"}]}]}}"#,
+            ),
+            (
+                "gemini",
+                r#"{"hook_event_name":"BeforeTool","session_id":"m2-gemini","tool_name":"run_shell_command","tool_input":{"command":"echo hi"}}"#,
+            ),
+            (
+                "claude-code",
+                r#"{"hook_event_name":"PermissionRequest","session_id":"m2-permission","tool_name":"Bash","tool_input":{"command":"echo hi"}}"#,
+            ),
+        ];
+
+        for (source, event) in cases {
+            let started = Instant::now();
+            let mut child = std::process::Command::new(&bridge)
+                .args(["--source", source])
+                .env("VIBEBOARD_HOME", &home)
+                .env("HOME", &home)
+                .env("VIBEBOARD_HOOK_PORT", port.to_string())
+                .stdin(std::process::Stdio::piped())
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .spawn()
+                .expect("spawn bridge");
+            if let Some(stdin) = child.stdin.as_mut() {
+                stdin.write_all(event.as_bytes()).expect("write hook event");
+            }
+            drop(child.stdin.take());
+
+            let status = loop {
+                if let Some(status) = child.try_wait().expect("wait for bridge") {
+                    break status;
+                }
+                if started.elapsed() > Duration::from_secs(2) {
+                    let _ = child.kill();
+                    panic!("bridge did not exit within 2s for {source}: {event}");
+                }
+                std::thread::sleep(Duration::from_millis(10));
+            };
+
+            let output = child.wait_with_output().expect("bridge output");
+            assert!(
+                status.success(),
+                "bridge exited with {status:?} for {source}: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            for forbidden in [
+                "permissionDecision",
+                "updatedInput",
+                "\"decision\"",
+                "behavior",
+            ] {
+                assert!(
+                    !stdout.contains(forbidden),
+                    "bridge must not print an approval decision ({forbidden}): {stdout}"
+                );
+            }
+            assert!(
+                started.elapsed() < Duration::from_secs(2),
+                "bridge must exit within 2s for {source}"
+            );
+        }
+
+        let records = invocation_records(
+            &home
+                .join(".vibeboard")
+                .join("hooks")
+                .join("invocations.jsonl"),
+        );
+        assert_eq!(
+            records.len(),
+            3,
+            "every event must be forwarded: {records:?}"
+        );
+        assert!(
+            records.iter().all(|record| record["forwarded"] == true),
+            "events must be recorded as forwarded: {records:?}"
+        );
+
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    fn gemini_settings_file(label: &str, settings: &Value) -> PathBuf {
+        let suffix = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!(
+            "vibeboard-gemini-{label}-{}-{suffix}.json",
+            std::process::id()
+        ));
+        std::fs::write(&path, serde_json::to_string_pretty(settings).unwrap()).unwrap();
+        path
+    }
+
+    fn gemini_permission_mode(path: &Path) -> Option<String> {
+        let settings: Value =
+            serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+        settings
+            .pointer("/security/permissions/mode")
+            .and_then(Value::as_str)
+            .map(str::to_string)
+    }
+
+    fn legacy_gemini_settings() -> Value {
+        serde_json::json!({
+            "security": { "permissions": { "mode": "auto" } },
+            "hooks": {
+                "BeforeTool": [{
+                    "matcher": "*",
+                    "hooks": [{
+                        "type": "command",
+                        "command": "C:/Users/me/.vibeboard/bin/vibe-board-bridge.exe --source gemini",
+                        "timeout": 21600
+                    }]
+                }]
+            }
+        })
+    }
+
+    #[test]
+    fn reinstall_reverts_the_auto_permission_mode_vibe_board_set_for_gemini() {
+        let path = gemini_settings_file("reinstall", &legacy_gemini_settings());
+
+        update_nested_json_hooks(
+            &gemini_profile(),
+            &path,
+            "C:/Users/me/.vibeboard/bin/vibe-board-bridge.exe --source gemini",
+        )
+        .unwrap();
+
+        assert_eq!(gemini_permission_mode(&path), None);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn uninstall_reverts_the_auto_permission_mode_vibe_board_set_for_gemini() {
+        let path = gemini_settings_file("uninstall", &legacy_gemini_settings());
+
+        remove_nested_json_hooks(&gemini_profile(), &path).unwrap();
+
+        assert_eq!(gemini_permission_mode(&path), None);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn a_users_own_gemini_auto_mode_is_kept_when_vibe_board_never_installed_hooks() {
+        let path = gemini_settings_file(
+            "user-owned",
+            &serde_json::json!({ "security": { "permissions": { "mode": "auto" } } }),
+        );
+
+        update_nested_json_hooks(
+            &gemini_profile(),
+            &path,
+            "C:/Users/me/.vibeboard/bin/vibe-board-bridge.exe --source gemini",
+        )
+        .unwrap();
+
+        assert_eq!(gemini_permission_mode(&path).as_deref(), Some("auto"));
+        let _ = std::fs::remove_file(&path);
     }
 }

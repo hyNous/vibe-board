@@ -21,12 +21,11 @@ const TRANSCRIPT_TAIL_BYTES: u64 = 256 * 1024;
 
 /// Last known activity for a Claude Code transcript. `Finished` means the last
 /// recorded turn ended; `Active` means a prompt or tool result is still waiting
-/// for the assistant. `WaitingApproval`/`WaitingInput` are inferred when the
-/// transcript stops on an interactive tool call.
+/// for the assistant. `WaitingInput` is inferred when the transcript stops on
+/// an interactive tool call.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum TranscriptActivity {
     Active,
-    WaitingApproval,
     WaitingInput,
     Finished,
     Interrupted,
@@ -272,13 +271,7 @@ fn apply_parse_result(
 
     let latest_user = latest_text_for_role(&result.new_messages, ChatRole::User);
     session_store.update_session(session_id, |session| {
-        session.phase = if session.pending_permission.is_some() || session.pending_plan.is_some() {
-            SessionPhase::WaitingApproval
-        } else if session.pending_question.is_some() {
-            SessionPhase::WaitingInput
-        } else {
-            SessionPhase::Processing
-        };
+        session.phase = SessionPhase::Processing;
         if let Some(text) = latest_user {
             session.last_user_message = Some(text);
         }
@@ -287,18 +280,11 @@ fn apply_parse_result(
 
 fn apply_activity(session_store: &SessionStore, session_id: &str, activity: TranscriptActivity) {
     session_store.update_session(session_id, |session| {
-        session.phase = if session.pending_permission.is_some() || session.pending_plan.is_some() {
-            SessionPhase::WaitingApproval
-        } else if session.pending_question.is_some() {
-            SessionPhase::WaitingInput
-        } else {
-            match activity {
-                TranscriptActivity::Active => SessionPhase::Processing,
-                TranscriptActivity::WaitingApproval => SessionPhase::WaitingApproval,
-                TranscriptActivity::WaitingInput => SessionPhase::WaitingInput,
-                TranscriptActivity::Finished => SessionPhase::Done,
-                TranscriptActivity::Interrupted => SessionPhase::Interrupted,
-            }
+        session.phase = match activity {
+            TranscriptActivity::Active => SessionPhase::Processing,
+            TranscriptActivity::WaitingInput => SessionPhase::WaitingInput,
+            TranscriptActivity::Finished => SessionPhase::Done,
+            TranscriptActivity::Interrupted => SessionPhase::Interrupted,
         };
     });
 }
@@ -340,12 +326,8 @@ fn transcript_activity_for_line(json: &serde_json::Value) -> Option<TranscriptAc
                 return None;
             }
             let message = json.get("message")?;
-            if let Some(tool) = interactive_tool_name(message) {
-                return Some(if tool == "ExitPlanMode" {
-                    TranscriptActivity::WaitingApproval
-                } else {
-                    TranscriptActivity::WaitingInput
-                });
+            if interactive_tool_name(message).is_some() {
+                return Some(TranscriptActivity::WaitingInput);
             }
             match message.get("stop_reason").and_then(|value| value.as_str()) {
                 Some("end_turn") | Some("max_tokens") | Some("stop_sequence") => {
@@ -891,7 +873,7 @@ mod tests {
         );
         assert_eq!(
             read_transcript_activity(&plan),
-            Some(TranscriptActivity::WaitingApproval)
+            Some(TranscriptActivity::WaitingInput)
         );
         assert_eq!(
             read_transcript_activity(&question),

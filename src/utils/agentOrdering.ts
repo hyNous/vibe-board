@@ -76,7 +76,7 @@ export function buildAgentUsageScores(
     const age = activityAt > 0 ? Math.max(0, now - activityAt) : RECENT_WINDOW_MS
     const recency = Math.max(0, RECENT_WINDOW_MS - age) / RECENT_WINDOW_MS
     const activeBoost = session.id === activeSessionId ? 10_000 : 0
-    const runningBoost = session.phase === 'processing' || session.phase === 'waiting_approval' || session.phase === 'waiting_input'
+    const runningBoost = session.phase === 'processing' || session.phase === 'waiting_input'
       ? 2_000
       : 0
     scores.set(session.agentType, (scores.get(session.agentType) ?? 0) + activeBoost + runningBoost + 1_000 + recency * 1_000)

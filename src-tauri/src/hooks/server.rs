@@ -1,23 +1,21 @@
 // HookServer — Async TCP + Unix socket server for agent hook events
-// Accepts JSON-line protocol from hook scripts, routes to adapters,
-// and keeps connections alive for permission request/response flow.
+// Accepts JSON-line protocol from hook scripts and routes events to adapters.
+// Connections are read-only: the server never sends a response back.
 
-use std::collections::{BTreeMap, HashMap, VecDeque};
+use std::collections::{HashMap, VecDeque};
 #[cfg(unix)]
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::net::TcpListener;
 #[cfg(unix)]
 use tokio::net::{UnixListener, UnixStream};
-use tokio::sync::{oneshot, Mutex};
 
 use super::session_store::{
-    AgentRunStatus, ContextWindowInfo, PendingPermission, PendingPlan, PendingQuestion,
-    QuestionItem as PendingQuestionItem, QuestionOption as PendingQuestionOption, RateLimitInfo,
-    SessionPhase, SessionStore, SubagentInfo, SubagentStopUpdate, UsageRateWindow,
+    AgentRunStatus, ContextWindowInfo, RateLimitInfo, SessionPhase, SessionStore, SubagentInfo,
+    SubagentStopUpdate, UsageRateWindow,
 };
 use crate::agents::{AgentAdapter, AgentEvent};
 use crate::config::{AppConfig, ConfigStore};
@@ -25,9 +23,10 @@ use crate::control_tower::{ControlTowerDatabase, TaskEventRecord};
 use crate::hook_endpoint;
 use crate::hooks::conversation_parser::{
     discover_codex_session_file, discover_session_file, extract_cache_ttl_info,
-    extract_latest_assistant_text, extract_pending_codex_user_input, extract_session_title,
-    extract_subagents_from_transcript, CodexPendingUserInput, TranscriptSubagentInfo,
+    extract_latest_assistant_text, extract_session_title, extract_subagents_from_transcript,
+    TranscriptSubagentInfo,
 };
+
 use crate::sound::{SoundEngine, SoundEvent};
 use crate::terminal::suppression;
 use crate::webhook::{self, templates::NotificationEvent};
@@ -36,12 +35,6 @@ use uuid::Uuid;
 const RAW_EVENT_BUFFER_PER_SESSION: usize = 200;
 const SESSION_END_CLEANUP_SECS: u64 = 5;
 const DONE_SESSION_HISTORY_CLEANUP_SECS: u64 = 300;
-const DEFAULT_INTERACTION_RESPONSE_TIMEOUT_SECS: u64 = 300;
-const HUMAN_INTERACTION_RESPONSE_TIMEOUT_SECS: u64 = 21_600;
-const RECENT_TOOL_CACHE_TTL_MS: u64 = 2 * 60 * 1000;
-const RECENT_TOOL_CACHE_LIMIT: usize = 200;
-const WEBHOOK_INTERACTION_EVENTS: [&str; 3] =
-    ["waiting_approval", "waiting_input", "plan_approval"];
 
 /// Raw hook event snapshot retained for Agent monitor diagnostics.
 #[derive(Debug, Clone, serde::Serialize)]
@@ -145,67 +138,8 @@ impl RawHookEventSummary {
     }
 }
 
-/// Permission response sent back to hook script
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct PermissionResponse {
-    pub decision: String,
-    pub reason: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub always: Option<bool>,
-}
-
-/// A pending permission waiting for UI response
-pub(crate) struct PendingPermissionEntry {
-    pub(crate) session_id: String,
-    pub(crate) received_at_ms: u64,
-    pub(crate) tx: oneshot::Sender<PermissionReply>,
-}
-
-pub(crate) struct PermissionReply {
-    pub(crate) response: PermissionResponse,
-    pub(crate) ack: oneshot::Sender<Result<(), String>>,
-}
-
-#[derive(Debug, Clone)]
-struct RecentToolInvocation {
-    session_id: String,
-    tool_name: String,
-    tool_use_id: String,
-    signature: String,
-    seen_at_ms: u64,
-}
-
-/// Question response sent back to hook script
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct QuestionResponse {
-    pub answer: String,
-}
-
-/// A pending question waiting for UI response
-pub(crate) struct PendingQuestionEntry {
-    pub(crate) tx: oneshot::Sender<QuestionResponse>,
-}
-
-/// Plan response sent back to hook script
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct PlanResponse {
-    pub mode: String,
-    pub message: Option<String>,
-}
-
-/// A pending plan waiting for UI response
-pub(crate) struct PendingPlanEntry {
-    pub(crate) tx: oneshot::Sender<PlanResponse>,
-}
-
 /// The HookServer manages incoming connections from agent hook scripts
 pub struct HookServer {
-    /// Pending permission requests: tool/request key -> waiting hook connections
-    pending_permissions: Arc<Mutex<HashMap<String, Vec<PendingPermissionEntry>>>>,
-    /// Pending question requests: session_id -> sender
-    pending_questions: Arc<Mutex<HashMap<String, PendingQuestionEntry>>>,
-    /// Pending plan approvals: session_id -> sender
-    pending_plans: Arc<Mutex<HashMap<String, PendingPlanEntry>>>,
     /// Session store reference
     session_store: Arc<SessionStore>,
     /// Registered adapters (shared with AppState to avoid duplication)
@@ -223,38 +157,17 @@ pub struct HookServer {
     socket_owned: Arc<AtomicBool>,
     /// Persistent task trace database used for child-agent native events.
     task_db: Arc<ControlTowerDatabase>,
-    /// Recent PreToolUse cache for PermissionRequest correlation when Codex omits tool_use_id.
-    recent_tools: Arc<Mutex<VecDeque<RecentToolInvocation>>>,
 }
 
 #[derive(Clone)]
 struct HookConnectionContext {
-    pending: Arc<Mutex<HashMap<String, Vec<PendingPermissionEntry>>>>,
-    pending_q: Arc<Mutex<HashMap<String, PendingQuestionEntry>>>,
-    pending_plan: Arc<Mutex<HashMap<String, PendingPlanEntry>>>,
     store: Arc<SessionStore>,
     adapters: Arc<Vec<Arc<dyn AgentAdapter>>>,
     sound: Arc<std::sync::Mutex<Option<Arc<SoundEngine>>>>,
     app: Arc<std::sync::Mutex<Option<tauri::AppHandle>>>,
     raw_events: Arc<std::sync::Mutex<RawHookEventStore>>,
     config_store: Arc<std::sync::Mutex<Option<ConfigStore>>>,
-    recent_tools: Arc<Mutex<VecDeque<RecentToolInvocation>>>,
     task_db: Arc<ControlTowerDatabase>,
-}
-
-#[derive(Clone)]
-enum PendingWebhookCheck {
-    Permission {
-        tool_use_id: Option<String>,
-        tool_name: String,
-    },
-    Question {
-        question: String,
-    },
-    Plan {
-        title: String,
-        content: String,
-    },
 }
 
 impl HookServer {
@@ -264,9 +177,6 @@ impl HookServer {
         task_db: Arc<ControlTowerDatabase>,
     ) -> Self {
         Self {
-            pending_permissions: Arc::new(Mutex::new(HashMap::new())),
-            pending_questions: Arc::new(Mutex::new(HashMap::new())),
-            pending_plans: Arc::new(Mutex::new(HashMap::new())),
             session_store,
             adapters,
             sound_engine: Arc::new(std::sync::Mutex::new(None)),
@@ -275,7 +185,6 @@ impl HookServer {
             config_store: Arc::new(std::sync::Mutex::new(None)),
             endpoint: hook_endpoint::current(),
             socket_owned: Arc::new(AtomicBool::new(false)),
-            recent_tools: Arc::new(Mutex::new(VecDeque::new())),
             task_db,
         }
     }
@@ -305,193 +214,6 @@ impl HookServer {
     pub fn set_config_store(&self, config_store: ConfigStore) {
         if let Ok(mut store) = self.config_store.lock() {
             *store = Some(config_store);
-        }
-    }
-
-    fn interaction_response_timeout(raw: &serde_json::Value) -> Duration {
-        let agent = raw
-            .get("agent")
-            .and_then(|value| value.as_str())
-            .unwrap_or_default();
-        let seconds = if matches!(
-            agent,
-            "codex" | "openai.codex" | "claude-code" | "claude" | "opencode"
-        ) {
-            HUMAN_INTERACTION_RESPONSE_TIMEOUT_SECS
-        } else {
-            DEFAULT_INTERACTION_RESPONSE_TIMEOUT_SECS
-        };
-        Duration::from_secs(seconds)
-    }
-
-    async fn record_recent_tool_invocation(
-        recent_tools: &Arc<Mutex<VecDeque<RecentToolInvocation>>>,
-        event: Option<&AgentEvent>,
-        raw: &serde_json::Value,
-    ) {
-        let Some(AgentEvent::ToolUse {
-            session_id,
-            tool_name,
-            status,
-            ..
-        }) = event
-        else {
-            return;
-        };
-        if status != "running" {
-            return;
-        }
-        let Some(tool_use_id) = Self::raw_tool_use_id(raw) else {
-            return;
-        };
-
-        let now = current_time_ms();
-        let mut tools = recent_tools.lock().await;
-        Self::prune_recent_tools(&mut tools, now);
-        tools.push_back(RecentToolInvocation {
-            session_id: session_id.clone(),
-            tool_name: tool_name.clone(),
-            tool_use_id,
-            signature: Self::tool_input_signature_from_raw(raw),
-            seen_at_ms: now,
-        });
-        while tools.len() > RECENT_TOOL_CACHE_LIMIT {
-            tools.pop_front();
-        }
-    }
-
-    async fn resolve_permission_tool_use_id(
-        recent_tools: &Arc<Mutex<VecDeque<RecentToolInvocation>>>,
-        session_id: &str,
-        tool_name: &str,
-        raw: &serde_json::Value,
-    ) -> Option<String> {
-        if let Some(tool_use_id) = Self::raw_tool_use_id(raw) {
-            return Some(tool_use_id);
-        }
-
-        let signature = Self::tool_input_signature_from_raw(raw);
-        let now = current_time_ms();
-        let mut tools = recent_tools.lock().await;
-        Self::prune_recent_tools(&mut tools, now);
-
-        if !signature.is_empty() {
-            if let Some(tool) = tools.iter().rev().find(|tool| {
-                tool.session_id == session_id
-                    && tool.tool_name == tool_name
-                    && tool.signature == signature
-            }) {
-                return Some(tool.tool_use_id.clone());
-            }
-        }
-
-        tools
-            .iter()
-            .rev()
-            .find(|tool| tool.session_id == session_id && tool.tool_name == tool_name)
-            .map(|tool| tool.tool_use_id.clone())
-    }
-
-    fn prune_recent_tools(tools: &mut VecDeque<RecentToolInvocation>, now_ms: u64) {
-        while tools
-            .front()
-            .is_some_and(|tool| now_ms.saturating_sub(tool.seen_at_ms) > RECENT_TOOL_CACHE_TTL_MS)
-        {
-            tools.pop_front();
-        }
-    }
-
-    fn raw_tool_use_id(raw: &serde_json::Value) -> Option<String> {
-        raw.get("tool_use_id")
-            .or_else(|| raw.get("toolUseId"))
-            .or_else(|| raw.get("toolUseID"))
-            .or_else(|| raw.get("toolCallId"))
-            .or_else(|| raw.get("tool_call_id"))
-            .or_else(|| raw.get("callId"))
-            .or_else(|| raw.get("call_id"))
-            .and_then(|value| value.as_str())
-            .filter(|value| !value.trim().is_empty())
-            .map(|value| value.to_string())
-    }
-
-    fn tool_input_signature_from_raw(raw: &serde_json::Value) -> String {
-        Self::tool_input_signature(raw.get("tool_input").or_else(|| raw.get("toolInput")))
-    }
-
-    fn tool_input_signature(input: Option<&serde_json::Value>) -> String {
-        let Some(input) = input else {
-            return String::new();
-        };
-
-        if let Some(obj) = input.as_object() {
-            for key in ["command", "file_path", "filePath", "path"] {
-                if let Some(value) = obj.get(key).and_then(|value| value.as_str()) {
-                    if !value.trim().is_empty() {
-                        return format!("{}:{}", key, value);
-                    }
-                }
-            }
-        }
-
-        Self::canonical_json_for_signature(input)
-    }
-
-    fn clear_pending_permission_after_tool_resolution(
-        store: &SessionStore,
-        session_id: &str,
-        raw: &serde_json::Value,
-    ) {
-        let Some(session) = store.get_session(session_id) else {
-            return;
-        };
-        let Some(pending) = session.pending_permission else {
-            return;
-        };
-
-        let raw_tool_use_id = Self::raw_tool_use_id(raw);
-        let same_tool_use_id = raw_tool_use_id
-            .as_deref()
-            .is_some_and(|id| pending.tool_use_id.as_deref() == Some(id));
-        if same_tool_use_id || Self::is_permission_resolution_event(raw) {
-            store.set_pending_permission(session_id, None);
-        }
-    }
-
-    fn is_permission_resolution_event(raw: &serde_json::Value) -> bool {
-        let event = Self::raw_event_name(raw).to_ascii_lowercase();
-        event == "permissiondenied"
-            || event.ends_with(".approved")
-            || event.ends_with(".denied")
-            || event.ends_with(".rejected")
-    }
-
-    fn canonical_json_for_signature(value: &serde_json::Value) -> String {
-        match value {
-            serde_json::Value::Object(map) => {
-                let mut entries = BTreeMap::new();
-                for (key, value) in map {
-                    if key == "description" {
-                        continue;
-                    }
-                    entries.insert(key.clone(), Self::canonical_json_for_signature(value));
-                }
-                let parts = entries
-                    .into_iter()
-                    .map(|(key, value)| {
-                        let key = serde_json::to_string(&key).unwrap_or_else(|_| "\"\"".into());
-                        format!("{}:{}", key, value)
-                    })
-                    .collect::<Vec<_>>();
-                format!("{{{}}}", parts.join(","))
-            }
-            serde_json::Value::Array(values) => {
-                let parts = values
-                    .iter()
-                    .map(Self::canonical_json_for_signature)
-                    .collect::<Vec<_>>();
-                format!("[{}]", parts.join(","))
-            }
-            _ => serde_json::to_string(value).unwrap_or_default(),
         }
     }
 
@@ -560,121 +282,11 @@ impl HookServer {
             .unwrap_or_else(|| "agent".to_string())
     }
 
-    fn permission_input_value_from_raw(raw: &serde_json::Value) -> Option<serde_json::Value> {
-        if let Some(input) = raw.get("tool_input").or_else(|| raw.get("toolInput")) {
-            return Some(input.clone());
-        }
-
-        let mut input = serde_json::Map::new();
-        if let Some(command) = raw
-            .get("commandPreview")
-            .or_else(|| raw.pointer("/messageParams/command"))
-            .and_then(|value| value.as_str())
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-        {
-            input.insert(
-                "command".to_string(),
-                serde_json::Value::String(command.to_string()),
-            );
-        }
-        if let Some(paths) = raw.pointer("/messageParams/paths").cloned() {
-            input.insert("paths".to_string(), paths);
-        }
-        if let Some(message) = raw
-            .get("message")
-            .or_else(|| raw.get("messageKey"))
-            .and_then(|value| value.as_str())
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-        {
-            input.insert(
-                "message".to_string(),
-                serde_json::Value::String(message.to_string()),
-            );
-        }
-        if let Some(category) = raw.get("category").and_then(|value| value.as_str()) {
-            input.insert(
-                "category".to_string(),
-                serde_json::Value::String(category.to_string()),
-            );
-        }
-        if let Some(event_type) = raw.get("eventType").and_then(|value| value.as_str()) {
-            input.insert(
-                "eventType".to_string(),
-                serde_json::Value::String(event_type.to_string()),
-            );
-        }
-
-        (!input.is_empty()).then_some(serde_json::Value::Object(input))
-    }
-
-    fn normalized_permission_input_from_raw(raw: &serde_json::Value) -> Option<serde_json::Value> {
-        let input = Self::permission_input_value_from_raw(raw)?;
-        if let Some(text) = input.as_str() {
-            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(text) {
-                return Some(parsed);
-            }
-        }
-        Some(input)
-    }
-
-    fn permission_tool_input_from_raw(raw: &serde_json::Value) -> String {
-        Self::permission_input_value_from_raw(raw)
-            .map(|value| value.to_string())
-            .unwrap_or_default()
-    }
-
-    fn approval_detail_for_webhook(tool_name: &str, raw: &serde_json::Value) -> Option<String> {
-        let parsed_input = Self::normalized_permission_input_from_raw(raw)?;
-
-        let mut lines = vec![format!("> {}", tool_name)];
-        let command = parsed_input
-            .get("command")
-            .or_else(|| parsed_input.get("cmd"))
-            .and_then(|value| value.as_str())
-            .map(str::trim)
-            .filter(|value| !value.is_empty());
-        let description = parsed_input
-            .get("description")
-            .or_else(|| parsed_input.get("desc"))
-            .and_then(|value| value.as_str())
-            .map(str::trim)
-            .filter(|value| !value.is_empty());
-
-        if let Some(command) = command {
-            lines.push(String::new());
-            lines.push("```bash".to_string());
-            lines.push(command.chars().take(1200).collect());
-            lines.push("```".to_string());
-        }
-        if let Some(description) = description {
-            lines.push(String::new());
-            lines.push(format!("> {}", description));
-        }
-        if command.is_none() && description.is_none() {
-            let detail = serde_json::to_string_pretty(&parsed_input)
-                .or_else(|_| serde_json::to_string(&parsed_input))
-                .unwrap_or_default();
-            if detail.trim().is_empty() {
-                return None;
-            }
-            lines.push(String::new());
-            lines.push("```json".to_string());
-            lines.push(detail.chars().take(1600).collect());
-            lines.push("```".to_string());
-        }
-
-        Some(lines.join("\n"))
-    }
-
     fn dispatch_webhook_event(
         config_store: &Arc<std::sync::Mutex<Option<ConfigStore>>>,
-        store: &Arc<SessionStore>,
         event: NotificationEvent,
         source: String,
         session_id: String,
-        pending_check: Option<PendingWebhookCheck>,
     ) {
         let Some(config_store) = Self::current_config_store(config_store) else {
             return;
@@ -682,32 +294,13 @@ impl HookServer {
         let event_key = webhook::templates::event_key(&event);
         let app_config = config_store.get();
         let language = app_config.language.clone();
-        let configs = app_config.webhook_configs;
         let mut immediate = Vec::new();
 
-        for cfg in configs {
+        for cfg in app_config.webhook_configs {
             if !cfg.matches(event_key, &source) {
                 continue;
             }
-
-            if let Some(check) = pending_check
-                .clone()
-                .filter(|_| WEBHOOK_INTERACTION_EVENTS.contains(&event_key) && cfg.delay_enabled)
-            {
-                Self::schedule_delayed_webhook(
-                    config_store.clone(),
-                    store.clone(),
-                    cfg.id.clone(),
-                    event_key.to_string(),
-                    event.clone(),
-                    source.clone(),
-                    session_id.clone(),
-                    check,
-                    cfg.delay_minutes.max(1),
-                );
-            } else {
-                immediate.push(cfg);
-            }
+            immediate.push(cfg);
         }
 
         if immediate.is_empty() {
@@ -740,93 +333,6 @@ impl HookServer {
                 }
             }
         });
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    fn schedule_delayed_webhook(
-        config_store: ConfigStore,
-        store: Arc<SessionStore>,
-        webhook_id: String,
-        event_key: String,
-        event: NotificationEvent,
-        source: String,
-        session_id: String,
-        pending_check: PendingWebhookCheck,
-        delay_minutes: u32,
-    ) {
-        tokio::spawn(async move {
-            tokio::time::sleep(Duration::from_secs(u64::from(delay_minutes) * 60)).await;
-
-            if !Self::is_interaction_still_pending(&store, &session_id, &pending_check) {
-                log::info!(
-                    "Delayed webhook {} skipped; session {} was handled",
-                    webhook_id,
-                    session_id
-                );
-                return;
-            }
-
-            let app_config = config_store.get();
-            let language = app_config.language;
-            let cfg = app_config.webhook_configs.into_iter().find(|cfg| {
-                cfg.id == webhook_id && cfg.delay_enabled && cfg.matches(&event_key, &source)
-            });
-
-            let Some(cfg) = cfg else {
-                return;
-            };
-
-            let results =
-                webhook::WebhookForwarder::send(&[cfg], &event, &source, &session_id, &language)
-                    .await;
-            for (id, result) in results {
-                match result {
-                    webhook::WebhookResult::Success => log::info!(
-                        "Delayed webhook {} delivered for session {}",
-                        id,
-                        session_id
-                    ),
-                    webhook::WebhookResult::Skipped => {}
-                    webhook::WebhookResult::Failed(message) => log::warn!(
-                        "Delayed webhook {} failed for session {}: {}",
-                        id,
-                        session_id,
-                        message
-                    ),
-                }
-            }
-        });
-    }
-
-    fn is_interaction_still_pending(
-        store: &SessionStore,
-        session_id: &str,
-        pending_check: &PendingWebhookCheck,
-    ) -> bool {
-        let Some(session) = store.get_session(session_id) else {
-            return false;
-        };
-
-        match pending_check {
-            PendingWebhookCheck::Permission {
-                tool_use_id,
-                tool_name,
-            } => session.pending_permission.as_ref().is_some_and(|pending| {
-                if let Some(tool_use_id) = tool_use_id {
-                    pending.tool_use_id.as_ref() == Some(tool_use_id)
-                } else {
-                    pending.tool_name == *tool_name
-                }
-            }),
-            PendingWebhookCheck::Question { question } => session
-                .pending_question
-                .as_ref()
-                .is_some_and(|pending| pending.question == *question),
-            PendingWebhookCheck::Plan { title, content } => session
-                .pending_plan
-                .as_ref()
-                .is_some_and(|pending| pending.title == *title && pending.content == *content),
-        }
     }
 
     /// Detect if Cursor has YOLO mode enabled by reading its settings.json
@@ -873,16 +379,12 @@ impl HookServer {
         let tcp_listener = TcpListener::bind(&tcp_addr).await?;
 
         let context = HookConnectionContext {
-            pending: self.pending_permissions.clone(),
-            pending_q: self.pending_questions.clone(),
-            pending_plan: self.pending_plans.clone(),
             store: self.session_store.clone(),
             adapters: self.adapters.clone(),
             sound: self.sound_engine.clone(),
             app: self.app_handle.clone(),
             raw_events: self.raw_events.clone(),
             config_store: self.config_store.clone(),
-            recent_tools: self.recent_tools.clone(),
             task_db: self.task_db.clone(),
         };
 
@@ -971,24 +473,19 @@ impl HookServer {
         }
     }
 
-    /// Handle a single connection (works with both Unix and TCP streams via AsyncRead+AsyncWrite)
+    /// Handle a single connection (works with both Unix and TCP streams)
     async fn handle_connection<S>(stream: S, context: HookConnectionContext) -> anyhow::Result<()>
     where
-        S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
+        S: tokio::io::AsyncRead + Unpin + Send + 'static,
     {
-        let pending = context.pending;
-        let pending_q = context.pending_q;
-        let pending_plan = context.pending_plan;
         let store = context.store;
         let adapters = context.adapters;
         let sound = context.sound;
         let app = context.app;
         let raw_events = context.raw_events;
         let config_store = context.config_store;
-        let recent_tools = context.recent_tools;
         let task_db = context.task_db;
-        let (reader, mut writer) = tokio::io::split(stream);
-        let mut buf_reader = BufReader::new(reader);
+        let mut buf_reader = BufReader::new(stream);
         let mut line = String::new();
 
         // Read a single JSON line
@@ -1022,345 +519,12 @@ impl HookServer {
         Self::record_raw_event(&raw_events, &raw, event.as_ref());
         if let Some(ref agent_event) = event {
             Self::ensure_session_for_event(&store, agent_event, &raw);
-            // Record presence immediately so blocking interactions also mark
-            // the CLI online even when their branch returns early below.
             store.record_agent_event(agent_event);
         }
         let event_for_status = event.clone();
-        Self::record_recent_tool_invocation(&recent_tools, event.as_ref(), &raw).await;
 
         match event {
-            Some(AgentEvent::PermissionRequest {
-                ref session_id,
-                ref tool_name,
-                ref diff,
-                ref options,
-            }) => {
-                if Self::route_interaction_to_terminal_if_idle(
-                    &config_store,
-                    &store,
-                    &raw,
-                    session_id,
-                    "permission",
-                ) {
-                    return Ok(());
-                }
-
-                // Check smart suppression: is the agent's terminal focused?
-                let is_suppressed = Self::check_suppression(&store, session_id);
-
-                // Only play sound if not suppressed
-                if !is_suppressed {
-                    Self::play_sound(&sound, SoundEvent::TaskConfirmation);
-                }
-
-                let resolved_tool_use_id = Self::resolve_permission_tool_use_id(
-                    &recent_tools,
-                    session_id,
-                    tool_name,
-                    &raw,
-                )
-                .await
-                .unwrap_or_else(|| format!("permission:{}:{}", session_id, current_time_ms()));
-
-                // Set pending permission on session
-                store.set_pending_permission(
-                    session_id,
-                    Some(PendingPermission {
-                        tool_use_id: Some(resolved_tool_use_id.clone()),
-                        tool_name: tool_name.clone(),
-                        tool_input: Self::permission_tool_input_from_raw(&raw),
-                        diff: diff.clone(),
-                        options: options.clone(),
-                    }),
-                );
-                Self::update_session_metadata_from_raw(&store, &raw);
-                Self::dispatch_webhook_event(
-                    &config_store,
-                    &store,
-                    NotificationEvent::WaitingApproval {
-                        tool_name: tool_name.clone(),
-                        detail: Self::approval_detail_for_webhook(tool_name, &raw),
-                    },
-                    Self::source_for_webhook(&store, &raw, session_id, None),
-                    session_id.clone(),
-                    Some(PendingWebhookCheck::Permission {
-                        tool_use_id: Some(resolved_tool_use_id.clone()),
-                        tool_name: tool_name.clone(),
-                    }),
-                );
-
-                // Re-emit with suppression flag so frontend knows not to auto-expand
-                if is_suppressed {
-                    store.emit_update_suppressed(true);
-                    if let Ok(guard) = app.lock() {
-                        if let Some(ref handle) = *guard {
-                            crate::platform::notifications::send_permission_notification(
-                                handle, tool_name,
-                            );
-                        }
-                    }
-                }
-
-                // Create a oneshot channel for the permission response
-                let (tx, rx) = oneshot::channel();
-                {
-                    let mut pending_map = pending.lock().await;
-                    pending_map
-                        .entry(resolved_tool_use_id.clone())
-                        .or_default()
-                        .push(PendingPermissionEntry {
-                            session_id: session_id.clone(),
-                            received_at_ms: current_time_ms(),
-                            tx,
-                        });
-                }
-
-                // Wait for the UI to respond. Codex uses a longer hook timeout for Vibe Board
-                // approvals; other agents keep the existing five-minute fallback window.
-                let response =
-                    tokio::time::timeout(Self::interaction_response_timeout(&raw), rx).await;
-
-                match response {
-                    Ok(Ok(reply)) => {
-                        // Send response back to the hook script
-                        let write_result = match serde_json::to_string(&reply.response) {
-                            Ok(json) => {
-                                let result = async {
-                                    writer.write_all(json.as_bytes()).await?;
-                                    writer.write_all(b"\n").await?;
-                                    writer.flush().await
-                                }
-                                .await
-                                .map_err(|err| err.to_string());
-                                result
-                            }
-                            Err(err) => Err(err.to_string()),
-                        };
-                        let _ = reply.ack.send(write_result.clone());
-
-                        if write_result.is_ok() {
-                            // Play confirmation sound
-                            Self::play_sound(&sound, SoundEvent::TaskConfirmation);
-
-                            // Clear pending permission
-                            store.set_pending_permission(session_id, None);
-                            store.update_phase(session_id, SessionPhase::Processing);
-                        } else if let Err(err) = write_result {
-                            log::warn!(
-                                "Permission response write failed for session {} tool {}: {}",
-                                session_id,
-                                resolved_tool_use_id,
-                                err
-                            );
-                        }
-                    }
-                    _ => {
-                        // Timeout or channel closed — let Claude Code handle it normally
-                        let mut pending_map = pending.lock().await;
-                        pending_map.remove(&resolved_tool_use_id);
-                        store.set_pending_permission(session_id, None);
-                        log::warn!("Permission request timed out for session {}", session_id);
-                    }
-                }
-            }
-            Some(AgentEvent::AskQuestion {
-                ref session_id,
-                ref question,
-                ref options,
-                ref descriptions,
-                ref header,
-                multi_select,
-                ref questions,
-            }) => {
-                if Self::route_interaction_to_terminal_if_idle(
-                    &config_store,
-                    &store,
-                    &raw,
-                    session_id,
-                    "question",
-                ) {
-                    return Ok(());
-                }
-
-                // Check smart suppression: is the agent's terminal focused?
-                let is_suppressed = Self::check_suppression(&store, session_id);
-
-                // Only play sound if not suppressed
-                if !is_suppressed {
-                    Self::play_sound(&sound, SoundEvent::NeedsApproval);
-                }
-
-                store.set_pending_question(
-                    session_id,
-                    Some(PendingQuestion {
-                        question: question.clone(),
-                        options: options.clone(),
-                        descriptions: descriptions.clone(),
-                        header: header.clone(),
-                        multi_select,
-                        questions: questions
-                            .iter()
-                            .map(|q| PendingQuestionItem {
-                                id: None,
-                                question: q.question.clone(),
-                                header: q.header.clone(),
-                                options: q
-                                    .options
-                                    .iter()
-                                    .map(|opt| PendingQuestionOption {
-                                        label: opt.label.clone(),
-                                        description: opt.description.clone(),
-                                    })
-                                    .collect(),
-                                multi_select: q.multi_select,
-                            })
-                            .collect(),
-                        tool_use_id: None,
-                        source: None,
-                        response_mode: None,
-                    }),
-                );
-                Self::update_session_metadata_from_raw(&store, &raw);
-                Self::dispatch_webhook_event(
-                    &config_store,
-                    &store,
-                    NotificationEvent::WaitingInput {
-                        question: question.clone(),
-                    },
-                    Self::source_for_webhook(&store, &raw, session_id, None),
-                    session_id.clone(),
-                    Some(PendingWebhookCheck::Question {
-                        question: question.clone(),
-                    }),
-                );
-
-                // Re-emit with suppression flag so frontend knows not to auto-expand
-                if is_suppressed {
-                    store.emit_update_suppressed(true);
-                    if let Ok(guard) = app.lock() {
-                        if let Some(ref handle) = *guard {
-                            crate::platform::notifications::send_question_notification(
-                                handle, question,
-                            );
-                        }
-                    }
-                }
-
-                // Create a oneshot channel for the question response
-                let (tx, rx) = oneshot::channel();
-                {
-                    let mut pending_map = pending_q.lock().await;
-                    pending_map.insert(session_id.clone(), PendingQuestionEntry { tx });
-                }
-
-                let response =
-                    tokio::time::timeout(Self::interaction_response_timeout(&raw), rx).await;
-
-                match response {
-                    Ok(Ok(resp)) => {
-                        let json = serde_json::to_string(&resp)?;
-                        writer.write_all(json.as_bytes()).await?;
-                        writer.write_all(b"\n").await?;
-                        writer.flush().await?;
-
-                        Self::play_sound(&sound, SoundEvent::TaskConfirmation);
-
-                        store.set_pending_question(session_id, None);
-                        store.update_phase(session_id, SessionPhase::Processing);
-                    }
-                    _ => {
-                        let mut pending_map = pending_q.lock().await;
-                        pending_map.remove(session_id);
-                        store.set_pending_question(session_id, None);
-                        log::warn!("Question request timed out for session {}", session_id);
-                    }
-                }
-            }
-            Some(AgentEvent::PlanApproval {
-                ref session_id,
-                ref title,
-                ref content,
-                ref permissions,
-            }) => {
-                if Self::route_interaction_to_terminal_if_idle(
-                    &config_store,
-                    &store,
-                    &raw,
-                    session_id,
-                    "plan approval",
-                ) {
-                    return Ok(());
-                }
-
-                let is_suppressed = Self::check_suppression(&store, session_id);
-
-                if !is_suppressed {
-                    Self::play_sound(&sound, SoundEvent::PlanApproval);
-                }
-
-                store.set_pending_plan(
-                    session_id,
-                    Some(PendingPlan {
-                        title: title.clone(),
-                        content: content.clone(),
-                        permissions: permissions.clone(),
-                    }),
-                );
-                Self::update_session_metadata_from_raw(&store, &raw);
-                Self::dispatch_webhook_event(
-                    &config_store,
-                    &store,
-                    NotificationEvent::PlanApproval {
-                        title: title.clone(),
-                    },
-                    Self::source_for_webhook(&store, &raw, session_id, None),
-                    session_id.clone(),
-                    Some(PendingWebhookCheck::Plan {
-                        title: title.clone(),
-                        content: content.clone(),
-                    }),
-                );
-
-                if is_suppressed {
-                    store.emit_update_suppressed(true);
-                    if let Ok(guard) = app.lock() {
-                        if let Some(ref handle) = *guard {
-                            crate::platform::notifications::send_plan_notification(handle, title);
-                        }
-                    }
-                }
-
-                let (tx, rx) = oneshot::channel();
-                {
-                    let mut pending_map = pending_plan.lock().await;
-                    pending_map.insert(session_id.clone(), PendingPlanEntry { tx });
-                }
-
-                let response =
-                    tokio::time::timeout(Self::interaction_response_timeout(&raw), rx).await;
-
-                match response {
-                    Ok(Ok(resp)) => {
-                        let json = serde_json::to_string(&resp)?;
-                        writer.write_all(json.as_bytes()).await?;
-                        writer.write_all(b"\n").await?;
-                        writer.flush().await?;
-
-                        Self::play_sound(&sound, SoundEvent::TaskConfirmation);
-                        store.set_pending_plan(session_id, None);
-                        store.update_phase(session_id, SessionPhase::Processing);
-                    }
-                    _ => {
-                        let mut pending_map = pending_plan.lock().await;
-                        pending_map.remove(session_id);
-                        store.set_pending_plan(session_id, None);
-                        log::warn!("Plan approval timed out for session {}", session_id);
-                    }
-                }
-            }
             Some(ref agent_event) => {
-                // Process non-permission events (with sound)
                 Self::process_event(agent_event, &raw, &store, &sound, &app, &config_store);
             }
             None => {
@@ -1486,10 +650,11 @@ impl HookServer {
         match event {
             Some(AgentEvent::SessionStart { .. }) => "starting",
             Some(AgentEvent::SessionEnd { .. }) => "completed",
-            Some(AgentEvent::PermissionRequest { .. } | AgentEvent::PlanApproval { .. }) => {
-                "waiting_approval"
-            }
-            Some(AgentEvent::AskQuestion { .. }) => "waiting_input",
+            Some(
+                AgentEvent::PermissionRequest { .. }
+                | AgentEvent::PlanApproval { .. }
+                | AgentEvent::AskQuestion { .. },
+            ) => Self::native_status_from_raw(raw).unwrap_or("processing"),
             Some(AgentEvent::Error { .. }) => "error",
             Some(AgentEvent::Interrupt { .. }) => "interrupted",
             Some(AgentEvent::ToolUse { status, .. }) => {
@@ -1548,7 +713,7 @@ impl HookServer {
             | "waiting_approval"
             | "waiting_permission"
             | "permission_request"
-            | "plan_approval" => Some("waiting_approval"),
+            | "plan_approval" => Some("processing"),
             "waiting_for_input" | "waiting_input" | "ask_question" | "question" => {
                 Some("waiting_input")
             }
@@ -1567,7 +732,7 @@ impl HookServer {
     ) -> String {
         let title = match event {
             Some(AgentEvent::PermissionRequest { tool_name, .. }) => {
-                format!("Waiting for permission: {tool_name}")
+                format!("Tool: {tool_name}")
             }
             Some(AgentEvent::AskQuestion { .. }) => "Waiting for input".to_string(),
             Some(AgentEvent::PlanApproval { title, .. }) => {
@@ -1654,23 +819,12 @@ impl HookServer {
     }
 
     fn is_blocking_event(raw: &serde_json::Value, event: Option<&AgentEvent>) -> bool {
-        if matches!(
-            event,
-            Some(
-                AgentEvent::PermissionRequest { .. }
-                    | AgentEvent::AskQuestion { .. }
-                    | AgentEvent::PlanApproval { .. }
-                    | AgentEvent::Error { .. }
-            )
-        ) {
+        if matches!(event, Some(AgentEvent::Error { .. })) {
             return true;
         }
         matches!(
-            Self::raw_event_name(raw),
-            "PermissionRequest" | "permission_request" | "PlanApproval" | "AskQuestion"
-        ) || matches!(
             raw.get("status").and_then(|value| value.as_str()),
-            Some("waiting_for_approval" | "waiting_for_input")
+            Some("waiting_for_input")
         )
     }
 
@@ -1949,11 +1103,9 @@ impl HookServer {
                 Self::play_sound_for_session(sound, store, session_id, SoundEvent::SessionStart);
                 Self::dispatch_webhook_event(
                     config_store,
-                    store,
                     NotificationEvent::SessionStart,
                     agent_type.clone(),
                     session_id.clone(),
-                    None,
                 );
             }
             AgentEvent::SessionEnd { session_id } => {
@@ -2130,10 +1282,6 @@ impl HookServer {
                         _ => {}
                     }
                 }
-                if status != "running" {
-                    Self::clear_pending_permission_after_tool_resolution(store, session_id, _raw);
-                }
-
                 if Self::is_subagent_tool(tool_name)
                     && Self::is_codex_session(store, session_id, _raw)
                 {
@@ -2216,13 +1364,11 @@ impl HookServer {
                 Self::play_sound_for_session(sound, store, session_id, SoundEvent::TaskComplete);
                 Self::dispatch_webhook_event(
                     config_store,
-                    store,
                     NotificationEvent::Completion {
                         summary: summary.clone(),
                     },
                     Self::source_for_webhook(store, _raw, session_id, None),
                     session_id.clone(),
-                    None,
                 );
                 Self::schedule_done_session_cleanup(store, session_id, done_cleanup_secs);
             }
@@ -2272,13 +1418,11 @@ impl HookServer {
                 Self::play_sound_for_session(sound, store, session_id, SoundEvent::TaskComplete);
                 Self::dispatch_webhook_event(
                     config_store,
-                    store,
                     NotificationEvent::Completion {
                         summary: truncated.clone(),
                     },
                     Self::source_for_webhook(store, _raw, session_id, None),
                     session_id.clone(),
-                    None,
                 );
             }
             AgentEvent::Error {
@@ -2303,13 +1447,11 @@ impl HookServer {
                 Self::play_sound_for_session(sound, store, session_id, SoundEvent::TaskError);
                 Self::dispatch_webhook_event(
                     config_store,
-                    store,
                     NotificationEvent::Error {
                         message: message.clone(),
                     },
                     Self::source_for_webhook(store, _raw, session_id, None),
                     session_id.clone(),
-                    None,
                 );
                 Self::schedule_done_session_cleanup(store, session_id, done_cleanup_secs);
             }
@@ -2622,20 +1764,10 @@ impl HookServer {
             });
         }
 
-        if status == "waiting_for_input"
-            && Self::try_set_codex_rollout_pending_question(store, session_id, sound, raw)
-        {
-            return;
-        }
-
         // Map status to phase
         let phase = match status {
             "processing" | "running_tool" | "starting" => SessionPhase::Processing,
             "waiting_for_input" => SessionPhase::Ready,
-            "waiting_for_approval" => {
-                Self::play_sound(sound, SoundEvent::NeedsApproval);
-                SessionPhase::WaitingApproval
-            }
             "compacting" => {
                 Self::play_sound(sound, SoundEvent::ContextLimit);
                 SessionPhase::Compacting
@@ -2739,87 +1871,10 @@ impl HookServer {
         }
 
         if status.as_deref() == Some("waiting_for_input") {
-            if Self::try_set_codex_rollout_pending_question(store, session_id, sound, raw) {
-                return;
-            }
             store.update_session(session_id, |s| {
                 s.phase = SessionPhase::Ready;
                 s.description = Some("Waiting for input".to_string());
             });
-        }
-    }
-
-    fn try_set_codex_rollout_pending_question(
-        store: &SessionStore,
-        session_id: &str,
-        sound: &Arc<std::sync::Mutex<Option<Arc<SoundEngine>>>>,
-        raw: &serde_json::Value,
-    ) -> bool {
-        let is_codex = raw
-            .get("agent")
-            .and_then(|value| value.as_str())
-            .is_some_and(|agent| agent == "codex" || agent == "openai.codex")
-            || store
-                .get_session(session_id)
-                .is_some_and(|session| session.agent_type == "codex");
-        if !is_codex {
-            return false;
-        }
-
-        let Some(path) = Self::transcript_path_for_session(store, session_id, raw)
-            .or_else(|| discover_codex_session_file(session_id))
-        else {
-            return false;
-        };
-        let Some(pending) = extract_pending_codex_user_input(&path) else {
-            return false;
-        };
-
-        let already_showing = store
-            .get_session(session_id)
-            .and_then(|session| session.pending_question)
-            .and_then(|question| question.tool_use_id)
-            .is_some_and(|tool_use_id| tool_use_id == pending.call_id);
-
-        if !already_showing && !Self::check_suppression(store, session_id) {
-            Self::play_sound(sound, SoundEvent::TaskConfirmation);
-        }
-
-        store.set_pending_question(
-            session_id,
-            Some(Self::pending_question_from_codex_user_input(pending)),
-        );
-        true
-    }
-
-    fn pending_question_from_codex_user_input(pending: CodexPendingUserInput) -> PendingQuestion {
-        PendingQuestion {
-            question: pending.question,
-            options: pending.options,
-            descriptions: pending.descriptions,
-            header: pending.header,
-            multi_select: pending.multi_select,
-            questions: pending
-                .questions
-                .into_iter()
-                .map(|question| PendingQuestionItem {
-                    id: question.id,
-                    question: question.question,
-                    header: question.header,
-                    options: question
-                        .options
-                        .into_iter()
-                        .map(|option| PendingQuestionOption {
-                            label: option.label,
-                            description: option.description,
-                        })
-                        .collect(),
-                    multi_select: question.multi_select,
-                })
-                .collect(),
-            tool_use_id: Some(pending.call_id),
-            source: Some("codex_rollout_request_user_input".to_string()),
-            response_mode: Some("external_only".to_string()),
         }
     }
 
@@ -2889,12 +1944,9 @@ impl HookServer {
             let should_remove = store_for_cleanup
                 .get_session(&session_id_for_cleanup)
                 .map(|session| {
-                    (session.phase == SessionPhase::Done
+                    session.phase == SessionPhase::Done
                         || session.phase == SessionPhase::Error
-                        || session.phase == SessionPhase::Interrupted)
-                        && session.pending_permission.is_none()
-                        && session.pending_question.is_none()
-                        && session.pending_plan.is_none()
+                        || session.phase == SessionPhase::Interrupted
                 })
                 .unwrap_or(false);
             if should_remove {
@@ -3198,54 +2250,6 @@ impl HookServer {
         });
     }
 
-    fn route_interaction_to_terminal_if_idle(
-        config_store: &Arc<std::sync::Mutex<Option<ConfigStore>>>,
-        store: &Arc<SessionStore>,
-        raw: &serde_json::Value,
-        session_id: &str,
-        interaction_kind: &str,
-    ) -> bool {
-        let Some(idle_seconds) = Self::idle_interaction_route_seconds(config_store) else {
-            return false;
-        };
-
-        Self::update_session_metadata_from_raw(store, raw);
-        store.emit_update_suppressed(true);
-        log::info!(
-            "Routing {} interaction for session {} back to terminal after {}s of user idle time",
-            interaction_kind,
-            session_id,
-            idle_seconds
-        );
-        true
-    }
-
-    fn idle_interaction_route_seconds(
-        config_store: &Arc<std::sync::Mutex<Option<ConfigStore>>>,
-    ) -> Option<u64> {
-        let config_store = Self::current_config_store(config_store)?;
-        let config = config_store.get();
-        let idle_seconds = crate::platform::idle::user_idle_seconds()?;
-        if Self::idle_interaction_should_route(&config, Some(idle_seconds)) {
-            Some(idle_seconds)
-        } else {
-            None
-        }
-    }
-
-    fn idle_interaction_should_route(config: &AppConfig, idle_seconds: Option<u64>) -> bool {
-        if !config.idle_interaction_routing_enabled || config.idle_interaction_routing_minutes == 0
-        {
-            return false;
-        }
-
-        let Some(idle_seconds) = idle_seconds else {
-            return false;
-        };
-        let threshold = u64::from(config.idle_interaction_routing_minutes) * 60;
-        idle_seconds >= threshold
-    }
-
     fn refresh_cache_ttl_from_transcript(
         store: &SessionStore,
         session_id: &str,
@@ -3347,155 +2351,6 @@ impl HookServer {
         }
         suppression::is_terminal_focused(pid)
     }
-
-    /// Respond to a pending permission request from the UI
-    pub async fn respond_permission(
-        &self,
-        session_id: &str,
-        allowed: bool,
-        always: bool,
-    ) -> anyhow::Result<()> {
-        let response = PermissionResponse {
-            decision: if allowed {
-                "allow".to_string()
-            } else {
-                "deny".to_string()
-            },
-            reason: if allowed {
-                None
-            } else {
-                Some("Denied by user via Vibe Board".to_string())
-            },
-            always: if allowed && always { Some(true) } else { None },
-        };
-        self.send_pending_permission_response(session_id, response)
-            .await
-    }
-
-    /// Respond to a pending question from the UI
-    pub async fn respond_question(&self, session_id: &str, answer: String) -> anyhow::Result<()> {
-        let mut pending_map = self.pending_questions.lock().await;
-        if let Some(entry) = pending_map.remove(session_id) {
-            let response = QuestionResponse { answer };
-            let _ = entry.tx.send(response);
-            Ok(())
-        } else {
-            anyhow::bail!("No pending question for session {}", session_id)
-        }
-    }
-
-    /// Respond to a pending plan approval from the UI
-    pub async fn respond_plan(
-        &self,
-        session_id: &str,
-        mode: String,
-        message: Option<String>,
-    ) -> anyhow::Result<()> {
-        let mut pending_map = self.pending_plans.lock().await;
-        if let Some(entry) = pending_map.remove(session_id) {
-            let response = PlanResponse { mode, message };
-            let _ = entry.tx.send(response);
-            Ok(())
-        } else {
-            anyhow::bail!("No pending plan for session {}", session_id)
-        }
-    }
-
-    pub async fn respond_auto_approve(&self, session_id: &str) -> anyhow::Result<()> {
-        let response = PermissionResponse {
-            decision: "auto".to_string(),
-            reason: None,
-            always: None,
-        };
-        self.send_pending_permission_response(session_id, response)
-            .await
-    }
-
-    async fn send_pending_permission_response(
-        &self,
-        session_id: &str,
-        response: PermissionResponse,
-    ) -> anyhow::Result<()> {
-        let entries = {
-            let mut pending_map = self.pending_permissions.lock().await;
-            let Some(key) = Self::latest_pending_permission_key(&pending_map, session_id) else {
-                anyhow::bail!("No pending permission for session {}", session_id);
-            };
-            pending_map.remove(&key).unwrap_or_default()
-        };
-
-        let mut ack_receivers = Vec::new();
-        let mut send_failures = 0usize;
-        for entry in entries {
-            let (ack_tx, ack_rx) = oneshot::channel();
-            let reply = PermissionReply {
-                response: response.clone(),
-                ack: ack_tx,
-            };
-            if entry.tx.send(reply).is_ok() {
-                ack_receivers.push(ack_rx);
-            } else {
-                send_failures += 1;
-            }
-        }
-
-        if ack_receivers.is_empty() {
-            anyhow::bail!(
-                "No active permission hook receivers for session {} ({} send failures)",
-                session_id,
-                send_failures
-            );
-        }
-
-        let mut successes = 0usize;
-        let mut failures = Vec::new();
-        for ack in ack_receivers {
-            match tokio::time::timeout(Duration::from_secs(5), ack).await {
-                Ok(Ok(Ok(()))) => successes += 1,
-                Ok(Ok(Err(err))) => failures.push(err),
-                Ok(Err(_)) => {
-                    failures.push("permission hook receiver dropped before write ack".into())
-                }
-                Err(_) => failures.push("permission hook write ack timed out".into()),
-            }
-        }
-
-        if successes > 0 {
-            if !failures.is_empty() {
-                log::warn!(
-                    "Permission response for session {} had {} successful hook write(s) and {} failure(s): {}",
-                    session_id,
-                    successes,
-                    failures.len(),
-                    failures.join("; ")
-                );
-            }
-            Ok(())
-        } else {
-            anyhow::bail!(
-                "Permission response failed to reach hook for session {}: {}",
-                session_id,
-                failures.join("; ")
-            )
-        }
-    }
-
-    fn latest_pending_permission_key(
-        pending_map: &HashMap<String, Vec<PendingPermissionEntry>>,
-        session_id: &str,
-    ) -> Option<String> {
-        pending_map
-            .iter()
-            .filter_map(|(key, entries)| {
-                entries
-                    .iter()
-                    .filter(|entry| entry.session_id == session_id)
-                    .map(|entry| (key, entry.received_at_ms))
-                    .max_by_key(|(_, received_at_ms)| *received_at_ms)
-            })
-            .max_by_key(|(_, received_at_ms)| *received_at_ms)
-            .map(|(key, _)| key.clone())
-    }
 }
 
 fn canonical_agent_id(agent: &str) -> &str {
@@ -3575,6 +2430,7 @@ impl Drop for HookServer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
     #[test]
     fn ensure_session_creates_codex_session_without_session_start() {
@@ -3696,106 +2552,19 @@ mod tests {
         );
     }
 
-    #[test]
-    fn codex_interaction_timeout_matches_hook_bridge_window() {
-        let raw = serde_json::json!({ "agent": "codex" });
-
-        assert_eq!(
-            HookServer::interaction_response_timeout(&raw),
-            Duration::from_secs(HUMAN_INTERACTION_RESPONSE_TIMEOUT_SECS)
-        );
-    }
-
-    #[test]
-    fn non_codex_interaction_timeout_keeps_existing_window() {
-        let raw = serde_json::json!({ "agent": "gemini" });
-
-        assert_eq!(
-            HookServer::interaction_response_timeout(&raw),
-            Duration::from_secs(DEFAULT_INTERACTION_RESPONSE_TIMEOUT_SECS)
-        );
-    }
-
-    #[test]
-    fn opencode_interaction_timeout_uses_long_window() {
-        let raw = serde_json::json!({ "agent": "opencode" });
-
-        assert_eq!(
-            HookServer::interaction_response_timeout(&raw),
-            Duration::from_secs(HUMAN_INTERACTION_RESPONSE_TIMEOUT_SECS)
-        );
-    }
-
-    #[test]
-    fn claude_code_interaction_timeout_matches_hook_bridge_window() {
-        let raw = serde_json::json!({ "agent": "claude-code" });
-
-        assert_eq!(
-            HookServer::interaction_response_timeout(&raw),
-            Duration::from_secs(HUMAN_INTERACTION_RESPONSE_TIMEOUT_SECS)
-        );
-    }
-
     #[tokio::test]
-    async fn permission_request_resolves_recent_pre_tool_use_id_without_explicit_id() {
-        let recent_tools = Arc::new(Mutex::new(VecDeque::new()));
-        let pre_raw = serde_json::json!({
-            "event": "PreToolUse",
-            "session_id": "codex-s1",
-            "tool_name": "Bash",
-            "tool_use_id": "call-date-1",
-            "tool_input": { "command": "date" }
-        });
-        let pre_event = AgentEvent::ToolUse {
-            session_id: "codex-s1".to_string(),
-            tool_name: "Bash".to_string(),
-            tool_input: "{\"command\":\"date\"}".to_string(),
-            tool_target: None,
-            status: "running".to_string(),
-        };
-
-        HookServer::record_recent_tool_invocation(&recent_tools, Some(&pre_event), &pre_raw).await;
-
-        let permission_raw = serde_json::json!({
-            "event": "PermissionRequest",
-            "session_id": "codex-s1",
-            "tool_name": "Bash",
-            "tool_input": {
-                "command": "date",
-                "description": "Show the current time."
-            }
-        });
-
-        assert_eq!(
-            HookServer::resolve_permission_tool_use_id(
-                &recent_tools,
-                "codex-s1",
-                "Bash",
-                &permission_raw
-            )
-            .await
-            .as_deref(),
-            Some("call-date-1")
-        );
-    }
-
-    #[tokio::test]
-    async fn handle_connection_sets_pending_permission_for_windows_hook_event() {
+    async fn pre_tool_use_runs_without_approval_state_and_without_a_response() {
         let store = Arc::new(SessionStore::new());
         let adapters: Vec<Arc<dyn AgentAdapter>> = vec![Arc::new(
             crate::agents::claude_code::ClaudeCodeAdapter::new(),
         )];
         let context = HookConnectionContext {
-            pending: Arc::new(Mutex::new(HashMap::new())),
-            pending_q: Arc::new(Mutex::new(HashMap::new())),
-            pending_plan: Arc::new(Mutex::new(HashMap::new())),
             store: store.clone(),
             adapters: Arc::new(adapters),
             sound: Arc::new(std::sync::Mutex::new(None)),
             app: Arc::new(std::sync::Mutex::new(None)),
             raw_events: Arc::new(std::sync::Mutex::new(RawHookEventStore::new())),
             config_store: Arc::new(std::sync::Mutex::new(None)),
-            recent_tools: Arc::new(Mutex::new(VecDeque::new())),
             task_db: Arc::new(ControlTowerDatabase::open_in_memory().expect("task db")),
         };
         let (mut client, server) = tokio::io::duplex(4096);
@@ -3805,7 +2574,7 @@ mod tests {
 
         client
             .write_all(
-                br#"{"agent":"claude-code","event":"PermissionRequest","session_id":"win-hook","cwd":"C:\\Users\\admin\\Documents\\github\\agentbro","tool_name":"Bash","tool_input":{"command":"echo AgentBro Windows smoke"}}"#,
+                br#"{"agent":"claude-code","event":"PreToolUse","session_id":"win-hook","cwd":"C:\\Users\\admin\\Documents\\github\\agentbro","tool_name":"Bash","tool_input":{"command":"echo AgentBro Windows smoke"}}"#,
             )
             .await
             .unwrap();
@@ -3814,10 +2583,8 @@ mod tests {
 
         tokio::time::timeout(Duration::from_secs(2), async {
             loop {
-                if store
-                    .get_session("win-hook")
-                    .and_then(|session| session.pending_permission)
-                    .is_some()
+                if store.get_session("win-hook").map(|session| session.phase)
+                    == Some(SessionPhase::Processing)
                 {
                     break;
                 }
@@ -3825,229 +2592,48 @@ mod tests {
             }
         })
         .await
-        .expect("pending permission should be set");
+        .expect("session should be processing");
 
         let session = store.get_session("win-hook").expect("session should exist");
         assert_eq!(session.project, "agentbro");
-        assert_eq!(session.phase, SessionPhase::WaitingApproval);
-        let pending = session
-            .pending_permission
-            .expect("permission should stay pending while hook waits");
-        assert_eq!(pending.tool_name, "Bash");
-        assert!(pending.tool_input.contains("AgentBro Windows smoke"));
-
-        task.abort();
-    }
-
-    #[tokio::test]
-    async fn handle_connection_sets_pending_permission_for_workbuddy_safety_event() {
-        let store = Arc::new(SessionStore::new());
-        let adapters: Vec<Arc<dyn AgentAdapter>> =
-            vec![Arc::new(crate::agents::workbuddy::WorkBuddyAdapter::new())];
-        let context = HookConnectionContext {
-            pending: Arc::new(Mutex::new(HashMap::new())),
-            pending_q: Arc::new(Mutex::new(HashMap::new())),
-            pending_plan: Arc::new(Mutex::new(HashMap::new())),
-            store: store.clone(),
-            adapters: Arc::new(adapters),
-            sound: Arc::new(std::sync::Mutex::new(None)),
-            app: Arc::new(std::sync::Mutex::new(None)),
-            raw_events: Arc::new(std::sync::Mutex::new(RawHookEventStore::new())),
-            config_store: Arc::new(std::sync::Mutex::new(None)),
-            recent_tools: Arc::new(Mutex::new(VecDeque::new())),
-            task_db: Arc::new(ControlTowerDatabase::open_in_memory().expect("task db")),
-        };
-        let (mut client, server) = tokio::io::duplex(4096);
-        let task = tokio::spawn(async move {
-            let _ = HookServer::handle_connection(server, context).await;
-        });
-
-        client
-            .write_all(
-                br#"{"agent":"workbuddy","sessionId":"workbuddy-safety","cwd":"/Users/me/project","toolCallId":"toolu_1","category":"file-safety","eventType":"file-safety.needs-approval","decision":"info","messageKey":"securityCenter.audit.fileSafety.needsApproval.write","messageParams":{"paths":"/Users/me/Desktop/out"}}"#,
-            )
-            .await
-            .unwrap();
-        client.write_all(b"\n").await.unwrap();
-        client.flush().await.unwrap();
-
-        tokio::time::timeout(Duration::from_secs(2), async {
-            loop {
-                if store
-                    .get_session("workbuddy-safety")
-                    .and_then(|session| session.pending_permission)
-                    .is_some()
-                {
-                    break;
-                }
-                tokio::time::sleep(Duration::from_millis(10)).await;
-            }
-        })
-        .await
-        .expect("workbuddy safety approval should be set");
-
-        let session = store
-            .get_session("workbuddy-safety")
-            .expect("session should exist");
-        assert_eq!(session.agent_type, "workbuddy");
-        assert_eq!(session.phase, SessionPhase::WaitingApproval);
-        let pending = session
-            .pending_permission
-            .expect("permission should stay pending while hook waits");
-        assert_eq!(pending.tool_name, "File Safety");
-        assert_eq!(pending.tool_use_id.as_deref(), Some("toolu_1"));
-        assert!(pending.tool_input.contains("/Users/me/Desktop/out"));
-
-        task.abort();
-    }
-
-    #[test]
-    fn permission_tool_input_synthesizes_workbuddy_audit_context() {
-        let raw = serde_json::json!({
-            "agent": "workbuddy",
-            "sessionId": "s1",
-            "toolCallId": "toolu_1",
-            "category": "command-safety",
-            "eventType": "command-safety.needs-approval",
-            "commandPreview": "pwd && mkdir -p ~/Desktop/out",
-            "messageParams": {
-                "command": "pwd && mkdir -p ~/Desktop/out"
-            }
-        });
-
-        let input = HookServer::permission_tool_input_from_raw(&raw);
-        assert!(input.contains("pwd && mkdir -p"));
-        assert!(input.contains("command-safety"));
-        assert_eq!(
-            HookServer::raw_tool_use_id(&raw).as_deref(),
-            Some("toolu_1")
-        );
-    }
-
-    #[test]
-    fn workbuddy_permission_resolution_clears_matching_pending_permission() {
-        let store = Arc::new(SessionStore::new());
-        store.get_or_create_session("s1", "workbuddy", "project", "/tmp/project", "");
-        store.set_pending_permission(
-            "s1",
-            Some(PendingPermission {
-                tool_use_id: Some("toolu_1".to_string()),
-                tool_name: "File Safety".to_string(),
-                tool_input: "{}".to_string(),
-                diff: None,
-                options: None,
-            }),
-        );
-        let sound = Arc::new(std::sync::Mutex::new(None));
-        let app = Arc::new(std::sync::Mutex::new(None));
-        let config_store = Arc::new(std::sync::Mutex::new(None));
-        let raw = serde_json::json!({
-            "agent": "workbuddy",
-            "sessionId": "s1",
-            "toolCallId": "toolu_1",
-            "category": "file-safety",
-            "eventType": "file-safety.approved",
-            "decision": "approved"
-        });
-        let event = AgentEvent::ToolUse {
-            session_id: "s1".to_string(),
-            tool_name: "File Safety".to_string(),
-            tool_input: "{}".to_string(),
-            tool_target: None,
-            status: "success".to_string(),
-        };
-
-        HookServer::process_event(&event, &raw, &store, &sound, &app, &config_store);
-
-        let session = store.get_session("s1").expect("session should exist");
-        assert!(session.pending_permission.is_none());
         assert_eq!(session.phase, SessionPhase::Processing);
-    }
+        assert_eq!(session.last_tool_name.as_deref(), Some("Bash"));
+        assert_eq!(session.run_state.status, AgentRunStatus::Running);
+        let json = serde_json::to_value(&session).expect("session should serialize");
+        assert!(json.get("pendingPermission").is_none());
+        assert!(json.get("pendingQuestion").is_none());
+        assert!(json.get("pendingPlan").is_none());
 
-    #[test]
-    fn permission_signature_ignores_human_description() {
-        let pre = serde_json::json!({ "tool_input": { "command": "pwd" } });
-        let permission = serde_json::json!({
-            "tool_input": {
-                "description": "Show the current directory.",
-                "command": "pwd"
-            }
-        });
-
+        let mut buffer = [0u8; 32];
+        let read = tokio::time::timeout(Duration::from_secs(2), client.read(&mut buffer))
+            .await
+            .expect("client read should resolve")
+            .expect("client read should succeed");
         assert_eq!(
-            HookServer::tool_input_signature_from_raw(&pre),
-            HookServer::tool_input_signature_from_raw(&permission)
+            read, 0,
+            "server must close the connection without a response"
         );
+
+        task.await.expect("connection handler should finish");
     }
 
     #[test]
-    fn silence_config_matches_cwd_but_blocking_event_is_protected() {
+    fn silence_config_matches_cwd_but_error_event_is_protected() {
         let mut config = AppConfig::default();
         config.excluded_hook_cwd_substrings = "/tmp/my-project".to_string();
         let raw = serde_json::json!({
-            "event": "PermissionRequest",
-            "status": "waiting_for_approval",
+            "event": "Error",
+            "status": "error",
             "cwd": "/tmp/my-project",
             "session_id": "s1"
         });
-        let event = AgentEvent::PermissionRequest {
+        let event = AgentEvent::Error {
             session_id: "s1".to_string(),
-            tool_name: "Bash".to_string(),
-            diff: None,
-            options: None,
+            message: "boom".to_string(),
         };
 
         assert!(HookServer::config_silences_raw_event(&config, &raw));
         assert!(HookServer::is_blocking_event(&raw, Some(&event)));
-    }
-
-    #[test]
-    fn idle_interaction_routing_requires_enabled_local_idle_session() {
-        let mut config = AppConfig::default();
-        config.idle_interaction_routing_minutes = 5;
-
-        assert!(!HookServer::idle_interaction_should_route(
-            &config,
-            Some(600)
-        ));
-
-        config.idle_interaction_routing_enabled = true;
-        assert!(!HookServer::idle_interaction_should_route(
-            &config,
-            Some(299)
-        ));
-        assert!(HookServer::idle_interaction_should_route(
-            &config,
-            Some(300)
-        ));
-    }
-
-    #[test]
-    fn latest_pending_permission_key_prefers_newest_entry_for_session() {
-        let mut pending = HashMap::new();
-        let (old_tx, _old_rx) = oneshot::channel();
-        let (new_tx, _new_rx) = oneshot::channel();
-        pending.insert(
-            "old-tool".to_string(),
-            vec![PendingPermissionEntry {
-                session_id: "s1".to_string(),
-                received_at_ms: 10,
-                tx: old_tx,
-            }],
-        );
-        pending.insert(
-            "new-tool".to_string(),
-            vec![PendingPermissionEntry {
-                session_id: "s1".to_string(),
-                received_at_ms: 20,
-                tx: new_tx,
-            }],
-        );
-
-        assert_eq!(
-            HookServer::latest_pending_permission_key(&pending, "s1").as_deref(),
-            Some("new-tool")
-        );
     }
 
     #[test]

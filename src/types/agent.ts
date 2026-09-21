@@ -18,7 +18,6 @@ export type AgentRunStatus =
   | 'starting'
   | 'running'
   | 'waiting_input'
-  | 'waiting_permission'
   | 'blocked'
   | 'rate_limited'
   | 'error'
@@ -43,7 +42,6 @@ export type AgentRunEvent =
   | { type: 'tool_started'; toolName: string; toolTarget?: string }
   | { type: 'tool_finished'; toolName: string; toolTarget?: string; status: Extract<ToolStatus, 'success' | 'error' | 'interrupted'> }
   | { type: 'waiting_input'; question?: string }
-  | { type: 'permission_requested'; toolName?: string }
   | { type: 'rate_limited'; phase?: string; currentAction?: string }
   | { type: 'error'; message?: string }
   | { type: 'completed'; summary?: string }
@@ -55,7 +53,6 @@ export type SessionPhase =
   | 'ready'
   | 'idle'
   | 'processing'
-  | 'waiting_approval'
   | 'waiting_input'
   | 'compacting'
   | 'done'
@@ -67,12 +64,9 @@ export type PanelState = 'collapsed' | 'hover' | 'expanded'
 export type BaseLayer = 'compact' | 'expanded' | 'detail'
 export type DisplayLevel = 'dormant' | 'compact' | 'visible'
 
-export type OverlayType = 'permission' | 'question' | 'plan' | 'completion' | 'response' | 'compacting'
+export type OverlayType = 'completion' | 'response' | 'compacting'
 
 export const OVERLAY_PRIORITY: Record<OverlayType, number> = {
-  permission: 100,
-  plan: 90,
-  question: 80,
   completion: 20,
   response: 10,
   compacting: 15,
@@ -103,32 +97,6 @@ export interface DiffLine {
 export interface DiffContent {
   filePath: string
   lines: DiffLine[]
-}
-
-export interface PermissionRequest {
-  toolUseId?: string
-  toolName: string
-  toolInput: string
-  diff?: DiffContent
-  options?: string[]
-}
-
-export interface AskQuestion {
-  question: string
-  options: string[]
-  descriptions?: string[]
-  header?: string
-  multiSelect?: boolean
-  toolUseId?: string
-  source?: string
-  responseMode?: string
-  questions?: Array<{
-    id?: string | null
-    question: string
-    header?: string | null
-    options: Array<{ label: string; description?: string | null }>
-    multiSelect?: boolean
-  }>
 }
 
 export interface UsageRateWindow {
@@ -222,7 +190,6 @@ export interface SessionState {
   runState?: AgentRunState
   startedAt: number
   idleSince?: number
-  unattendedSince?: number // timestamp when session entered a waiting state
   duration: number
   tokens: TokenUsage
   rateLimits?: RateLimitInfo
@@ -230,8 +197,6 @@ export interface SessionState {
   contextWindow?: ContextWindowInfo
   lastMainAgentAt?: number
   cacheTtlMs?: number
-  pendingPermission?: PermissionRequest
-  pendingQuestion?: AskQuestion
   lastToolName?: string
   lastToolTarget?: string
   lastToolStatus?: ToolStatus
@@ -253,9 +218,6 @@ export interface SessionState {
   zellijSessionName?: string
   cmuxSurfaceId?: string
   cmuxWorkspaceId?: string
-  planTitle?: string
-  planContent?: string
-  planPermissions?: string[]
   responseText?: string
   taskCompletedAt?: number // timestamp when task completed
   isYoloMode?: boolean
@@ -325,7 +287,6 @@ export type ChatMessage =
       trailingContent?: string
     }
   | ({ role: 'tool_use'; timestamp: number } & ChatToolCall)
-  | { role: 'permission'; toolName: string; toolInput?: string; diff?: DiffContent; options?: string[]; timestamp: number }
   | { role: 'thinking'; content: string; timestamp: number }
   | { role: 'error'; message: string; timestamp: number }
 
@@ -334,13 +295,10 @@ export type AgentEvent =
   | { type: 'session_end'; sessionId: string }
   | { type: 'processing'; sessionId: string; description: string }
   | { type: 'tool_use'; sessionId: string; toolName: string; toolInput: string; toolTarget?: string; status: ToolStatus }
-  | { type: 'permission_request'; sessionId: string; toolName: string; toolInput?: string; diff?: DiffContent; options?: string[] }
-  | { type: 'ask_question'; sessionId: string; question: string; options: string[]; descriptions?: string[]; header?: string; multiSelect?: boolean; questions?: AskQuestion['questions'] }
   | { type: 'task_complete'; sessionId: string; summary: string }
   | { type: 'error'; sessionId: string; message: string }
   | { type: 'interrupt'; sessionId: string }
   | { type: 'context_compact'; sessionId: string; phase: 'pre' | 'post' }
   | { type: 'token_usage'; sessionId: string; input: number; output: number; cacheRead: number; cacheCreate: number }
-  | { type: 'plan_request'; sessionId: string; planTitle: string; planContent: string; requestedPermissions?: string[] }
   | { type: 'task_update'; sessionId: string; taskId: string; subject: string; status: 'pending' | 'in_progress' | 'completed' }
   | { type: 'user_message'; sessionId: string; content: string }

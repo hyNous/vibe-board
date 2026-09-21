@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { getBlockingOverlayPanelHeight, getNotificationPanelHeight, getReadableNotificationHeight } from '../utils/notificationLayout'
+import { getNotificationPanelHeight, getReadableNotificationHeight } from '../utils/notificationLayout'
 
 describe('notificationLayout', () => {
   it('uses the configured height as a fallback when content is unknown', () => {
@@ -38,27 +38,5 @@ describe('notificationLayout', () => {
 
   it('uses a compact dedicated height for context compaction notices', () => {
     expect(getNotificationPanelHeight(200, 600, 'compacting')).toBe(260)
-  })
-
-  it('keeps simple permission prompts compact', () => {
-    expect(getBlockingOverlayPanelHeight('permission', {
-      toolName: 'Bash',
-      toolInput: '{"command":"mkdir -p src/auth","description":"Create src/auth directory"}',
-    }, 600)).toBe(270)
-  })
-
-  it('grows permission prompts when a diff is present', () => {
-    expect(getBlockingOverlayPanelHeight('permission', {
-      toolName: 'Edit',
-      toolInput: '{"file_path":"src/auth/middleware.ts","old_string":"getToken()","new_string":"refreshToken()"}',
-      diff: { lines: Array.from({ length: 12 }, () => ({})) },
-    }, 600)).toBeGreaterThan(430)
-  })
-
-  it('sizes question prompts from the number of visible options', () => {
-    expect(getBlockingOverlayPanelHeight('question', {
-      question: '接下来优先采样哪个视图？',
-      options: ['Overlay', 'Detail', 'Compact'],
-    }, 600)).toBe(415)
   })
 })

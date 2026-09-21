@@ -16,7 +16,6 @@ pub enum SessionPhase {
     Ready,
     Idle,
     Processing,
-    WaitingApproval,
     WaitingInput,
     Compacting,
     Done,
@@ -32,7 +31,6 @@ pub enum AgentRunStatus {
     Starting,
     Running,
     WaitingInput,
-    WaitingPermission,
     Blocked,
     RateLimited,
     Error,
@@ -47,7 +45,6 @@ fn session_phase_name(phase: &SessionPhase) -> &'static str {
         SessionPhase::Ready => "ready",
         SessionPhase::Idle => "idle",
         SessionPhase::Processing => "processing",
-        SessionPhase::WaitingApproval => "waiting_approval",
         SessionPhase::WaitingInput => "waiting_input",
         SessionPhase::Compacting => "compacting",
         SessionPhase::Done => "done",
@@ -75,15 +72,12 @@ impl SessionPhase {
         matches!(
             (self, next),
             (Ready, Processing)
-                | (Ready, WaitingApproval)
                 | (Ready, Compacting)
                 | (Ready, Idle)
                 | (Ready, Done)
                 | (Idle, Ready)
                 | (Idle, Processing)
-                | (Idle, WaitingApproval)
                 | (Idle, Compacting)
-                | (Processing, WaitingApproval)
                 | (Processing, WaitingInput)
                 | (Processing, Done)
                 | (Processing, Ready)
@@ -91,9 +85,6 @@ impl SessionPhase {
                 | (Processing, Interrupted)
                 | (Processing, Compacting)
                 | (Processing, Idle)
-                | (WaitingApproval, Ready)
-                | (WaitingApproval, Processing)
-                | (WaitingApproval, Idle)
                 | (WaitingInput, Ready)
                 | (WaitingInput, Processing)
                 | (WaitingInput, Idle)
@@ -116,17 +107,14 @@ impl SessionPhase {
 
     /// Returns true when this phase requires user attention.
     pub fn needs_attention(&self) -> bool {
-        matches!(
-            self,
-            Self::WaitingApproval | Self::WaitingInput | Self::Error
-        )
+        matches!(self, Self::WaitingInput | Self::Error)
     }
 
     /// Returns true when the session is actively doing something.
     pub fn is_active(&self) -> bool {
         matches!(
             self,
-            Self::Processing | Self::WaitingApproval | Self::WaitingInput | Self::Compacting
+            Self::Processing | Self::WaitingInput | Self::Compacting
         )
     }
 }
@@ -226,66 +214,6 @@ pub struct ContextWindowInfo {
     pub used_percentage: Option<f64>,
 }
 
-/// Pending permission request details
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PendingPermission {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub tool_use_id: Option<String>,
-    pub tool_name: String,
-    pub tool_input: String,
-    pub diff: Option<String>,
-    pub options: Option<Vec<String>>,
-}
-
-/// Pending question details
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PendingQuestion {
-    pub question: String,
-    pub options: Vec<String>,
-    pub descriptions: Vec<String>,
-    pub header: Option<String>,
-    #[serde(rename = "multiSelect")]
-    pub multi_select: bool,
-    #[serde(default)]
-    pub questions: Vec<QuestionItem>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub tool_use_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub source: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub response_mode: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct QuestionItem {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub id: Option<String>,
-    pub question: String,
-    #[serde(default)]
-    pub header: Option<String>,
-    pub options: Vec<QuestionOption>,
-    #[serde(default)]
-    pub multi_select: bool,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct QuestionOption {
-    pub label: String,
-    #[serde(default)]
-    pub description: Option<String>,
-}
-
-/// Pending plan approval details
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PendingPlan {
-    pub title: String,
-    pub content: String,
-    pub permissions: Vec<String>,
-}
-
 /// Information about an active subagent (nested agent spawned via Task tool)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -364,9 +292,6 @@ pub struct SessionState {
     pub context_window: Option<ContextWindowInfo>,
     pub last_main_agent_at: Option<i64>,
     pub cache_ttl_ms: Option<i64>,
-    pub pending_permission: Option<PendingPermission>,
-    pub pending_question: Option<PendingQuestion>,
-    pub pending_plan: Option<PendingPlan>,
     pub last_tool_name: Option<String>,
     pub last_tool_target: Option<String>,
     pub last_tool_status: Option<String>,
@@ -419,9 +344,6 @@ impl SessionState {
             context_window: None,
             last_main_agent_at: None,
             cache_ttl_ms: None,
-            pending_permission: None,
-            pending_question: None,
-            pending_plan: None,
             last_tool_name: None,
             last_tool_target: None,
             last_tool_status: None,
@@ -456,12 +378,7 @@ impl SessionState {
             && self.last_response.is_some();
         let status = if response_completed {
             AgentRunStatus::Completed
-        } else if self.pending_permission.is_some()
-            || self.pending_plan.is_some()
-            || self.phase == SessionPhase::WaitingApproval
-        {
-            AgentRunStatus::WaitingPermission
-        } else if self.pending_question.is_some() || self.phase == SessionPhase::WaitingInput {
+        } else if self.phase == SessionPhase::WaitingInput {
             AgentRunStatus::WaitingInput
         } else {
             match self.phase {
@@ -470,9 +387,7 @@ impl SessionState {
                 SessionPhase::Done => AgentRunStatus::Completed,
                 SessionPhase::Interrupted => AgentRunStatus::Cancelled,
                 SessionPhase::Ready | SessionPhase::Idle => AgentRunStatus::Idle,
-                SessionPhase::WaitingApproval | SessionPhase::WaitingInput => {
-                    AgentRunStatus::Unknown
-                }
+                SessionPhase::WaitingInput => AgentRunStatus::Unknown,
             }
         };
         let phase = Some(if response_completed {
@@ -516,28 +431,6 @@ impl SessionState {
 
     pub fn has_unfinished_tasks(&self) -> bool {
         self.tasks.iter().any(|task| task.status != "completed")
-    }
-}
-
-fn reconcile_pending_for_phase(session: &mut SessionState) {
-    match &session.phase {
-        SessionPhase::WaitingApproval => {
-            session.pending_question = None;
-        }
-        SessionPhase::WaitingInput => {
-            session.pending_permission = None;
-            session.pending_plan = None;
-        }
-        _ => {
-            // Preserve pending_permission if the bridge is still blocking on it.
-            // Gemini hooks use BeforeTool as the permission gate — the bridge blocks
-            // until the user responds. Clearing here would dismiss the approval UI
-            // when a Processing event (e.g. AfterAgent) arrives concurrently.
-            if session.pending_permission.is_none() {
-                session.pending_question = None;
-                session.pending_plan = None;
-            }
-        }
     }
 }
 
@@ -638,7 +531,6 @@ impl SessionStore {
                 );
             }
             session.phase = phase;
-            reconcile_pending_for_phase(&mut session);
             session.update_duration();
         }
         self.emit_update();
@@ -648,43 +540,6 @@ impl SessionStore {
     pub fn update_session(&self, session_id: &str, updater: impl FnOnce(&mut SessionState)) {
         if let Some(mut session) = self.sessions.get_mut(session_id) {
             updater(&mut session);
-            reconcile_pending_for_phase(&mut session);
-            session.update_duration();
-        }
-        self.emit_update();
-    }
-
-    /// Set pending permission on a session
-    pub fn set_pending_permission(&self, session_id: &str, permission: Option<PendingPermission>) {
-        if let Some(mut session) = self.sessions.get_mut(session_id) {
-            session.pending_permission = permission;
-            if session.pending_permission.is_some() {
-                session.phase = SessionPhase::WaitingApproval;
-            }
-            session.update_duration();
-        }
-        self.emit_update();
-    }
-
-    /// Set pending question on a session
-    pub fn set_pending_question(&self, session_id: &str, question: Option<PendingQuestion>) {
-        if let Some(mut session) = self.sessions.get_mut(session_id) {
-            session.pending_question = question;
-            if session.pending_question.is_some() {
-                session.phase = SessionPhase::WaitingInput;
-            }
-            session.update_duration();
-        }
-        self.emit_update();
-    }
-
-    /// Set pending plan approval on a session
-    pub fn set_pending_plan(&self, session_id: &str, plan: Option<PendingPlan>) {
-        if let Some(mut session) = self.sessions.get_mut(session_id) {
-            session.pending_plan = plan;
-            if session.pending_plan.is_some() {
-                session.phase = SessionPhase::WaitingApproval;
-            }
             session.update_duration();
         }
         self.emit_update();
@@ -1221,9 +1076,6 @@ impl SessionStore {
                 session.phase = SessionPhase::Done;
                 session.description = Some("Session ended".to_string());
                 session.last_response = Some("Session ended".to_string());
-                session.pending_permission = None;
-                session.pending_question = None;
-                session.pending_plan = None;
                 session.update_duration();
             }
         }
@@ -1448,23 +1300,8 @@ mod tests {
     }
 
     #[test]
-    fn update_session_clears_pending_permission_when_activity_resumes() {
+    fn running_tool_session_has_no_approval_state() {
         let store = seeded_store();
-        store.set_pending_permission(
-            "s1",
-            Some(PendingPermission {
-                tool_use_id: None,
-                tool_name: "Bash".to_string(),
-                tool_input: "{\"command\":\"pnpm test\"}".to_string(),
-                diff: None,
-                options: None,
-            }),
-        );
-
-        // Simulate the user responding: clearPermission sets pending_permission
-        // to None and phase to Processing before update_session runs.
-        store.set_pending_permission("s1", None);
-
         store.update_session("s1", |session| {
             session.phase = SessionPhase::Processing;
             session.last_tool_name = Some("Bash".to_string());
@@ -1473,36 +1310,13 @@ mod tests {
 
         let session = store.get_session("s1").expect("session should exist");
         assert_eq!(session.phase, SessionPhase::Processing);
-        assert!(session.pending_permission.is_none());
-    }
+        assert_eq!(session.run_state.status, AgentRunStatus::Running);
 
-    #[test]
-    fn update_session_preserves_pending_permission_during_approval() {
-        let store = seeded_store();
-        store.set_pending_permission(
-            "s1",
-            Some(PendingPermission {
-                tool_use_id: None,
-                tool_name: "run_shell_command".to_string(),
-                tool_input: "{\"command\":\"ls -la\"}".to_string(),
-                diff: None,
-                options: None,
-            }),
-        );
-
-        // A concurrent Processing event (e.g. Gemini AfterAgent) should NOT
-        // dismiss the pending permission while the bridge is still blocking.
-        store.update_session("s1", |session| {
-            session.phase = SessionPhase::Processing;
-            session.description = Some("Agent completed".to_string());
-        });
-
-        let session = store.get_session("s1").expect("session should exist");
-        assert!(session.pending_permission.is_some());
-        assert_eq!(
-            session.pending_permission.as_ref().unwrap().tool_name,
-            "run_shell_command"
-        );
+        let json = serde_json::to_value(&session).expect("session should serialize");
+        assert!(json.get("pendingPermission").is_none());
+        assert!(json.get("pendingQuestion").is_none());
+        assert!(json.get("pendingPlan").is_none());
+        assert_eq!(json["runState"]["status"], "running");
     }
 
     #[test]

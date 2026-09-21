@@ -111,11 +111,12 @@ impl AgentAdapter for GeminiAdapter {
                     text: summary,
                 })
             }
-            "BeforeTool" | "PreToolUse" | "pre_tool_use" => Ok(AgentEvent::PermissionRequest {
+            "BeforeTool" | "PreToolUse" | "pre_tool_use" => Ok(AgentEvent::ToolUse {
                 session_id,
                 tool_name,
-                diff: None,
-                options: None,
+                tool_input: tool_input.clone(),
+                tool_target: None,
+                status: "running".to_string(),
             }),
             "AfterTool" | "PostToolUse" | "post_tool_use" => {
                 let tool_response = raw

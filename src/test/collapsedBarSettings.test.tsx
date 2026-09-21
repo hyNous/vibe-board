@@ -93,38 +93,10 @@ describe('collapsed bar settings button', () => {
     expect(container.querySelector('.collapsed-bar__icon-btn')).toBeNull()
   })
 
-  it('omits waiting details and collapsed gear in the collapsed island when waiting for approval', () => {
-    const { container } = render(
-      <CollapsedBar
-        sessions={[session({
-          phase: 'waiting_approval',
-          pendingPermission: {
-            toolName: 'Write',
-            toolInput: JSON.stringify({ file_path: '/Users/demo/project/src/auth.ts' }),
-          },
-        })]}
-        panelState="collapsed"
-        onCollapse={vi.fn()}
-      />,
-    )
-
-    expect(screen.queryByText('agentbro')).not.toBeInTheDocument()
-    expect(screen.queryByText('Needs approval: Writing')).not.toBeInTheDocument()
-    expect(screen.queryByText('auth.ts')).not.toBeInTheDocument()
-    expect(container.querySelector('.collapsed-bar__icon-btn')).toBeNull()
-    expect(screen.getByLabelText('Vibe Board')).toBeInTheDocument()
-  })
-
   it('omits waiting details and collapsed gear in the collapsed island when waiting for input', () => {
     const { container } = render(
       <CollapsedBar
-        sessions={[session({
-          phase: 'waiting_input',
-          pendingQuestion: {
-            question: 'Which implementation should I use?',
-            options: ['A', 'B'],
-          },
-        })]}
+        sessions={[session({ phase: 'waiting_input' })]}
         panelState="collapsed"
         onCollapse={vi.fn()}
       />,
@@ -132,7 +104,6 @@ describe('collapsed bar settings button', () => {
 
     expect(screen.queryByText('agentbro')).not.toBeInTheDocument()
     expect(screen.queryByText('Waiting for input')).not.toBeInTheDocument()
-    expect(screen.queryByText('Which implementation should I use?')).not.toBeInTheDocument()
     expect(container.querySelector('.collapsed-bar__icon-btn')).toBeNull()
     expect(screen.getByLabelText('Vibe Board')).toBeInTheDocument()
   })

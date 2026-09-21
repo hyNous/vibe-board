@@ -6,7 +6,7 @@ const startedAt = Date.now()
 describe('computePriority', () => {
   it('matches Vibe Board island session sorting order', () => {
     expect(computePriority({ phase: 'error', startedAt })).toBe(PRIORITY.error)
-    expect(computePriority({ phase: 'waiting_approval', startedAt })).toBe(PRIORITY.attention)
+    expect(computePriority({ phase: 'waiting_input', startedAt })).toBe(PRIORITY.attention)
     expect(computePriority({ phase: 'processing', lastToolName: 'Bash', startedAt })).toBe(PRIORITY.working)
     expect(computePriority({ phase: 'processing', startedAt })).toBe(PRIORITY.thinking)
     expect(computePriority({ phase: 'compacting', startedAt })).toBe(PRIORITY.compacting)

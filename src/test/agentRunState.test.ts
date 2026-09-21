@@ -38,8 +38,7 @@ describe('agent run state normalization', () => {
     expect(() => new Date(state.startedAt || '').toISOString()).not.toThrow()
   })
 
-  it('represents waiting permission, waiting input, errors, and completion', () => {
-    expect(agentRunStateFromSession(session({ phase: 'waiting_approval' })).status).toBe('waiting_permission')
+  it('represents waiting input, errors, and completion', () => {
     expect(agentRunStateFromSession(session({ phase: 'waiting_input' })).status).toBe('waiting_input')
     expect(agentRunStateFromSession(session({ phase: 'error' })).status).toBe('error')
     expect(agentRunStateFromSession(session({ phase: 'done' })).status).toBe('completed')

@@ -31,7 +31,7 @@ use hooks::conversation_parser::{
 };
 use hooks::file_watcher::ConversationWatcher;
 use hooks::server::HookServer;
-use hooks::session_store::{SessionPhase, SessionState, SessionStore};
+use hooks::session_store::SessionStore;
 use platform::display::{find_target_monitor, list_displays_inner, DisplayInfo};
 use sound::{SoundEvent, SoundPack, SoundPackImportResult};
 use telemetry::TelemetryService;
@@ -1731,144 +1731,6 @@ fn position_skill_pack_picker(window: &tauri::WebviewWindow) {
     )));
 }
 
-fn first_pending_permission(store: &SessionStore) -> Option<SessionState> {
-    let mut sessions: Vec<_> = store
-        .get_all_sessions()
-        .into_iter()
-        .filter(|session| session.pending_permission.is_some())
-        .collect();
-    sessions.sort_by_key(|session| session.started_at);
-    sessions.into_iter().next()
-}
-
-fn first_pending_question(store: &SessionStore) -> Option<SessionState> {
-    let mut sessions: Vec<_> = store
-        .get_all_sessions()
-        .into_iter()
-        .filter(|session| session.pending_question.is_some())
-        .collect();
-    sessions.sort_by_key(|session| session.started_at);
-    sessions.into_iter().next()
-}
-
-fn handle_permission_shortcut(app: tauri::AppHandle, allowed: bool) {
-    let state = app.state::<AppState>();
-    let Some(session) = first_pending_permission(&state.session_store) else {
-        return;
-    };
-    let session_id = session.id.clone();
-    let codex_app_server = state.codex_app_server.clone();
-    let hook_server = state.hook_server.clone();
-    let session_store = state.session_store.clone();
-
-    tauri::async_runtime::spawn(async move {
-        match codex_app_server
-            .respond_permission(&session_id, allowed, false)
-            .await
-        {
-            Ok(true) => return,
-            Ok(false) => {}
-            Err(err) => log::warn!(
-                "Global permission shortcut Codex app-server response failed for {}: {}",
-                session_id,
-                err
-            ),
-        }
-        let hook_result = hook_server
-            .respond_permission(&session_id, allowed, false)
-            .await;
-        if let Err(err) = hook_result {
-            log::warn!(
-                "Global permission shortcut hook response failed for {}: {}. Falling back to tmux.",
-                session_id,
-                err
-            );
-            let fallback_result = (|| -> Result<(), String> {
-                let pid = session
-                    .pid
-                    .ok_or_else(|| "Session has no PID for tmux fallback".to_string())?;
-                let tmux_target = crate::terminal::approval::resolve_tmux_target(pid)
-                    .ok_or_else(|| "Could not find tmux pane for session".to_string())?;
-                if allowed {
-                    crate::terminal::approval::approve_once(&tmux_target)
-                        .map_err(|e| e.to_string())?;
-                } else {
-                    crate::terminal::approval::reject(
-                        &tmux_target,
-                        Some("Denied via keyboard shortcut"),
-                    )
-                    .map_err(|e| e.to_string())?;
-                }
-                Ok(())
-            })();
-            if let Err(fallback_err) = fallback_result {
-                log::warn!(
-                    "Global permission shortcut tmux fallback failed for {}: {}",
-                    session_id,
-                    fallback_err
-                );
-                return;
-            }
-        }
-        session_store.set_pending_permission(&session_id, None);
-        session_store.update_phase(&session_id, SessionPhase::Processing);
-    });
-}
-
-fn handle_question_skip_shortcut(app: tauri::AppHandle) {
-    let state = app.state::<AppState>();
-    let Some(session) = first_pending_question(&state.session_store) else {
-        return;
-    };
-    let session_id = session.id.clone();
-    let answer = session
-        .pending_question
-        .as_ref()
-        .and_then(|question| question.options.first().cloned())
-        .unwrap_or_default();
-    let hook_server = state.hook_server.clone();
-    let codex_app_server = state.codex_app_server.clone();
-    let session_store = state.session_store.clone();
-
-    tauri::async_runtime::spawn(async move {
-        if let Some(question) = session.pending_question.as_ref() {
-            if question.source.as_deref() == Some("codex_app_server_request_user_input")
-                && question.response_mode.as_deref() == Some("app_server")
-            {
-                let mut answers = std::collections::BTreeMap::new();
-                let answer_id = question
-                    .questions
-                    .first()
-                    .and_then(|item| item.id.clone())
-                    .unwrap_or_else(|| question.question.clone());
-                answers.insert(answer_id, vec![answer.clone()]);
-                match codex_app_server
-                    .respond_question(&session_id, answers)
-                    .await
-                {
-                    Ok(true) => return,
-                    Ok(false) => {}
-                    Err(err) => log::warn!(
-                        "Global question shortcut Codex app-server response failed for {}: {}",
-                        session_id,
-                        err
-                    ),
-                }
-            }
-        }
-        if let Err(err) = hook_server.respond_question(&session_id, answer).await {
-            log::warn!(
-                "Global question skip shortcut failed for {}: {}",
-                session_id,
-                err
-            );
-            return;
-        }
-        session_store.set_pending_question(&session_id, None);
-        session_store.update_phase(&session_id, SessionPhase::Processing);
-    });
-}
-
 fn register_one_global_shortcut<F>(
     app: &tauri::AppHandle,
     accelerator: &str,
@@ -1904,19 +1766,6 @@ fn register_island_global_shortcuts_for_config(
     register_one_global_shortcut(app, &config.global_shortcut, |app| {
         toggle_notch_window(&app)
     })?;
-    if config.shortcut_approve_enabled {
-        register_one_global_shortcut(app, &config.shortcut_approve, |app| {
-            handle_permission_shortcut(app, true)
-        })?;
-    }
-    if config.shortcut_deny_enabled {
-        register_one_global_shortcut(app, &config.shortcut_deny, |app| {
-            handle_permission_shortcut(app, false)
-        })?;
-    }
-    if config.shortcut_skip_enabled {
-        register_one_global_shortcut(app, &config.shortcut_skip, handle_question_skip_shortcut)?;
-    }
     Ok(())
 }
 
@@ -5188,10 +5037,6 @@ pub fn run() {
             commands::get_app_state_flags,
             commands::list_usage_providers,
             commands::authorize_usage_provider,
-            commands::respond_permission,
-            commands::respond_auto_approve,
-            commands::respond_question,
-            commands::respond_plan,
             commands::send_message,
             commands::jump_to_terminal,
             commands::activate_session_host,

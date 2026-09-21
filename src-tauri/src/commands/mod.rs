@@ -17,8 +17,8 @@ use crate::hooks::diagnostics::DiagnosticRingBuffer;
 use crate::hooks::file_watcher::ConversationWatcher;
 use crate::hooks::server::{HookServer, RawHookEvent};
 use crate::hooks::session_store::{
-    AgentStatusSnapshot, PendingQuestion, RateLimitInfo, SessionPhase, SessionState, SessionStore,
-    SubagentInfo, TokenUsage, UsageRateWindow,
+    AgentStatusSnapshot, RateLimitInfo, SessionPhase, SessionState, SessionStore, SubagentInfo,
+    TokenUsage, UsageRateWindow,
 };
 use crate::platform::display_controller::DisplayController;
 use crate::sound::SoundEngine;
@@ -104,54 +104,6 @@ impl CodexAppServerBridge {
         *self.tx.lock().await = None;
     }
 
-    pub async fn respond_permission(
-        &self,
-        thread_id: &str,
-        allowed: bool,
-        always: bool,
-    ) -> Result<bool, String> {
-        let (reply_tx, reply_rx) = oneshot::channel();
-        let command = CodexAppServerCommand::Permission {
-            thread_id: thread_id.to_string(),
-            allowed,
-            always,
-            reply: reply_tx,
-        };
-        let Some(tx) = self.tx.lock().await.clone() else {
-            return Ok(false);
-        };
-        if tx.send(command).is_err() {
-            self.detach().await;
-            return Ok(false);
-        }
-        reply_rx
-            .await
-            .map_err(|_| "Codex app-server monitor stopped before responding".to_string())?
-    }
-
-    pub async fn respond_question(
-        &self,
-        thread_id: &str,
-        answers: BTreeMap<String, Vec<String>>,
-    ) -> Result<bool, String> {
-        let (reply_tx, reply_rx) = oneshot::channel();
-        let command = CodexAppServerCommand::Question {
-            thread_id: thread_id.to_string(),
-            answers,
-            reply: reply_tx,
-        };
-        let Some(tx) = self.tx.lock().await.clone() else {
-            return Ok(false);
-        };
-        if tx.send(command).is_err() {
-            self.detach().await;
-            return Ok(false);
-        }
-        reply_rx
-            .await
-            .map_err(|_| "Codex app-server monitor stopped before responding".to_string())?
-    }
-
     /// Ask the live app-server for the latest account rate limits. Returns
     /// `Ok(None)` when the bridge isn't attached so the caller can fall back
     /// to a one-off stdio spawn.
@@ -205,17 +157,6 @@ impl CodexAppServerBridge {
 }
 
 enum CodexAppServerCommand {
-    Permission {
-        thread_id: String,
-        allowed: bool,
-        always: bool,
-        reply: oneshot::Sender<Result<bool, String>>,
-    },
-    Question {
-        thread_id: String,
-        answers: BTreeMap<String, Vec<String>>,
-        reply: oneshot::Sender<Result<bool, String>>,
-    },
     RateLimits {
         reply: oneshot::Sender<Result<serde_json::Value, String>>,
     },
@@ -224,21 +165,6 @@ enum CodexAppServerCommand {
         text: String,
         reply: oneshot::Sender<Result<bool, String>>,
     },
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum CodexAppServerPendingKind {
-    CommandApproval,
-    FileApproval,
-    PermissionsApproval,
-    UserInput,
-}
-
-#[derive(Debug, Clone)]
-struct CodexAppServerPendingRequest {
-    request_id: serde_json::Value,
-    kind: CodexAppServerPendingKind,
-    requested_permissions: Option<serde_json::Value>,
 }
 
 enum CodexAppServerOutgoingRequest {
@@ -1709,7 +1635,6 @@ async fn run_codex_app_server_monitor_once(
 
         let mut next_request_id = 2_i64;
         let mut outgoing: HashMap<i64, CodexAppServerOutgoingRequest> = HashMap::new();
-        let mut pending_requests: HashMap<String, CodexAppServerPendingRequest> = HashMap::new();
         let mut last_energy_mode: Option<EnergyMode> = None;
 
         send_codex_app_server_thread_list_request(&mut sink, &mut outgoing, &mut next_request_id)
@@ -1745,19 +1670,11 @@ async fn run_codex_app_server_monitor_once(
                     };
                     let value: serde_json::Value = serde_json::from_str(&text)
                         .map_err(|err| format!("Invalid codex app-server JSON message: {err}"))?;
-                    handle_codex_app_server_message(
-                        &store,
-                        &mut pending_requests,
-                        &mut outgoing,
-                        &value,
-                    )
-                    .await?;
+                    handle_codex_app_server_message(&store, &mut outgoing, &value).await?;
                 }
                 Some(command) = rx.recv() => {
                     handle_codex_app_server_command(
-                        &store,
                         &mut sink,
-                        &mut pending_requests,
                         &mut outgoing,
                         &mut next_request_id,
                         command,
@@ -1821,7 +1738,6 @@ async fn send_codex_app_server_thread_list_request(
 
 async fn handle_codex_app_server_message(
     store: &SessionStore,
-    pending_requests: &mut HashMap<String, CodexAppServerPendingRequest>,
     outgoing: &mut HashMap<i64, CodexAppServerOutgoingRequest>,
     message: &serde_json::Value,
 ) -> Result<(), String> {
@@ -1830,11 +1746,15 @@ async fn handle_codex_app_server_message(
             .get("params")
             .cloned()
             .unwrap_or_else(|| serde_json::json!({}));
-        if let Some(request_id) = message.get("id").cloned() {
-            handle_codex_app_server_request(store, pending_requests, request_id, method, &params)
-                .await?;
+        if message.get("id").is_some() {
+            // Vibe Board only observes agent sessions. Approval and user-input
+            // requests from the app-server are ignored and never answered.
+            log::debug!(
+                "Ignoring Codex app-server request {} because Vibe Board does not answer approvals",
+                method
+            );
         } else {
-            handle_codex_app_server_notification(store, pending_requests, method, &params).await?;
+            handle_codex_app_server_notification(store, method, &params).await?;
         }
         return Ok(());
     }
@@ -1883,7 +1803,6 @@ async fn handle_codex_app_server_message(
 
 async fn handle_codex_app_server_notification(
     store: &SessionStore,
-    pending_requests: &HashMap<String, CodexAppServerPendingRequest>,
     method: &str,
     params: &serde_json::Value,
 ) -> Result<(), String> {
@@ -1892,16 +1811,10 @@ async fn handle_codex_app_server_notification(
             let Some(thread_id) = codex_string(params, "threadId") else {
                 return Ok(());
             };
-            if store.get_session(&thread_id).is_none() && !pending_requests.contains_key(&thread_id)
-            {
+            if store.get_session(&thread_id).is_none() {
                 return Ok(());
             }
-            let phase = codex_phase_from_status(
-                params.get("status"),
-                pending_requests
-                    .get(&thread_id)
-                    .map(|pending| &pending.kind),
-            );
+            let phase = codex_phase_from_status(params.get("status"));
             store.get_or_create_session(&thread_id, "codex", "Codex", "/", "Codex");
             store.update_session(&thread_id, |session| {
                 session.agent_type = "codex".to_string();
@@ -1939,213 +1852,13 @@ async fn handle_codex_app_server_notification(
     Ok(())
 }
 
-async fn handle_codex_app_server_request(
-    store: &SessionStore,
-    pending_requests: &mut HashMap<String, CodexAppServerPendingRequest>,
-    request_id: serde_json::Value,
-    method: &str,
-    params: &serde_json::Value,
-) -> Result<(), String> {
-    match method {
-        "item/commandExecution/requestApproval" => {
-            let thread_id = codex_string(params, "threadId")
-                .or_else(|| codex_string(params, "conversationId"))
-                .unwrap_or_default();
-            if thread_id.is_empty() {
-                return Ok(());
-            }
-            let command = params
-                .get("command")
-                .and_then(|value| value.as_array())
-                .map(|items| {
-                    items
-                        .iter()
-                        .filter_map(|item| item.as_str())
-                        .collect::<Vec<_>>()
-                        .join(" ")
-                })
-                .unwrap_or_default();
-            let reason = codex_string(params, "reason");
-            let cwd = codex_string(params, "cwd");
-            let preview = if command.is_empty() {
-                reason
-                    .clone()
-                    .unwrap_or_else(|| "Codex wants to run a terminal command.".to_string())
-            } else {
-                command.clone()
-            };
-            pending_requests.insert(
-                thread_id.clone(),
-                CodexAppServerPendingRequest {
-                    request_id: request_id.clone(),
-                    kind: CodexAppServerPendingKind::CommandApproval,
-                    requested_permissions: None,
-                },
-            );
-            upsert_codex_app_server_pending_permission(
-                store,
-                &thread_id,
-                cwd.as_deref(),
-                &preview,
-                request_id_to_string(&request_id),
-                "exec_command",
-                &preview,
-            );
-        }
-        "item/fileChange/requestApproval" => {
-            let Some(thread_id) = codex_string(params, "threadId") else {
-                return Ok(());
-            };
-            let preview = codex_string(params, "reason")
-                .or_else(|| codex_string(params, "grantRoot"))
-                .unwrap_or_else(|| "Codex wants to modify files in this workspace.".to_string());
-            pending_requests.insert(
-                thread_id.clone(),
-                CodexAppServerPendingRequest {
-                    request_id: request_id.clone(),
-                    kind: CodexAppServerPendingKind::FileApproval,
-                    requested_permissions: None,
-                },
-            );
-            upsert_codex_app_server_pending_permission(
-                store,
-                &thread_id,
-                None,
-                &preview,
-                request_id_to_string(&request_id),
-                "file_change",
-                &preview,
-            );
-        }
-        "item/permissions/requestApproval" => {
-            let Some(thread_id) = codex_string(params, "threadId") else {
-                return Ok(());
-            };
-            let permissions = params
-                .get("permissions")
-                .cloned()
-                .unwrap_or_else(|| serde_json::json!({}));
-            let preview = codex_string(params, "reason")
-                .unwrap_or_else(|| codex_app_server_permission_summary(&permissions));
-            pending_requests.insert(
-                thread_id.clone(),
-                CodexAppServerPendingRequest {
-                    request_id: request_id.clone(),
-                    kind: CodexAppServerPendingKind::PermissionsApproval,
-                    requested_permissions: Some(permissions.clone()),
-                },
-            );
-            upsert_codex_app_server_pending_permission(
-                store,
-                &thread_id,
-                None,
-                &preview,
-                request_id_to_string(&request_id),
-                "permissions_request",
-                &preview,
-            );
-        }
-        "item/tool/requestUserInput" => {
-            let Some(thread_id) = codex_string(params, "threadId") else {
-                return Ok(());
-            };
-            let pending_question = codex_app_server_pending_question(params, &request_id);
-            let preview = pending_question.question.clone();
-            pending_requests.insert(
-                thread_id.clone(),
-                CodexAppServerPendingRequest {
-                    request_id,
-                    kind: CodexAppServerPendingKind::UserInput,
-                    requested_permissions: None,
-                },
-            );
-            upsert_codex_app_server_pending_question(store, &thread_id, &preview, pending_question);
-        }
-        _ => {}
-    }
-    Ok(())
-}
-
 async fn handle_codex_app_server_command(
-    store: &SessionStore,
     sink: &mut CodexWsSink,
-    pending_requests: &mut HashMap<String, CodexAppServerPendingRequest>,
     outgoing: &mut HashMap<i64, CodexAppServerOutgoingRequest>,
     next_request_id: &mut i64,
     command: CodexAppServerCommand,
 ) {
     match command {
-        CodexAppServerCommand::Permission {
-            thread_id,
-            allowed,
-            always,
-            reply,
-        } => {
-            let result = match pending_requests.remove(&thread_id) {
-                Some(pending)
-                    if matches!(
-                        pending.kind,
-                        CodexAppServerPendingKind::CommandApproval
-                            | CodexAppServerPendingKind::FileApproval
-                            | CodexAppServerPendingKind::PermissionsApproval
-                    ) =>
-                {
-                    let response = codex_app_server_permission_response(&pending, allowed, always);
-                    match write_ws_json(
-                        sink,
-                        serde_json::json!({
-                            "id": pending.request_id,
-                            "result": response
-                        }),
-                    )
-                    .await
-                    {
-                        Ok(()) => {
-                            clear_codex_app_server_interaction(store, &thread_id);
-                            Ok(true)
-                        }
-                        Err(err) => Err(err),
-                    }
-                }
-                Some(pending) => {
-                    pending_requests.insert(thread_id.clone(), pending);
-                    Ok(false)
-                }
-                None => Ok(false),
-            };
-            let _ = reply.send(result);
-        }
-        CodexAppServerCommand::Question {
-            thread_id,
-            answers,
-            reply,
-        } => {
-            let result = match pending_requests.remove(&thread_id) {
-                Some(pending) if pending.kind == CodexAppServerPendingKind::UserInput => {
-                    match write_ws_json(
-                        sink,
-                        serde_json::json!({
-                            "id": pending.request_id,
-                            "result": codex_request_user_input_payload(answers)
-                        }),
-                    )
-                    .await
-                    {
-                        Ok(()) => {
-                            clear_codex_app_server_interaction(store, &thread_id);
-                            Ok(true)
-                        }
-                        Err(err) => Err(err),
-                    }
-                }
-                Some(pending) => {
-                    pending_requests.insert(thread_id.clone(), pending);
-                    Ok(false)
-                }
-                None => Ok(false),
-            };
-            let _ = reply.send(result);
-        }
         CodexAppServerCommand::RateLimits { reply } => {
             let request_id = *next_request_id;
             *next_request_id += 1;
@@ -2208,206 +1921,6 @@ fn codex_turn_steer_payload(request_id: i64, thread_id: &str, text: &str) -> ser
             ]
         }
     })
-}
-
-fn upsert_codex_app_server_pending_permission(
-    store: &SessionStore,
-    thread_id: &str,
-    cwd: Option<&str>,
-    preview: &str,
-    tool_use_id: String,
-    tool_name: &str,
-    tool_input: &str,
-) {
-    let cwd = cwd.unwrap_or("/");
-    store.get_or_create_session(thread_id, "codex", "Codex", cwd, "Codex");
-    store.update_session(thread_id, |session| {
-        session.agent_type = "codex".to_string();
-        session.engine_label = Some("Codex App".to_string());
-        session.codex_app_server_thread_id = Some(thread_id.to_string());
-        session.project = if session.project.trim().is_empty() {
-            "Codex".to_string()
-        } else {
-            session.project.clone()
-        };
-        session.cwd = cwd.to_string();
-        session.terminal = "Codex".to_string();
-        session.term_bundle_id = Some("com.openai.codex".to_string());
-        session.phase = SessionPhase::WaitingApproval;
-        session.description = Some(preview.to_string());
-        session.pending_permission = Some(crate::hooks::session_store::PendingPermission {
-            tool_use_id: Some(tool_use_id),
-            tool_name: tool_name.to_string(),
-            tool_input: tool_input.to_string(),
-            diff: None,
-            options: None,
-        });
-        session.pending_question = None;
-        session.pending_plan = None;
-    });
-}
-
-fn upsert_codex_app_server_pending_question(
-    store: &SessionStore,
-    thread_id: &str,
-    preview: &str,
-    pending_question: PendingQuestion,
-) {
-    store.get_or_create_session(thread_id, "codex", "Codex", "/", "Codex");
-    store.update_session(thread_id, |session| {
-        session.agent_type = "codex".to_string();
-        session.engine_label = Some("Codex App".to_string());
-        session.codex_app_server_thread_id = Some(thread_id.to_string());
-        session.terminal = "Codex".to_string();
-        session.term_bundle_id = Some("com.openai.codex".to_string());
-        session.phase = SessionPhase::WaitingInput;
-        session.description = Some(preview.to_string());
-        session.pending_question = Some(pending_question);
-        session.pending_permission = None;
-        session.pending_plan = None;
-    });
-}
-
-fn clear_codex_app_server_interaction(store: &SessionStore, thread_id: &str) {
-    store.update_session(thread_id, |session| {
-        session.pending_permission = None;
-        session.pending_question = None;
-        session.pending_plan = None;
-        session.phase = SessionPhase::Processing;
-    });
-}
-
-fn codex_app_server_permission_response(
-    pending: &CodexAppServerPendingRequest,
-    allowed: bool,
-    always: bool,
-) -> serde_json::Value {
-    match pending.kind {
-        CodexAppServerPendingKind::PermissionsApproval => serde_json::json!({
-            "permissions": if allowed {
-                pending.requested_permissions.clone().unwrap_or_else(|| serde_json::json!({}))
-            } else {
-                serde_json::json!({})
-            },
-            "scope": if allowed && always { "session" } else { "turn" }
-        }),
-        _ => serde_json::json!({
-            "decision": if allowed {
-                if always { "acceptForSession" } else { "accept" }
-            } else {
-                "decline"
-            }
-        }),
-    }
-}
-
-fn codex_app_server_permission_summary(permissions: &serde_json::Value) -> String {
-    let Some(object) = permissions.as_object() else {
-        return "Codex requested extra permissions.".to_string();
-    };
-    if object.is_empty() {
-        return "Codex requested extra permissions.".to_string();
-    }
-    object
-        .keys()
-        .map(|key| format!("Codex requested {key} permission."))
-        .collect::<Vec<_>>()
-        .join("\n")
-}
-
-fn codex_app_server_pending_question(
-    params: &serde_json::Value,
-    request_id: &serde_json::Value,
-) -> PendingQuestion {
-    let questions = params
-        .get("questions")
-        .and_then(|value| value.as_array())
-        .map(|items| {
-            items
-                .iter()
-                .map(codex_app_server_question_item)
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_default();
-    let first = questions.first();
-    let question = first
-        .map(|item| item.question.clone())
-        .filter(|value| !value.trim().is_empty())
-        .unwrap_or_else(|| "Codex needs your input.".to_string());
-    let options = first
-        .map(|item| {
-            item.options
-                .iter()
-                .map(|option| option.label.clone())
-                .collect()
-        })
-        .unwrap_or_default();
-    let descriptions = first
-        .map(|item| {
-            item.options
-                .iter()
-                .map(|option| option.description.clone().unwrap_or_default())
-                .collect()
-        })
-        .unwrap_or_default();
-    PendingQuestion {
-        question,
-        options,
-        descriptions,
-        header: first.and_then(|item| item.header.clone()),
-        multi_select: first.map(|item| item.multi_select).unwrap_or(false),
-        questions,
-        tool_use_id: Some(request_id_to_string(request_id)),
-        source: Some("codex_app_server_request_user_input".to_string()),
-        response_mode: Some("app_server".to_string()),
-    }
-}
-
-fn codex_app_server_question_item(
-    value: &serde_json::Value,
-) -> crate::hooks::session_store::QuestionItem {
-    let question = codex_string(value, "question").unwrap_or_default();
-    let id = codex_string(value, "id");
-    let header = codex_string(value, "header");
-    let multi_select = value
-        .get("isMultiple")
-        .or_else(|| value.get("allowsMultiple"))
-        .or_else(|| value.get("multiSelect"))
-        .or_else(|| value.get("multiple"))
-        .and_then(|value| value.as_bool())
-        .unwrap_or(false);
-    let options = value
-        .get("options")
-        .and_then(|value| value.as_array())
-        .map(|items| {
-            items
-                .iter()
-                .enumerate()
-                .map(
-                    |(index, option)| crate::hooks::session_store::QuestionOption {
-                        label: codex_string(option, "label")
-                            .unwrap_or_else(|| format!("Option {}", index + 1)),
-                        description: codex_string(option, "description"),
-                    },
-                )
-                .collect()
-        })
-        .unwrap_or_default();
-    crate::hooks::session_store::QuestionItem {
-        id,
-        question,
-        header,
-        options,
-        multi_select,
-    }
-}
-
-fn request_id_to_string(value: &serde_json::Value) -> String {
-    value
-        .as_str()
-        .map(str::to_string)
-        .or_else(|| value.as_i64().map(|value| value.to_string()))
-        .unwrap_or_else(|| value.to_string())
 }
 
 fn codex_thread_list_from_response(response: &serde_json::Value) -> Option<Vec<serde_json::Value>> {
@@ -2491,11 +2004,7 @@ fn sync_codex_app_server_thread_to_store(
         session.cwd = cwd.clone();
         session.terminal = "Codex".to_string();
         session.term_bundle_id = Some("com.openai.codex".to_string());
-        session.phase = if session.pending_permission.is_some() || session.pending_plan.is_some() {
-            SessionPhase::WaitingApproval
-        } else if session.pending_question.is_some() {
-            SessionPhase::WaitingInput
-        } else if !matches!(phase, SessionPhase::Idle) || !local_owns_lifecycle {
+        session.phase = if !matches!(phase, SessionPhase::Idle) || !local_owns_lifecycle {
             phase.clone()
         } else {
             session.phase.clone()
@@ -2530,7 +2039,7 @@ fn sync_codex_app_server_thread_to_store(
 }
 
 fn codex_phase_from_thread(thread: &serde_json::Value) -> SessionPhase {
-    codex_phase_from_status(thread.get("status"), None)
+    codex_phase_from_status(thread.get("status"))
 }
 
 fn codex_thread_is_closed(thread: &serde_json::Value) -> bool {
@@ -2576,48 +2085,12 @@ fn codex_app_server_idle_thread_is_stale(phase: &SessionPhase, updated_at: Optio
     chrono::Utc::now().timestamp() - updated_at > IDLE_THREAD_RETENTION_SECONDS
 }
 
-fn codex_phase_from_status(
-    status: Option<&serde_json::Value>,
-    pending_kind: Option<&CodexAppServerPendingKind>,
-) -> SessionPhase {
-    if matches!(
-        pending_kind,
-        Some(
-            CodexAppServerPendingKind::CommandApproval
-                | CodexAppServerPendingKind::FileApproval
-                | CodexAppServerPendingKind::PermissionsApproval
-        )
-    ) {
-        return SessionPhase::WaitingApproval;
-    }
-    if pending_kind == Some(&CodexAppServerPendingKind::UserInput) {
-        return SessionPhase::WaitingInput;
-    }
-
+fn codex_phase_from_status(status: Option<&serde_json::Value>) -> SessionPhase {
     let status_type = status
         .and_then(|status| status.get("type"))
         .and_then(|value| value.as_str());
     match status_type {
-        Some("active") | Some("running") | Some("processing") => {
-            let flags = status
-                .and_then(|status| status.get("activeFlags"))
-                .or_else(|| status.and_then(|status| status.get("active_flags")))
-                .and_then(|value| value.as_array())
-                .map(|items| {
-                    items
-                        .iter()
-                        .filter_map(|item| item.as_str())
-                        .collect::<Vec<_>>()
-                })
-                .unwrap_or_default();
-            if flags.contains(&"waitingOnApproval") {
-                SessionPhase::WaitingApproval
-            } else if flags.contains(&"waitingOnUserInput") {
-                SessionPhase::WaitingInput
-            } else {
-                SessionPhase::Processing
-            }
-        }
+        Some("active") | Some("running") | Some("processing") => SessionPhase::Processing,
         Some("error") | Some("failed") => SessionPhase::Error,
         _ => SessionPhase::Idle,
     }
@@ -2919,28 +2392,14 @@ fn sync_local_codex_rollouts_from_root(store: &SessionStore, root: &Path) {
         // The app-server only knows a Desktop-owned thread as a `notLoaded`
         // placeholder and reports it idle. The local rollout is written by the
         // process that actually runs the turn, so it owns the lifecycle; the
-        // app-server still contributes live status and pending interactions.
+        // app-server still contributes live status.
         let updated_at = snapshot.updated_at.or(Some(fallback_updated_at));
         let last_response = snapshot.last_response.clone().or_else(|| {
             (!snapshot.active)
                 .then(|| extract_latest_assistant_text(&path))
                 .flatten()
         });
-        // The app-server can relay an interactive wait as an `activeFlags`
-        // phase without creating a pending object. Keep that wait while the
-        // local rollout still reports the turn active; turn completion or a
-        // newer app-server phase clears it.
-        let preserve_waiting = snapshot.active
-            && existing.as_ref().is_some_and(|session| {
-                matches!(
-                    session.phase,
-                    SessionPhase::WaitingApproval | SessionPhase::WaitingInput
-                )
-            });
-        let next_phase = match (preserve_waiting, existing.as_ref()) {
-            (true, Some(session)) => session.phase.clone(),
-            _ => phase.clone(),
-        };
+        let next_phase = phase.clone();
         let changed = existing
             .as_ref()
             .map(|session| {
@@ -2968,21 +2427,7 @@ fn sync_local_codex_rollouts_from_root(store: &SessionStore, root: &Path) {
             session.cwd = cwd.clone();
             session.terminal = "Codex".to_string();
             session.term_bundle_id = Some("com.openai.codex".to_string());
-            session.phase =
-                if session.pending_permission.is_some() || session.pending_plan.is_some() {
-                    SessionPhase::WaitingApproval
-                } else if session.pending_question.is_some() {
-                    SessionPhase::WaitingInput
-                } else if snapshot.active
-                    && matches!(
-                        session.phase,
-                        SessionPhase::WaitingApproval | SessionPhase::WaitingInput
-                    )
-                {
-                    session.phase.clone()
-                } else {
-                    phase.clone()
-                };
+            session.phase = phase.clone();
             session.session_title = title.clone();
             session.description = title.clone();
             if let Some(started_at) = snapshot.started_at {
@@ -3570,94 +3015,6 @@ fn format_remaining_duration(
         Some(format!("{minutes}m"))
     } else {
         Some("<1m".to_string())
-    }
-}
-
-#[tauri::command]
-pub async fn respond_permission(
-    state: State<'_, AppState>,
-    session_id: String,
-    allowed: bool,
-    always: Option<bool>,
-) -> Result<(), String> {
-    let always = always.unwrap_or(false);
-    log::info!(
-        "Permission response: session={}, allowed={}, always={}",
-        session_id,
-        allowed,
-        always
-    );
-
-    match state
-        .codex_app_server
-        .respond_permission(&session_id, allowed, always)
-        .await
-    {
-        Ok(true) => return Ok(()),
-        Ok(false) => {}
-        Err(err) => log::warn!(
-            "Codex app-server permission response failed for {}: {}",
-            session_id,
-            err
-        ),
-    }
-
-    // Try hook socket first
-    let hook_result = state
-        .hook_server
-        .respond_permission(&session_id, allowed, always)
-        .await;
-
-    match hook_result {
-        Ok(()) => Ok(()),
-        Err(e) => {
-            #[cfg(target_os = "windows")]
-            {
-                return Err(format!(
-                    "Hook response failed on Windows: {e}. Make sure the Vibe Board hook TCP bridge is running, then retry from the island."
-                ));
-            }
-            #[cfg(not(target_os = "windows"))]
-            {
-                // Hook socket failed — fall back to tmux send-keys
-                log::warn!(
-                    "Hook socket response failed for {}: {}. Falling back to tmux.",
-                    session_id,
-                    e
-                );
-
-                let session = state
-                    .session_store
-                    .get_session(&session_id)
-                    .ok_or_else(|| format!("Session {} not found", session_id))?;
-
-                let pid = session
-                    .pid
-                    .ok_or_else(|| "Session has no PID for tmux fallback".to_string())?;
-
-                let tmux_target = crate::terminal::approval::resolve_tmux_target(pid)
-                    .ok_or_else(|| "Could not find tmux pane for session".to_string())?;
-
-                if allowed {
-                    if always {
-                        crate::terminal::approval::approve_always(&tmux_target)
-                            .map_err(|e| e.to_string())?;
-                    } else {
-                        crate::terminal::approval::approve_once(&tmux_target)
-                            .map_err(|e| e.to_string())?;
-                    }
-                } else {
-                    crate::terminal::approval::reject(&tmux_target, None)
-                        .map_err(|e| e.to_string())?;
-                }
-
-                // Clear pending permission since we handled it via tmux
-                state
-                    .session_store
-                    .set_pending_permission(&session_id, None);
-                Ok(())
-            }
-        }
     }
 }
 
@@ -4764,333 +4121,6 @@ fn codex_binary_candidates() -> Vec<PathBuf> {
     }
 
     candidates
-}
-
-// ── Question Response Command ────────────────────────────────────
-
-#[tauri::command]
-pub async fn respond_question(
-    state: State<'_, AppState>,
-    session_id: String,
-    answer: String,
-) -> Result<(), String> {
-    log::info!(
-        "Question response: session={}, answer={}",
-        session_id,
-        answer
-    );
-
-    if let Some(session) = state.session_store.get_session(&session_id) {
-        if let Some(question) = session.pending_question.clone() {
-            if is_codex_app_server_question(&question) {
-                let answers = codex_answers_for_pending_question(&question, &answer);
-                match state
-                    .codex_app_server
-                    .respond_question(&session_id, answers)
-                    .await
-                {
-                    Ok(true) => return Ok(()),
-                    Ok(false) => {}
-                    Err(err) => log::warn!(
-                        "Codex app-server question response failed for {}: {}",
-                        session_id,
-                        err
-                    ),
-                }
-            }
-            if is_codex_rollout_question(&question) {
-                let call_id = question
-                    .tool_use_id
-                    .as_deref()
-                    .filter(|value| !value.is_empty())
-                    .ok_or_else(|| "Codex question is missing call_id".to_string())?;
-                let answers = codex_answers_for_pending_question(&question, &answer);
-                submit_codex_request_user_input_output(&session_id, call_id, answers).await?;
-                state.session_store.set_pending_question(&session_id, None);
-                state.session_store.update_phase(
-                    &session_id,
-                    crate::hooks::session_store::SessionPhase::Processing,
-                );
-                return Ok(());
-            }
-        }
-    }
-
-    state
-        .hook_server
-        .respond_question(&session_id, answer)
-        .await
-        .map_err(|e| e.to_string())
-}
-
-fn is_codex_rollout_question(question: &PendingQuestion) -> bool {
-    question.source.as_deref() == Some("codex_rollout_request_user_input")
-        && question.response_mode.as_deref() == Some("external_only")
-}
-
-fn is_codex_app_server_question(question: &PendingQuestion) -> bool {
-    question.source.as_deref() == Some("codex_app_server_request_user_input")
-        && question.response_mode.as_deref() == Some("app_server")
-}
-
-fn codex_answers_for_pending_question(
-    question: &PendingQuestion,
-    answer: &str,
-) -> BTreeMap<String, Vec<String>> {
-    let mut answers = BTreeMap::new();
-
-    if let Ok(serde_json::Value::Object(object)) = serde_json::from_str::<serde_json::Value>(answer)
-    {
-        for item in &question.questions {
-            let answer_id = codex_question_answer_id(item.id.as_deref(), &item.question);
-            let raw = object
-                .get(&item.question)
-                .or_else(|| object.get(answer_id.as_str()));
-            if let Some(raw) = raw {
-                let values = codex_answer_values_from_json(raw, item.multi_select);
-                if !values.is_empty() {
-                    answers.insert(answer_id, values);
-                }
-            }
-        }
-        if !answers.is_empty() {
-            return answers;
-        }
-    }
-
-    let answer_id = question
-        .questions
-        .first()
-        .map(|item| codex_question_answer_id(item.id.as_deref(), &item.question))
-        .unwrap_or_else(|| question.question.clone());
-    let multi_select = question
-        .questions
-        .first()
-        .map(|item| item.multi_select)
-        .unwrap_or(question.multi_select);
-    answers.insert(
-        answer_id,
-        codex_answer_values_from_text(answer, multi_select),
-    );
-    answers
-}
-
-fn codex_question_answer_id(id: Option<&str>, question: &str) -> String {
-    id.filter(|value| !value.trim().is_empty())
-        .unwrap_or(question)
-        .to_string()
-}
-
-fn codex_answer_values_from_json(value: &serde_json::Value, multi_select: bool) -> Vec<String> {
-    match value {
-        serde_json::Value::Array(items) => items
-            .iter()
-            .filter_map(|item| item.as_str())
-            .map(|item| item.trim().to_string())
-            .filter(|item| !item.is_empty())
-            .collect(),
-        serde_json::Value::String(value) => codex_answer_values_from_text(value, multi_select),
-        other => codex_answer_values_from_text(&other.to_string(), multi_select),
-    }
-}
-
-fn codex_answer_values_from_text(value: &str, multi_select: bool) -> Vec<String> {
-    if multi_select {
-        value
-            .split(',')
-            .map(|item| item.trim().to_string())
-            .filter(|item| !item.is_empty())
-            .collect()
-    } else {
-        let trimmed = value.trim();
-        if trimmed.is_empty() {
-            Vec::new()
-        } else {
-            vec![trimmed.to_string()]
-        }
-    }
-}
-
-async fn submit_codex_request_user_input_output(
-    thread_id: &str,
-    call_id: &str,
-    answers: BTreeMap<String, Vec<String>>,
-) -> Result<(), String> {
-    let binary = resolve_codex_binary()
-        .ok_or_else(|| "Could not find codex CLI for app-server".to_string())?;
-    let output = codex_request_user_input_output(answers);
-
-    let mut child = crate::platform::process::background_tokio_command(binary)
-        .arg("app-server")
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .spawn()
-        .map_err(|err| format!("Failed to start codex app-server: {}", err))?;
-
-    let mut stdin = child
-        .stdin
-        .take()
-        .ok_or_else(|| "Failed to open codex app-server stdin".to_string())?;
-    let stdout = child
-        .stdout
-        .take()
-        .ok_or_else(|| "Failed to open codex app-server stdout".to_string())?;
-    let mut lines = TokioBufReader::new(stdout).lines();
-
-    let result = tokio::time::timeout(Duration::from_secs(10), async {
-        write_json_rpc(
-            &mut stdin,
-            serde_json::json!({
-                "id": 1,
-                "method": "initialize",
-                "params": {
-                    "clientInfo": {
-                        "name": "Vibe Board",
-                        "version": env!("CARGO_PKG_VERSION")
-                    }
-                }
-            }),
-        )
-        .await
-        .ok_or_else(|| "Failed to initialize codex app-server".to_string())?;
-        read_json_rpc_response(&mut lines, 1)
-            .await
-            .ok_or_else(|| "Codex app-server initialize failed".to_string())?;
-
-        write_json_rpc(
-            &mut stdin,
-            serde_json::json!({
-                "method": "initialized",
-                "params": {}
-            }),
-        )
-        .await
-        .ok_or_else(|| "Failed to send codex app-server initialized".to_string())?;
-
-        write_json_rpc(
-            &mut stdin,
-            serde_json::json!({
-                "id": 2,
-                "method": "thread/inject_items",
-                "params": {
-                    "threadId": thread_id,
-                    "items": [
-                        {
-                            "type": "function_call_output",
-                            "call_id": call_id,
-                            "output": output
-                        }
-                    ]
-                }
-            }),
-        )
-        .await
-        .ok_or_else(|| "Failed to submit Codex question answer".to_string())?;
-        read_json_rpc_response(&mut lines, 2)
-            .await
-            .ok_or_else(|| "Codex app-server rejected question answer".to_string())?;
-
-        Ok::<(), String>(())
-    })
-    .await
-    .map_err(|_| "Timed out submitting Codex question answer".to_string())
-    .and_then(|inner| inner);
-
-    if child.try_wait().ok().flatten().is_none() {
-        let _ = child.start_kill();
-        let _ = child.wait().await;
-    }
-
-    result
-}
-
-fn codex_request_user_input_output(answers: BTreeMap<String, Vec<String>>) -> String {
-    codex_request_user_input_payload(answers).to_string()
-}
-
-fn codex_request_user_input_payload(answers: BTreeMap<String, Vec<String>>) -> serde_json::Value {
-    let formatted_answers = answers
-        .into_iter()
-        .map(|(key, values)| (key, serde_json::json!({ "answers": values })))
-        .collect::<serde_json::Map<_, _>>();
-    serde_json::json!({ "answers": formatted_answers })
-}
-
-// ── Plan Response Command ────────────────────────────────────────
-
-#[tauri::command]
-pub async fn respond_plan(
-    state: State<'_, AppState>,
-    session_id: String,
-    mode: String,
-    message: Option<String>,
-) -> Result<(), String> {
-    log::info!(
-        "Plan response: session={}, mode={}, has_message={}",
-        session_id,
-        mode,
-        message.as_ref().map(|s| !s.is_empty()).unwrap_or(false)
-    );
-
-    state
-        .hook_server
-        .respond_plan(&session_id, mode, message)
-        .await
-        .map_err(|e| e.to_string())
-}
-
-// ── Auto-Approve Command ─────────────────────────────────────────
-
-#[tauri::command]
-pub async fn respond_auto_approve(
-    state: State<'_, AppState>,
-    session_id: String,
-) -> Result<(), String> {
-    log::info!("Auto-approve: session={}", session_id);
-
-    let hook_result = state.hook_server.respond_auto_approve(&session_id).await;
-
-    match hook_result {
-        Ok(()) => Ok(()),
-        Err(e) => {
-            #[cfg(target_os = "windows")]
-            {
-                return Err(format!(
-                    "Auto-approve failed on Windows: {e}. Make sure the Vibe Board hook TCP bridge is running, then retry."
-                ));
-            }
-
-            #[cfg(not(target_os = "windows"))]
-            {
-                log::warn!(
-                    "Hook socket auto-approve failed for {}: {}. Falling back to tmux.",
-                    session_id,
-                    e
-                );
-
-                let session = state
-                    .session_store
-                    .get_session(&session_id)
-                    .ok_or_else(|| format!("Session {} not found", session_id))?;
-
-                let pid = session
-                    .pid
-                    .ok_or_else(|| "Session has no PID for tmux fallback".to_string())?;
-
-                let tmux_target = crate::terminal::approval::resolve_tmux_target(pid)
-                    .ok_or_else(|| "Could not find tmux pane for session".to_string())?;
-
-                crate::terminal::approval::approve_always(&tmux_target)
-                    .map_err(|e| e.to_string())?;
-
-                state
-                    .session_store
-                    .set_pending_permission(&session_id, None);
-                Ok(())
-            }
-        }
-    }
 }
 
 // ── Hook Verification Commands ───────────────────────────────────
@@ -8209,19 +7239,16 @@ pub async fn verify_engine_path(path: String) -> Result<bool, String> {
 mod tests {
     use super::{
         app_host_message_unsupported_error, can_fallback_to_terminal_app,
-        codex_answers_for_pending_question, codex_app_server_pending_question,
-        codex_app_server_permission_response, codex_app_server_refresh_interval_seconds,
-        codex_desktop_send_message_script, codex_desktop_send_message_without_activation_script,
-        codex_phase_from_thread, codex_request_user_input_output, codex_token_counts_from_line,
-        codex_turn_steer_payload, fallback_terminal_app_name, handle_codex_app_server_request,
+        codex_app_server_refresh_interval_seconds, codex_desktop_send_message_script,
+        codex_desktop_send_message_without_activation_script, codex_phase_from_thread,
+        codex_token_counts_from_line, codex_turn_steer_payload, fallback_terminal_app_name,
         installed_hooks_check, is_codex_desktop_session, is_ide_terminal_session, is_uuid_like,
         load_codex_token_usage_summary_from_root, parse_antigravity_usage_payload,
         parse_opencode_usage_payload, parse_subagent_chat_history_for_session,
         qoder_app_send_message_script, read_codex_session_meta_from_path,
         read_local_codex_rollout_state, redact_sensitive_hook_config, remote_session_chat_history,
         resolve_session_tty, session_has_desktop_host, sync_codex_app_server_thread_to_store,
-        sync_local_codex_rollouts_from_root, terminal_hint_for_fallback, CodexAppServerPendingKind,
-        CodexAppServerPendingRequest, CODEX_TOKEN_SOURCE_LABEL,
+        sync_local_codex_rollouts_from_root, terminal_hint_for_fallback, CODEX_TOKEN_SOURCE_LABEL,
     };
     #[cfg(target_os = "windows")]
     use super::{
@@ -8232,11 +7259,8 @@ mod tests {
     use crate::energy::EnergyMode;
     use crate::hooks::conversation_parser::{ChatRole, MessageBlock};
     use crate::hooks::server::RawHookEvent;
-    use crate::hooks::session_store::{
-        PendingPermission, PendingQuestion, QuestionItem, QuestionOption, SessionPhase,
-        SessionState, SessionStore, SubagentInfo,
-    };
-    use std::{collections::HashMap, fs, path::PathBuf};
+    use crate::hooks::session_store::{SessionPhase, SessionState, SessionStore, SubagentInfo};
+    use std::{fs, path::PathBuf};
 
     fn session(agent_type: &str, terminal: &str, tty: Option<&str>) -> SessionState {
         let mut session = SessionState::new(
@@ -8341,7 +7365,7 @@ mod tests {
     }
 
     #[test]
-    fn codex_app_server_status_maps_to_attention_phase() {
+    fn codex_app_server_status_maps_to_processing() {
         let thread = serde_json::json!({
             "status": {
                 "type": "active",
@@ -8349,7 +7373,7 @@ mod tests {
             }
         });
 
-        assert_eq!(codex_phase_from_thread(&thread), SessionPhase::WaitingInput);
+        assert_eq!(codex_phase_from_thread(&thread), SessionPhase::Processing);
     }
 
     #[test]
@@ -8440,32 +7464,6 @@ mod tests {
     }
 
     #[test]
-    fn local_codex_rollout_sync_preserves_pending_approval() {
-        let store = SessionStore::new();
-        store.get_or_create_session("desktop-thread", "codex", "Codex", "/", "Codex");
-        store.set_pending_permission(
-            "desktop-thread",
-            Some(PendingPermission {
-                tool_use_id: Some("approval-1".to_string()),
-                tool_name: "exec_command".to_string(),
-                tool_input: "pnpm test".to_string(),
-                diff: None,
-                options: None,
-            }),
-        );
-
-        let root = temp_codex_rollout_root("pending");
-        write_active_codex_rollout(&root, "desktop-thread");
-        sync_local_codex_rollouts_from_root(&store, &root);
-
-        let session = store.get_session("desktop-thread").expect("session");
-        assert_eq!(session.phase, SessionPhase::WaitingApproval);
-        assert!(session.pending_permission.is_some());
-
-        let _ = fs::remove_dir_all(root);
-    }
-
-    #[test]
     fn local_codex_rollout_sync_restores_ownership_label() {
         let store = SessionStore::new();
         let root = temp_codex_rollout_root("relabel");
@@ -8496,7 +7494,7 @@ mod tests {
     }
 
     #[test]
-    fn local_codex_rollout_sync_preserves_app_server_waiting_phase() {
+    fn local_codex_rollout_sync_ignores_app_server_waiting_flags() {
         let store = SessionStore::new();
         let local_at = chrono::Utc::now().timestamp();
         store.get_or_create_session("desktop-thread", "codex", "work", "C:\\work", "Codex");
@@ -8506,8 +7504,6 @@ mod tests {
             session.last_main_agent_at = Some(local_at);
         });
 
-        // The app-server relays the wait through `activeFlags` only, so no
-        // pending permission object exists in the store.
         let thread = serde_json::json!({
             "id": "desktop-thread",
             "name": "work",
@@ -8518,7 +7514,7 @@ mod tests {
         sync_codex_app_server_thread_to_store(&store, &thread).expect("thread sync");
         assert_eq!(
             store.get_session("desktop-thread").expect("session").phase,
-            SessionPhase::WaitingApproval
+            SessionPhase::Processing
         );
 
         let root = temp_codex_rollout_root("waiting");
@@ -8526,10 +7522,9 @@ mod tests {
         sync_local_codex_rollouts_from_root(&store, &root);
 
         let session = store.get_session("desktop-thread").expect("session");
-        assert_eq!(session.phase, SessionPhase::WaitingApproval);
-        assert!(session.pending_permission.is_none());
+        assert_eq!(session.phase, SessionPhase::Processing);
 
-        // The completed rollout releases the wait instead of keeping it stuck.
+        // The completed rollout finishes the task as usual.
         let mut content = fs::read_to_string(&path).expect("read rollout");
         content.push_str(&format!(
             "{{\"timestamp\":\"{}\",\"type\":\"event_msg\",\"payload\":{{\"type\":\"task_complete\"}}}}\n",
@@ -8605,7 +7600,7 @@ mod tests {
     }
 
     #[test]
-    fn codex_app_server_live_status_overrides_local_rollout_task() {
+    fn codex_app_server_live_status_is_processing_without_approval_state() {
         let store = SessionStore::new();
         let local_at = chrono::Utc::now().timestamp();
         store.get_or_create_session("thread-local", "codex", "Project", "/tmp/project", "Codex");
@@ -8626,7 +7621,7 @@ mod tests {
 
         assert_eq!(
             store.get_session("thread-local").expect("session").phase,
-            SessionPhase::WaitingApproval
+            SessionPhase::Processing
         );
     }
 
@@ -8743,72 +7738,6 @@ mod tests {
         assert!(store.get_session("thread-recent-idle").is_some());
     }
 
-    #[tokio::test]
-    async fn codex_app_server_permission_request_creates_pending_session() {
-        let store = SessionStore::new();
-        let mut pending = HashMap::new();
-        let params = serde_json::json!({
-            "threadId": "thread-approval",
-            "command": ["pnpm", "test"],
-            "cwd": "/tmp/agentbro",
-            "reason": "Run the test suite"
-        });
-
-        handle_codex_app_server_request(
-            &store,
-            &mut pending,
-            serde_json::json!("request-1"),
-            "item/commandExecution/requestApproval",
-            &params,
-        )
-        .await
-        .unwrap();
-
-        let session = store.get_session("thread-approval").unwrap();
-        assert_eq!(session.phase, SessionPhase::WaitingApproval);
-        assert_eq!(session.cwd, "/tmp/agentbro");
-        assert_eq!(session.engine_label.as_deref(), Some("Codex App"));
-        assert_eq!(
-            session
-                .pending_permission
-                .as_ref()
-                .map(|p| p.tool_name.as_str()),
-            Some("exec_command")
-        );
-        assert_eq!(
-            pending.get("thread-approval").map(|p| &p.kind),
-            Some(&CodexAppServerPendingKind::CommandApproval)
-        );
-    }
-
-    #[test]
-    fn codex_app_server_thread_sync_preserves_pending_interaction() {
-        let store = SessionStore::new();
-        store.get_or_create_session("thread-waiting", "codex", "Codex", "/", "Codex");
-        store.set_pending_permission(
-            "thread-waiting",
-            Some(crate::hooks::session_store::PendingPermission {
-                tool_use_id: Some("approval-1".to_string()),
-                tool_name: "exec_command".to_string(),
-                tool_input: "pnpm test".to_string(),
-                diff: None,
-                options: None,
-            }),
-        );
-        let thread = serde_json::json!({
-            "id": "thread-waiting",
-            "name": "Waiting thread",
-            "cwd": "/tmp/agentbro",
-            "status": { "type": "active", "activeFlags": [] }
-        });
-
-        sync_codex_app_server_thread_to_store(&store, &thread).unwrap();
-        let session = store.get_session("thread-waiting").unwrap();
-
-        assert_eq!(session.phase, SessionPhase::WaitingApproval);
-        assert!(session.pending_permission.is_some());
-    }
-
     #[test]
     fn codex_app_server_energy_policy_slows_down_when_quiet() {
         let store = SessionStore::new();
@@ -8830,49 +7759,6 @@ mod tests {
             codex_app_server_refresh_interval_seconds(&store, 15),
             (EnergyMode::Active, 15)
         );
-    }
-
-    #[test]
-    fn codex_app_server_question_request_maps_options_and_payload() {
-        let params = serde_json::json!({
-            "questions": [{
-                "id": "target",
-                "header": "Target",
-                "question": "Which target?",
-                "isMultiple": true,
-                "options": [
-                    { "label": "Preview", "description": "Dry run" },
-                    { "label": "Ship" }
-                ]
-            }]
-        });
-
-        let pending = codex_app_server_pending_question(&params, &serde_json::json!("req-q"));
-        assert_eq!(
-            pending.source.as_deref(),
-            Some("codex_app_server_request_user_input")
-        );
-        assert_eq!(pending.response_mode.as_deref(), Some("app_server"));
-        assert_eq!(pending.questions[0].id.as_deref(), Some("target"));
-        assert!(pending.questions[0].multi_select);
-        assert_eq!(
-            pending.options,
-            vec!["Preview".to_string(), "Ship".to_string()]
-        );
-
-        let response = codex_app_server_permission_response(
-            &CodexAppServerPendingRequest {
-                request_id: serde_json::json!("perm-1"),
-                kind: CodexAppServerPendingKind::PermissionsApproval,
-                requested_permissions: Some(
-                    serde_json::json!({ "network": { "domains": ["example.com"] } }),
-                ),
-            },
-            true,
-            true,
-        );
-        assert_eq!(response["scope"], "session");
-        assert!(response["permissions"].get("network").is_some());
     }
 
     #[test]
@@ -9278,83 +8164,6 @@ mod tests {
         assert!(is_uuid_like("123e4567-e89b-12d3-a456-426614174000"));
         assert!(!is_uuid_like("not-a-thread-id"));
         assert!(!is_uuid_like("123e4567e89b12d3a456426614174000"));
-    }
-
-    #[test]
-    fn codex_question_answer_payload_uses_question_ids() {
-        let pending = PendingQuestion {
-            question: "Pick one".to_string(),
-            options: vec!["Preview".to_string(), "Ship".to_string()],
-            descriptions: Vec::new(),
-            header: None,
-            multi_select: false,
-            questions: vec![QuestionItem {
-                id: Some("target".to_string()),
-                question: "Pick one".to_string(),
-                header: None,
-                options: vec![
-                    QuestionOption {
-                        label: "Preview".to_string(),
-                        description: None,
-                    },
-                    QuestionOption {
-                        label: "Ship".to_string(),
-                        description: None,
-                    },
-                ],
-                multi_select: false,
-            }],
-            tool_use_id: Some("call_question_1".to_string()),
-            source: Some("codex_rollout_request_user_input".to_string()),
-            response_mode: Some("external_only".to_string()),
-        };
-
-        let answers = codex_answers_for_pending_question(&pending, "Ship");
-        assert_eq!(answers.get("target"), Some(&vec!["Ship".to_string()]));
-        assert_eq!(
-            codex_request_user_input_output(answers),
-            r#"{"answers":{"target":{"answers":["Ship"]}}}"#
-        );
-    }
-
-    #[test]
-    fn codex_question_answer_payload_maps_nested_json_answers() {
-        let pending = PendingQuestion {
-            question: "Questions".to_string(),
-            options: Vec::new(),
-            descriptions: Vec::new(),
-            header: None,
-            multi_select: false,
-            questions: vec![
-                QuestionItem {
-                    id: Some("target".to_string()),
-                    question: "Which target?".to_string(),
-                    header: None,
-                    options: Vec::new(),
-                    multi_select: true,
-                },
-                QuestionItem {
-                    id: Some("notify".to_string()),
-                    question: "Notify?".to_string(),
-                    header: None,
-                    options: Vec::new(),
-                    multi_select: false,
-                },
-            ],
-            tool_use_id: Some("call_question_1".to_string()),
-            source: Some("codex_rollout_request_user_input".to_string()),
-            response_mode: Some("external_only".to_string()),
-        };
-
-        let answers = codex_answers_for_pending_question(
-            &pending,
-            r#"{"Which target?":"Preview, Ship","Notify?":"No"}"#,
-        );
-        assert_eq!(
-            answers.get("target"),
-            Some(&vec!["Preview".to_string(), "Ship".to_string()])
-        );
-        assert_eq!(answers.get("notify"), Some(&vec!["No".to_string()]));
     }
 
     #[test]

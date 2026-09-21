@@ -12,7 +12,6 @@ use std::time::{Duration, Instant};
 
 #[cfg(test)]
 const AGENTBRO_MARKER: &str = "agentbro";
-const CODEX_PERMISSION_TIMEOUT_SECONDS: u64 = 21_600;
 const CODEX_APP_SERVER_PORT: u16 = 41241;
 
 const HOOK_EVENTS: &[(&str, &str, u64)] = &[
@@ -20,13 +19,6 @@ const HOOK_EVENTS: &[(&str, &str, u64)] = &[
     ("UserPromptSubmit", "user_prompt_submit", 5),
     ("PreToolUse", "pre_tool_use", 5),
     ("PostToolUse", "post_tool_use", 5),
-    ("PostToolUseFailure", "post_tool_use_failure", 5),
-    (
-        "PermissionRequest",
-        "permission_request",
-        CODEX_PERMISSION_TIMEOUT_SECONDS,
-    ),
-    ("PermissionDenied", "permission_denied", 5),
     ("Notification", "notification", 5),
     ("Stop", "stop", 5),
     ("SessionEnd", "session_end", 5),
@@ -1609,14 +1601,12 @@ mod tests {
             session_start[1]["hooks"][0]["command"],
             "/Users/me/.agentbro/bin/agentbro-bridge --source codex"
         );
-        assert_eq!(
-            settings["hooks"]["PermissionRequest"][0]["hooks"][0]["timeout"],
-            CODEX_PERMISSION_TIMEOUT_SECONDS
-        );
+        assert!(settings["hooks"].get("PermissionRequest").is_none());
+        assert!(settings["hooks"].get("PermissionDenied").is_none());
+        assert!(settings["hooks"].get("PostToolUseFailure").is_none());
         assert!(settings["hooks"]["UserPromptSubmit"].is_array());
         assert!(settings["hooks"]["SessionEnd"].is_array());
-        assert!(settings["hooks"]["PostToolUseFailure"].is_array());
-        assert!(settings["hooks"]["PermissionDenied"].is_array());
+        assert_eq!(settings["hooks"]["PreToolUse"][0]["hooks"][0]["timeout"], 5);
         assert!(settings["hooks"]["Notification"].is_array());
         assert!(settings["hooks"].get("StopFailure").is_none());
     }

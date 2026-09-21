@@ -91,11 +91,12 @@ impl AgentAdapter for AntiGravityAdapter {
 
         match event {
             "RateLimitsUpdate" | "StatusLineUpdate" => rate_limit_event_from_raw(raw, session_id),
-            "PreToolUse" => Ok(AgentEvent::PermissionRequest {
+            "PreToolUse" => Ok(AgentEvent::ToolUse {
                 session_id,
                 tool_name,
-                diff: None,
-                options: None,
+                tool_input: tool_input.to_string(),
+                tool_target: tool_target(&tool_input),
+                status: "running".to_string(),
             }),
             "PostToolUse" => {
                 let error = string_field(raw, &["tool_error", "error"])
@@ -211,11 +212,14 @@ mod tests {
 
         assert!(matches!(
             event,
-            AgentEvent::PermissionRequest {
+            AgentEvent::ToolUse {
                 session_id,
                 tool_name,
+                status,
                 ..
-            } if session_id == "conversation-1" && tool_name == "run_command"
+            } if session_id == "conversation-1"
+                && tool_name == "run_command"
+                && status == "running"
         ));
     }
 

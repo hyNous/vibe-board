@@ -275,12 +275,11 @@ describe('CollapsedBar idle tips', () => {
     expect(screen.queryByText('5h 36% 1h1m')).not.toBeInTheDocument()
   })
 
-  it('omits alerts, error badges, and counts in the collapsed bar when idle or erroring', () => {
+  it('omits alerts, error badges, and counts in the collapsed bar when erroring', () => {
     const { container } = render(
       <CollapsedBar
         sessions={[
           session({ id: 'error', phase: 'error', description: 'Tool failed' }),
-          session({ id: 'approval', phase: 'waiting_approval', pendingPermission: { toolName: 'Bash', toolInput: 'pnpm test' } }),
         ]}
         panelState="collapsed"
         onCollapse={() => {}}

@@ -274,7 +274,6 @@ fn buddy_status_code(
 ) -> u8 {
     use crate::hooks::session_store::SessionPhase;
     match phase {
-        SessionPhase::WaitingApproval => 3,
         SessionPhase::WaitingInput => 4,
         SessionPhase::Processing | SessionPhase::Compacting => {
             if matches!(last_tool_status, Some("running")) {

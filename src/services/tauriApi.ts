@@ -90,35 +90,6 @@ export interface BackendSession {
   } | null
   lastMainAgentAt: number | null
   cacheTtlMs: number | null
-  pendingPermission: {
-    toolUseId?: string | null
-    toolName: string
-    toolInput: string
-    diff: string | null
-    options: string[] | null
-  } | null
-  pendingQuestion: {
-    question: string
-    options: string[]
-    descriptions: string[]
-    header: string | null
-    multiSelect: boolean
-    toolUseId?: string | null
-    source?: string | null
-    responseMode?: string | null
-    questions: Array<{
-      id?: string | null
-      question: string
-      header: string | null
-      options: Array<{ label: string; description: string | null }>
-      multiSelect: boolean
-    }>
-  } | null
-  pendingPlan: {
-    title: string
-    content: string
-    permissions: string[]
-  } | null
   lastToolName: string | null
   lastToolTarget: string | null
   lastToolStatus: string | null
@@ -182,8 +153,6 @@ export interface MonitorSessionSummary {
   lastToolName: string | null
   lastToolTarget: string | null
   lastToolStatus: string | null
-  waitingUser: boolean
-  pendingKind: 'permission' | 'question' | 'plan' | string | null
   subagentCount: number
   activeToolCount: number
   title: string | null
@@ -410,38 +379,6 @@ export async function createDemoTaskTrace(): Promise<import('../types/taskTrace'
 export async function getTaskTraces(): Promise<import('../types/taskTrace').TaskRecord[]> {
   if (!isTauri()) return []
   return invoke<import('../types/taskTrace').TaskRecord[]>('get_task_traces')
-}
-
-export async function respondPermission(sessionId: string, allowed: boolean, always?: boolean): Promise<void> {
-  if (!isTauri()) {
-    console.log(`[mock] respondPermission(${sessionId}, ${allowed}, always=${always})`)
-    return
-  }
-  return invoke('respond_permission', { sessionId, allowed, always: always ?? false })
-}
-
-export async function respondQuestion(sessionId: string, answer: string): Promise<void> {
-  if (!isTauri()) {
-    console.log(`[mock] respondQuestion(${sessionId}, "${answer}")`)
-    return
-  }
-  return invoke('respond_question', { sessionId, answer })
-}
-
-export async function respondPlan(sessionId: string, mode: string, message?: string): Promise<void> {
-  if (!isTauri()) {
-    console.log(`[mock] respondPlan(${sessionId}, "${mode}", "${message ?? ''}")`)
-    return
-  }
-  return invoke('respond_plan', { sessionId, mode, message: message ?? null })
-}
-
-export async function respondAutoApprove(sessionId: string): Promise<void> {
-  if (!isTauri()) {
-    console.log(`[mock] respondAutoApprove(${sessionId})`)
-    return
-  }
-  return invoke('respond_auto_approve', { sessionId })
 }
 
 export async function sendMessage(sessionId: string, message: string): Promise<void> {

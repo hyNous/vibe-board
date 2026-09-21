@@ -7,7 +7,7 @@ import { isQuietHours } from '../utils/quietHours'
 import { isSessionPastDisplayTimeout, timestampToMs } from '../utils/sessionDisplay'
 import { sessionMatchesLegacyCwdExclusion, sessionMatchesSilenceRule } from '../utils/sessionSilence'
 import { isCodexTitleMetadata } from '../utils/codexMetadata'
-import { respondPermission, saveSessions as saveSessionsToBackend } from '../services/tauriApi'
+import { saveSessions as saveSessionsToBackend } from '../services/tauriApi'
 import { agentRunStateFromSession, runStateForLegacyEvent } from '../utils/agentRunState'
 
 // Debounce helper
@@ -55,9 +55,6 @@ interface SessionStore {
   replaceAllSessions: (sessions: SessionState[], options?: { suppressed?: boolean }) => void
   setChatHistory: (sessionId: string, messages: ChatMessage[], meta?: ChatHistoryMeta) => void
   prependChatHistory: (sessionId: string, messages: ChatMessage[], meta?: ChatHistoryMeta) => void
-  clearPermission: (sessionId: string) => void
-  clearQuestion: (sessionId: string) => void
-  clearPlan: (sessionId: string) => void
   setRateLimits: (limits: RateLimitInfo) => void
   setUsageSnapshots: (limits: RateLimitInfo[]) => void
   setAgentStatuses: (statuses: AgentStatusSnapshot[]) => void
@@ -76,29 +73,6 @@ interface SessionStore {
 
 function toList(sessions: Record<string, SessionState>, now = Date.now()): SessionState[] {
   return Object.values(sessions).filter((session) => isDisplayableSession(session, now))
-}
-
-function hasPendingInteraction(session: SessionState): boolean {
-  return Boolean(session.pendingPermission || session.pendingQuestion || session.planTitle || session.planContent)
-}
-
-function clearPendingInteraction(session: SessionState): SessionState {
-  return {
-    ...session,
-    pendingPermission: undefined,
-    pendingQuestion: undefined,
-    planTitle: undefined,
-    planContent: undefined,
-    planPermissions: undefined,
-    unattendedSince: undefined,
-  }
-}
-
-function clearBlockingOverlaysForSession(queue: OverlayItem[], sessionId: string): OverlayItem[] {
-  return queue.filter((overlay) => !(
-    overlay.sessionId === sessionId
-    && (overlay.type === 'permission' || overlay.type === 'question' || overlay.type === 'plan')
-  ))
 }
 
 function mergeLocalUserMessages(remoteMessages: ChatMessage[], localMessages: ChatMessage[]): ChatMessage[] {
@@ -128,10 +102,6 @@ function hasSessionContent(session: SessionState): boolean {
   return Boolean(
     meaningfulText(session.lastUserMessage)
     || meaningfulText(session.sessionTitle)
-    || session.pendingPermission
-    || session.pendingQuestion
-    || session.planTitle
-    || session.planContent
     || meaningfulText(session.responseText)
     || meaningfulText(session.description)
     || session.lastToolName
@@ -183,7 +153,7 @@ function isDisplayableSession(session: SessionState, now = Date.now()): boolean 
   if (isProbeSession(session)) {
     return false
   }
-  if (session.phase === 'waiting_approval' || session.phase === 'waiting_input' || session.phase === 'error' || hasPendingInteraction(session)) {
+  if (session.phase === 'waiting_input' || session.phase === 'error') {
     return true
   }
   if (session.phase === 'done' && (sessionEndedText(session.responseText) || sessionEndedText(session.description))) {
@@ -230,7 +200,6 @@ function isInternalCodexPromptText(text: string | undefined | null): boolean {
 
 function isInternalCodexPromptSession(session: SessionState): boolean {
   if (session.agentType !== 'codex') return false
-  if (session.pendingPermission || session.pendingQuestion || session.planTitle || session.planContent) return false
   if (!isInternalCodexPromptText(session.sessionTitle) && !isInternalCodexPromptText(session.lastUserMessage)) return false
   if (usefulCompletionText(session.responseText) || usefulCompletionText(session.description)) return false
   return true
@@ -238,7 +207,6 @@ function isInternalCodexPromptSession(session: SessionState): boolean {
 
 function isCodexTitleMetadataOnlySession(session: SessionState): boolean {
   if (session.agentType !== 'codex') return false
-  if (session.pendingPermission || session.pendingQuestion || session.planTitle || session.planContent) return false
   if (session.subagents.length > 0 || session.activeTools.length > 0 || (session.tasks && session.tasks.length > 0)) return false
 
   const texts = [
@@ -336,7 +304,6 @@ function isActivityPhase(phase: SessionState['phase']): boolean {
   return phase === 'processing'
     || phase === 'compacting'
     || phase === 'waiting_input'
-    || phase === 'waiting_approval'
 }
 
 function sessionActivityAnchor(session: SessionState, now: number): number {
@@ -396,11 +363,6 @@ export const useSessionStore: UseBoundStore<StoreApi<SessionStore>> = create<Ses
       const panelState = state.panelState
       let overlayQueue = state.overlayQueue
       let activeSessionId = state.activeSessionId
-      const clearBlockingState = (session: SessionState): SessionState => {
-        if (!hasPendingInteraction(session)) return session
-        overlayQueue = clearBlockingOverlaysForSession(overlayQueue, session.id)
-        return clearPendingInteraction(session)
-      }
 
       switch (event.type) {
         case 'session_start': {
@@ -436,7 +398,7 @@ export const useSessionStore: UseBoundStore<StoreApi<SessionStore>> = create<Ses
           const session = sessions[event.sessionId]
           if (session) {
             sessions[event.sessionId] = {
-              ...clearBlockingState(session),
+              ...session,
               phase: 'processing',
               description: event.description,
               idleSince: undefined,
@@ -451,7 +413,7 @@ export const useSessionStore: UseBoundStore<StoreApi<SessionStore>> = create<Ses
           if (session) {
             const msg: ChatMessage = { role: 'user', content: event.content, timestamp: Date.now() }
             sessions[event.sessionId] = {
-              ...clearBlockingState(session),
+              ...session,
               phase: 'processing',
               lastUserMessage: event.content,
               lastUserMessageAt: Date.now(),
@@ -467,9 +429,8 @@ export const useSessionStore: UseBoundStore<StoreApi<SessionStore>> = create<Ses
           const session = sessions[event.sessionId]
           if (session) {
             const msg: ChatMessage = { role: 'tool_use', toolName: event.toolName, toolInput: event.toolInput, status: event.status, timestamp: Date.now() }
-            const baseSession = clearBlockingState(session)
             const updatedSession = {
-              ...baseSession,
+              ...session,
               phase: 'processing' as const,
               lastToolName: event.toolName,
               lastToolTarget: event.toolTarget,
@@ -525,94 +486,6 @@ export const useSessionStore: UseBoundStore<StoreApi<SessionStore>> = create<Ses
           break
         }
 
-        case 'permission_request': {
-          // Auto-approve if tool is in the auto-approve list
-          const autoApproveTools = useConfigStore.getState().autoApproveTools
-          if (autoApproveTools.includes(event.toolName)) {
-            const session = sessions[event.sessionId]
-            if (session) {
-              sessions[event.sessionId] = { ...session, phase: 'processing', lastActivityAt: Date.now() }
-            }
-            // Fire auto-approve response asynchronously
-            respondPermission(event.sessionId, true).catch(() => {})
-            break
-          }
-
-          const session = sessions[event.sessionId]
-          if (session) {
-            const msg: ChatMessage = { role: 'permission', toolName: event.toolName, toolInput: event.toolInput, diff: event.diff, options: event.options, timestamp: Date.now() }
-            sessions[event.sessionId] = {
-              ...session,
-              phase: 'waiting_approval',
-              pendingPermission: {
-                toolName: event.toolName,
-                toolInput: event.toolInput || '',
-                diff: event.diff,
-                options: event.options,
-              },
-              chatHistory: [...session.chatHistory, msg],
-              unattendedSince: session.unattendedSince ?? Date.now(),
-            }
-          }
-          // Push overlay instead of forcing panel state
-          const permOverlayId = `perm-${event.sessionId}-${Date.now()}`
-          const permOverlay: OverlayItem = {
-            id: permOverlayId,
-            sessionId: event.sessionId,
-            type: 'permission',
-            data: {
-              toolName: event.toolName,
-              toolInput: event.toolInput || '',
-              diff: event.diff,
-              options: event.options,
-            },
-            createdAt: Date.now(),
-          }
-          // Queue overlay after set() — use setTimeout(0) to run after state update
-          setTimeout(() => useSessionStore.getState().pushOverlay(permOverlay), 0)
-          activeSessionId = event.sessionId
-          break
-        }
-
-        case 'ask_question': {
-          const session = sessions[event.sessionId]
-          if (session) {
-            sessions[event.sessionId] = {
-              ...session,
-              phase: 'waiting_input',
-              pendingQuestion: {
-                question: event.question,
-                options: event.options,
-                descriptions: event.descriptions,
-                header: event.header,
-                multiSelect: event.multiSelect,
-                questions: event.questions,
-              },
-              unattendedSince: session.unattendedSince ?? Date.now(),
-            }
-          }
-          const qOverlay: OverlayItem = {
-            id: `question-${event.sessionId}-${Date.now()}`,
-            sessionId: event.sessionId,
-            type: 'question',
-            data: {
-              question: event.question,
-              options: event.options.map((label, i) => ({
-                label,
-                description: event.descriptions?.[i],
-              })),
-              descriptions: event.descriptions,
-              header: event.header,
-              multiSelect: event.multiSelect,
-              questions: event.questions,
-            },
-            createdAt: Date.now(),
-          }
-          setTimeout(() => useSessionStore.getState().pushOverlay(qOverlay), 0)
-          activeSessionId = event.sessionId
-          break
-        }
-
         case 'task_complete': {
           const session = sessions[event.sessionId]
           const summary = session ? deriveCompletionSummary(session, event.summary) : event.summary
@@ -623,15 +496,9 @@ export const useSessionStore: UseBoundStore<StoreApi<SessionStore>> = create<Ses
               phase: 'done',
               description: summary,
               responseText: summary,
-              pendingPermission: undefined,
-              pendingQuestion: undefined,
-              planTitle: undefined,
-              planContent: undefined,
-              planPermissions: undefined,
               chatHistory: [...session.chatHistory, msg],
               taskCompletedAt: Date.now(),
               idleSince: Date.now(),
-              unattendedSince: undefined,
               subagents: session.subagents.map((s) => s.status === 'running' ? { ...s, status: 'completed' as const } : s),
             }
           }
@@ -647,30 +514,6 @@ export const useSessionStore: UseBoundStore<StoreApi<SessionStore>> = create<Ses
             }
             setTimeout(() => useSessionStore.getState().pushOverlay(completionOverlay), 0)
           }
-          break
-        }
-
-        case 'plan_request': {
-          const session = sessions[event.sessionId]
-          if (session) {
-            sessions[event.sessionId] = {
-              ...session,
-              phase: 'waiting_approval',
-              planTitle: event.planTitle,
-              planContent: event.planContent,
-              planPermissions: event.requestedPermissions,
-              unattendedSince: session.unattendedSince ?? Date.now(),
-            }
-          }
-          const planOverlay: OverlayItem = {
-            id: `plan-${event.sessionId}-${Date.now()}`,
-            sessionId: event.sessionId,
-            type: 'plan',
-            data: { planTitle: event.planTitle, planContent: event.planContent, requestedPermissions: event.requestedPermissions },
-            createdAt: Date.now(),
-          }
-          setTimeout(() => useSessionStore.getState().pushOverlay(planOverlay), 0)
-          activeSessionId = event.sessionId
           break
         }
 
@@ -759,10 +602,8 @@ export const useSessionStore: UseBoundStore<StoreApi<SessionStore>> = create<Ses
       if (event.type !== 'session_end' && event.sessionId) {
         const session = sessions[event.sessionId]
         if (session) {
-          const runState: AgentRunState = event.type === 'permission_request'
-            && session.phase === 'processing'
-            ? agentRunStateFromSession(session)
-            : runStateForLegacyEvent(event, session.runState, session) ?? agentRunStateFromSession(session)
+          const runState: AgentRunState =
+            runStateForLegacyEvent(event, session.runState, session) ?? agentRunStateFromSession(session)
           sessions[event.sessionId] = { ...session, runState }
         }
       }
@@ -883,80 +724,6 @@ export const useSessionStore: UseBoundStore<StoreApi<SessionStore>> = create<Ses
           runState: incoming.runState ?? agentRunStateFromSession(baseSession, now),
         }
         sessions[s.id] = s
-        // Detect new pendingQuestion — create question overlay
-        if (s.pendingQuestion && !prev?.pendingQuestion) {
-          const existingOverlay = state.overlayQueue.find((o) => o.sessionId === s.id && o.type === 'question')
-          if (!existingOverlay) {
-            newOverlays.push({
-              id: `question-${s.id}-${Date.now()}`,
-              sessionId: s.id,
-              type: 'question',
-              data: {
-                question: s.pendingQuestion.question,
-                options: (s.pendingQuestion.options || []).map((label: string, i: number) => ({
-                  label,
-                  description: s.pendingQuestion?.descriptions?.[i],
-                })),
-                header: s.pendingQuestion.header,
-                multiSelect: s.pendingQuestion.multiSelect,
-                questions: s.pendingQuestion.questions,
-              },
-              createdAt: Date.now(),
-              suppressed,
-            })
-          }
-        }
-
-        // Detect new pendingPermission — create permission overlay and chat message
-        if (s.pendingPermission && !prev?.pendingPermission) {
-          // Add permission message to chat history so ChatView shows tool details
-          const permMsg: ChatMessage = {
-            role: 'permission',
-            toolName: s.pendingPermission.toolName,
-            toolInput: s.pendingPermission.toolInput,
-            diff: s.pendingPermission.diff,
-            options: s.pendingPermission.options,
-            timestamp: Date.now(),
-          }
-          s.chatHistory = [...(s.chatHistory ?? []), permMsg]
-
-          const existingOverlay = state.overlayQueue.find((o) => o.sessionId === s.id && o.type === 'permission')
-          if (!existingOverlay) {
-            newOverlays.push({
-              id: `permission-${s.id}-${Date.now()}`,
-              sessionId: s.id,
-              type: 'permission',
-              data: {
-                toolName: s.pendingPermission.toolName,
-                toolInput: s.pendingPermission.toolInput,
-                diff: s.pendingPermission.diff,
-                options: s.pendingPermission.options,
-              },
-              createdAt: Date.now(),
-              suppressed,
-            })
-          }
-        }
-
-        // Detect new pending plan approval from backend hook flow.
-        if ((s.planTitle || s.planContent) && (s.planContent !== prev?.planContent || s.planTitle !== prev?.planTitle)) {
-          const existingOverlay = state.overlayQueue.find((o) => o.sessionId === s.id && o.type === 'plan')
-          if (!existingOverlay) {
-            newOverlays.push({
-              id: `plan-${s.id}-${Date.now()}`,
-              sessionId: s.id,
-              type: 'plan',
-              data: {
-                planTitle: s.planTitle,
-                planContent: s.planContent || '',
-                requestedPermissions: s.planPermissions || [],
-              },
-              createdAt: Date.now(),
-              suppressed,
-            })
-          }
-        }
-
         const hideNonBlockingOverlays = !isDisplayableSession(s, now)
           || isInternalCodexPromptSession(s)
           || isCodexTitleMetadataOnlySession(s)
@@ -1013,9 +780,6 @@ export const useSessionStore: UseBoundStore<StoreApi<SessionStore>> = create<Ses
       const overlayQueue = state.overlayQueue.filter((overlay) => {
         const session = sessions[overlay.sessionId]
         if (!session) return false
-        if (overlay.type === 'permission') return Boolean(session.pendingPermission)
-        if (overlay.type === 'question') return Boolean(session.pendingQuestion)
-        if (overlay.type === 'plan') return Boolean(session.planTitle || session.planContent)
         if (overlay.type === 'compacting') return session.phase === 'compacting'
         return true
       })
@@ -1064,52 +828,6 @@ export const useSessionStore: UseBoundStore<StoreApi<SessionStore>> = create<Ses
         [sessionId]: { ...session, chatHistory, chatHistoryMeta: meta ?? session.chatHistoryMeta },
       }
       return { sessions, sessionList: toList(sessions) }
-    })
-  },
-
-  clearPermission: (sessionId) => {
-    set((state) => {
-      const session = state.sessions[sessionId]
-      if (!session) return state
-      const sessions = {
-        ...state.sessions,
-        [sessionId]: { ...session, phase: 'processing' as const, pendingPermission: undefined, unattendedSince: undefined },
-      }
-      const overlayQueue = state.overlayQueue.filter((o) => !(o.sessionId === sessionId && o.type === 'permission'))
-      return { sessions, sessionList: toList(sessions), overlayQueue, activeOverlay: overlayQueue[0] ?? null }
-    })
-  },
-
-  clearQuestion: (sessionId) => {
-    set((state) => {
-      const session = state.sessions[sessionId]
-      if (!session) return state
-      const sessions = {
-        ...state.sessions,
-        [sessionId]: { ...session, phase: 'processing' as const, pendingQuestion: undefined, unattendedSince: undefined },
-      }
-      const overlayQueue = state.overlayQueue.filter((o) => !(o.sessionId === sessionId && o.type === 'question'))
-      return { sessions, sessionList: toList(sessions), overlayQueue, activeOverlay: overlayQueue[0] ?? null }
-    })
-  },
-
-  clearPlan: (sessionId) => {
-    set((state) => {
-      const session = state.sessions[sessionId]
-      if (!session) return state
-      const sessions = {
-        ...state.sessions,
-        [sessionId]: {
-          ...session,
-          phase: 'processing' as const,
-          planTitle: undefined,
-          planContent: undefined,
-          planPermissions: undefined,
-          unattendedSince: undefined,
-        },
-      }
-      const overlayQueue = state.overlayQueue.filter((o) => !(o.sessionId === sessionId && o.type === 'plan'))
-      return { sessions, sessionList: toList(sessions), overlayQueue, activeOverlay: overlayQueue[0] ?? null }
     })
   },
 
@@ -1187,10 +905,9 @@ export const useSessionStore: UseBoundStore<StoreApi<SessionStore>> = create<Ses
     const muted = useSessionStore.getState().mutedSessions[item.sessionId]
     if (muted && Date.now() < muted) return
 
-    // During quiet hours, suppress non-blocking overlays.
-    const isNonBlocking = item.type === 'response' || item.type === 'completion' || item.type === 'compacting'
-    if (isNonBlocking && isQuietHours()) return
-    if (isNonBlocking && useSessionStore.getState().isWakeSilenced()) return
+    // Overlays are informational only; keep quiet hours and wake silence quiet.
+    if (isQuietHours()) return
+    if (useSessionStore.getState().isWakeSilenced()) return
 
     set((state) => {
       const replacesSessionResult = item.type === 'response' || item.type === 'completion'

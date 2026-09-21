@@ -119,23 +119,6 @@ describe('sessionStore backend overlays', () => {
     expect(overlay?.data).toMatchObject({ summary: 'All checks passed' })
   })
 
-  it('preserves backend permission options when creating permission overlays', () => {
-    useSessionStore.getState().replaceAllSessions([
-      session({
-        phase: 'waiting_approval',
-        pendingPermission: {
-          toolName: 'Bash',
-          toolInput: '{"command":"pnpm test"}',
-          options: ['allow', 'deny'],
-        },
-      }),
-    ])
-
-    const overlay = useSessionStore.getState().activeOverlay
-    expect(overlay?.type).toBe('permission')
-    expect(overlay?.data).toMatchObject({ options: ['allow', 'deny'] })
-  })
-
   it('uses backend response text instead of generic completion text', () => {
     useSessionStore.getState().replaceAllSessions([session({ phase: 'processing' })])
     useSessionStore.getState().replaceAllSessions([
@@ -641,44 +624,6 @@ describe('sessionStore backend overlays', () => {
     expect(state.overlayQueue.map((overlay) => overlay.type)).toEqual(['completion'])
   })
 
-  it('marks blocking overlays from suppressed backend updates', () => {
-    useSessionStore.getState().replaceAllSessions([
-      session({
-        phase: 'waiting_approval',
-        pendingPermission: { toolName: 'Bash', toolInput: 'pnpm test' },
-      }),
-    ], { suppressed: true })
-
-    const overlay = useSessionStore.getState().activeOverlay
-    expect(overlay?.type).toBe('permission')
-    expect(overlay?.suppressed).toBe(true)
-  })
-
-  it('marks plan requests as waiting for approval', async () => {
-    useSessionStore.getState().updateSession({
-      type: 'session_start',
-      sessionId: 's1',
-      project: 'project',
-      terminal: 'iTerm',
-      agentType: 'claude-code',
-    })
-
-    useSessionStore.getState().updateSession({
-      type: 'plan_request',
-      sessionId: 's1',
-      planTitle: 'Implementation plan',
-      planContent: '1. Align details',
-      requestedPermissions: ['Edit'],
-    })
-    await new Promise((resolve) => setTimeout(resolve, 0))
-
-    const state = useSessionStore.getState()
-    expect(state.sessions.s1.phase).toBe('waiting_approval')
-    expect(state.sessions.s1.planPermissions).toEqual(['Edit'])
-    expect(state.sessions.s1.unattendedSince).toEqual(expect.any(Number))
-    expect(state.activeOverlay?.type).toBe('plan')
-  })
-
   it('hides empty Codex App startup placeholders from the visible session list', () => {
     useSessionStore.getState().replaceAllSessions([
       session({
@@ -773,60 +718,6 @@ describe('sessionStore backend overlays', () => {
 
     expect(useSessionStore.getState().sessionList).toEqual([])
     expect(useSessionStore.getState().activeOverlay).toBeNull()
-  })
-
-  it('removes stale blocking overlays when backend clears pending state', () => {
-    useSessionStore.getState().replaceAllSessions([
-      session({
-        pendingPermission: { toolName: 'Bash', toolInput: 'pnpm test' },
-        pendingQuestion: { question: 'Continue?', options: ['Yes'] },
-        planTitle: 'Plan',
-        planContent: '1. Fix',
-      }),
-    ])
-    expect(useSessionStore.getState().overlayQueue.map((overlay) => overlay.type)).toEqual([
-      'permission',
-      'plan',
-      'question',
-    ])
-
-    useSessionStore.getState().replaceAllSessions([session({ phase: 'processing' })])
-
-    expect(useSessionStore.getState().overlayQueue).toEqual([])
-    expect(useSessionStore.getState().activeOverlay).toBeNull()
-  })
-
-  it('clears pending permission overlays when a live terminal tool result arrives', async () => {
-    useSessionStore.getState().updateSession({
-      type: 'session_start',
-      sessionId: 's1',
-      project: 'project',
-      terminal: 'iTerm',
-      agentType: 'claude-code',
-    })
-    useSessionStore.getState().updateSession({
-      type: 'permission_request',
-      sessionId: 's1',
-      toolName: 'Bash',
-      toolInput: 'pnpm test',
-    })
-    await new Promise((resolve) => setTimeout(resolve, 0))
-    expect(useSessionStore.getState().sessions.s1.pendingPermission).toBeDefined()
-    expect(useSessionStore.getState().activeOverlay?.type).toBe('permission')
-
-    useSessionStore.getState().updateSession({
-      type: 'tool_use',
-      sessionId: 's1',
-      toolName: 'Bash',
-      toolInput: 'pnpm test',
-      status: 'error',
-    })
-
-    const state = useSessionStore.getState()
-    expect(state.sessions.s1.pendingPermission).toBeUndefined()
-    expect(state.sessions.s1.phase).toBe('processing')
-    expect(state.overlayQueue.some((overlay) => overlay.type === 'permission')).toBe(false)
-    expect(state.activeOverlay).toBeNull()
   })
 
   it('marks inactive processing sessions idle after the configured idle timeout', () => {
@@ -953,7 +844,7 @@ describe('sessionStore backend overlays', () => {
     expect(useSessionStore.getState().sessionList.map((item) => item.id)).toEqual(['visible'])
   })
 
-  it('keeps blocking sessions visible even when they match a silence rule', () => {
+  it('keeps waiting sessions visible even when they match a silence rule', () => {
     useConfigStore.setState({
       sessionSilenceRules: [{
         id: 'rule-cwd',
@@ -966,13 +857,12 @@ describe('sessionStore backend overlays', () => {
 
     useSessionStore.getState().replaceAllSessions([
       session({
-        id: 'approval',
+        id: 'waiting',
         cwd: '/tmp/noisy-project',
-        phase: 'waiting_approval',
-        pendingPermission: { toolName: 'Edit', toolInput: '{}' },
+        phase: 'waiting_input',
       }),
     ])
 
-    expect(useSessionStore.getState().sessionList.map((item) => item.id)).toEqual(['approval'])
+    expect(useSessionStore.getState().sessionList.map((item) => item.id)).toEqual(['waiting'])
   })
 })
