@@ -3,15 +3,19 @@
 这是 Vibe Board 自己的路线图，不跟随 [AgentBro](UPSTREAM.md) 上游的计划。这里只
 写**当前仓库实际打算做的事**，不写上游已有但 Vibe Board 不做的功能。
 
-已经明确**不在**范围内的（相关代码已经删除，不会回来）：远程 SSH 服务器管理、
-Agent Switch / CCSwitch、宠物生态、旧版 Skill 市场、网络抓包 Inspector。
+已经明确**不在**范围内的（相关代码已经删除，或已决定删除，不会回来）：远程 SSH 服务器管理、
+Agent Switch / CCSwitch、宠物生态与角色主题、旧版 Skill 市场、网络抓包 Inspector、
+MCP 管理、Plugin 管理、技能包、在看板上批准 / 回答 / 与 Agent 对话、宿主概念。
+
+**本阶段范围的唯一依据**是 [`docs/product/backlog-2026-09-18.md`](docs/product/backlog-2026-09-18.md)
+（2026-09-21 维护者确认）。本文件只做概览。
 
 **深链（URL scheme）也不恢复。** 早期的 `agentisland:` / `ccswitch:` 深链只服务于
 Agent Switch，随该子系统一并删除，应用现在不注册任何 `xxx://` scheme。原始验收
 条件里写的是"深链使用 Vibe Board 命名"，维护者已在 2026-09-18 确认改为不恢复。
 看到这条差异时不要把深链插件加回来。
 
-更新时间：2026-09-18
+更新时间：2026-09-21
 
 ---
 
@@ -51,9 +55,10 @@ autoSyncSkillPacks）不会导入新库。改过这些值的老用户升级后�
 额度页目标确定为两条：看剩余额度、按天/周/月折算金额结算。取数路线采用
 「用户授权后使用其本地凭据向 Provider 查询」。
 
-**这是产品定位改变**：当前 README 承诺「不生成价格估算」，隐私说明建立在
-「基本只读本地、不外发凭据」之上。功能落地时必须同步修改 README（中英）、
-`docs/privacy-policy.md`。在落地前不要提前改动这些文档。
+**这是回归 PRD，不是定位改变**：PRD 第 2 节定位即含「成本分析」，11.4 节规定了
+等价成本须标 `Estimated`。README 中「不生成价格估算」是早先的偏离。功能落地时同步修改
+README（中英）与 `docs/privacy-policy.md`（新增「用户授权后以其凭据向 Provider 请求」）；
+落地前不要提前改动。
 
 历史数据可回溯：Agent 自身写的会话日志已含完整 token 分项与模型名
 （本机 Codex 有 654 个、覆盖 4 个半月），无需常驻软件采集。
