@@ -240,6 +240,15 @@ export interface UsageSnapshot {
   authStatus: 'authorized' | 'missing' | 'unknown'
   authPath: string | null
   canAuthorize: boolean
+  /** True when this provider has a wired online query path (M8c). */
+  networkSupported: boolean
+  /** True only after the user authorized this provider's online query. */
+  networkAuthorized: boolean
+  networkKind: 'http' | 'cli' | null
+  networkTarget: string | null
+  /** Local credential file location; never the value. */
+  networkCredential: string | null
+  networkUnsupportedReason: string | null
 }
 
 export interface UsageDashboard {
@@ -276,6 +285,8 @@ export interface BackendConfig {
   completionTimeout: number
   showTokenUsage: boolean
   usageQueryEnabled: boolean
+  /** Provider ids the user allowed to query online; empty by default. */
+  usageNetworkAuthorizedProviders: string[]
   codexAppServerSyncEnabled: boolean
   codexAppServerSyncConfigured?: boolean
   codexAppServerSyncIntervalSeconds: number
@@ -406,6 +417,19 @@ export async function authorizeUsageProvider(provider: string): Promise<void> {
   return invoke('authorize_usage_provider', { provider })
 }
 
+/**
+ * Grants or revokes one provider's permission to query online. Returns the
+ * updated list of authorized provider ids. Nothing is queried while a provider
+ * is absent from that list.
+ */
+export async function setUsageNetworkAuthorization(
+  provider: string,
+  authorized: boolean,
+): Promise<string[]> {
+  if (!isTauri()) return []
+  return invoke<string[]>('set_usage_network_authorization', { provider, authorized })
+}
+
 export async function getMonitorSessions(): Promise<MonitorSessionSummary[]> {
   if (!isTauri()) return []
   return invoke<MonitorSessionSummary[]>('get_monitor_sessions')
@@ -447,6 +471,7 @@ export async function getConfig(): Promise<BackendConfig> {
       completionTimeout: 5,
       showTokenUsage: true,
       usageQueryEnabled: true,
+      usageNetworkAuthorizedProviders: [],
       codexAppServerSyncEnabled: true,
       codexAppServerSyncConfigured: false,
       codexAppServerSyncIntervalSeconds: 30,

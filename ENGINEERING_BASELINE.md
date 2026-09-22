@@ -112,7 +112,7 @@ Antigravity）的取数方式真实不同，且现有「一家一个定制函数
 
 | Provider | 剩余额度来源 | 历史用量来源 | 需联网 | Verified |
 | --- | --- | --- | --- | --- |
-| Codex | Codex 自带 CLI 的 `app-server`（JSON-RPC `account/rateLimits/read`，由 Codex 用自己的登录向 OpenAI 查询）；次选：会话日志中 6 小时内的限额快照（纯本地） | `~/.codex/sessions/*.jsonl`（本机 654 个） | 是（间接，经 Codex 进程） | **VERIFIED**：用 `%LOCALAPPDATA%/OpenAI/Codex/bin/codex.exe` 手动调用返回 5 小时与 7 天窗口。**缺陷**：现有代码用 `find_binary("codex")`，找不到桌面版自带的 CLI（本机 PATH 上没有 codex），实测返回空；应改用 `find_codex_cli_binary` 一类含自带目录的查找 |
+| Codex | Codex 自带 CLI 的 `app-server`（JSON-RPC `account/rateLimits/read`，由 Codex 用自己的登录向 OpenAI 查询）；次选：会话日志中 6 小时内的限额快照（纯本地） | `~/.codex/sessions/*.jsonl`（本机 654 个） | 是（间接，经 Codex 进程） | **VERIFIED**：用 `%LOCALAPPDATA%/OpenAI/Codex/bin/codex.exe` 手动调用返回 5 小时与 7 天窗口。原缺陷（`find_binary("codex")` 找不到桌面版自带 CLI）已在 M8c 修复 |
 | Claude Code | 本地临时文件 `island-rate-limits.json`（statusline 写入，纯本地）；联网查询需其 OAuth 令牌 | `~/.claude/projects/*.jsonl`（本机 21 个） | 联网路径：是 | 本地文件路径：本机无数据。联网路径 **UNKNOWN**：本机无 `~/.claude/.credentials.json`，查看凭据存放位置被权限检查拦下，未 probe——**不上线联网取数** |
 | OpenCode | `https://opencode.ai/zen/go/v1/usage`（Bearer 本地 API key） | 无 | 是 | **VERIFIED**：返回 5 小时 / 7 天 / 30 天窗口，约 1.3 秒 |
 | Antigravity | 本地运行 `agy /usage`（由 agy 自己联网） | 无 | 是（间接，经 agy 进程） | **VERIFIED**：返回额度，但耗时 12–15 秒，首次 probe 超时返回空 |
@@ -426,6 +426,17 @@ OpenCode 取数，在 10 分钟缓存过期后用本地 API key 请求 `opencode
 6. 同步修改 `README.md`、`README.en.md` 能力表与 `docs/privacy-policy.md`：删除「不生成价格估算」，新增「用户授权后以其本地凭据向 Provider 请求」。
 
 **Verification（M8 各段）**：检查命令全绿；M8c 父级核对 probe 记录与网络断言。
+
+**M8c 状态（2026-09-22）：PASS WITH RISKS，已合入。**
+新增配置 `usageNetworkAuthorizedProviders`（默认空，旧 `usageQueryEnabled` 不迁移为授权，语义收窄为「灵动岛是否显示额度」）；
+`UsageProvider` 拆为 `fetch_local` 与 `fetch_network`，未授权时不调用后者；OpenCode / Codex / Antigravity 上线联网，Claude Code
+标「暂不支持联网查询」；Codex 改用含桌面版自带目录的 CLI 查找；开启前内联确认请求目标与凭据文件位置；README 中英、隐私政策、教程同步。
+父级独立验证：前端 45 文件 428 项全过，lint / build / fmt / check 通过；`cargo test --lib` 两轮均 572 通过 / 23 失败，失败集合 = 已知名单子集；
+读代码核对所有联网取数调用点（`load_usage_snapshots`、`get_agent_statuses`、`collect_snapshot`）均经授权门控。
+父级补修：M7 的派发向导测试会临时替换进程级 HOME，`profiles::update_toml_hooks_is_idempotent` 未持有共享锁而偶发失败，已补锁。
+
+**风险记录**：①维护者本机的 OpenCode 此前会在未开启时联网（M8a 记录的既有问题），升级后默认不再联网，需维护者在额度页逐家开启。
+②Codex app-server 超时仍为 8 秒（agy 为 20 秒）。③界面未目视。
 
 ### M9 — 首次向导教程（第一版）
 

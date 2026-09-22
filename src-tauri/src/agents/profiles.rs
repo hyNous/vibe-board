@@ -4380,6 +4380,10 @@ name = "also keep"
 
     #[test]
     fn update_toml_hooks_is_idempotent() {
+        // Resolves the bridge path from HOME twice; hold the shared lock so a
+        // test that swaps HOME (e.g. the dispatch wizard tests) cannot change
+        // it between the two installs.
+        let _home = crate::skills::lock_shared_test_home();
         let tmp = std::env::temp_dir().join(format!(
             "agentbro-kimi-idempotent-{}.toml",
             std::process::id()

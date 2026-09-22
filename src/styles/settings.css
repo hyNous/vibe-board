@@ -3359,6 +3359,67 @@
   gap: 8px;
 }
 
+.usage-provider-row__querying {
+  color: var(--settings-text-secondary);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 600;
+}
+
+.usage-provider-row__network {
+  margin-top: 5px;
+}
+
+.usage-provider-row__network-state {
+  color: var(--settings-text-secondary);
+  font-size: 10px;
+}
+
+.usage-provider-row__confirm {
+  margin-top: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--settings-border);
+  border-radius: 8px;
+  background: #f6f6fa;
+}
+
+.usage-provider-row__confirm-intro {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.usage-provider-row__confirm-list {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 2px 10px;
+  margin: 0;
+  font-size: 11px;
+}
+
+.usage-provider-row__confirm-list dt {
+  color: var(--settings-text-tertiary);
+  font-weight: 600;
+}
+
+.usage-provider-row__confirm-list dd {
+  margin: 0;
+  color: var(--settings-text-secondary);
+  word-break: break-all;
+}
+
+.usage-provider-row__confirm-note {
+  margin: 6px 0 0;
+  color: var(--settings-text-tertiary);
+  font-size: 10px;
+}
+
+.usage-provider-row__confirm-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
 .hook-status-badge {
   flex-shrink: 0;
   padding: 4px 10px;

@@ -7,6 +7,7 @@ import {
   isTauri,
   listUsageProviders,
   openSystemPath,
+  setUsageNetworkAuthorization,
   updateConfig as updateBackendConfig,
 } from '../../../services/tauriApi'
 import type { UsageSnapshot } from '../../../services/tauriApi'
@@ -15,7 +16,8 @@ import { SettingRow } from '../SettingRow'
 import { Toggle } from '../Toggle'
 import { GlassButton } from '../../shared'
 
-const USAGE_PROVIDER_REFRESH_TIMEOUT_MS = 10_000
+// `agy /usage` can take up to 20 seconds; leave headroom before the UI gives up.
+const USAGE_PROVIDER_REFRESH_TIMEOUT_MS = 25_000
 
 function readableError(error: unknown): string {
   if (error instanceof Error) return error.message
@@ -56,6 +58,7 @@ export function UsageProvidersPanel() {
   const [usageProviders, setUsageProviders] = useState<UsageSnapshot[]>([])
   const [usageLoading, setUsageLoading] = useState(false)
   const [usageAction, setUsageAction] = useState<string | null>(null)
+  const [pendingAuthorization, setPendingAuthorization] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const usageRequestSeq = useRef(0)
@@ -96,6 +99,27 @@ export function UsageProvidersPanel() {
     window.setTimeout(() => { fetchUsageProviders({ live: false, showLoading: false }) }, 150)
   }
 
+  const applyNetworkAuthorization = async (provider: string, authorized: boolean) => {
+    setError(null); setNotice(null)
+    if (!isTauri()) {
+      setNotice(t('settings.desktopOnlyHooks', { defaultValue: 'Hook management is available in the desktop app.' }))
+      return
+    }
+    setUsageAction(provider)
+    try {
+      await setUsageNetworkAuthorization(provider, authorized)
+      setPendingAuthorization(null)
+      setNotice(authorized
+        ? t('settings.usageNetworkEnabledNotice', { defaultValue: '已允许联网查询，正在刷新额度。' })
+        : t('settings.usageNetworkDisabledNotice', { defaultValue: '已撤销联网查询授权，该 Provider 不再发起请求。' }))
+      await fetchUsageProviders({ live: authorized, showLoading: true })
+    } catch (e) {
+      setError(readableError(e))
+    } finally {
+      setUsageAction(null)
+    }
+  }
+
   const authorizeProvider = async (provider: string) => {
     setError(null); setNotice(null)
     if (!isTauri()) {
@@ -116,9 +140,13 @@ export function UsageProvidersPanel() {
   const accountUsageProviders = usageProviders
     .filter((provider) => provider.settingsOrder != null)
     .sort((a, b) => (a.settingsOrder ?? 0) - (b.settingsOrder ?? 0))
+
   const usageStatusLabel = (provider: UsageSnapshot) => {
     if (!provider.enabled) return t('settings.disabled', { defaultValue: 'Disabled' })
     if (provider.state === 'ok') return t('settings.connected', { defaultValue: 'Connected' })
+    if (provider.networkSupported && !provider.networkAuthorized) {
+      return t('settings.usageNetworkNeedsAuthorization', { defaultValue: '未授权联网查询' })
+    }
     if (provider.authStatus === 'authorized') return t('settings.waitingData', { defaultValue: 'Waiting for data' })
     if (provider.authStatus === 'missing') return t('settings.needsAuth', { defaultValue: 'Needs authorization' })
     if (provider.implementationStatus === 'available') return t('settings.usageReaderAvailable', { defaultValue: '可接入' })
@@ -126,9 +154,20 @@ export function UsageProvidersPanel() {
     return t('settings.needsAuth', { defaultValue: 'Needs authorization' })
   }
 
+  const networkRequestSummary = (provider: UsageSnapshot) => {
+    const target = provider.networkTarget ?? ''
+    const template = provider.networkKind === 'cli'
+      ? t('settings.usageNetworkConfirmCli', {
+        defaultValue: '运行本地程序 {{target}}，由它自己向 Provider 查询额度。',
+      })
+      : t('settings.usageNetworkConfirmHttp', {
+        defaultValue: '向 {{target}} 发出用量查询请求。',
+      })
+    return template.replace('{{target}}', target)
+  }
+
   const shouldShowUsageAuthorize = (provider: UsageSnapshot) =>
-    config.usageQueryEnabled
-    && provider.canAuthorize
+    provider.canAuthorize
     && provider.authStatus !== 'authorized'
     && provider.state !== 'ok'
 
@@ -144,8 +183,8 @@ export function UsageProvidersPanel() {
       {error && <div className="hook-error-card">{error}</div>}
       {notice && <div className="hook-notice-card">{notice}</div>}
       <SettingRow
-        label={t('settings.usageQueryEnabled', { defaultValue: '启用用量查询' })}
-        description={t('settings.usageQueryEnabledDesc', { defaultValue: '后台读取官方账号或 CLI 的 Token 配额，用于灵动岛顶部显示。第三方 API/中转站用量后续在单独模块配置。' })}
+        label={t('settings.usageQueryEnabled', { defaultValue: '在灵动岛显示额度' })}
+        description={t('settings.usageQueryEnabledDesc', { defaultValue: '只控制灵动岛顶部是否显示额度；联网查询需要在下方逐个 Provider 授权，默认全部关闭。' })}
       >
         <Toggle checked={config.usageQueryEnabled} onChange={setUsageQueryEnabled} />
       </SettingRow>
@@ -154,40 +193,110 @@ export function UsageProvidersPanel() {
           {t('settings.noAccountQuotaProviders', { defaultValue: '暂无可查询的官方账号配额。' })}
         </div>
       )}
-      {accountUsageProviders.map((provider) => (
-        <div className="usage-provider-row" key={provider.provider} data-testid={`usage-provider-${provider.provider}`}>
-          <div className="usage-provider-row__main">
-            <div className="usage-provider-row__title">
-              <span>{provider.label}</span>
-              <strong>{usageStatusLabel(provider)}</strong>
+      {accountUsageProviders.map((provider) => {
+        const confirming = pendingAuthorization === provider.provider
+        const busy = usageAction === provider.provider
+        return (
+          <div className="usage-provider-row" key={provider.provider} data-testid={`usage-provider-${provider.provider}`}>
+            <div className="usage-provider-row__main">
+              <div className="usage-provider-row__title">
+                <span>{provider.label}</span>
+                <strong>{usageStatusLabel(provider)}</strong>
+                {usageLoading && provider.networkSupported && provider.networkAuthorized && (
+                  <em className="usage-provider-row__querying" data-testid={`usage-provider-querying-${provider.provider}`}>
+                    {t('settings.usageNetworkQuerying', { defaultValue: '正在查询…' })}
+                  </em>
+                )}
+              </div>
+              <div className="usage-provider-row__detail" title={provider.authPath || provider.detail}>
+                {provider.source ? `${provider.source} · ${provider.detail}` : provider.detail}
+              </div>
+              {provider.authPath && (
+                <div className="usage-provider-row__path">{provider.authPath}</div>
+              )}
+              {provider.networkSupported ? (
+                <div className="usage-provider-row__network" data-testid={`usage-network-${provider.provider}`}>
+                  <span className="usage-provider-row__network-state">
+                    {provider.networkAuthorized
+                      ? t('settings.usageNetworkAuthorized', { defaultValue: '已允许联网查询' })
+                      : t('settings.usageNetworkNotAuthorized', { defaultValue: '未允许联网查询（默认关闭）' })}
+                  </span>
+                  {confirming && (
+                    <div className="usage-provider-row__confirm" data-testid={`usage-network-confirm-${provider.provider}`}>
+                      <p className="usage-provider-row__confirm-intro">
+                        {t('settings.usageNetworkConfirmIntro', { defaultValue: '开启后 Vibe Board 会：' })}
+                      </p>
+                      <dl className="usage-provider-row__confirm-list">
+                        <dt>{t('settings.usageNetworkRequest', { defaultValue: '发出的请求' })}</dt>
+                        <dd>{networkRequestSummary(provider)}</dd>
+                        <dt>{t('settings.usageNetworkCredential', { defaultValue: '使用的本地凭据' })}</dt>
+                        <dd className="usage-provider-row__path">
+                          {provider.networkCredential
+                            ?? t('settings.usageNetworkCredentialManaged', { defaultValue: '由该本地程序自己管理，Vibe Board 不读取' })}
+                        </dd>
+                      </dl>
+                      <p className="usage-provider-row__confirm-note">
+                        {t('settings.usageNetworkConfirmNote', { defaultValue: '只读取凭据用于本次请求，不显示也不记录凭据内容；可随时撤销。' })}
+                      </p>
+                      <div className="usage-provider-row__confirm-actions">
+                        <GlassButton
+                          variant="primary"
+                          onClick={() => void applyNetworkAuthorization(provider.provider, true)}
+                          disabled={busy}
+                        >
+                          {busy
+                            ? t('settings.detecting', { defaultValue: '检测中...' })
+                            : t('settings.usageNetworkConfirmEnable', { defaultValue: '确认开启' })}
+                        </GlassButton>
+                        <GlassButton variant="ghost" onClick={() => setPendingAuthorization(null)} disabled={busy}>
+                          {t('settings.usageNetworkCancel', { defaultValue: '取消' })}
+                        </GlassButton>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : provider.networkUnsupportedReason === 'unverified' ? (
+                <div className="usage-provider-row__path" data-testid={`usage-network-unsupported-${provider.provider}`}>
+                  {t('settings.usageNetworkUnsupported', { defaultValue: '暂不支持联网查询' })}
+                </div>
+              ) : null}
             </div>
-            <div className="usage-provider-row__detail" title={provider.authPath || provider.detail}>
-              {provider.source ? `${provider.source} · ${provider.detail}` : provider.detail}
+            <div className="usage-provider-row__actions">
+              {provider.authPath && (
+                <GlassButton variant="ghost" onClick={() => openSystemPath(provider.authPath!)}>
+                  {t('settings.openCredential', { defaultValue: '打开凭据' })}
+                </GlassButton>
+              )}
+              {provider.networkSupported && (
+                <Toggle
+                  checked={provider.networkAuthorized}
+                  disabled={busy}
+                  onChange={(next) => {
+                    setError(null); setNotice(null)
+                    if (next) {
+                      setPendingAuthorization(provider.provider)
+                    } else {
+                      setPendingAuthorization(null)
+                      void applyNetworkAuthorization(provider.provider, false)
+                    }
+                  }}
+                />
+              )}
+              {shouldShowUsageAuthorize(provider) && (
+                <GlassButton
+                  variant="secondary"
+                  onClick={() => authorizeProvider(provider.provider)}
+                  disabled={busy}
+                >
+                  {busy
+                    ? t('settings.authorizing', { defaultValue: '授权中...' })
+                    : t('settings.authorizeUsage', { defaultValue: '打开官方登录' })}
+                </GlassButton>
+              )}
             </div>
-            {provider.authPath && (
-              <div className="usage-provider-row__path">{provider.authPath}</div>
-            )}
           </div>
-          <div className="usage-provider-row__actions">
-            {provider.authPath && (
-              <GlassButton variant="ghost" onClick={() => openSystemPath(provider.authPath!)}>
-                {t('settings.openCredential', { defaultValue: '打开凭据' })}
-              </GlassButton>
-            )}
-            {shouldShowUsageAuthorize(provider) && (
-              <GlassButton
-                variant="secondary"
-                onClick={() => authorizeProvider(provider.provider)}
-                disabled={usageAction === provider.provider}
-              >
-                {usageAction === provider.provider
-                  ? t('settings.authorizing', { defaultValue: '授权中...' })
-                  : t('settings.authorizeUsage', { defaultValue: '用量授权' })}
-              </GlassButton>
-            )}
-          </div>
-        </div>
-      ))}
+        )
+      })}
     </SettingGroup>
   )
 }

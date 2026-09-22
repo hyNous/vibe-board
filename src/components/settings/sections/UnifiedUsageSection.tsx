@@ -84,11 +84,12 @@ function formatFreshness(t: Translate, timestamp: number | null): string {
 }
 
 function stateLabel(t: Translate, snapshot: UsageSnapshot): string {
+  if (snapshot.state === 'ok') return t('settings.connected', { defaultValue: 'Connected' })
+  if (snapshot.state === 'disabled') return t('settings.disabled', { defaultValue: 'Disabled' })
+  if (snapshot.networkSupported && !snapshot.networkAuthorized) {
+    return t('settings.usageNetworkNeedsAuthorization', { defaultValue: '未授权联网查询' })
+  }
   switch (snapshot.state) {
-    case 'ok':
-      return t('settings.connected', { defaultValue: 'Connected' })
-    case 'disabled':
-      return t('settings.disabled', { defaultValue: 'Disabled' })
     case 'unauthorized':
       return t('settings.needsAuth', { defaultValue: 'Needs authorization' })
     case 'failed':
@@ -238,7 +239,13 @@ export function UnifiedUsageSection() {
             <h3>{t('settings.usagePage.nowTitle', { defaultValue: 'Now' })}</h3>
             <p>{t('settings.usagePage.nowDesc', { defaultValue: 'Remaining quota, reset time, source, and freshness reported by each provider.' })}</p>
           </div>
-          {loading && <span className="unified-usage__provider-loading">{t('settings.detecting', { defaultValue: 'Checking...' })}</span>}
+          {loading && (
+            <span className="unified-usage__provider-loading">
+              {providers.some((provider) => provider.networkSupported && provider.networkAuthorized)
+                ? t('settings.usageNetworkQuerying', { defaultValue: '正在查询…' })
+                : t('settings.detecting', { defaultValue: 'Checking...' })}
+            </span>
+          )}
         </div>
         {providers.length === 0 ? (
           <div className="hook-empty">{t('settings.usagePage.noProviders', { defaultValue: 'No usage provider data is available yet.' })}</div>

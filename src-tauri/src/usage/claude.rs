@@ -3,8 +3,8 @@
 
 use super::normalize::{provider_rate_limits, UsageRateLimitSnapshot};
 use super::{
-    build_snapshot, resolve_state, UsageAuthStatus, UsageCredential, UsageFetch, UsageProvider,
-    UsageSnapshot,
+    build_snapshot, resolve_state, UsageAuthStatus, UsageCredential, UsageFetch, UsageNetworkPlan,
+    UsageProvider, UsageSnapshot,
 };
 use crate::hooks::session_store::RateLimitInfo;
 use futures_util::future::BoxFuture;
@@ -53,7 +53,7 @@ impl UsageProvider for ClaudeUsageProvider {
         }
     }
 
-    fn fetch<'a>(&'a self, _live: bool) -> BoxFuture<'a, UsageFetch> {
+    fn fetch_local<'a>(&'a self) -> BoxFuture<'a, UsageFetch> {
         async move {
             let snapshot = load_claude_usage_rate_limits();
             let has_temp = claude_rate_limit_paths().iter().any(|path| path.exists());
@@ -82,6 +82,15 @@ impl UsageProvider for ClaudeUsageProvider {
             }
         }
         .boxed()
+    }
+
+    /// Claude Code's online quota query needs its OAuth token and has never
+    /// been verified, so it stays offline (M8c capability matrix).
+    fn network_plan(&self) -> UsageNetworkPlan {
+        UsageNetworkPlan {
+            unsupported_reason: Some("unverified"),
+            ..UsageNetworkPlan::default()
+        }
     }
 
     fn normalize(

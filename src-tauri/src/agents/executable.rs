@@ -229,6 +229,13 @@ fn windows_codex_bundled_cli_candidates() -> Vec<PathBuf> {
     let Some(local_app_data) = windows_local_app_data_dir() else {
         return Vec::new();
     };
+    windows_codex_bundled_cli_candidates_in(&local_app_data)
+}
+
+/// Versioned bundled-CLI directories under `<local_app_data>/OpenAI/Codex/bin`,
+/// newest first, plus the bin root as a fallback.
+#[cfg(target_os = "windows")]
+fn windows_codex_bundled_cli_candidates_in(local_app_data: &Path) -> Vec<PathBuf> {
     let codex_bin = local_app_data.join("OpenAI").join("Codex").join("bin");
     let mut candidates = Vec::new();
 
@@ -584,6 +591,39 @@ mod tests {
             candidates[1],
             std::path::PathBuf::from("/Users/example/.version-fox/sdks/nodejs/bin")
         );
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn windows_codex_bundled_cli_candidates_include_version_dirs_and_bin_root() {
+        let base = std::env::temp_dir().join(format!(
+            "vibeboard-codex-bundled-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("system time")
+                .as_nanos()
+        ));
+        let version_dir = base.join("OpenAI").join("Codex").join("bin").join("1.2.3");
+        std::fs::create_dir_all(&version_dir).expect("version dir");
+        std::fs::write(version_dir.join("codex.exe"), b"stub").expect("codex stub");
+
+        let candidates = super::windows_codex_bundled_cli_candidates_in(&base);
+        let bin_root = base.join("OpenAI").join("Codex").join("bin");
+
+        assert!(
+            candidates.contains(&version_dir.join("codex.exe")),
+            "the versioned bundled CLI must be a candidate: {candidates:?}"
+        );
+        assert!(
+            candidates.contains(&bin_root.join("codex.exe")),
+            "the bin root fallback must stay a candidate: {candidates:?}"
+        );
+        assert!(candidates
+            .iter()
+            .any(|path| path.extension().is_some_and(|ext| ext == "cmd")));
+
+        let _ = std::fs::remove_dir_all(&base);
     }
 
     #[cfg(target_os = "windows")]

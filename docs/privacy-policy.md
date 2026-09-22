@@ -1,6 +1,6 @@
 # Privacy Policy
 
-Last updated: September 3, 2026
+Last updated: September 22, 2026
 
 Vibe Board is a local-first desktop utility for surfacing AI coding-agent
 events in a floating island. Coding session data and local configuration stay
@@ -39,6 +39,16 @@ Review exported files before sharing them.
 If you enable the optional telemetry build, the configured SLS endpoint stores
 the anonymous usage events. GitHub is contacted only for release checks or
 GitHub-backed Skill synchronization that you explicitly use.
+
+Quota lookups that leave your machine are opt-in per provider and off by
+default. Only after you authorize a provider on the Usage page does Vibe Board
+query that provider's quota — either by calling the provider's usage endpoint
+with the credential already stored locally for it, or by running the provider's
+own local CLI and letting it contact the provider. The credential value is read
+only for that request and never appears in logs, error messages, or the UI.
+Revoking a provider's authorization stops further queries immediately. Local
+sources (session-log history, locally written rate-limit files) need no
+authorization and keep working.
 
 For privacy questions, use the issue tracker for the repository that distributes
 your Vibe Board build.

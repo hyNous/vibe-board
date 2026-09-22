@@ -6,8 +6,8 @@ use super::normalize::{
     usage_snapshot_within_age, UsageRateLimitSnapshot,
 };
 use super::{
-    build_snapshot, resolve_state, UsageAuthStatus, UsageCredential, UsageFetch, UsageProvider,
-    UsageSnapshot,
+    build_snapshot, resolve_state, UsageAuthStatus, UsageCredential, UsageFetch, UsageNetworkKind,
+    UsageNetworkPlan, UsageProvider, UsageSnapshot,
 };
 use crate::hooks::session_store::RateLimitInfo;
 use futures_util::future::BoxFuture;
@@ -24,6 +24,9 @@ use tokio::sync::Mutex as TokioMutex;
 
 const CODEX_USAGE_LIVE_CACHE_TTL: Duration = Duration::from_secs(300);
 const CODEX_USAGE_LIVE_FAILURE_TTL: Duration = Duration::from_secs(60);
+/// Upper bound for one app-server round trip. The app-server answers in well
+/// under a second when it is reachable; the bound only stops a hung process.
+const CODEX_APP_SERVER_TIMEOUT: Duration = Duration::from_secs(8);
 
 pub struct CodexUsageProvider;
 
@@ -58,13 +61,51 @@ impl UsageProvider for CodexUsageProvider {
                 UsageAuthStatus::Missing
             },
             path: path.map(|path| path.display().to_string()),
-            can_authorize: crate::commands::find_binary("codex").is_some(),
+            can_authorize: codex_cli_binary().is_some(),
         }
     }
 
-    fn fetch<'a>(&'a self, live: bool) -> BoxFuture<'a, UsageFetch> {
+    fn network_plan(&self) -> UsageNetworkPlan {
+        UsageNetworkPlan {
+            kind: Some(UsageNetworkKind::Cli),
+            target: Some("codex app-server (JSON-RPC account/rateLimits/read)"),
+            credential: dirs::home_dir()
+                .map(|home| home.join(".codex").join("auth.json"))
+                .map(|path| path.display().to_string()),
+            unsupported_reason: None,
+        }
+    }
+
+    fn fetch_local<'a>(&'a self) -> BoxFuture<'a, UsageFetch> {
         async move {
-            let (quota, error) = load_codex_quota(live).await;
+            let snapshot = load_codex_usage_rate_limits_from_jsonl();
+            let detail = if let Some(snapshot) = &snapshot {
+                let updated = snapshot
+                    .captured_at
+                    .map(|date| format!(" updated {}", date.format("%H:%M:%S")))
+                    .unwrap_or_default();
+                format!("Codex session log rate limits found.{updated}")
+            } else if codex_auth_configured() {
+                "Codex auth found, waiting for account quota data.".to_string()
+            } else {
+                "No Codex auth or account quota data found.".to_string()
+            };
+
+            UsageFetch {
+                rate_limits: snapshot.map(|snapshot| snapshot.rate_limits),
+                // Token usage comes from the persisted daily aggregate; the
+                // scanner runs on its own background thread (M8b).
+                history: super::history::provider_history("codex"),
+                detail,
+                ..UsageFetch::default()
+            }
+        }
+        .boxed()
+    }
+
+    fn fetch_network<'a>(&'a self) -> BoxFuture<'a, UsageFetch> {
+        async move {
+            let (quota, error) = load_codex_usage_rate_limits_live_cached_with_error().await;
             let detail = if let Some(snapshot) = &quota {
                 let updated = snapshot
                     .captured_at
@@ -73,17 +114,12 @@ impl UsageProvider for CodexUsageProvider {
                 format!("Codex account rate limits found.{updated}")
             } else if let Some(error) = &error {
                 format!("Codex account quota request failed: {error}")
-            } else if codex_auth_configured() {
-                "Codex auth found, waiting for account quota data.".to_string()
             } else {
-                "No Codex auth or account quota data found.".to_string()
+                "Codex app-server returned no account quota data.".to_string()
             };
 
             UsageFetch {
                 rate_limits: quota.map(|snapshot| snapshot.rate_limits),
-                // Token usage comes from the persisted daily aggregate; the
-                // scanner runs on its own background thread (M8b).
-                history: super::history::provider_history("codex"),
                 detail,
                 error,
                 ..UsageFetch::default()
@@ -104,9 +140,23 @@ impl UsageProvider for CodexUsageProvider {
     }
 }
 
-/// Legacy shape used by the island and agent status commands.
-pub(crate) async fn load_rate_limits(live: bool) -> Option<RateLimitInfo> {
-    load_codex_quota(live)
+/// The Codex CLI bundled with the desktop app lives under a versioned
+/// `%LOCALAPPDATA%/OpenAI/Codex/bin/<hash>` directory that a plain PATH lookup
+/// misses, so quota lookups must use the bundled-aware finder.
+fn codex_cli_binary() -> Option<PathBuf> {
+    crate::agents::executable::find_codex_cli_binary()
+}
+
+/// Legacy shape used by the island and agent status commands. The session-log
+/// snapshot is local and needs no authorization.
+pub(crate) fn load_local_rate_limits() -> Option<RateLimitInfo> {
+    load_codex_usage_rate_limits_from_jsonl().map(|snapshot| snapshot.rate_limits)
+}
+
+/// Legacy shape used by the island and agent status commands. Runs the Codex
+/// app-server, which queries OpenAI itself; callers gate it on authorization.
+pub(crate) async fn load_live_rate_limits() -> Option<RateLimitInfo> {
+    load_codex_usage_rate_limits_live_cached_with_error()
         .await
         .0
         .map(|snapshot| snapshot.rate_limits)
@@ -116,21 +166,6 @@ fn codex_auth_configured() -> bool {
     dirs::home_dir()
         .map(|home| home.join(".codex").join("auth.json"))
         .is_some_and(|path| path.exists())
-}
-
-async fn load_codex_quota(live: bool) -> (Option<UsageRateLimitSnapshot>, Option<String>) {
-    if !live {
-        return (load_codex_usage_rate_limits_from_jsonl(), None);
-    }
-
-    let (live_snapshot, error) = load_codex_usage_rate_limits_live_cached_with_error().await;
-    if live_snapshot.is_some() {
-        return (live_snapshot, None);
-    }
-    match load_codex_usage_rate_limits_from_jsonl() {
-        Some(snapshot) => (Some(snapshot), None),
-        None => (None, error),
-    }
 }
 
 #[derive(Default)]
@@ -188,9 +223,10 @@ async fn load_codex_usage_rate_limits_live_uncached(
         }
     }
 
-    let Some(binary) = crate::commands::find_binary("codex") else {
+    let Some(binary) = codex_cli_binary() else {
         return (None, live_error);
     };
+    let binary = binary.display().to_string();
     (codex_rate_limits_via_stdio(&binary).await, live_error)
 }
 
@@ -207,7 +243,7 @@ async fn codex_rate_limits_via_stdio(binary: &str) -> Option<UsageRateLimitSnaps
     let stdout = child.stdout.take()?;
     let mut lines = TokioBufReader::new(stdout).lines();
 
-    let result = tokio::time::timeout(Duration::from_secs(8), async {
+    let result = tokio::time::timeout(CODEX_APP_SERVER_TIMEOUT, async {
         write_json_rpc(
             &mut stdin,
             serde_json::json!({
@@ -576,6 +612,47 @@ impl CodexTokenCounts {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn quota_lookup_uses_the_bundled_codex_cli_finder() {
+        let source = fs::read_to_string(
+            Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("src")
+                .join("usage")
+                .join("codex.rs"),
+        )
+        .expect("read codex usage source");
+        let production = source
+            .split("#[cfg(test)]")
+            .next()
+            .expect("production source");
+
+        assert!(
+            production.contains("find_codex_cli_binary"),
+            "quota lookups must use the bundled-aware Codex CLI finder"
+        );
+        assert!(
+            !production.contains("find_binary(\"codex\")"),
+            "a plain PATH lookup misses the Codex desktop app's bundled CLI"
+        );
+    }
+
+    #[test]
+    fn codex_cli_binary_uses_the_shared_bundled_finder() {
+        assert_eq!(
+            codex_cli_binary(),
+            crate::agents::executable::find_codex_cli_binary()
+        );
+    }
+
+    #[tokio::test]
+    async fn unauthorized_codex_never_reports_an_authorized_online_query() {
+        let snapshot = super::super::collect_snapshot(&CodexUsageProvider, true, true, false).await;
+
+        assert!(!snapshot.network_authorized);
+        assert!(snapshot.network_supported);
+        assert!(snapshot.detail.contains("not authorized"));
+    }
 
     #[test]
     fn codex_token_counts_split_cached_input_from_info_totals() {

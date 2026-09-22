@@ -79,8 +79,15 @@ pub struct AppConfig {
     pub smart_suppression: bool,
     pub completion_timeout: u32,
     pub show_token_usage: bool,
+    /// Display toggle for the island header only. It never grants permission to
+    /// query a provider over the network — that is per-provider (M8c).
     #[serde(default = "default_true")]
     pub usage_query_enabled: bool,
+    /// Provider ids the user explicitly allowed to be queried over the network
+    /// (or through a provider-owned local CLI). Empty by default; the legacy
+    /// `usage_query_enabled` flag must never migrate into this list.
+    #[serde(default)]
+    pub usage_network_authorized_providers: Vec<String>,
     #[serde(default = "default_codex_app_server_sync_enabled")]
     pub codex_app_server_sync_enabled: bool,
     /// One-time migration marker for the Windows Codex app-server default.
@@ -296,6 +303,7 @@ impl Default for AppConfig {
             completion_timeout: 5,
             show_token_usage: true,
             usage_query_enabled: true,
+            usage_network_authorized_providers: Vec::new(),
             codex_app_server_sync_enabled: default_codex_app_server_sync_enabled(),
             codex_app_server_sync_configured: false,
             codex_app_server_sync_interval_seconds: DEFAULT_CODEX_APP_SERVER_SYNC_INTERVAL_SECONDS,
@@ -765,6 +773,46 @@ mod tests {
         let config: AppConfig = serde_json::from_value(value).expect("deserialize legacy config");
 
         assert!(config.enabled_agents.is_empty());
+    }
+
+    #[test]
+    fn usage_network_authorization_defaults_to_empty_and_never_follows_the_legacy_toggle() {
+        let mut value = serde_json::to_value(AppConfig::default()).expect("serialize config");
+        let object = value.as_object_mut().expect("config object");
+        object.remove("usageNetworkAuthorizedProviders");
+        // A stored config from before M8c: the master switch was on by default.
+        object.insert("usageQueryEnabled".to_string(), serde_json::json!(true));
+
+        let config: AppConfig = serde_json::from_value(value).expect("deserialize legacy config");
+
+        assert!(
+            config.usage_network_authorized_providers.is_empty(),
+            "the legacy master switch must not migrate into any provider authorization"
+        );
+        assert!(config.usage_query_enabled);
+    }
+
+    #[test]
+    fn usage_network_authorization_roundtrips_through_serde() {
+        let config = AppConfig {
+            usage_network_authorized_providers: vec!["opencode".to_string()],
+            ..AppConfig::default()
+        };
+        let value = serde_json::to_value(&config).expect("serialize config");
+        assert_eq!(
+            value
+                .get("usageNetworkAuthorizedProviders")
+                .and_then(|v| v.as_array())
+                .map(Vec::len),
+            Some(1)
+        );
+
+        let restored: AppConfig = serde_json::from_value(value).expect("deserialize config");
+
+        assert_eq!(
+            restored.usage_network_authorized_providers,
+            vec!["opencode"]
+        );
     }
 
     #[test]

@@ -69,7 +69,7 @@ impl UsageProvider for CatalogUsageProvider {
         }
     }
 
-    fn fetch<'a>(&'a self, _live: bool) -> BoxFuture<'a, UsageFetch> {
+    fn fetch_local<'a>(&'a self) -> BoxFuture<'a, UsageFetch> {
         async move {
             let detail = if self.unsupported {
                 "No usage reader is available for this Agent yet.".to_string()

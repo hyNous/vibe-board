@@ -4846,6 +4846,7 @@ pub fn run() {
             commands::get_app_state_flags,
             usage::list_usage_providers,
             usage::authorize_usage_provider,
+            usage::set_usage_network_authorization,
             usage::history::start_usage_history_scan,
             usage::history::get_usage_history_scan_status,
             commands::jump_to_terminal,

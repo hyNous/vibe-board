@@ -27,7 +27,7 @@ Vibe Board lives at the top or side edge of the screen. Expanding it shows the c
 
 - Several agents running at once stay distinguishable through conversation titles and execution states, without switching windows.
 - Clicking a task jumps to its terminal; desktop agents open and foreground their app window.
-- When token data is available it is shown directly; otherwise the UI shows provider quota and reset time without inventing a price estimate.
+- When token data is available it is shown directly; otherwise the UI shows provider quota and reset time. Online quota queries are off by default and only run for providers you authorize individually, using the credentials already stored locally for that provider.
 
 The default look is solid black, with a frosted-glass effect available. The board docks to the top or either side edge, and the side dock has three sizes: 64×132 (narrow, default), 72×148 (standard), and 80×168 (wide).
 
@@ -46,7 +46,7 @@ The installer is an unsigned Windows x64 build, so SmartScreen may ask for confi
 | --- | --- |
 | Task board | Shows the current task, agent online state, and completion reminders. The task area scrolls and shows only the agent, conversation title, and execution state — never conversation bodies. |
 | Approvals and questions | Approve, deny, answer, or confirm plans during a run without returning to the terminal. |
-| Usage | Prefers real tokens; otherwise shows provider quota, window, and reset time. |
+| Usage | Prefers real tokens; otherwise shows provider quota, window, and reset time. Local session logs and local files need no authorization; online queries are off by default and require per-provider authorization on the Usage page, after which Vibe Board queries the provider with the credentials already stored locally (or through that provider's own CLI). Authorization can be revoked at any time. |
 | Agent management | Scans CLIs and desktop apps for version, path, hook, and configuration state, and supports custom agents. |
 | Skill management | Imports from an agent, local folder, or GitHub; adopts into the center library; distributes by symlink or copy. |
 | Look and docking | Solid black by default with an optional frosted-glass effect; docks to the top or either side edge, with three side sizes. |

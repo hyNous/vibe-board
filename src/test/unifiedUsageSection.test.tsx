@@ -21,6 +21,7 @@ vi.mock('../services/tauriApi', () => ({
   getConfig: () => Promise.resolve({}),
   updateConfig: () => Promise.resolve(),
   authorizeUsageProvider: () => Promise.resolve(),
+  setUsageNetworkAuthorization: () => Promise.resolve([]),
   openSystemPath: () => Promise.resolve(),
 }))
 
@@ -79,6 +80,12 @@ function snapshotProvider(overrides: Partial<UsageSnapshot> = {}): UsageSnapshot
     authStatus: 'authorized',
     authPath: null,
     canAuthorize: false,
+    networkSupported: false,
+    networkAuthorized: false,
+    networkKind: null,
+    networkTarget: null,
+    networkCredential: null,
+    networkUnsupportedReason: null,
     ...overrides,
   }
 }
@@ -282,6 +289,30 @@ describe('UnifiedUsageSection rendering', () => {
     expect(within(unknownModel).getByLabelText('No public price; token usage only')).toHaveTextContent('—')
     expect(within(unknownModel).queryByText('Unknown')).not.toBeInTheDocument()
     expect(within(unknownModel).queryByText(/\$0\.00/)).not.toBeInTheDocument()
+  })
+
+  it('marks a provider with an unauthorized online query instead of waiting for data', async () => {
+    getUsageDashboard.mockResolvedValue({
+      providers: [snapshotProvider({
+        state: 'unavailable',
+        windows: [],
+        history: emptyHistory(),
+        networkSupported: true,
+        networkAuthorized: false,
+        networkKind: 'http',
+        networkTarget: 'https://example.invalid/usage',
+        networkCredential: '/home/user/.local/share/opencode/auth.json',
+      })],
+      computedAt: Date.now(),
+      pricingEffectiveDate: null,
+    })
+
+    await renderUsage()
+
+    const now = await screen.findByTestId('usage-now')
+    const row = await within(now).findByRole('row', { name: /Codex/ })
+    expect(within(row).getByText('未授权联网查询')).toBeInTheDocument()
+    expect(within(row).queryByText('Waiting for data')).not.toBeInTheDocument()
   })
 
   it('shows the background scan progress while usage history is being collected', async () => {

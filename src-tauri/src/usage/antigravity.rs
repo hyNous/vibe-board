@@ -3,8 +3,8 @@
 
 use super::normalize::{number_from_value, UsageRateLimitSnapshot};
 use super::{
-    build_snapshot, resolve_state, unknown_history, UsageCredential, UsageFetch, UsageProvider,
-    UsageSnapshot,
+    build_snapshot, resolve_state, unknown_history, UsageCredential, UsageFetch, UsageNetworkKind,
+    UsageNetworkPlan, UsageProvider, UsageSnapshot,
 };
 use crate::hooks::session_store::{RateLimitInfo, UsageRateWindow};
 use futures_util::future::BoxFuture;
@@ -15,7 +15,9 @@ use std::time::{Duration, Instant};
 use tokio::sync::Mutex as TokioMutex;
 
 const ANTIGRAVITY_USAGE_CACHE_TTL: Duration = Duration::from_secs(60);
-const ANTIGRAVITY_USAGE_TIMEOUT: Duration = Duration::from_secs(15);
+/// `agy /usage` was measured at 12–15 seconds, so the bound is 20 seconds.
+const ANTIGRAVITY_USAGE_TIMEOUT: Duration = Duration::from_secs(20);
+const ANTIGRAVITY_USAGE_COMMAND: &str = "agy /usage";
 
 pub struct AntigravityUsageProvider;
 
@@ -44,24 +46,49 @@ impl UsageProvider for AntigravityUsageProvider {
         }
     }
 
-    fn fetch<'a>(&'a self, _live: bool) -> BoxFuture<'a, UsageFetch> {
+    fn network_plan(&self) -> UsageNetworkPlan {
+        UsageNetworkPlan {
+            kind: Some(UsageNetworkKind::Cli),
+            target: Some(ANTIGRAVITY_USAGE_COMMAND),
+            // The Antigravity CLI owns its own login; Vibe Board never reads it.
+            credential: None,
+            unsupported_reason: None,
+        }
+    }
+
+    fn fetch_local<'a>(&'a self) -> BoxFuture<'a, UsageFetch> {
         async move {
             let binary_available = find_antigravity_binary().is_some();
-            let snapshot = load_antigravity_usage_rate_limits().await;
-
-            let detail = if snapshot.is_some() {
-                "Antigravity /usage quota synced.".to_string()
-            } else if binary_available {
-                "Antigravity CLI found; /usage returned no quota data.".to_string()
+            let detail = if binary_available {
+                "Antigravity CLI found; no local quota source.".to_string()
             } else {
                 "Antigravity CLI (agy) was not found.".to_string()
             };
 
             UsageFetch {
-                rate_limits: snapshot.map(|snapshot| snapshot.rate_limits),
                 history: unknown_history("No local Antigravity token history reader yet"),
                 detail,
-                error: None,
+                ..UsageFetch::default()
+            }
+        }
+        .boxed()
+    }
+
+    fn fetch_network<'a>(&'a self) -> BoxFuture<'a, UsageFetch> {
+        async move {
+            let (snapshot, error) = load_antigravity_usage_rate_limits().await;
+            let detail = if snapshot.is_some() {
+                "Antigravity /usage quota synced.".to_string()
+            } else if let Some(error) = &error {
+                format!("Antigravity /usage request failed: {error}")
+            } else {
+                "Antigravity /usage returned no quota data.".to_string()
+            };
+
+            UsageFetch {
+                rate_limits: snapshot.map(|snapshot| snapshot.rate_limits),
+                detail,
+                error,
                 ..UsageFetch::default()
             }
         }
@@ -84,10 +111,12 @@ impl UsageProvider for AntigravityUsageProvider {
     }
 }
 
-/// Legacy shape used by the island and agent status commands.
+/// Legacy shape used by the island and agent status commands. Callers gate it
+/// on authorization because it runs the Antigravity CLI, which goes online.
 pub(crate) async fn load_rate_limits() -> Option<RateLimitInfo> {
     load_antigravity_usage_rate_limits()
         .await
+        .0
         .map(|snapshot| snapshot.rate_limits)
 }
 
@@ -95,9 +124,10 @@ pub(crate) async fn load_rate_limits() -> Option<RateLimitInfo> {
 struct AntigravityUsageCache {
     fetched_at: Option<Instant>,
     snapshot: Option<UsageRateLimitSnapshot>,
+    error: Option<String>,
 }
 
-async fn load_antigravity_usage_rate_limits() -> Option<UsageRateLimitSnapshot> {
+async fn load_antigravity_usage_rate_limits() -> (Option<UsageRateLimitSnapshot>, Option<String>) {
     static CACHE: OnceLock<TokioMutex<AntigravityUsageCache>> = OnceLock::new();
     let cache = CACHE.get_or_init(|| TokioMutex::new(AntigravityUsageCache::default()));
     {
@@ -106,17 +136,31 @@ async fn load_antigravity_usage_rate_limits() -> Option<UsageRateLimitSnapshot> 
             .fetched_at
             .is_some_and(|fetched_at| fetched_at.elapsed() < ANTIGRAVITY_USAGE_CACHE_TTL)
         {
-            return cached.snapshot.clone();
+            return (cached.snapshot.clone(), visible_error(&cached));
         }
     }
 
     let fresh = fetch_antigravity_usage_rate_limits().await;
     let mut cached = cache.lock().await;
     cached.fetched_at = Some(Instant::now());
-    if fresh.is_some() {
-        cached.snapshot = fresh;
+    match fresh {
+        (Some(snapshot), _) => {
+            cached.snapshot = Some(snapshot);
+            cached.error = None;
+        }
+        (None, error) => {
+            cached.error = error;
+        }
     }
-    cached.snapshot.clone()
+    (cached.snapshot.clone(), visible_error(&cached))
+}
+
+fn visible_error(cached: &AntigravityUsageCache) -> Option<String> {
+    if cached.snapshot.is_some() {
+        None
+    } else {
+        cached.error.clone()
+    }
 }
 
 fn find_antigravity_binary() -> Option<String> {
@@ -142,8 +186,13 @@ fn find_antigravity_binary() -> Option<String> {
         .map(|path| path.display().to_string())
 }
 
-async fn fetch_antigravity_usage_rate_limits() -> Option<UsageRateLimitSnapshot> {
-    let binary = find_antigravity_binary()?;
+async fn fetch_antigravity_usage_rate_limits() -> (Option<UsageRateLimitSnapshot>, Option<String>) {
+    let Some(binary) = find_antigravity_binary() else {
+        return (
+            None,
+            Some("the Antigravity CLI (agy) was not found".to_string()),
+        );
+    };
     let mut command = crate::platform::process::background_tokio_command(binary);
     command
         .args([
@@ -158,15 +207,36 @@ async fn fetch_antigravity_usage_rate_limits() -> Option<UsageRateLimitSnapshot>
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .kill_on_drop(true);
-    let output = tokio::time::timeout(ANTIGRAVITY_USAGE_TIMEOUT, command.output())
-        .await
-        .ok()?
-        .ok()?;
+    let output = match tokio::time::timeout(ANTIGRAVITY_USAGE_TIMEOUT, command.output()).await {
+        Ok(Ok(output)) => output,
+        Ok(Err(error)) => return (None, Some(format!("could not run agy /usage: {error}"))),
+        Err(_) => {
+            return (
+                None,
+                Some(format!(
+                    "agy /usage timed out after {} seconds",
+                    ANTIGRAVITY_USAGE_TIMEOUT.as_secs()
+                )),
+            )
+        }
+    };
     if !output.status.success() {
-        return None;
+        return (
+            None,
+            Some(format!("agy /usage exited with {}", output.status)),
+        );
     }
-    let payload = serde_json::from_slice::<serde_json::Value>(&output.stdout).ok()?;
-    parse_antigravity_usage_payload(&payload, chrono::Utc::now())
+    let payload = match serde_json::from_slice::<serde_json::Value>(&output.stdout) {
+        Ok(payload) => payload,
+        Err(_) => return (None, Some("agy /usage did not return JSON".to_string())),
+    };
+    match parse_antigravity_usage_payload(&payload, chrono::Utc::now()) {
+        Some(snapshot) => (Some(snapshot), None),
+        None => (
+            None,
+            Some("agy /usage returned no quota windows".to_string()),
+        ),
+    }
 }
 
 fn parse_antigravity_usage_payload(
@@ -306,6 +376,27 @@ fn antigravity_window_minutes(bucket: &serde_json::Value, window: &str) -> Optio
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn network_plan_runs_agy_with_a_twenty_second_bound() {
+        let plan = AntigravityUsageProvider.network_plan();
+        assert_eq!(plan.kind, Some(UsageNetworkKind::Cli));
+        assert_eq!(plan.target, Some(ANTIGRAVITY_USAGE_COMMAND));
+        assert!(plan.credential.is_none());
+        assert_eq!(ANTIGRAVITY_USAGE_TIMEOUT, Duration::from_secs(20));
+    }
+
+    #[tokio::test]
+    async fn unauthorized_provider_reports_no_quota_source() {
+        let snapshot =
+            super::super::collect_snapshot(&AntigravityUsageProvider, true, true, false).await;
+
+        assert!(!snapshot.network_authorized);
+        assert!(snapshot.network_supported);
+        assert!(snapshot.source.is_none());
+        assert!(snapshot.windows.is_empty());
+        assert!(snapshot.detail.contains("not authorized"));
+    }
 
     #[test]
     fn parses_antigravity_usage_payload_with_all_model_windows() {

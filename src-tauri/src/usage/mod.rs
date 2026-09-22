@@ -19,6 +19,7 @@ pub mod opencode;
 use crate::commands::AppState;
 use crate::hooks::session_store::{RateLimitInfo, UsageRateWindow};
 use futures_util::future::BoxFuture;
+use futures_util::FutureExt;
 use tauri::State;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
@@ -57,6 +58,34 @@ pub struct UsageCredential {
     pub status: UsageAuthStatus,
     pub path: Option<String>,
     pub can_authorize: bool,
+}
+
+/// How an authorized provider is queried: an HTTP endpoint, or a local program
+/// that performs the provider request itself.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum UsageNetworkKind {
+    Http,
+    Cli,
+}
+
+/// What the user is asked to approve before a provider may query online. It
+/// never carries a credential value — only the file location to display.
+#[derive(Debug, Clone, Default)]
+pub struct UsageNetworkPlan {
+    pub kind: Option<UsageNetworkKind>,
+    /// Endpoint URL (HTTP) or the local program command (CLI).
+    pub target: Option<&'static str>,
+    /// Local credential file the query reads, if any.
+    pub credential: Option<String>,
+    /// Stable reason code when online querying is deliberately not wired yet.
+    pub unsupported_reason: Option<&'static str>,
+}
+
+impl UsageNetworkPlan {
+    fn is_supported(&self) -> bool {
+        self.kind.is_some()
+    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq, serde::Serialize)]
@@ -172,6 +201,20 @@ pub struct UsageSnapshot {
     pub auth_status: String,
     pub auth_path: Option<String>,
     pub can_authorize: bool,
+    /// True when this provider has a wired online query path (M8c).
+    pub network_supported: bool,
+    /// True when the user explicitly allowed this provider's online query.
+    /// Nothing is requested while this is false.
+    pub network_authorized: bool,
+    /// `http` or `cli`; `None` when online querying is not supported.
+    pub network_kind: Option<UsageNetworkKind>,
+    /// Endpoint URL or local program command shown in the confirmation.
+    pub network_target: Option<String>,
+    /// Local credential file location (never the value).
+    pub network_credential: Option<String>,
+    /// Reason code shown when online querying is not wired (for example
+    /// `unverified` for Claude Code).
+    pub network_unsupported_reason: Option<String>,
 }
 
 pub trait UsageProvider: Send + Sync {
@@ -207,9 +250,27 @@ pub trait UsageProvider: Send + Sync {
     /// Step 1 — read local credential presence. Never returns the secret value.
     fn read_credentials(&self) -> UsageCredential;
 
-    /// Step 2 — fetch provider data. Local only, except the pre-existing
-    /// OpenCode Go request.
-    fn fetch<'a>(&'a self, live: bool) -> BoxFuture<'a, UsageFetch>;
+    /// What online querying would do, and which credential file it reads.
+    /// Providers without a verified online path return the default plan.
+    fn network_plan(&self) -> UsageNetworkPlan {
+        UsageNetworkPlan::default()
+    }
+
+    /// True when [`UsageProvider::fetch_network`] may reach the network or
+    /// launch a provider-owned process. Derived from the network plan.
+    fn requires_network(&self) -> bool {
+        self.network_plan().is_supported()
+    }
+
+    /// Step 2a — local-only data (session logs, local statusline files). Always
+    /// allowed; never starts a provider process or an HTTP request.
+    fn fetch_local<'a>(&'a self) -> BoxFuture<'a, UsageFetch>;
+
+    /// Step 2b — the provider query. Called only after the user authorized
+    /// this provider; implementations must not be reached otherwise.
+    fn fetch_network<'a>(&'a self) -> BoxFuture<'a, UsageFetch> {
+        async { UsageFetch::default() }.boxed()
+    }
 
     /// Step 3 — normalize credential + fetch into the shared snapshot type.
     fn normalize(
@@ -252,6 +313,7 @@ pub(crate) fn build_snapshot(
     state: UsageState,
     detail: String,
 ) -> UsageSnapshot {
+    let plan = provider.network_plan();
     UsageSnapshot {
         provider: provider.id().to_string(),
         label: provider.label().to_string(),
@@ -279,29 +341,78 @@ pub(crate) fn build_snapshot(
         auth_status: credentials.status.as_str().to_string(),
         auth_path: credentials.path.clone(),
         can_authorize: credentials.can_authorize,
+        network_supported: plan.is_supported(),
+        network_authorized: false,
+        network_kind: plan.kind,
+        network_target: plan.target.map(str::to_string),
+        network_credential: plan.credential.clone(),
+        network_unsupported_reason: plan.unsupported_reason.map(str::to_string),
     }
 }
 
-/// Runs the shared pipeline for one provider. The settings list has always
-/// surfaced local provider state even while the query toggle is off, so
-/// `enabled` only changes the reported state; the dashboard checks the toggle
-/// before collecting at all.
+/// Keeps local data when the provider query fails or returns nothing, and lets
+/// a successful query replace the local rate-limit snapshot.
+fn merge_usage_fetch(local: UsageFetch, network: UsageFetch) -> UsageFetch {
+    let mut merged = local;
+    match network.rate_limits {
+        Some(rate_limits) => {
+            merged.rate_limits = Some(rate_limits);
+            merged.source = network.source;
+            merged.error = None;
+            if !network.detail.is_empty() {
+                merged.detail = network.detail;
+            }
+        }
+        None => {
+            if merged.rate_limits.is_none() {
+                merged.error = network.error;
+                if !network.detail.is_empty() {
+                    merged.detail = network.detail;
+                }
+            } else if let Some(error) = network.error {
+                if !merged.detail.is_empty() {
+                    merged.detail.push(' ');
+                }
+                merged
+                    .detail
+                    .push_str(&format!("Live query failed: {error}"));
+            }
+        }
+    }
+    if network.history.available {
+        merged.history = network.history;
+    }
+    merged
+}
+
+pub(crate) fn is_network_authorized(authorized: &[String], provider_id: &str) -> bool {
+    authorized.iter().any(|id| id == provider_id)
+}
+
+/// Runs the shared pipeline for one provider. Local sources always run; the
+/// online query runs only when the user authorized this provider and a live
+/// refresh was requested.
 pub async fn collect_snapshot(
     provider: &dyn UsageProvider,
     enabled: bool,
     live: bool,
+    network_authorized: bool,
 ) -> UsageSnapshot {
     let credentials = provider.read_credentials();
-    let fetched = provider.fetch(live).await;
-    provider.normalize(enabled, credentials, fetched)
-}
-
-fn disabled_snapshot(provider: &dyn UsageProvider) -> UsageSnapshot {
-    let credentials = provider.read_credentials();
-    let mut snapshot = provider.normalize(false, credentials, UsageFetch::default());
-    snapshot.detail = "Usage query is disabled".to_string();
-    snapshot.windows.clear();
-    snapshot.history = UsageHistory::default();
+    let mut fetched = provider.fetch_local().await;
+    let authorized = network_authorized && provider.requires_network();
+    if authorized && live {
+        fetched = merge_usage_fetch(fetched, provider.fetch_network().await);
+    } else if provider.requires_network() && !network_authorized {
+        if !fetched.detail.is_empty() {
+            fetched.detail.push(' ');
+        }
+        fetched
+            .detail
+            .push_str("Online usage query is not authorized.");
+    }
+    let mut snapshot = provider.normalize(enabled, credentials, fetched);
+    snapshot.network_authorized = authorized;
     snapshot
 }
 
@@ -318,17 +429,17 @@ pub fn all_providers() -> Vec<Box<dyn UsageProvider>> {
     providers
 }
 
-pub(crate) async fn dashboard_snapshots(enabled: bool) -> Vec<UsageSnapshot> {
+pub(crate) async fn dashboard_snapshots(
+    enabled: bool,
+    network_authorized: &[String],
+) -> Vec<UsageSnapshot> {
     let mut snapshots = Vec::new();
     for provider in all_providers() {
         if provider.implementation_status() != "active" {
             continue;
         }
-        snapshots.push(if enabled {
-            collect_snapshot(provider.as_ref(), true, true).await
-        } else {
-            disabled_snapshot(provider.as_ref())
-        });
+        let authorized = is_network_authorized(network_authorized, provider.id());
+        snapshots.push(collect_snapshot(provider.as_ref(), enabled, true, authorized).await);
     }
     snapshots
 }
@@ -362,20 +473,26 @@ pub(crate) fn merge_rate_limits(snapshot: &mut UsageSnapshot, rate_limits: &Rate
 
 // ── Legacy readers kept for the island / agent status commands ───────────
 
-pub async fn load_usage_snapshots() -> Vec<RateLimitInfo> {
-    [
-        codex::load_rate_limits(true).await,
-        claude::load_rate_limits(),
-        opencode::load_rate_limits().await,
-        antigravity::load_rate_limits().await,
-    ]
-    .into_iter()
-    .flatten()
-    .collect()
+/// Local-only readers always run; the provider queries run only for providers
+/// the user authorized.
+pub async fn load_usage_snapshots(network_authorized: &[String]) -> Vec<RateLimitInfo> {
+    let mut snapshots = Vec::new();
+    snapshots.extend(codex::load_local_rate_limits());
+    snapshots.extend(claude::load_rate_limits());
+    if is_network_authorized(network_authorized, "codex") {
+        snapshots.extend(codex::load_live_rate_limits().await);
+    }
+    if is_network_authorized(network_authorized, "opencode") {
+        snapshots.extend(opencode::load_rate_limits().await);
+    }
+    if is_network_authorized(network_authorized, "antigravity") {
+        snapshots.extend(antigravity::load_rate_limits().await);
+    }
+    snapshots
 }
 
-pub async fn load_latest_usage_rate_limits() -> Option<RateLimitInfo> {
-    load_usage_snapshots()
+pub async fn load_latest_usage_rate_limits(network_authorized: &[String]) -> Option<RateLimitInfo> {
+    load_usage_snapshots(network_authorized)
         .await
         .into_iter()
         .max_by_key(|rate_limits| rate_limits.updated_at)
@@ -394,26 +511,26 @@ pub struct UsageDashboard {
 
 #[tauri::command]
 pub async fn get_usage_dashboard(state: State<'_, AppState>) -> Result<UsageDashboard, String> {
-    let enabled = state.config_store.get().usage_query_enabled;
-    let mut providers = dashboard_snapshots(enabled).await;
+    let config = state.config_store.get();
+    let enabled = config.usage_query_enabled;
+    let mut providers =
+        dashboard_snapshots(enabled, &config.usage_network_authorized_providers).await;
 
-    if enabled {
-        // Rate limits reported by live hook sessions are one of the local
-        // sources the page already showed; keep merging them by provider id.
-        for status in state.session_store.get_agent_status_snapshots() {
-            let Some(rate_limits) = status.rate_limits else {
-                continue;
-            };
-            let Some(provider_id) = rate_limits.provider.as_deref() else {
-                continue;
-            };
-            let canonical_id = canonical_provider_id(provider_id);
-            if let Some(snapshot) = providers
-                .iter_mut()
-                .find(|snapshot| snapshot.provider == canonical_id)
-            {
-                merge_rate_limits(snapshot, &rate_limits);
-            }
+    // Rate limits reported by live hook sessions are one of the local
+    // sources the page already showed; keep merging them by provider id.
+    for status in state.session_store.get_agent_status_snapshots() {
+        let Some(rate_limits) = status.rate_limits else {
+            continue;
+        };
+        let Some(provider_id) = rate_limits.provider.as_deref() else {
+            continue;
+        };
+        let canonical_id = canonical_provider_id(provider_id);
+        if let Some(snapshot) = providers
+            .iter_mut()
+            .find(|snapshot| snapshot.provider == canonical_id)
+        {
+            merge_rate_limits(snapshot, &rate_limits);
         }
     }
 
@@ -429,13 +546,53 @@ pub async fn list_usage_providers(
     state: State<'_, AppState>,
     live: Option<bool>,
 ) -> Result<Vec<UsageSnapshot>, String> {
-    let enabled = state.config_store.get().usage_query_enabled;
+    let config = state.config_store.get();
+    let enabled = config.usage_query_enabled;
     let live = live.unwrap_or(true);
     let mut providers = Vec::new();
     for provider in all_providers() {
-        providers.push(collect_snapshot(provider.as_ref(), enabled, live).await);
+        let authorized =
+            is_network_authorized(&config.usage_network_authorized_providers, provider.id());
+        providers.push(collect_snapshot(provider.as_ref(), enabled, live, authorized).await);
     }
     Ok(providers)
+}
+
+/// Grants or revokes one provider's permission to query online. Revoking takes
+/// effect for every later request; nothing is queried while the id is absent.
+#[tauri::command]
+pub async fn set_usage_network_authorization(
+    state: State<'_, AppState>,
+    provider: String,
+    authorized: bool,
+) -> Result<Vec<String>, String> {
+    let canonical_id = canonical_provider_id(&provider);
+    let Some(spec) = all_providers()
+        .into_iter()
+        .find(|spec| spec.id() == canonical_id)
+    else {
+        return Err(format!("Unsupported usage provider: {provider}"));
+    };
+    if authorized && !spec.requires_network() {
+        return Err(format!(
+            "{} has no verified online usage query.",
+            spec.label()
+        ));
+    }
+
+    let mut config = state.config_store.get();
+    config
+        .usage_network_authorized_providers
+        .retain(|id| id != &canonical_id);
+    if authorized {
+        config
+            .usage_network_authorized_providers
+            .push(canonical_id.clone());
+    }
+    config.usage_network_authorized_providers.sort();
+    config.usage_network_authorized_providers.dedup();
+    state.config_store.update(config)?;
+    Ok(state.config_store.get().usage_network_authorized_providers)
 }
 
 /// Opens the provider's own login flow in a terminal. Behavior is unchanged
@@ -473,6 +630,7 @@ fn authorize_target(provider: &str) -> Option<(&'static str, &'static [&'static 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use futures_util::FutureExt;
     use std::fs;
     use std::path::Path;
 
@@ -542,29 +700,213 @@ mod tests {
         assert!(!snapshot.catalog_supported);
         assert!(snapshot.windows.is_empty());
         assert_eq!(snapshot.history.periods.len(), 0);
+        assert!(!snapshot.network_supported);
 
         let known = catalog::supported_providers()
             .into_iter()
             .find(|provider| provider.id() == "kimi")
             .expect("kimi catalog entry");
-        let snapshot = known.normalize(true, known.read_credentials(), known.fetch(true).await);
+        let snapshot = known.normalize(true, known.read_credentials(), known.fetch_local().await);
         assert_eq!(snapshot.state, UsageState::Unavailable);
         assert!(snapshot.settings_order.is_some());
         assert_eq!(snapshot.auth_status, "unknown");
     }
 
+    #[derive(Default)]
+    struct StubCounters {
+        local: std::sync::atomic::AtomicUsize,
+        network: std::sync::atomic::AtomicUsize,
+    }
+
+    struct StubProvider {
+        counters: std::sync::Arc<StubCounters>,
+        plan: UsageNetworkPlan,
+    }
+
+    fn stub_plan() -> UsageNetworkPlan {
+        UsageNetworkPlan {
+            kind: Some(UsageNetworkKind::Http),
+            target: Some("https://example.invalid/usage"),
+            credential: Some("/tmp/stub-credentials.json".to_string()),
+            unsupported_reason: None,
+        }
+    }
+
+    impl UsageProvider for StubProvider {
+        fn id(&self) -> &'static str {
+            "stub"
+        }
+
+        fn label(&self) -> &'static str {
+            "Stub"
+        }
+
+        fn implementation_status(&self) -> &'static str {
+            "active"
+        }
+
+        fn read_credentials(&self) -> UsageCredential {
+            UsageCredential::default()
+        }
+
+        fn network_plan(&self) -> UsageNetworkPlan {
+            self.plan.clone()
+        }
+
+        fn fetch_local<'a>(&'a self) -> BoxFuture<'a, UsageFetch> {
+            async move {
+                self.counters
+                    .local
+                    .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                UsageFetch {
+                    detail: "Local stub data.".to_string(),
+                    ..UsageFetch::default()
+                }
+            }
+            .boxed()
+        }
+
+        fn fetch_network<'a>(&'a self) -> BoxFuture<'a, UsageFetch> {
+            async move {
+                self.counters
+                    .network
+                    .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                UsageFetch {
+                    rate_limits: Some(crate::hooks::session_store::RateLimitInfo {
+                        five_hour_usage: 10.0,
+                        five_hour_remaining: "90%".to_string(),
+                        seven_day_usage: 20.0,
+                        seven_day_remaining: "80%".to_string(),
+                        provider: Some("stub".to_string()),
+                        provider_label: Some("Stub".to_string()),
+                        source: Some("stub-network".to_string()),
+                        updated_at: Some(chrono::Utc::now().timestamp_millis()),
+                        windows: Vec::new(),
+                    }),
+                    detail: "Network stub data.".to_string(),
+                    ..UsageFetch::default()
+                }
+            }
+            .boxed()
+        }
+
+        fn normalize(
+            &self,
+            enabled: bool,
+            credentials: UsageCredential,
+            fetched: UsageFetch,
+        ) -> UsageSnapshot {
+            let state = resolve_state(self, enabled, &credentials, &fetched);
+            let detail = fetched.detail.clone();
+            build_snapshot(self, enabled, &credentials, &fetched, state, detail)
+        }
+    }
+
+    fn stub_provider() -> (StubProvider, std::sync::Arc<StubCounters>) {
+        let counters = std::sync::Arc::new(StubCounters::default());
+        (
+            StubProvider {
+                counters: std::sync::Arc::clone(&counters),
+                plan: stub_plan(),
+            },
+            counters,
+        )
+    }
+
     #[tokio::test]
-    async fn disabled_providers_never_reread_or_fetch_usage() {
-        let providers = all_providers();
-        let codex = providers
-            .iter()
-            .find(|provider| provider.id() == "codex")
-            .expect("codex provider");
-        let snapshot = disabled_snapshot(codex.as_ref());
-        assert_eq!(snapshot.state, UsageState::Disabled);
+    async fn unauthorized_network_provider_never_calls_fetch_network() {
+        let (provider, counters) = stub_provider();
+
+        let snapshot = collect_snapshot(&provider, true, true, false).await;
+
+        assert_eq!(
+            counters.network.load(std::sync::atomic::Ordering::SeqCst),
+            0,
+            "an unauthorized provider must not be queried"
+        );
+        assert_eq!(
+            counters.local.load(std::sync::atomic::Ordering::SeqCst),
+            1,
+            "local sources stay available without authorization"
+        );
+        assert!(!snapshot.network_authorized);
+        assert!(snapshot.network_supported);
+        assert_eq!(snapshot.network_target.as_deref(), stub_plan().target);
         assert!(snapshot.windows.is_empty());
-        assert!(!snapshot.history.available);
-        assert_eq!(snapshot.detail, "Usage query is disabled");
+        assert!(snapshot.detail.contains("not authorized"));
+    }
+
+    #[tokio::test]
+    async fn authorized_network_provider_queries_only_on_a_live_refresh() {
+        let (provider, counters) = stub_provider();
+
+        let cached = collect_snapshot(&provider, true, false, true).await;
+        assert_eq!(
+            counters.network.load(std::sync::atomic::Ordering::SeqCst),
+            0,
+            "a non-live refresh must not query the provider"
+        );
+        assert!(cached.network_authorized);
+        assert!(cached.windows.is_empty());
+
+        let live = collect_snapshot(&provider, true, true, true).await;
+        assert_eq!(
+            counters.network.load(std::sync::atomic::Ordering::SeqCst),
+            1
+        );
+        assert_eq!(live.state, UsageState::Ok);
+        assert_eq!(live.source.as_deref(), Some("stub-network"));
+        assert_eq!(live.windows.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn revoked_authorization_stops_further_queries() {
+        let (provider, counters) = stub_provider();
+
+        let authorized = collect_snapshot(&provider, true, true, true).await;
+        assert_eq!(authorized.state, UsageState::Ok);
+
+        let revoked = collect_snapshot(&provider, true, true, false).await;
+        assert_eq!(
+            counters.network.load(std::sync::atomic::Ordering::SeqCst),
+            1,
+            "revoking must not trigger another provider query"
+        );
+        assert!(!revoked.network_authorized);
+        assert!(revoked.windows.is_empty());
+    }
+
+    #[test]
+    fn network_plans_match_the_verified_provider_matrix() {
+        let providers = all_providers();
+        for id in ["codex", "opencode", "antigravity"] {
+            let provider = providers
+                .iter()
+                .find(|provider| provider.id() == id)
+                .unwrap_or_else(|| panic!("{id} provider"));
+            assert!(
+                provider.requires_network(),
+                "{id} is a verified online provider"
+            );
+            assert!(provider.network_plan().target.is_some(), "{id} target");
+        }
+
+        let claude = providers
+            .iter()
+            .find(|provider| provider.id() == "claude-code")
+            .expect("claude provider");
+        assert!(
+            !claude.requires_network(),
+            "Claude Code's online query is unverified and must stay offline"
+        );
+        assert_eq!(claude.network_plan().unsupported_reason, Some("unverified"));
+
+        let kimi = providers
+            .iter()
+            .find(|provider| provider.id() == "kimi")
+            .expect("kimi catalog provider");
+        assert!(!kimi.requires_network());
+        assert_eq!(kimi.network_plan().unsupported_reason, None);
     }
 
     #[test]

@@ -164,10 +164,13 @@ pub async fn get_sessions(state: State<'_, AppState>) -> Result<Vec<SessionState
 pub async fn get_usage_rate_limits(
     state: State<'_, AppState>,
 ) -> Result<Option<RateLimitInfo>, String> {
-    if !state.config_store.get().usage_query_enabled {
+    let config = state.config_store.get();
+    if !config.usage_query_enabled {
         return Ok(None);
     }
-    let mut latest = crate::usage::load_latest_usage_rate_limits().await;
+    let mut latest =
+        crate::usage::load_latest_usage_rate_limits(&config.usage_network_authorized_providers)
+            .await;
     for snapshot in state.session_store.get_agent_status_snapshots() {
         let Some(rate_limits) = snapshot.rate_limits else {
             continue;
@@ -187,10 +190,12 @@ pub async fn get_usage_rate_limits(
 
 #[tauri::command]
 pub async fn get_usage_snapshots(state: State<'_, AppState>) -> Result<Vec<RateLimitInfo>, String> {
-    if !state.config_store.get().usage_query_enabled {
+    let config = state.config_store.get();
+    if !config.usage_query_enabled {
         return Ok(Vec::new());
     }
-    let mut snapshots = crate::usage::load_usage_snapshots().await;
+    let mut snapshots =
+        crate::usage::load_usage_snapshots(&config.usage_network_authorized_providers).await;
     for snapshot in state.session_store.get_agent_status_snapshots() {
         let Some(rate_limits) = snapshot.rate_limits else {
             continue;
@@ -301,12 +306,21 @@ pub async fn get_agent_statuses(
         ("antigravity", "Antigravity"),
     ];
 
-    let opencode_rate_limits = if state.config_store.get().usage_query_enabled {
+    let config = state.config_store.get();
+    let opencode_rate_limits = if config.usage_query_enabled
+        && crate::usage::is_network_authorized(
+            &config.usage_network_authorized_providers,
+            "opencode",
+        ) {
         crate::usage::opencode::load_rate_limits().await
     } else {
         None
     };
-    let antigravity_rate_limits = if state.config_store.get().usage_query_enabled {
+    let antigravity_rate_limits = if config.usage_query_enabled
+        && crate::usage::is_network_authorized(
+            &config.usage_network_authorized_providers,
+            "antigravity",
+        ) {
         crate::usage::antigravity::load_rate_limits().await
     } else {
         None

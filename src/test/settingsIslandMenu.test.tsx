@@ -20,6 +20,7 @@ const tauriMocks = vi.hoisted(() => ({
   setAnalyticsEnabled: vi.fn(() => Promise.resolve()),
   listUsageProviders: vi.fn(() => Promise.resolve([] as UsageSnapshot[])),
   authorizeUsageProvider: vi.fn(() => Promise.resolve()),
+  setUsageNetworkAuthorization: vi.fn(() => Promise.resolve([] as string[])),
   updateConfig: vi.fn(() => Promise.resolve()),
   openTutorialWindow: vi.fn(() => Promise.resolve()),
   isTauri: vi.fn(() => false),
@@ -42,6 +43,7 @@ vi.mock('../services/tauriApi', async (importOriginal) => {
     setAnalyticsEnabled: tauriMocks.setAnalyticsEnabled,
     listUsageProviders: tauriMocks.listUsageProviders,
     authorizeUsageProvider: tauriMocks.authorizeUsageProvider,
+    setUsageNetworkAuthorization: tauriMocks.setUsageNetworkAuthorization,
     updateConfig: tauriMocks.updateConfig,
     openTutorialWindow: tauriMocks.openTutorialWindow,
     isTauri: tauriMocks.isTauri,
@@ -94,6 +96,28 @@ const providerFixture: UsageSnapshot = {
   authStatus: 'missing',
   authPath: '/home/user/.codex/auth.json',
   canAuthorize: true,
+  networkSupported: true,
+  networkAuthorized: false,
+  networkKind: 'cli',
+  networkTarget: 'codex app-server (JSON-RPC account/rateLimits/read)',
+  networkCredential: '/home/user/.codex/auth.json',
+  networkUnsupportedReason: null,
+}
+
+const claudeFixture: UsageSnapshot = {
+  ...providerFixture,
+  provider: 'claude-code',
+  label: 'Claude Code',
+  settingsOrder: 1,
+  authStatus: 'missing',
+  authPath: null,
+  canAuthorize: false,
+  networkSupported: false,
+  networkAuthorized: false,
+  networkKind: null,
+  networkTarget: null,
+  networkCredential: null,
+  networkUnsupportedReason: 'unverified',
 }
 
 describe('settings island menu', () => {
@@ -483,14 +507,95 @@ describe('settings island menu', () => {
     fireEvent.click(screen.getByRole('button', { name: '使用额度' }))
 
     expect(await screen.findByText('账号配额')).toBeInTheDocument()
-    expect(screen.getByText('启用用量查询')).toBeInTheDocument()
+    expect(screen.getByText('在灵动岛显示额度')).toBeInTheDocument()
     const providerRow = await screen.findByTestId('usage-provider-codex')
     expect(providerRow).toHaveTextContent('Codex')
-    expect(providerRow).toHaveTextContent('Needs authorization')
+    expect(providerRow).toHaveTextContent('未授权联网查询')
 
     tauriMocks.isTauri.mockReturnValue(true)
-    fireEvent.click(screen.getByText('用量授权'))
+    fireEvent.click(screen.getByText('打开官方登录'))
     await waitFor(() => expect(tauriMocks.authorizeUsageProvider).toHaveBeenCalledWith('codex'))
+  })
+
+  it('requires confirmation before enabling a provider online query', async () => {
+    tauriMocks.listUsageProviders.mockResolvedValue([providerFixture])
+    tauriMocks.setUsageNetworkAuthorization.mockResolvedValue(['codex'])
+    render(<SettingsApp onClose={vi.fn()} />)
+    tauriMocks.isTauri.mockReturnValue(true)
+
+    fireEvent.click(screen.getByRole('button', { name: '使用额度' }))
+    const providerRow = await screen.findByTestId('usage-provider-codex')
+    expect(providerRow).toHaveTextContent('未允许联网查询（默认关闭）')
+
+    fireEvent.click(within(providerRow).getByRole('switch'))
+
+    // Nothing is authorized until the user confirms the described request.
+    expect(tauriMocks.setUsageNetworkAuthorization).not.toHaveBeenCalled()
+    const confirm = await within(providerRow).findByTestId('usage-network-confirm-codex')
+    expect(confirm).toHaveTextContent('codex app-server (JSON-RPC account/rateLimits/read)')
+    expect(confirm).toHaveTextContent('/home/user/.codex/auth.json')
+
+    fireEvent.click(within(confirm).getByText('确认开启'))
+    await waitFor(() => expect(tauriMocks.setUsageNetworkAuthorization).toHaveBeenCalledWith('codex', true))
+  })
+
+  it('cancels a pending online query authorization without changing anything', async () => {
+    tauriMocks.listUsageProviders.mockResolvedValue([providerFixture])
+    render(<SettingsApp onClose={vi.fn()} />)
+
+    fireEvent.click(screen.getByRole('button', { name: '使用额度' }))
+    const providerRow = await screen.findByTestId('usage-provider-codex')
+
+    fireEvent.click(within(providerRow).getByRole('switch'))
+    fireEvent.click(await within(providerRow).findByText('取消'))
+
+    expect(within(providerRow).queryByTestId('usage-network-confirm-codex')).not.toBeInTheDocument()
+    expect(tauriMocks.setUsageNetworkAuthorization).not.toHaveBeenCalled()
+  })
+
+  it('revokes an authorized provider immediately and marks unsupported ones', async () => {
+    tauriMocks.listUsageProviders.mockResolvedValue([
+      { ...providerFixture, networkAuthorized: true },
+      claudeFixture,
+    ])
+    tauriMocks.setUsageNetworkAuthorization.mockResolvedValue([])
+    render(<SettingsApp onClose={vi.fn()} />)
+    tauriMocks.isTauri.mockReturnValue(true)
+
+    fireEvent.click(screen.getByRole('button', { name: '使用额度' }))
+    const codexRow = await screen.findByTestId('usage-provider-codex')
+    expect(codexRow).toHaveTextContent('已允许联网查询')
+
+    fireEvent.click(within(codexRow).getByRole('switch'))
+
+    // Revoking needs no confirmation and takes effect right away.
+    await waitFor(() => expect(tauriMocks.setUsageNetworkAuthorization).toHaveBeenCalledWith('codex', false))
+    expect(within(codexRow).queryByTestId('usage-network-confirm-codex')).not.toBeInTheDocument()
+
+    const claudeRow = await screen.findByTestId('usage-provider-claude-code')
+    expect(claudeRow).toHaveTextContent('暂不支持联网查询')
+    expect(within(claudeRow).queryByRole('switch')).not.toBeInTheDocument()
+  })
+
+  it('marks an authorized provider as querying while the refresh is in flight', async () => {
+    tauriMocks.listUsageProviders.mockResolvedValueOnce([{ ...providerFixture, networkAuthorized: true }])
+    render(<SettingsApp onClose={vi.fn()} />)
+
+    fireEvent.click(screen.getByRole('button', { name: '使用额度' }))
+    const providerRow = await screen.findByTestId('usage-provider-codex')
+
+    let resolveProviders: ((providers: UsageSnapshot[]) => void) | undefined
+    tauriMocks.listUsageProviders.mockImplementationOnce(
+      () => new Promise<UsageSnapshot[]>((resolve) => { resolveProviders = resolve }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: '刷新' }))
+
+    expect(await within(providerRow).findByTestId('usage-provider-querying-codex'))
+      .toHaveTextContent('正在查询…')
+
+    resolveProviders?.([])
+    await waitFor(() =>
+      expect(within(providerRow).queryByTestId('usage-provider-querying-codex')).not.toBeInTheDocument())
   })
 
   it('keeps the read-only Agent list above the dispatch setup wizard', async () => {
