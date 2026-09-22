@@ -10,6 +10,8 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+# Installers copied out of src-tauri/target by scripts/build-windows.mjs
+installers/
 tmp/
 
 # Shared Claude Code config (CLAUDE.md, commands/) is checked in.
