@@ -76,6 +76,24 @@ describe('first-run wizard tutorial step', () => {
     expect(screen.getByText('Agent 接入')).toBeInTheDocument()
   })
 
+  it.each([
+    ['稍后设置', 'the skip button'],
+    ['关闭', 'the close button'],
+  ])('returns to the settings page instead of closing the window via %s (%s)', async (name) => {
+    tauriMocks.isTauri.mockReturnValue(true)
+    tauriMocks.getConfig.mockResolvedValue({ setupWizardCompleted: false, autoLaunchAgents: [] })
+    const onClose = vi.fn()
+    render(<SettingsApp onClose={onClose} />)
+
+    await screen.findByText('让 Vibe Board 跟着你的 Agent 工作')
+    fireEvent.click(screen.getByRole('button', { name }))
+
+    await waitFor(() => expect(useConfigStore.getState().setupWizardCompleted).toBe(true))
+    expect(await screen.findByRole('button', { name: '外观' })).toBeInTheDocument()
+    expect(screen.queryByText('让 Vibe Board 跟着你的 Agent 工作')).not.toBeInTheDocument()
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
   it('opens the bundled full tutorial from the tour step', async () => {
     render(<SetupWizard onClose={vi.fn()} />)
 

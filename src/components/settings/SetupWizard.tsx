@@ -308,7 +308,7 @@ export function SetupWizard({ onClose }: SetupWizardProps) {
   return (
     <div className="setup-wizard" role="dialog" aria-labelledby="setup-wizard-title">
       <div className="setup-wizard__panel">
-        <button className="setup-wizard__close" type="button" onClick={onClose} aria-label={text('关闭', 'Close')}>×</button>
+        <button className="setup-wizard__close" type="button" onClick={() => void finishWithoutSetup()} aria-label={text('关闭', 'Close')}>×</button>
         <div className="setup-wizard__brand">
           <span className="setup-wizard__brand-mark">AI</span>
           <span>Vibe Board</span>
