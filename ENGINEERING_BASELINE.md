@@ -359,6 +359,21 @@ lint / build / fmt / `cargo check --all-targets` 通过；`cargo test --lib` 519
 
 **Verification**：检查命令全绿；父级在隔离 HOME 下端到端跑一次。
 
+**状态（2026-09-22）：PASS WITH RISKS，已合入。**
+四个派发 Skill 由父级在维护者同意后原样复制进 `src-tauri/resources/dispatch-skills/`（审核：无密钥、账号、个人路径与运行记录），
+worker 未改动其内容（父级 `diff -r` 与 `~/.agents/skills` 逐字节一致）。
+父级独立验证：前端 43 文件 411 项全过，lint / build / fmt / `cargo check --all-targets` 通过；`cargo test --lib` 526 通过 / 23 失败，
+失败集合 = 已知名单子集；派发向导 7 项 Rust 测试（隔离 HOME + 桩程序，使用仓库内真实 Skill 文件）覆盖预览 = 写入、未确认不写、
+幂等、全局指令文件逐字节不变、缺 Node 阻断、凭据只报告文件是否存在；`release:check` ok。
+
+**父级补充修正**：原预览不区分新建与覆盖。维护者机器上 `~/.claude/skills/opencode-agent` 是指向自建副本的软链，日后自建副本更新后
+再点安装会被随包旧版静默覆盖。父级给每个预览文件加 `change`（create / unchanged / overwrite），有覆盖时显示醒目提示；
+补 1 条 Rust 测试、2 条前端测试。
+
+**风险记录**：①默认同时装进 Claude Code 与 Codex 两个目录，不做勾选。②没有走 Skill 管理的中心库，4 个 Skill 不会出现在 Skill 库的
+「受管理」列表中（worker 理由：避免改变 Skill 管理行为）。③真实安装包内资源是否落盘未经完整打包验证。
+④全量前端测试在本机负载下偶发 5 秒超时（`skillManagerV2View`、`unifiedUsageSection`），单跑与重跑均通过，属既有测试脆弱性。
+
 ### M8 — 用量记录仪表盘（三段）
 
 体量最大，拆成三个里程碑，每段独立验收。

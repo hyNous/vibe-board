@@ -1,0 +1,6 @@
+interface:
+  display_name: "Antigravity Agent"
+  short_description: "Delegate autonomous development work to Antigravity"
+  default_prompt: "Use $antigravity-agent to give Antigravity the desired outcome and let it explore, implement, and verify autonomously."
+policy:
+  allow_implicit_invocation: true

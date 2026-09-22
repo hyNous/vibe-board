@@ -22,6 +22,8 @@ export default defineConfig({
     globals: true,
     environment: 'jsdom',
     setupFiles: ['src/test/setup.ts'],
-    exclude: [...configDefaults.exclude, '.claude/**'],
+    // Bundled Tauri resources ship their own Node test files; they are not
+    // frontend tests and must not be collected by vitest.
+    exclude: [...configDefaults.exclude, '.claude/**', 'src-tauri/**'],
   },
 })

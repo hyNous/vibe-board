@@ -1,6 +1,7 @@
 // Tauri IPC Commands — Bridge between frontend and Rust backend
 
 pub mod buddy;
+pub mod dispatch;
 pub mod monitor;
 pub mod persistence;
 

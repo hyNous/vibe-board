@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { SettingsApp } from '../components/settings'
 import type { BackendDisplayInfo, UsageProviderStatus } from '../services/tauriApi'
@@ -478,16 +478,17 @@ describe('settings island menu', () => {
     await waitFor(() => expect(tauriMocks.authorizeUsageProvider).toHaveBeenCalledWith('codex'))
   })
 
-  it('shows installed Agents read-only on the dispatch page', async () => {
+  it('keeps the read-only Agent list above the dispatch setup wizard', async () => {
     render(<SettingsApp onClose={vi.fn()} />)
 
     fireEvent.click(screen.getByRole('button', { name: '派发框架' }))
 
-    expect(await screen.findByTestId('dispatch-agent-claude-code')).toBeInTheDocument()
+    const claudeRow = await screen.findByTestId('dispatch-agent-claude-code')
     expect(screen.getByText('Claude Code')).toBeInTheDocument()
     expect(screen.getByText('/usr/local/bin/claude')).toBeInTheDocument()
     expect(screen.queryByTestId('dispatch-agent-codex')).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /install|update|uninstall|安装|更新|卸载/i })).not.toBeInTheDocument()
+    expect(within(claudeRow).queryByRole('button')).not.toBeInTheDocument()
+    expect(await screen.findByTestId('dispatch-preview')).toBeInTheDocument()
   })
 
   it('reopens the first-run wizard from the tutorial entry', async () => {

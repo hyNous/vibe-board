@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "default": "antigravity",
+  "providers": {
+    "antigravity": {
+      "command": "agy",
+      "command_env": "AGY_BIN",
+      "command_candidates": [
+        "${LOCALAPPDATA}/agy/bin/agy.exe",
+        "${USERPROFILE}/.agy/bin/agy.exe"
+      ],
+      "args": [
+        "--input-format",
+        "stream-json",
+        "--output-format",
+        "stream-json"
+      ],
+      "permission_args": ["--dangerously-skip-permissions"],
+      "prompt_transport": "stdin_json",
+      "stdin_template": {
+        "event": "user",
+        "message": { "content": "$PROMPT" }
+      },
+      "model_flag": "--model",
+      "effort_flag": "--effort",
+      "session_flag": "--conversation",
+      "output_parser": "result-event",
+      "preserve_response_on_nonzero": true,
+      "check_args": ["--version"],
+      "quota_check": {
+        "safe": true,
+        "timeout_ms": 10000,
+        "args": ["-p", "/usage"],
+        "available_patterns": ["(?:remaining|left|available)[^\\r\\n]*(?:[1-9]\\d*|unlimited|true)"],
+        "unavailable_patterns": ["(?:no|zero|0)\\s*(?:quota|credits?)", "(?:quota|credits?)[^\\r\\n]*(?:exhausted|depleted|unavailable|limit reached)"]
+      }
+    }
+  }
+}

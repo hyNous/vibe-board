@@ -1,0 +1,6 @@
+interface:
+  display_name: "External Agent Setup"
+  short_description: "Configure a named Skill for an external CLI agent"
+  default_prompt: "Use $external-agent-setup to detect, configure, and validate an external CLI through an interactive confirmation flow."
+policy:
+  allow_implicit_invocation: false
