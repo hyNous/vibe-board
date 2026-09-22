@@ -216,13 +216,15 @@ describe('UnifiedUsageSection rendering', () => {
     expect(within(nowRow).getByText('Waiting for data')).toBeInTheDocument()
 
     const costRow = await within(cost).findByRole('row', { name: /Codex/ })
-    expect(within(costRow).getAllByText('Unknown').length).toBeGreaterThanOrEqual(7)
+    // Token columns and requests are Unknown; with no price the cost cell stays empty.
+    expect(within(costRow).getAllByText('Unknown').length).toBeGreaterThanOrEqual(6)
+    expect(within(costRow).getByLabelText('No public price; token usage only')).toHaveTextContent('—')
     expect(within(costRow).queryByText('0')).not.toBeInTheDocument()
     // The price-table effective date is visible even before any usage exists.
     expect(within(cost).getByText(/Price table effective 2025-10-15/)).toBeInTheDocument()
   })
 
-  it('labels models missing from the price table and never prices them as zero', async () => {
+  it('shows only token usage for models without a public price, never a zero amount', async () => {
     const history: UsageHistory = {
       available: true,
       source: 'Codex local session logs',
@@ -261,11 +263,14 @@ describe('UnifiedUsageSection rendering', () => {
     await renderUsage()
 
     const cost = await screen.findByTestId('usage-cost')
-    await within(cost).findByText(/Not in price table: gpt-5\.2-codex-unreleased/)
+    await within(cost).findByText(/Token usage only \(no public price\): gpt-5\.2-codex-unreleased/)
     // The period total is a lower bound because one model has no price entry.
     expect(within(cost).getByText(/≥ \$2\.25/)).toBeInTheDocument()
     const unknownModel = within(cost).getByTestId('usage-model-gpt-5.2-codex-unreleased')
-    expect(within(unknownModel).getByText('Unknown')).toBeInTheDocument()
+    // Tokens are shown; the cost cell is empty rather than Unknown or $0.00.
+    expect(within(unknownModel).getByText('500')).toBeInTheDocument()
+    expect(within(unknownModel).getByLabelText('No public price; token usage only')).toHaveTextContent('—')
+    expect(within(unknownModel).queryByText('Unknown')).not.toBeInTheDocument()
     expect(within(unknownModel).queryByText(/\$0\.00/)).not.toBeInTheDocument()
   })
 

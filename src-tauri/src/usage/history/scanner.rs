@@ -54,6 +54,11 @@ pub(crate) struct ParsedSource {
 #[derive(Debug, Clone, Default)]
 pub(crate) struct ParsedFile {
     pub rows: Vec<(String, String, TokenCounts)>,
+    /// Usage that carries a stable response id: `(message key, local day,
+    /// model, counts)`. Claude Code copies earlier responses into the log of a
+    /// resumed or forked session, so the same response can appear in several
+    /// files; the store counts each key once across all files.
+    pub messages: Vec<(String, String, String, TokenCounts)>,
     pub offset: u64,
     pub tail_hash: String,
     pub last_model: Option<String>,
@@ -213,6 +218,7 @@ fn parse_codex(file: &SourceFile, resume: Option<&FileState>) -> io::Result<Pars
     let offset = cursor.offset;
     let oversized_lines = cursor.oversized_lines;
     let parsed = ParsedFile {
+        messages: Vec::new(),
         rows: rows
             .into_iter()
             .map(|((day, model), counts)| (day, model, counts))
@@ -241,8 +247,10 @@ fn parse_claude(file: &SourceFile, resume: Option<&FileState>) -> io::Result<Par
     let (mut cursor, resume) = open_cursor(file, resume)?;
     let fallback = fallback_time(file.modified);
     let mut rows: BTreeMap<(String, String), TokenCounts> = BTreeMap::new();
-    // One API response can appear more than once in a transcript; a repeated
-    // message id inside this read is the same request, not a second one.
+    let mut messages: Vec<(String, String, String, TokenCounts)> = Vec::new();
+    // One API response is written as several lines (one per content block);
+    // a repeated message id inside this read is the same request. Repeats in
+    // other files are resolved by the store.
     let mut seen_message_ids: HashSet<String> = HashSet::new();
     let mut events = 0usize;
 
@@ -260,11 +268,13 @@ fn parse_claude(file: &SourceFile, resume: Option<&FileState>) -> io::Result<Par
         else {
             continue;
         };
-        if let Some(message_id) = message
+        let message_id = message
             .and_then(|value| value.get("id"))
             .and_then(|value| value.as_str())
-        {
-            if !seen_message_ids.insert(message_id.to_string()) {
+            .filter(|value| !value.is_empty())
+            .map(ToString::to_string);
+        if let Some(message_id) = &message_id {
+            if !seen_message_ids.insert(message_id.clone()) {
                 continue;
             }
         }
@@ -294,6 +304,17 @@ fn parse_claude(file: &SourceFile, resume: Option<&FileState>) -> io::Result<Par
             .get("timestamp")
             .and_then(date_from_value)
             .unwrap_or(fallback);
+        if let Some(message_id) = message_id {
+            let counts = TokenCounts {
+                input,
+                output,
+                cache_read,
+                cache_create: cache_write,
+                requests: 1,
+            };
+            messages.push((message_id, local_day_key(timestamp), model, counts));
+            continue;
+        }
         let counts = rows.entry((local_day_key(timestamp), model)).or_default();
         counts.input += input;
         counts.output += output;
@@ -311,6 +332,7 @@ fn parse_claude(file: &SourceFile, resume: Option<&FileState>) -> io::Result<Par
                 .into_iter()
                 .map(|((day, model), counts)| (day, model, counts))
                 .collect(),
+            messages,
             offset,
             tail_hash: tail_hash(&file.path, offset)?,
             last_model: None,
@@ -652,16 +674,17 @@ mod tests {
             parsed.events, 2,
             "duplicate message id must not double count"
         );
-        assert_eq!(parsed.rows.len(), 2);
+        assert!(parsed.rows.is_empty(), "responses with an id are keyed");
+        assert_eq!(parsed.messages.len(), 2);
         let sonnet = parsed
-            .rows
+            .messages
             .iter()
-            .find(|(_, model, _)| model == "claude-sonnet-4-5-20250929")
-            .expect("sonnet row");
-        assert_eq!(sonnet.2.input, 10);
-        assert_eq!(sonnet.2.output, 2);
-        assert_eq!(sonnet.2.cache_read, 30);
-        assert_eq!(sonnet.2.cache_create, 10);
+            .find(|(key, _, model, _)| key == "msg-1" && model == "claude-sonnet-4-5-20250929")
+            .expect("sonnet message");
+        assert_eq!(sonnet.3.input, 10);
+        assert_eq!(sonnet.3.output, 2);
+        assert_eq!(sonnet.3.cache_read, 30);
+        assert_eq!(sonnet.3.cache_create, 10);
         let _ = fs::remove_dir_all(root);
     }
 

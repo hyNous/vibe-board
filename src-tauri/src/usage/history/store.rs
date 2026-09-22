@@ -49,7 +49,20 @@ CREATE TABLE IF NOT EXISTS usage_day_model (
 );
 CREATE INDEX IF NOT EXISTS idx_usage_day_model_provider_day
     ON usage_day_model(provider, day);
+CREATE TABLE IF NOT EXISTS usage_messages (
+    provider TEXT NOT NULL,
+    message_key TEXT NOT NULL,
+    path TEXT NOT NULL,
+    PRIMARY KEY (provider, message_key)
+);
+CREATE INDEX IF NOT EXISTS idx_usage_messages_path
+    ON usage_messages(provider, path);
 ";
+
+/// Schema 1 counts each keyed response once across files. Databases written
+/// before it double counted Claude Code responses copied into resumed-session
+/// logs, so their Claude rows are dropped once and rebuilt by the next scan.
+const SCHEMA_VERSION: i64 = 1;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub(crate) struct TokenCounts {
@@ -96,6 +109,20 @@ impl UsageHistoryStore {
             .map_err(|error| error.to_string())?;
         conn.execute_batch(SCHEMA)
             .map_err(|error| error.to_string())?;
+        let version: i64 = conn
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .map_err(|error| error.to_string())?;
+        if version < SCHEMA_VERSION {
+            conn.execute_batch(&format!(
+                "BEGIN;
+                 DELETE FROM usage_day_model WHERE provider = 'claude-code';
+                 DELETE FROM usage_files WHERE provider = 'claude-code';
+                 DELETE FROM usage_messages WHERE provider = 'claude-code';
+                 PRAGMA user_version = {SCHEMA_VERSION};
+                 COMMIT;"
+            ))
+            .map_err(|error| error.to_string())?;
+        }
         Ok(conn)
     }
 
@@ -159,8 +186,31 @@ impl UsageHistoryStore {
                 params![provider, path_text],
             )
             .map_err(|error| error.to_string())?;
+            tx.execute(
+                "DELETE FROM usage_messages WHERE provider = ?1 AND path = ?2",
+                params![provider, path_text],
+            )
+            .map_err(|error| error.to_string())?;
         }
-        for (day, model, counts) in &parsed.rows {
+        // A keyed response counts only in the first file that recorded it.
+        let mut rows: Vec<(&str, &str, TokenCounts)> = parsed
+            .rows
+            .iter()
+            .map(|(day, model, counts)| (day.as_str(), model.as_str(), *counts))
+            .collect();
+        for (key, day, model, counts) in &parsed.messages {
+            let inserted = tx
+                .execute(
+                    "INSERT OR IGNORE INTO usage_messages (provider, message_key, path)
+                     VALUES (?1, ?2, ?3)",
+                    params![provider, key, path_text],
+                )
+                .map_err(|error| error.to_string())?;
+            if inserted == 1 {
+                rows.push((day.as_str(), model.as_str(), *counts));
+            }
+        }
+        for (day, model, counts) in &rows {
             tx.execute(
                 "INSERT INTO usage_day_model
                      (provider, path, day, model, input, output, cache_read, cache_create, requests)
@@ -312,6 +362,7 @@ mod tests {
 
     fn parsed(rows: Vec<(&str, &str, TokenCounts)>) -> ParsedFile {
         ParsedFile {
+            messages: Vec::new(),
             rows: rows
                 .into_iter()
                 .map(|(day, model, counts)| (day.to_string(), model.to_string(), counts))

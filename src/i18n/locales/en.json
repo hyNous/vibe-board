@@ -267,9 +267,9 @@
       "costEstimatedHeader": "Estimated cost",
       "estimated": "Estimated",
       "estimatedShort": "estimated",
-      "unpricedModels": "Not in price table",
+      "unpricedModels": "Token usage only (no public price)",
       "priceEffective": "Price table effective",
-      "costNote": "Amounts are estimated from local session logs and the built-in price table; unpriced models stay Unknown.",
+      "costNote": "Amounts are estimated from local session logs and the built-in price table, for reference only; models without a public price show token usage only.",
       "scanning": "Collecting usage history…",
       "scanFailed": "Usage history scan failed",
       "sessionsScanned": "{{count}} session file(s) scanned",
@@ -281,7 +281,8 @@
       "daysAgo": "{{count}} d ago",
       "noProviders": "No usage provider data is available yet.",
       "stateFailed": "Failed",
-      "stateUnsupported": "Not integrated"
+      "stateUnsupported": "Not integrated",
+      "noPrice": "No public price; token usage only"
     },
     "showCacheTTL": "Show Cache TTL",
     "detecting": "Checking...",

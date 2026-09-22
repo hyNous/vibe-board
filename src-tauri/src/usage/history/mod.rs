@@ -801,7 +801,7 @@ mod tests {
         );
         assert_eq!(
             history.pricing_effective_date.as_deref(),
-            Some("2025-10-15")
+            Some("2026-09-22")
         );
     }
 
@@ -842,6 +842,68 @@ mod tests {
                 .expect("today period"),
         );
         assert_eq!(after, 990, "aggregated history must survive log deletion");
+    }
+
+    #[test]
+    fn claude_responses_copied_into_resumed_session_logs_count_once() {
+        let fixture = Fixture::new("claude-resume");
+        let projects = fixture.root.join("projects").join("demo");
+        std::fs::create_dir_all(&projects).expect("create projects");
+        let ts = local_noon(Local::now().date_naive())
+            .to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        let line = |id: &str, output: u64| {
+            serde_json::json!({
+                "type": "assistant",
+                "timestamp": ts,
+                "message": {
+                    "id": id,
+                    "model": "claude-opus-5",
+                    "usage": { "input_tokens": 10, "output_tokens": output }
+                }
+            })
+            .to_string()
+        };
+        // The original session, then a resumed session whose log repeats the
+        // earlier response (msg-a, written twice as two content blocks) before
+        // adding a new one (msg-b).
+        std::fs::write(
+            projects.join("original.jsonl"),
+            format!("{}\n{}\n", line("msg-a", 5), line("msg-a", 5)),
+        )
+        .expect("write original");
+        std::fs::write(
+            projects.join("resumed.jsonl"),
+            format!("{}\n{}\n", line("msg-a", 5), line("msg-b", 7)),
+        )
+        .expect("write resumed");
+
+        let service = fixture.service("claude-code", "projects");
+        scan(&service);
+        let today = |service: &UsageHistoryService| {
+            let history = service.history_for_provider("claude-code", Local::now());
+            let period = history
+                .periods
+                .iter()
+                .find(|period| period.id == "today")
+                .cloned()
+                .expect("today period");
+            (total_tokens(&period), period.requests)
+        };
+        assert_eq!(today(&service), (10 + 5 + 10 + 7, Some(2)));
+
+        // Rescanning, or rewriting one file, must not count msg-a again.
+        std::fs::write(
+            projects.join("resumed.jsonl"),
+            format!(
+                "{}\n{}\n{}\n",
+                line("msg-a", 5),
+                line("msg-b", 7),
+                line("msg-c", 1)
+            ),
+        )
+        .expect("append resumed");
+        scan(&service);
+        assert_eq!(today(&service), (10 + 5 + 10 + 7 + 10 + 1, Some(3)));
     }
 
     #[test]

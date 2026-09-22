@@ -246,7 +246,7 @@ mod tests {
     #[test]
     fn built_in_table_exposes_effective_date_and_entries() {
         let table = table();
-        assert_eq!(table.effective_date(), Some("2025-10-15"));
+        assert_eq!(table.effective_date(), Some("2026-09-22"));
         assert_eq!(table.currency(), "USD");
         assert!(table.entry_for("gpt-5-codex").is_some());
         assert!(table.entry_for("claude-sonnet-4-5").is_some());
@@ -269,10 +269,10 @@ mod tests {
     #[test]
     fn unknown_models_have_no_estimate() {
         let table = table();
-        assert!(table.entry_for("claude-opus-4-8").is_none());
-        assert!(table.entry_for("claude-sonnet-4-6").is_none());
+        assert!(table.entry_for("claude-unreleased-9").is_none());
+        assert!(table.entry_for("codex-auto-review").is_none());
         assert!(table
-            .estimate("claude-opus-4-8", 1_000, 1_000, 0, 0)
+            .estimate("claude-unreleased-9", 1_000, 1_000, 0, 0)
             .is_none());
         assert!(table
             .estimate("claude-sonnet-4-5-sonnet", 0, 0, 0, 0)
@@ -288,8 +288,29 @@ mod tests {
         let expected = 3.0 + 1.5 + 0.6 + 0.0375;
         assert!((estimate.amount - expected).abs() < 1e-9, "{estimate:?}");
         assert_eq!(estimate.currency, "USD");
-        assert_eq!(estimate.effective_date.as_deref(), Some("2025-09-29"));
-        assert!(!estimate.verified);
+        assert_eq!(estimate.effective_date.as_deref(), Some("2026-09-22"));
+        assert!(estimate.verified);
+    }
+
+    #[test]
+    fn models_in_current_use_carry_verified_vendor_prices() {
+        // Checked against the vendor pricing pages on 2026-09-22.
+        let table = table();
+        for (model, input, output) in [
+            ("claude-opus-5", 5.0, 25.0),
+            ("claude-sonnet-5", 2.0, 10.0),
+            ("gpt-6-astra", 10.0, 50.0),
+            ("gpt-5.6-sol", 4.0, 20.0),
+            ("gpt-5.6-terra", 2.0, 12.0),
+            ("gpt-5.6-luna", 0.2, 1.2),
+            ("gpt-5.5", 5.0, 30.0),
+        ] {
+            let entry = table
+                .entry_for(model)
+                .unwrap_or_else(|| panic!("{model} priced"));
+            assert_eq!((entry.input, entry.output), (input, output), "{model}");
+            assert!(entry.verified, "{model} verified");
+        }
     }
 
     #[test]

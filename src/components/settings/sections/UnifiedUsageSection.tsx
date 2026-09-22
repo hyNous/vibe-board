@@ -114,11 +114,11 @@ function MetricValue({ value, unknown }: { value: number | null | undefined; unk
 
 /**
  * Every equivalent cost is an estimate: the amount comes from the built-in
- * price table, `≥` marks a lower bound (some models are unpriced), and an
- * unverified price entry says so. Missing prices are Unknown, never 0.
+ * price table and `≥` marks a lower bound (some models are unpriced). Without
+ * a price the cell stays empty: only token usage is shown, never a 0 amount.
  */
-function CostValue({ cost, label, unknown }: { cost: UsageCost | null; label: string; unknown: string }) {
-  if (!cost) return <>{unknown}</>
+function CostValue({ cost, label, noPrice }: { cost: UsageCost | null; label: string; noPrice: string }) {
+  if (!cost) return <span className="unified-usage__cost-none" title={noPrice} aria-label={noPrice}>—</span>
   return (
     <>
       {cost.complete ? '' : '≥ '}
@@ -208,6 +208,7 @@ export function UnifiedUsageSection() {
       .map((provider) => provider.history.pricingEffectiveDate)
       .find((date): date is string => Boolean(date))
   const costLabel = t('settings.usagePage.estimatedShort', { defaultValue: 'estimated' })
+  const noPrice = t('settings.usagePage.noPrice', { defaultValue: 'No public price; token usage only' })
 
   return (
     <section className="unified-usage">
@@ -345,8 +346,8 @@ export function UnifiedUsageSection() {
                         <strong>{snapshot.label}</strong>
                         {historyDetail && <span className="unified-usage__detail">{historyDetail}</span>}
                         {entry && entry.unpricedModels.length > 0 && (
-                          <span className="unified-usage__detail unified-usage__detail--warning">
-                            {t('settings.usagePage.unpricedModels', { defaultValue: 'Not in price table' })}: {entry.unpricedModels.join(', ')}
+                          <span className="unified-usage__detail">
+                            {t('settings.usagePage.unpricedModels', { defaultValue: 'Token usage only (no public price)' })}: {entry.unpricedModels.join(', ')}
                           </span>
                         )}
                       </td>
@@ -356,7 +357,7 @@ export function UnifiedUsageSection() {
                       <td><MetricValue value={tokens?.cacheRead} unknown={unknown} /></td>
                       <td><MetricValue value={tokens?.cacheCreate} unknown={unknown} /></td>
                       <td>{entry?.requests == null ? unknown : entry.requests}</td>
-                      <td><CostValue cost={entry?.cost ?? null} label={costLabel} unknown={unknown} /></td>
+                      <td><CostValue cost={entry?.cost ?? null} label={costLabel} noPrice={noPrice} /></td>
                     </tr>
                     {entry?.models.map((model) => (
                       <tr
@@ -371,7 +372,7 @@ export function UnifiedUsageSection() {
                         <td><MetricValue value={model.tokens.cacheRead} unknown={unknown} /></td>
                         <td><MetricValue value={model.tokens.cacheCreate} unknown={unknown} /></td>
                         <td>{model.requests}</td>
-                        <td><CostValue cost={model.cost} label={costLabel} unknown={unknown} /></td>
+                        <td><CostValue cost={model.cost} label={costLabel} noPrice={noPrice} /></td>
                       </tr>
                     ))}
                   </Fragment>
@@ -384,7 +385,7 @@ export function UnifiedUsageSection() {
           <strong>{t('settings.usagePage.estimated', { defaultValue: 'Estimated' })}</strong>
           <span>
             {t('settings.usagePage.costNote', {
-              defaultValue: 'Amounts are estimated from local session logs and the built-in price table; unpriced models stay Unknown.',
+              defaultValue: 'Amounts are estimated from local session logs and the built-in price table; models without a public price show token usage only.',
             })}
             {pricingEffectiveDate
               ? ` ${t('settings.usagePage.priceEffective', { defaultValue: 'Price table effective' })} ${pricingEffectiveDate}.`

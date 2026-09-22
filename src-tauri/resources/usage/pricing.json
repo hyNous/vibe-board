@@ -2,9 +2,9 @@
   "version": 1,
   "currency": "USD",
   "unit": "per_million_tokens",
-  "effective_date": "2025-10-15",
-  "source": "https://www.anthropic.com/pricing#api",
-  "notes": "Built-in equivalent-cost table for local usage estimates. Prices are USD per one million tokens. Every entry below is marked verified:false because this fork has not confirmed the vendor price pages since the listed effective dates; the maintainer must review each row against the vendor pricing page before treating a number as authoritative. Models missing from this table are reported as Unknown and are never billed as 0. Cache writes that a provider bills at the normal input rate reuse the input price.",
+  "effective_date": "2026-09-22",
+  "source": "https://platform.claude.com/docs/en/about-claude/pricing ; https://platform.openai.com/docs/pricing",
+  "notes": "Built-in equivalent-cost table for local usage estimates, USD per one million tokens. Entries with verified:true were checked against the vendor pricing pages on 2026-09-22 (standard / short-context rates). Older entries with verified:false are no longer listed on the vendor page and are kept for historical logs. Models missing from this table show token usage only, with no price.",
   "models": {
     "claude-opus-4-1": {
       "label": "Claude Opus 4.1",
@@ -14,9 +14,10 @@
       "cache_read": 1.5,
       "cache_write": 18.75,
       "currency": "USD",
-      "effective_date": "2025-08-05",
-      "source": "https://www.anthropic.com/pricing#api",
-      "verified": false
+      "effective_date": "2026-09-22",
+      "verified": true,
+      "source": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "notes": "cache_write uses the 5-minute cache-write rate (1.25x input); 1-hour cache writes cost 2x input and are under-estimated."
     },
     "claude-opus-4": {
       "label": "Claude Opus 4",
@@ -26,9 +27,10 @@
       "cache_read": 1.5,
       "cache_write": 18.75,
       "currency": "USD",
-      "effective_date": "2025-05-22",
-      "source": "https://www.anthropic.com/pricing#api",
-      "verified": false
+      "effective_date": "2026-09-22",
+      "verified": true,
+      "source": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "notes": "cache_write uses the 5-minute cache-write rate (1.25x input); 1-hour cache writes cost 2x input and are under-estimated."
     },
     "claude-sonnet-4-5": {
       "label": "Claude Sonnet 4.5",
@@ -38,9 +40,10 @@
       "cache_read": 0.3,
       "cache_write": 3.75,
       "currency": "USD",
-      "effective_date": "2025-09-29",
-      "source": "https://www.anthropic.com/pricing#api",
-      "verified": false
+      "effective_date": "2026-09-22",
+      "verified": true,
+      "source": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "notes": "cache_write uses the 5-minute cache-write rate (1.25x input); 1-hour cache writes cost 2x input and are under-estimated."
     },
     "claude-sonnet-4": {
       "label": "Claude Sonnet 4",
@@ -50,9 +53,10 @@
       "cache_read": 0.3,
       "cache_write": 3.75,
       "currency": "USD",
-      "effective_date": "2025-05-22",
-      "source": "https://www.anthropic.com/pricing#api",
-      "verified": false
+      "effective_date": "2026-09-22",
+      "verified": true,
+      "source": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "notes": "cache_write uses the 5-minute cache-write rate (1.25x input); 1-hour cache writes cost 2x input and are under-estimated."
     },
     "claude-haiku-4-5": {
       "label": "Claude Haiku 4.5",
@@ -62,9 +66,10 @@
       "cache_read": 0.1,
       "cache_write": 1.25,
       "currency": "USD",
-      "effective_date": "2025-10-15",
-      "source": "https://www.anthropic.com/pricing#api",
-      "verified": false
+      "effective_date": "2026-09-22",
+      "verified": true,
+      "source": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "notes": "cache_write uses the 5-minute cache-write rate (1.25x input); 1-hour cache writes cost 2x input and are under-estimated."
     },
     "claude-3-7-sonnet": {
       "label": "Claude Sonnet 3.7",
@@ -98,9 +103,10 @@
       "cache_read": 0.08,
       "cache_write": 1.0,
       "currency": "USD",
-      "effective_date": "2024-10-22",
-      "source": "https://www.anthropic.com/pricing#api",
-      "verified": false
+      "effective_date": "2026-09-22",
+      "verified": true,
+      "source": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "notes": "cache_write uses the 5-minute cache-write rate (1.25x input); 1-hour cache writes cost 2x input and are under-estimated."
     },
     "gpt-5-codex": {
       "label": "GPT-5 Codex",
@@ -209,6 +215,214 @@
       "effective_date": "2025-05-16",
       "source": "https://platform.openai.com/docs/pricing",
       "verified": false
+    },
+    "claude-opus-5": {
+      "label": "Claude Opus 5",
+      "provider": "claude-code",
+      "input": 5.0,
+      "output": 25.0,
+      "cache_read": 0.5,
+      "cache_write": 6.25,
+      "currency": "USD",
+      "effective_date": "2026-09-22",
+      "verified": true,
+      "source": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "notes": "cache_write uses the 5-minute cache-write rate (1.25x input); 1-hour cache writes cost 2x input and are under-estimated."
+    },
+    "claude-opus-4-8": {
+      "label": "Claude Opus 4.8",
+      "provider": "claude-code",
+      "input": 5.0,
+      "output": 25.0,
+      "cache_read": 0.5,
+      "cache_write": 6.25,
+      "currency": "USD",
+      "effective_date": "2026-09-22",
+      "verified": true,
+      "source": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "notes": "cache_write uses the 5-minute cache-write rate (1.25x input); 1-hour cache writes cost 2x input and are under-estimated."
+    },
+    "claude-opus-4-7": {
+      "label": "Claude Opus 4.7",
+      "provider": "claude-code",
+      "input": 5.0,
+      "output": 25.0,
+      "cache_read": 0.5,
+      "cache_write": 6.25,
+      "currency": "USD",
+      "effective_date": "2026-09-22",
+      "verified": true,
+      "source": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "notes": "cache_write uses the 5-minute cache-write rate (1.25x input); 1-hour cache writes cost 2x input and are under-estimated."
+    },
+    "claude-opus-4-6": {
+      "label": "Claude Opus 4.6",
+      "provider": "claude-code",
+      "input": 5.0,
+      "output": 25.0,
+      "cache_read": 0.5,
+      "cache_write": 6.25,
+      "currency": "USD",
+      "effective_date": "2026-09-22",
+      "verified": true,
+      "source": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "notes": "cache_write uses the 5-minute cache-write rate (1.25x input); 1-hour cache writes cost 2x input and are under-estimated."
+    },
+    "claude-opus-4-5": {
+      "label": "Claude Opus 4.5",
+      "provider": "claude-code",
+      "input": 5.0,
+      "output": 25.0,
+      "cache_read": 0.5,
+      "cache_write": 6.25,
+      "currency": "USD",
+      "effective_date": "2026-09-22",
+      "verified": true,
+      "source": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "notes": "cache_write uses the 5-minute cache-write rate (1.25x input); 1-hour cache writes cost 2x input and are under-estimated."
+    },
+    "claude-fable-5-1": {
+      "label": "Claude Fable 5.1",
+      "provider": "claude-code",
+      "input": 10.0,
+      "output": 50.0,
+      "cache_read": 0.25,
+      "cache_write": 12.5,
+      "currency": "USD",
+      "effective_date": "2026-09-22",
+      "verified": true,
+      "source": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "notes": "cache_write uses the 5-minute cache-write rate (1.25x input); 1-hour cache writes cost 2x input and are under-estimated."
+    },
+    "claude-fable-5": {
+      "label": "Claude Fable 5",
+      "provider": "claude-code",
+      "input": 10.0,
+      "output": 50.0,
+      "cache_read": 1.0,
+      "cache_write": 12.5,
+      "currency": "USD",
+      "effective_date": "2026-09-22",
+      "verified": true,
+      "source": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "notes": "cache_write uses the 5-minute cache-write rate (1.25x input); 1-hour cache writes cost 2x input and are under-estimated."
+    },
+    "claude-sonnet-5": {
+      "label": "Claude Sonnet 5",
+      "provider": "claude-code",
+      "input": 2.0,
+      "output": 10.0,
+      "cache_read": 0.2,
+      "cache_write": 2.5,
+      "currency": "USD",
+      "effective_date": "2026-09-22",
+      "verified": true,
+      "source": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "notes": "cache_write uses the 5-minute cache-write rate (1.25x input); 1-hour cache writes cost 2x input and are under-estimated."
+    },
+    "claude-sonnet-4-6": {
+      "label": "Claude Sonnet 4.6",
+      "provider": "claude-code",
+      "input": 3.0,
+      "output": 15.0,
+      "cache_read": 0.3,
+      "cache_write": 3.75,
+      "currency": "USD",
+      "effective_date": "2026-09-22",
+      "verified": true,
+      "source": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "notes": "cache_write uses the 5-minute cache-write rate (1.25x input); 1-hour cache writes cost 2x input and are under-estimated."
+    },
+    "gpt-6-astra": {
+      "label": "GPT-6 Astra",
+      "provider": "codex",
+      "input": 10.0,
+      "output": 50.0,
+      "cache_read": 1.0,
+      "cache_write": 12.5,
+      "currency": "USD",
+      "effective_date": "2026-09-22",
+      "verified": true,
+      "source": "https://platform.openai.com/docs/pricing",
+      "notes": "Short-context (standard) rate; long-context requests cost more and are under-estimated."
+    },
+    "gpt-5.6-sol": {
+      "label": "GPT-5.6 Sol",
+      "provider": "codex",
+      "input": 4.0,
+      "output": 20.0,
+      "cache_read": 0.4,
+      "cache_write": 5.0,
+      "currency": "USD",
+      "effective_date": "2026-09-22",
+      "verified": true,
+      "source": "https://platform.openai.com/docs/pricing",
+      "notes": "Short-context (standard) rate; long-context requests cost more and are under-estimated. Promotional price, available at least through 2026-11-21."
+    },
+    "gpt-5.6-terra": {
+      "label": "GPT-5.6 Terra",
+      "provider": "codex",
+      "input": 2.0,
+      "output": 12.0,
+      "cache_read": 0.2,
+      "cache_write": 2.5,
+      "currency": "USD",
+      "effective_date": "2026-09-22",
+      "verified": true,
+      "source": "https://platform.openai.com/docs/pricing",
+      "notes": "Short-context (standard) rate; long-context requests cost more and are under-estimated."
+    },
+    "gpt-5.6-luna": {
+      "label": "GPT-5.6 Luna",
+      "provider": "codex",
+      "input": 0.2,
+      "output": 1.2,
+      "cache_read": 0.02,
+      "cache_write": 0.25,
+      "currency": "USD",
+      "effective_date": "2026-09-22",
+      "verified": true,
+      "source": "https://platform.openai.com/docs/pricing",
+      "notes": "Short-context (standard) rate; long-context requests cost more and are under-estimated."
+    },
+    "gpt-5.5": {
+      "label": "GPT-5.5",
+      "provider": "codex",
+      "input": 5.0,
+      "output": 30.0,
+      "cache_read": 0.5,
+      "cache_write": 5.0,
+      "currency": "USD",
+      "effective_date": "2026-09-22",
+      "verified": true,
+      "source": "https://platform.openai.com/docs/pricing",
+      "notes": "Short-context (standard) rate; long-context requests cost more and are under-estimated. No separate cache-write price is listed; the input rate is used."
+    },
+    "gpt-5.4": {
+      "label": "GPT-5.4",
+      "provider": "codex",
+      "input": 2.5,
+      "output": 15.0,
+      "cache_read": 0.25,
+      "cache_write": 2.5,
+      "currency": "USD",
+      "effective_date": "2026-09-22",
+      "verified": true,
+      "source": "https://platform.openai.com/docs/pricing",
+      "notes": "Short-context (standard) rate; long-context requests cost more and are under-estimated. No separate cache-write price is listed; the input rate is used."
+    },
+    "gpt-5.3-codex": {
+      "label": "GPT-5.3 Codex",
+      "provider": "codex",
+      "input": 1.75,
+      "output": 14.0,
+      "cache_read": 0.175,
+      "cache_write": 1.75,
+      "currency": "USD",
+      "effective_date": "2026-09-22",
+      "verified": true,
+      "source": "https://platform.openai.com/docs/pricing",
+      "notes": "No separate cache-write price is listed; the input rate is used."
     }
   }
 }

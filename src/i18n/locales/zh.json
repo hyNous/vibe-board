@@ -267,9 +267,9 @@
       "costEstimatedHeader": "估算成本",
       "estimated": "估算",
       "estimatedShort": "估算",
-      "unpricedModels": "价格表未收录",
+      "unpricedModels": "只统计 token（无公开价格）",
       "priceEffective": "价格表生效日期",
-      "costNote": "金额由本地会话日志与内置价格表估算；未收录的模型保持未知。",
+      "costNote": "金额由本地会话日志与内置价格表估算，仅供参考；没有公开价格的模型只统计 token，不显示金额。",
       "scanning": "正在统计用量…",
       "scanFailed": "用量统计失败",
       "sessionsScanned": "已扫描 {{count}} 个会话文件",
@@ -281,7 +281,8 @@
       "daysAgo": "{{count}} 天前",
       "noProviders": "暂无可用的用量 Provider 数据。",
       "stateFailed": "失败",
-      "stateUnsupported": "未接入"
+      "stateUnsupported": "未接入",
+      "noPrice": "无公开价格，只统计 token"
     },
     "showCacheTTL": "显示缓存有效期",
     "detecting": "检测中...",
