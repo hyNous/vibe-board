@@ -598,17 +598,13 @@ describe('settings island menu', () => {
       expect(within(providerRow).queryByTestId('usage-provider-querying-codex')).not.toBeInTheDocument())
   })
 
-  it('keeps the read-only Agent list above the dispatch setup wizard', async () => {
+  it('renders the dispatch relationship page inside the settings window', async () => {
     render(<SettingsApp onClose={vi.fn()} />)
 
     fireEvent.click(screen.getByRole('button', { name: '派发框架' }))
 
-    const claudeRow = await screen.findByTestId('dispatch-agent-claude-code')
-    expect(screen.getByText('Claude Code')).toBeInTheDocument()
-    expect(screen.getByText('/usr/local/bin/claude')).toBeInTheDocument()
-    expect(screen.queryByTestId('dispatch-agent-codex')).not.toBeInTheDocument()
-    expect(within(claudeRow).queryByRole('button')).not.toBeInTheDocument()
-    expect(await screen.findByTestId('dispatch-preview')).toBeInTheDocument()
+    expect(await screen.findByText('派发关系树')).toBeInTheDocument()
+    expect(await screen.findByTestId('dispatch-empty-agents')).toBeInTheDocument()
   })
 
   it('reopens the first-run wizard from the tutorial entry', async () => {

@@ -14,38 +14,37 @@ export interface DispatchNodeStatus {
 export interface DispatchWorkerStatus {
   id: string
   displayName: string
-  command: string
   detected: boolean
   programPath: string | null
   version: string | null
   credentialFilePresent: boolean | null
 }
 
-export interface DispatchTargetStatus {
+export interface DispatchConnection {
+  workerId: string
+  displayName: string
+  skillId: string
+}
+
+export interface DispatchAgentNode {
   agentId: string
   displayName: string
-  programDetected: boolean
+  /** Claude Code and Codex are verified; every other dispatcher shows a hint. */
+  verified: boolean
   skillsDir: string
-  installedSkills: string[]
+  connections: DispatchConnection[]
+  addableWorkers: string[]
 }
 
-export interface DispatchSkillStatus {
-  id: string
-  present: boolean
-  fileCount: number
-}
-
-export interface DispatchDetection {
+export interface DispatchTree {
   node: DispatchNodeStatus
+  agents: DispatchAgentNode[]
   workers: DispatchWorkerStatus[]
-  targets: DispatchTargetStatus[]
-  skills: DispatchSkillStatus[]
-  resourcesRoot: string | null
+  skillsReady: boolean
 }
 
 export interface DispatchPlanFile {
   skillId: string
-  agentId: string
   relativePath: string
   sourcePath: string
   targetPath: string
@@ -53,41 +52,69 @@ export interface DispatchPlanFile {
   change: 'create' | 'unchanged' | 'overwrite'
 }
 
-export interface DispatchPlan {
-  detection: DispatchDetection
+export interface DispatchConnectPlan {
+  agentId: string
+  agentDisplayName: string
+  workerId: string
+  workerDisplayName: string
   files: DispatchPlanFile[]
   blockers: string[]
   canApply: boolean
 }
 
-export interface DispatchApplyResult {
+export interface DispatchConnectResult {
   writtenFiles: DispatchPlanFile[]
-  targets: string[]
 }
 
-const emptyDetection: DispatchDetection = {
-  node: { available: false, programPath: null, version: null },
-  workers: [],
-  targets: [],
-  skills: [],
-  resourcesRoot: null,
+export interface DispatchRemoval {
+  skillId: string
+  targetPath: string
+  /** remove = bundled copy, remove_link = link only, keep_modified = user-edited copy stays */
+  action: 'remove' | 'remove_link' | 'keep_modified'
 }
+
+export interface DispatchDisconnectPlan {
+  agentId: string
+  agentDisplayName: string
+  workerId: string
+  workerDisplayName: string
+  removals: DispatchRemoval[]
+  kept: DispatchRemoval[]
+  canApply: boolean
+}
+
+export interface DispatchDisconnectResult {
+  removed: DispatchRemoval[]
+  kept: DispatchRemoval[]
+}
+
+const emptyTree: DispatchTree = {
+  node: { available: false, programPath: null, version: null },
+  agents: [],
+  workers: [],
+  skillsReady: false,
+}
+
+const unavailable = () => Promise.reject(new Error('Dispatch setup is unavailable in browser preview'))
 
 export const dispatchApi = {
-  detect: () => isTauriRuntime()
-    ? invoke<DispatchDetection>('dispatch_detect')
-    : Promise.resolve(emptyDetection),
+  tree: () => isTauriRuntime()
+    ? invoke<DispatchTree>('dispatch_tree')
+    : Promise.resolve(emptyTree),
 
-  plan: () => isTauriRuntime()
-    ? invoke<DispatchPlan>('dispatch_plan')
-    : Promise.resolve<DispatchPlan>({
-      detection: emptyDetection,
-      files: [],
-      blockers: ['skills_missing'],
-      canApply: false,
-    }),
+  connectPlan: (agentId: string, workerId: string) => isTauriRuntime()
+    ? invoke<DispatchConnectPlan>('dispatch_connect_plan', { agentId, workerId })
+    : unavailable(),
 
-  apply: (confirm: boolean) => isTauriRuntime()
-    ? invoke<DispatchApplyResult>('dispatch_apply', { confirm })
-    : Promise.reject(new Error('Dispatch setup is unavailable in browser preview')),
+  connectApply: (agentId: string, workerId: string, confirm: boolean) => isTauriRuntime()
+    ? invoke<DispatchConnectResult>('dispatch_connect_apply', { agentId, workerId, confirm })
+    : unavailable(),
+
+  disconnectPlan: (agentId: string, workerId: string) => isTauriRuntime()
+    ? invoke<DispatchDisconnectPlan>('dispatch_disconnect_plan', { agentId, workerId })
+    : unavailable(),
+
+  disconnectApply: (agentId: string, workerId: string, confirm: boolean) => isTauriRuntime()
+    ? invoke<DispatchDisconnectResult>('dispatch_disconnect_apply', { agentId, workerId, confirm })
+    : unavailable(),
 }

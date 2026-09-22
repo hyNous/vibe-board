@@ -492,6 +492,16 @@ OpenCode 取数，在 10 分钟缓存过期后用本地 API key 请求 `opencode
 
 **Verification**：检查命令全绿；父级在隔离 HOME 下跑通添加 / 断开 / 软链 / 用户改动四条路径；维护者目视。
 
+**状态（2026-09-23）：PASS WITH RISKS，已合入。**
+后端 `commands/dispatch.rs` 重写为 `dispatch_tree`、`dispatch_connect_plan/apply`、`dispatch_disconnect_plan/apply`；前端重写为关系树。
+父级独立验证：前端 45 文件 435 项全过，lint / build / fmt / check 通过；`cargo test --lib` 579 通过 / 23 失败，失败集合 = 已知名单子集；
+读代码核对断开逻辑：用 Windows 重解析点属性识别软链与目录联接，只删链接本身；只有与随包版本逐字节相同的目录才整体删除；确认时重新计算计划。
+Rust 测试在 Windows 上真实创建目录联接覆盖软链路径。
+父级补修：Agent 不会出现在自己的可添加工人列表里（原实现 OpenCode 节点下会列出 OpenCode），连接计划也拒绝「自己派给自己」，补 1 条测试。
+
+**风险记录**：①一次连接写入工人 Skill、`external-agent-core` 与 `external-agent-setup` 三个 Skill，断开时保留 setup。
+②侧栏仍叫「派发框架」，页内标题为「派发关系树」，统一措辞留给 M11。③界面未目视。
+
 ### M11 — 全软件文案改写（面向用户）
 
 **Scope**：设置窗口、灵动岛、首次向导中所有用户可见文字，按「这是什么、我怎么用」重写；路径、版本、扫描数、事件数、内部状态码等
