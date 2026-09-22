@@ -1685,38 +1685,6 @@ async fn unregister_global_shortcut(app: tauri::AppHandle) -> Result<(), String>
     Ok(())
 }
 
-#[derive(Debug, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct GlobalActionShortcuts {
-    approve: String,
-    approve_enabled: bool,
-    deny: String,
-    deny_enabled: bool,
-    skip: String,
-    skip_enabled: bool,
-}
-
-#[tauri::command]
-async fn set_global_action_shortcuts(
-    app: tauri::AppHandle,
-    state: tauri::State<'_, AppState>,
-    shortcuts: GlobalActionShortcuts,
-) -> Result<(), String> {
-    let previous = state.config_store.get();
-    let mut next = previous.clone();
-    next.shortcut_approve = shortcuts.approve;
-    next.shortcut_approve_enabled = shortcuts.approve_enabled;
-    next.shortcut_deny = shortcuts.deny;
-    next.shortcut_deny_enabled = shortcuts.deny_enabled;
-    next.shortcut_skip = shortcuts.skip;
-    next.shortcut_skip_enabled = shortcuts.skip_enabled;
-    if let Err(err) = register_island_global_shortcuts_for_config(&app, &next) {
-        let _ = register_island_global_shortcuts_for_config(&app, &previous);
-        return Err(err);
-    }
-    state.config_store.update(next)
-}
-
 // ── Quit Command ────────────────────────────────────────────────
 
 #[tauri::command]
@@ -4779,7 +4747,6 @@ pub fn run() {
             commands::get_chat_history_tail,
             commands::get_subagent_chat_history,
             commands::monitor::get_monitor_sessions,
-            control_tower::commands::get_task_traces,
             commands::export_diagnostics,
             commands::add_engine_instance,
             commands::remove_engine_instance,
@@ -4844,7 +4811,6 @@ pub fn run() {
             validate_path,
             register_global_shortcut,
             unregister_global_shortcut,
-            set_global_action_shortcuts,
             perform_haptic,
             set_notch_focusable,
             restart_app,

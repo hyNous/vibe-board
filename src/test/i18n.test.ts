@@ -77,26 +77,16 @@ describe('Skill management copy', () => {
 })
 
 describe('i18n locale completeness', () => {
-  it('zh has all keys from en', () => {
-    const zhKeys = flatKeys(zh)
-    const missing = enKeys.filter((k) => !zhKeys.includes(k))
-    expect(missing).toEqual([])
-  })
-
-  it('ja has all keys from en', () => {
-    const jaKeys = flatKeys(ja)
-    const missing = enKeys.filter((k) => !jaKeys.includes(k))
-    expect(missing).toEqual([])
-  })
-
-  it('ko has all keys from en', () => {
-    const koKeys = flatKeys(ko)
-    const missing = enKeys.filter((k) => !koKeys.includes(k))
-    expect(missing).toEqual([])
+  it('all five locales have exactly the same key set', () => {
+    const locales = { en, zh, ja, ko, tr }
+    const expected = [...enKeys].sort()
+    for (const [name, locale] of Object.entries(locales)) {
+      expect([...flatKeys(locale as Record<string, unknown>)].sort(), name).toEqual(expected)
+    }
   })
 
   it('en has expected top-level namespaces', () => {
-    expect(Object.keys(en)).toEqual(expect.arrayContaining(['notch', 'settings', 'tray', 'trial']))
+    expect(Object.keys(en)).toEqual(expect.arrayContaining(['notch', 'settings', 'tray']))
   })
 
   it('ja tray.quit is translated', () => {
@@ -116,9 +106,6 @@ describe('i18n locale completeness', () => {
       'unmanagedSkills',
       'inheritedManagedNoResults',
       'inheritedUnmanagedNoResults',
-      'sharedAdoptAction',
-      'sharedAdoptBusy',
-      'sharedViewDetails',
       'builtinSkills',
     ]
     const locales = [en, zh, ja, ko, tr].map(

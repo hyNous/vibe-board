@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { SettingsApp } from '../components/settings'
-import type { BackendDisplayInfo } from '../services/tauriApi'
+import type { BackendDisplayInfo, UsageProviderStatus } from '../services/tauriApi'
 import { useConfigStore } from '../stores/configStore'
 import { useThemeStore } from '../stores/themeStore'
 import { isApplePlatform } from '../utils/platform'
@@ -16,9 +16,12 @@ const tauriMocks = vi.hoisted(() => ({
   previewSound: vi.fn(() => Promise.resolve()),
   setSoundEventRule: vi.fn(() => Promise.resolve()),
   registerGlobalShortcut: vi.fn(() => Promise.resolve()),
-  setGlobalActionShortcuts: vi.fn(() => Promise.resolve()),
   setIslandSurfaceOptions: vi.fn(() => Promise.resolve()),
   setAnalyticsEnabled: vi.fn(() => Promise.resolve()),
+  listUsageProviders: vi.fn(() => Promise.resolve([] as UsageProviderStatus[])),
+  authorizeUsageProvider: vi.fn(() => Promise.resolve()),
+  updateConfig: vi.fn(() => Promise.resolve()),
+  isTauri: vi.fn(() => false),
 }))
 
 vi.mock('../services/tauriApi', async (importOriginal) => {
@@ -34,9 +37,12 @@ vi.mock('../services/tauriApi', async (importOriginal) => {
     previewSound: tauriMocks.previewSound,
     setSoundEventRule: tauriMocks.setSoundEventRule,
     registerGlobalShortcut: tauriMocks.registerGlobalShortcut,
-    setGlobalActionShortcuts: tauriMocks.setGlobalActionShortcuts,
     setIslandSurfaceOptions: tauriMocks.setIslandSurfaceOptions,
     setAnalyticsEnabled: tauriMocks.setAnalyticsEnabled,
+    listUsageProviders: tauriMocks.listUsageProviders,
+    authorizeUsageProvider: tauriMocks.authorizeUsageProvider,
+    updateConfig: tauriMocks.updateConfig,
+    isTauri: tauriMocks.isTauri,
   }
 })
 
@@ -62,42 +68,68 @@ vi.mock('../components/settings/sections/AgentMonitorSection', () => ({
   AgentMonitorSection: () => <section><h2>Tasks</h2></section>,
 }))
 
+const providerFixture: UsageProviderStatus = {
+  provider: 'codex',
+  label: 'Codex',
+  enabled: true,
+  available: false,
+  catalogSupported: true,
+  implementationStatus: 'active',
+  source: 'local',
+  detail: 'authorization required',
+  authStatus: 'missing',
+  authPath: '/home/user/.codex/auth.json',
+  canAuthorize: true,
+}
+
 describe('settings island menu', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     tauriMocks.listDisplays.mockResolvedValue([])
     tauriMocks.registerGlobalShortcut.mockResolvedValue(undefined)
-    tauriMocks.setGlobalActionShortcuts.mockResolvedValue(undefined)
     tauriMocks.setIslandSurfaceOptions.mockResolvedValue(undefined)
     tauriMocks.setAnalyticsEnabled.mockResolvedValue(undefined)
+    tauriMocks.listUsageProviders.mockResolvedValue([])
+    tauriMocks.updateConfig.mockResolvedValue(undefined)
+    tauriMocks.isTauri.mockReturnValue(false)
     useConfigStore.setState({
       displayMonitor: 'auto',
       followFocus: false,
       tipsEnabled: true,
       analyticsEnabled: false,
       analyticsConsentPromptCompleted: true,
+      setupWizardCompleted: true,
+      globalShortcut: 'CommandOrControl+Shift+I',
     })
   })
 
-  it('shows the six Chinese primary navigation entries and keeps legacy entries hidden', () => {
+  it('shows the grouped navigation entries in the required order', () => {
     const { container } = render(<SettingsApp onClose={vi.fn()} />)
-    const visibleLabels = Array.from(
-      container.querySelectorAll('.settings-sidebar__item:not([hidden]) .settings-sidebar__label-text'),
-    ).map((item) => item.textContent?.trim())
+    const groups = Array.from(container.querySelectorAll('.settings-sidebar__nav > div')).map((group) => ({
+      label: group.querySelector('.settings-sidebar__group-label')?.textContent?.trim() ?? null,
+      items: Array.from(group.querySelectorAll('.settings-sidebar__item:not([hidden]) .settings-sidebar__label-text'))
+        .map((item) => item.textContent?.trim()),
+    }))
 
-    expect(visibleLabels).toEqual(['任务看板', '使用额度', 'Skill管理', 'Agent管理', '外观设置', '通用设置'])
+    expect(groups).toEqual([
+      { label: '运行', items: ['任务看板', '使用额度'] },
+      { label: '管理', items: ['Skill', '派发框架'] },
+      { label: '外观', items: ['外观'] },
+      { label: '快捷键', items: ['快捷键'] },
+      { label: '系统', items: ['通用', '重看教程与向导', '关于'] },
+    ])
     expect(screen.queryByText('远程服务器')).not.toBeInTheDocument()
     expect(screen.queryByText('Agent Switch')).not.toBeInTheDocument()
-    expect(screen.getByText('关于')).not.toBeVisible()
+    expect(screen.queryByText('Agent管理')).not.toBeInTheDocument()
   })
 
-  it('switches between Tasks, Usage, and Settings', async () => {
+  it('switches between Tasks, Usage, and General', async () => {
     render(<SettingsApp onClose={vi.fn()} />)
 
     expect(screen.getByRole('heading', { name: 'Tasks' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '使用额度' }))
     expect(await screen.findByRole('heading', { name: 'Usage' })).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '通用设置' }))
+    fireEvent.click(screen.getByRole('button', { name: '通用' }))
     await waitFor(() => expect(screen.getByText('settings.language')).toBeInTheDocument())
   })
 
@@ -115,14 +147,15 @@ describe('settings island menu', () => {
     expect(tauriMocks.setAnalyticsEnabled).not.toHaveBeenCalled()
   })
 
-  it('uses the left settings menu for island pages instead of top tabs', async () => {
+  it('uses the appearance page tabs instead of top tabs', async () => {
     const { container } = render(<SettingsApp onClose={vi.fn()} />)
 
-    fireEvent.click(screen.getByText('外观设置'))
+    fireEvent.click(screen.getByRole('button', { name: '外观' }))
 
     await waitFor(() => expect(screen.getByRole('button', { name: /Overview/ })).toHaveClass('active'))
-    expect(screen.getByRole('button', { name: /Display/ })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Behavior/ })).toBeInTheDocument()
+    const islandTabs = Array.from(container.querySelectorAll('.island-view-tabs button'))
+      .map((button) => button.textContent?.trim())
+    expect(islandTabs).toEqual(['Overview', 'Display', 'Behavior', 'Advanced'])
     expect(container.querySelector('.island-tabs')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: /Display/ }))
@@ -136,53 +169,40 @@ describe('settings island menu', () => {
     expect(screen.queryByRole('radio', { name: /磨砂玻璃/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('radiogroup', { name: '展示模式' })).not.toBeInTheDocument()
     expect(screen.queryByRole('radio', { name: '灵动岛' })).not.toBeInTheDocument()
-    expect(container.querySelector('.island-tabs')).not.toBeInTheDocument()
   })
 
-  it('keeps SSH server management out of the Dynamic Island menu', async () => {
-    const { container } = render(<SettingsApp onClose={vi.fn()} />)
-
-    fireEvent.click(screen.getByText('外观设置'))
-
-    await waitFor(() => expect(screen.getByRole('button', { name: /Overview/ })).toHaveClass('active'))
-    const islandMenuLabels = Array.from(container.querySelectorAll('.island-view-tabs button'))
-      .map((button) => button.textContent?.trim())
-    expect(islandMenuLabels).toContain('Integration')
-    expect(islandMenuLabels).not.toContain('SSH Remote')
-    expect(screen.queryByText('settings.sshDescription')).not.toBeInTheDocument()
-  })
-
-  it('orders Skill and Agent management in the primary navigation', () => {
-    const { container } = render(<SettingsApp onClose={vi.fn()} />)
-    const labels = Array.from(container.querySelectorAll('.settings-sidebar__item:not([hidden]) .settings-sidebar__label-text'))
-      .map((item) => item.textContent?.trim())
-
-    expect(labels.indexOf('Skill管理')).toBeLessThan(labels.indexOf('Agent管理'))
-    expect(labels.indexOf('Agent管理')).toBeLessThan(labels.indexOf('外观设置'))
-  })
-
-  it('places Hook diagnostics under Integration instead of Advanced', async () => {
+  it('keeps Hook diagnostics, detected tools, custom hooks, providers, and shortcuts out of appearance', async () => {
     render(<SettingsApp onClose={vi.fn()} />)
 
-    fireEvent.click(screen.getByText('外观设置'))
-    fireEvent.click(await screen.findByRole('button', { name: /Integration/ }))
+    fireEvent.click(screen.getByRole('button', { name: '外观' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: /Overview/ })).toHaveClass('active'))
 
-    await waitFor(() => expect(screen.getByText('Hook Doctor')).toBeInTheDocument())
-    fireEvent.click(screen.getByRole('button', { name: 'Run diagnostics' }))
-    await waitFor(() => expect(screen.getByText('Browser mode')).toBeInTheDocument())
+    for (const tab of ['Overview', 'Display', 'Behavior', 'Advanced']) {
+      fireEvent.click(screen.getByRole('button', { name: new RegExp(tab) }))
+      await waitFor(() => expect(screen.getByRole('button', { name: new RegExp(tab) })).toHaveClass('active'))
+      expect(screen.queryByText('Hook Doctor')).not.toBeInTheDocument()
+      expect(screen.queryByText('settings.detectedTools')).not.toBeInTheDocument()
+      expect(screen.queryByText('自定义 Hook 配置')).not.toBeInTheDocument()
+      expect(screen.queryByText('账号配额')).not.toBeInTheDocument()
+      expect(screen.queryByText('Global Shortcuts')).not.toBeInTheDocument()
+      expect(screen.queryByText('settings.jumpBeforeSend')).not.toBeInTheDocument()
+    }
+    expect(tauriMocks.listUsageProviders).not.toHaveBeenCalled()
+  })
 
-    fireEvent.click(screen.getByRole('button', { name: /Advanced/ }))
+  it('keeps SSH server management out of the appearance page', async () => {
+    render(<SettingsApp onClose={vi.fn()} />)
 
-    await waitFor(() => expect(screen.getByText('Visual Signals')).toBeInTheDocument())
-    expect(screen.queryByText('Hook Doctor')).not.toBeInTheDocument()
-    expect(screen.queryByText('Session Launcher')).not.toBeInTheDocument()
-    expect(screen.queryByText('Custom CLI Hook Templates')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '外观' }))
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /Overview/ })).toHaveClass('active'))
+    expect(screen.queryByText('settings.sshDescription')).not.toBeInTheDocument()
   })
 
   it('renders Advanced without removed debug and launcher controls', async () => {
     render(<SettingsApp onClose={vi.fn()} />)
 
-    fireEvent.click(screen.getByText('外观设置'))
+    fireEvent.click(screen.getByRole('button', { name: '外观' }))
     fireEvent.click(await screen.findByRole('button', { name: /Advanced/ }))
 
     await waitFor(() => expect(screen.getByText('Visual Signals')).toBeInTheDocument())
@@ -199,7 +219,7 @@ describe('settings island menu', () => {
     useThemeStore.setState({ colorTheme: 'midnight' })
     render(<SettingsApp onClose={vi.fn()} />)
 
-    fireEvent.click(screen.getByRole('button', { name: '外观设置' }))
+    fireEvent.click(screen.getByRole('button', { name: '外观' }))
 
     const frosted = await screen.findByRole('radio', { name: /磨砂玻璃/ })
     expect(screen.getByRole('radio', { name: /纯黑/ })).toHaveAttribute('aria-checked', 'true')
@@ -218,7 +238,7 @@ describe('settings island menu', () => {
     useThemeStore.setState({ colorTheme: 'warm-paper' })
     render(<SettingsApp onClose={vi.fn()} />)
 
-    fireEvent.click(screen.getByRole('button', { name: '外观设置' }))
+    fireEvent.click(screen.getByRole('button', { name: '外观' }))
 
     const midnight = await screen.findByRole('radio', { name: /纯黑/ })
     expect(midnight).toHaveAttribute('aria-checked', 'false')
@@ -233,7 +253,7 @@ describe('settings island menu', () => {
   it('removes the large island preview while keeping both effect choices', async () => {
     render(<SettingsApp onClose={vi.fn()} />)
 
-    fireEvent.click(screen.getByRole('button', { name: '外观设置' }))
+    fireEvent.click(screen.getByRole('button', { name: '外观' }))
 
     expect(await screen.findByRole('radio', { name: /纯黑/ })).toBeInTheDocument()
     expect(screen.getByRole('radio', { name: /磨砂玻璃/ })).toBeInTheDocument()
@@ -245,7 +265,7 @@ describe('settings island menu', () => {
   it('opens the user-level Skills overview with honest effect categories', async () => {
     render(<SettingsApp onClose={vi.fn()} />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Skill管理' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Skill' }))
 
     expect(await screen.findByRole('heading', { name: 'Skills' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: /全部（中心库）/ })).toBeInTheDocument()
@@ -254,29 +274,13 @@ describe('settings island menu', () => {
     expect(screen.queryByText(/通用分类来自中心库/)).not.toBeInTheDocument()
   })
 
-  it('keeps the six primary navigation entries on the island page', async () => {
-    const { container } = render(<SettingsApp onClose={vi.fn()} />)
-
-    fireEvent.click(screen.getByText('外观设置'))
-
-    await waitFor(() => expect(screen.getByText('settings.tipsEnabled')).toBeInTheDocument())
-    const labels = Array.from(
-      container.querySelectorAll('.settings-sidebar__item:not([hidden]) .settings-sidebar__label-text'),
-    ).map((item) => item.textContent?.trim())
-    expect(labels).toEqual(['任务看板', '使用额度', 'Skill管理', 'Agent管理', '外观设置', '通用设置'])
-    expect(container.querySelector('.settings-capability-nav')).not.toBeInTheDocument()
-    const islandTabs = Array.from(container.querySelectorAll('.island-view-tabs button'))
-      .map((button) => button.textContent?.trim())
-    expect(islandTabs).toEqual(['Overview', 'Display', 'Behavior', 'Integration', 'Shortcuts', 'Advanced'])
-  })
-
-  it('returns to general settings from the island page via the primary navigation', async () => {
+  it('returns to general settings from the appearance page via the primary navigation', async () => {
     render(<SettingsApp onClose={vi.fn()} />)
 
-    fireEvent.click(screen.getByText('外观设置'))
+    fireEvent.click(screen.getByRole('button', { name: '外观' }))
 
     await waitFor(() => expect(screen.getByText('settings.tipsEnabled')).toBeInTheDocument())
-    fireEvent.click(screen.getByRole('button', { name: '通用设置' }))
+    fireEvent.click(screen.getByRole('button', { name: '通用' }))
 
     await waitFor(() => expect(screen.getByText('settings.language')).toBeInTheDocument())
     expect(screen.queryByText('settings.tipsEnabled')).not.toBeInTheDocument()
@@ -287,7 +291,7 @@ describe('settings island menu', () => {
 
     render(<SettingsApp onClose={vi.fn()} />)
 
-    fireEvent.click(screen.getByText('外观设置'))
+    fireEvent.click(screen.getByRole('button', { name: '外观' }))
 
     await waitFor(() => expect(screen.getByText('settings.tipsEnabled')).toBeInTheDocument())
     const tipsRow = screen.getByText('settings.tipsEnabled').closest('.setting-row')
@@ -310,7 +314,7 @@ describe('settings island menu', () => {
 
     render(<SettingsApp onClose={vi.fn()} />)
 
-    fireEvent.click(screen.getByText('外观设置'))
+    fireEvent.click(screen.getByRole('button', { name: '外观' }))
     fireEvent.click(await screen.findByText('Quiet Assistant'))
 
     expect(useConfigStore.getState()).toEqual(expect.objectContaining({
@@ -344,7 +348,7 @@ describe('settings island menu', () => {
 
     render(<SettingsApp onClose={vi.fn()} />)
 
-    fireEvent.click(screen.getByText('外观设置'))
+    fireEvent.click(screen.getByRole('button', { name: '外观' }))
     fireEvent.click(await screen.findByRole('button', { name: /Display/ }))
 
     await waitFor(() => {
@@ -357,7 +361,7 @@ describe('settings island menu', () => {
     useConfigStore.setState({ notchHeightMode: 'custom', customNotchHeight: 40 })
     const { container } = render(<SettingsApp onClose={vi.fn()} />)
 
-    fireEvent.click(screen.getByText('外观设置'))
+    fireEvent.click(screen.getByRole('button', { name: '外观' }))
     fireEvent.click(await screen.findByRole('button', { name: /Display/ }))
 
     await waitFor(() => expect(screen.getByText('settings.customNotchHeight')).toBeInTheDocument())
@@ -376,7 +380,7 @@ describe('settings island menu', () => {
     useConfigStore.setState({ completionCardHeight: 200 })
     render(<SettingsApp onClose={vi.fn()} />)
 
-    fireEvent.click(screen.getByText('外观设置'))
+    fireEvent.click(screen.getByRole('button', { name: '外观' }))
     fireEvent.click(await screen.findByRole('button', { name: /Display/ }))
 
     await waitFor(() => expect(screen.getByText('settings.completionCardHeight')).toBeInTheDocument())
@@ -395,7 +399,7 @@ describe('settings island menu', () => {
     useConfigStore.setState({ sideIslandSize: 'narrow' })
     render(<SettingsApp onClose={vi.fn()} />)
 
-    fireEvent.click(screen.getByText('外观设置'))
+    fireEvent.click(screen.getByRole('button', { name: '外观' }))
     fireEvent.click(await screen.findByRole('button', { name: /Display/ }))
 
     await waitFor(() => expect(screen.getByText('Side Island Size')).toBeInTheDocument())
@@ -414,13 +418,15 @@ describe('settings island menu', () => {
   it('records and clears in-window shortcuts from the shortcuts page', async () => {
     render(<SettingsApp onClose={vi.fn()} />)
 
-    fireEvent.click(screen.getByText('外观设置'))
-    fireEvent.click(await screen.findByRole('button', { name: /Shortcuts/ }))
+    fireEvent.click(screen.getByRole('button', { name: '快捷键' }))
 
     await waitFor(() => expect(screen.getByText('Toggle Panel')).toBeInTheDocument())
     expect(screen.getByText('Collapse Panel')).toBeInTheDocument()
     expect(screen.getByText('Open Settings')).toBeInTheDocument()
     expect(screen.queryByText('Expand Panel')).not.toBeInTheDocument()
+    expect(screen.queryByText('Approve current permission')).not.toBeInTheDocument()
+    expect(screen.queryByText('Deny current permission')).not.toBeInTheDocument()
+    expect(screen.queryByText('Skip current question')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: /Show advanced shortcuts/ }))
     await waitFor(() => expect(screen.getByText('Expand Panel')).toBeInTheDocument())
@@ -440,22 +446,61 @@ describe('settings island menu', () => {
     expect(row).toHaveTextContent('Off')
   })
 
-  it('syncs global shortcut controls and rolls back failed native registration', async () => {
-    tauriMocks.setGlobalActionShortcuts.mockRejectedValueOnce(new Error('already registered'))
+  it('rolls back a failed global toggle shortcut registration', async () => {
+    tauriMocks.registerGlobalShortcut.mockRejectedValueOnce(new Error('already registered'))
     render(<SettingsApp onClose={vi.fn()} />)
 
-    fireEvent.click(screen.getByText('外观设置'))
-    fireEvent.click(await screen.findByRole('button', { name: /Shortcuts/ }))
+    fireEvent.click(screen.getByRole('button', { name: '快捷键' }))
 
-    await waitFor(() => expect(screen.getByText('Approve current permission')).toBeInTheDocument())
-    const row = screen.getByText('Approve current permission').closest('.setting-row')!
-    fireEvent.click(row.querySelector('[role="switch"]')!)
+    const input = await screen.findByDisplayValue('CommandOrControl+Shift+I')
+    fireEvent.change(input, { target: { value: 'CommandOrControl+Shift+J' } })
+    fireEvent.blur(input)
 
-    expect(tauriMocks.setGlobalActionShortcuts).toHaveBeenCalledWith(expect.objectContaining({
-      approve: 'CommandOrControl+Shift+A',
-      approveEnabled: true,
-    }))
-    await waitFor(() => expect(useConfigStore.getState().shortcutApproveEnabled).toBe(false))
+    expect(tauriMocks.registerGlobalShortcut).toHaveBeenCalledWith('CommandOrControl+Shift+J')
+    await waitFor(() => expect(useConfigStore.getState().globalShortcut).toBe('CommandOrControl+Shift+I'))
     expect(screen.getByRole('alert')).toHaveTextContent('already registered')
+  })
+
+  it('shows the usage provider settings on the usage page', async () => {
+    tauriMocks.listUsageProviders.mockResolvedValue([providerFixture])
+    render(<SettingsApp onClose={vi.fn()} />)
+
+    fireEvent.click(screen.getByRole('button', { name: '使用额度' }))
+
+    expect(await screen.findByText('账号配额')).toBeInTheDocument()
+    expect(screen.getByText('启用用量查询')).toBeInTheDocument()
+    const providerRow = await screen.findByTestId('usage-provider-codex')
+    expect(providerRow).toHaveTextContent('Codex')
+    expect(providerRow).toHaveTextContent('Needs authorization')
+
+    tauriMocks.isTauri.mockReturnValue(true)
+    fireEvent.click(screen.getByText('用量授权'))
+    await waitFor(() => expect(tauriMocks.authorizeUsageProvider).toHaveBeenCalledWith('codex'))
+  })
+
+  it('shows installed Agents read-only on the dispatch page', async () => {
+    render(<SettingsApp onClose={vi.fn()} />)
+
+    fireEvent.click(screen.getByRole('button', { name: '派发框架' }))
+
+    expect(await screen.findByTestId('dispatch-agent-claude-code')).toBeInTheDocument()
+    expect(screen.getByText('Claude Code')).toBeInTheDocument()
+    expect(screen.getByText('/usr/local/bin/claude')).toBeInTheDocument()
+    expect(screen.queryByTestId('dispatch-agent-codex')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /install|update|uninstall|安装|更新|卸载/i })).not.toBeInTheDocument()
+  })
+
+  it('reopens the first-run wizard from the tutorial entry', async () => {
+    render(<SettingsApp onClose={vi.fn()} />)
+
+    fireEvent.click(screen.getByRole('button', { name: '重看教程与向导' }))
+
+    expect(await screen.findByText('重新打开首次向导')).toBeInTheDocument()
+    fireEvent.click(screen.getByText('打开向导'))
+
+    await waitFor(() => expect(tauriMocks.updateConfig).toHaveBeenCalledWith(
+      expect.objectContaining({ setupWizardCompleted: false }),
+    ))
+    expect(useConfigStore.getState().setupWizardCompleted).toBe(false)
   })
 })

@@ -7,7 +7,8 @@ import { SettingGroup } from '../SettingGroup'
 import { SettingRow } from '../SettingRow'
 import { Toggle } from '../Toggle'
 import { Dropdown } from '../Dropdown'
-import { getConfig, quitApp, setLanguage, setLaunchAtLogin, updateConfig as updateBackendConfig } from '../../../services/tauriApi'
+import { quitApp, setLanguage, setLaunchAtLogin } from '../../../services/tauriApi'
+import { reopenSetupWizard } from '../../../utils/setupWizard'
 import { GlassButton } from '../../shared'
 
 export function GeneralSection() {
@@ -21,13 +22,11 @@ export function GeneralSection() {
   const [reconfiguring, setReconfiguring] = useState(false)
   const [setupError, setSetupError] = useState<string | null>(null)
 
-  const reopenSetupWizard = async () => {
+  const handleReopenSetupWizard = async () => {
     setReconfiguring(true)
     setSetupError(null)
     try {
-      const backend = await getConfig()
-      await updateBackendConfig({ ...backend, setupWizardCompleted: false })
-      updateConfig('setupWizardCompleted', false)
+      await reopenSetupWizard()
     } catch (error) {
       setSetupError(error instanceof Error ? error.message : String(error))
     } finally {
@@ -91,7 +90,7 @@ export function GeneralSection() {
                 ? `${autoLaunchAgents.length} ${t('settings.autoLaunchAgents', { defaultValue: 'Agent(s) start Vibe Board on session start' })}`
                 : t('settings.notConfigured', { defaultValue: 'Not configured' })}
             </span>
-            <GlassButton variant="secondary" onClick={reopenSetupWizard} disabled={reconfiguring}>
+            <GlassButton variant="secondary" onClick={handleReopenSetupWizard} disabled={reconfiguring}>
               {reconfiguring ? t('settings.opening', { defaultValue: 'Opening…' }) : t('settings.configure', { defaultValue: 'Configure' })}
             </GlassButton>
           </div>

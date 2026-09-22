@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { CodexUsageSection } from './CodexUsageSection'
+import { UsageProvidersPanel } from './UsageProvidersPanel'
 import { getAgentStatuses, getUsageSnapshots, isTauri, listUsageProviders, type UsageProviderStatus } from '../../../services/tauriApi'
 import type { AgentStatusSnapshot, RateLimitInfo } from '../../../types/agent'
 import { formatTokens } from '../../../utils/tokens'
@@ -267,6 +268,8 @@ export function UnifiedUsageSection() {
           <CodexUsageSection showHeader={false} />
         </div>
       )}
+
+      <UsageProvidersPanel />
     </section>
   )
 }

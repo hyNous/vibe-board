@@ -269,12 +269,6 @@ export interface BackendConfig {
   idleInteractionRoutingEnabled: boolean
   idleInteractionRoutingMinutes: number
   globalShortcut: string
-  shortcutApprove: string
-  shortcutApproveEnabled: boolean
-  shortcutDeny: string
-  shortcutDenyEnabled: boolean
-  shortcutSkip: string
-  shortcutSkipEnabled: boolean
   setupWizardCompleted: boolean
   autoLaunchAgents: string[]
 }
@@ -363,13 +357,6 @@ export async function getMonitorSessions(): Promise<MonitorSessionSummary[]> {
   return invoke<MonitorSessionSummary[]>('get_monitor_sessions')
 }
 
-export type { TaskRecord, AgentRunRecord, TaskEventRecord } from '../types/taskTrace'
-
-export async function getTaskTraces(): Promise<import('../types/taskTrace').TaskRecord[]> {
-  if (!isTauri()) return []
-  return invoke<import('../types/taskTrace').TaskRecord[]>('get_task_traces')
-}
-
 let jumpInFlight = false
 
 export async function activateSessionHost(sessionId: string): Promise<boolean> {
@@ -438,12 +425,6 @@ export async function getConfig(): Promise<BackendConfig> {
       idleInteractionRoutingEnabled: false,
       idleInteractionRoutingMinutes: 5,
       globalShortcut: 'CommandOrControl+Shift+I',
-      shortcutApprove: 'CommandOrControl+Shift+A',
-      shortcutApproveEnabled: false,
-      shortcutDeny: 'CommandOrControl+Shift+D',
-      shortcutDenyEnabled: false,
-      shortcutSkip: 'CommandOrControl+Shift+S',
-      shortcutSkipEnabled: false,
       setupWizardCompleted: false,
       autoLaunchAgents: [],
     }
@@ -715,18 +696,6 @@ export async function importSoundPack(packPath: string): Promise<SoundPackImport
 export async function setCustomSounds(sounds: Array<{ id: string; name: string; path: string; dataUrl?: string }>): Promise<void> {
   if (!isTauri()) return
   return invoke('set_custom_sounds', { sounds })
-}
-
-export async function setGlobalActionShortcuts(options: {
-  approve: string
-  approveEnabled: boolean
-  deny: string
-  denyEnabled: boolean
-  skip: string
-  skipEnabled: boolean
-}): Promise<void> {
-  if (!isTauri()) return
-  return invoke('set_global_action_shortcuts', { shortcuts: options })
 }
 
 export async function registerGlobalShortcut(shortcut: string): Promise<void> {
@@ -1205,11 +1174,6 @@ export async function installAgentHook(toolName: string): Promise<void> {
 export async function uninstallAgentHook(toolName: string): Promise<void> {
   if (!isTauri()) return
   return invoke('uninstall_agent_hook', { toolName })
-}
-
-export async function configureAgentHookEvents(toolName: string, enabledEvents: string[]): Promise<void> {
-  if (!isTauri()) return
-  return invoke('configure_agent_hook_events', { toolName, enabledEvents })
 }
 
 export async function simulateHookEvent(eventName: string, toolName?: string): Promise<void> {

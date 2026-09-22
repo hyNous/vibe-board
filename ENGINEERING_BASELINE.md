@@ -332,6 +332,18 @@ lint / build / fmt / `cargo check --all-targets` 通过；`cargo test --lib` 519
 
 **Verification**：检查命令全绿；父级核对第 3 条清单。
 
+**状态（2026-09-22）：PASS WITH RISKS，已合入。**
+父级独立验证：前端 41 文件 412 项全过，lint / build / fmt / `cargo check --all-targets` 通过；`cargo test --lib` 518 通过 / 23 失败，
+失败集合 = 已知名单子集；`release:check` ok。
+- AC3 父级复算：用脚本比对改动前后所有 `updateConfig` 调用的配置键（旧 50 / 新 49），差集仅 `jumpBeforeSend`（AC8 要求删除）。
+- 五语言清理复核：en 删除 481 键，其中落在动态拼接前缀下的只有 `settings.shortcutActions.approve-action / reject-action`（随 AC8 删除）；
+  删除键无一仍被代码字面引用；代码引用而文件缺失的键由 66 降到 38，且 38 个均为改动前既有（靠内联 defaultValue）。
+- 配置兼容：含批准 / 拒绝 / 跳过快捷键字段的旧配置可加载、旧字段不写回（新增 Rust 测试）。
+
+**风险记录**：①健康指示复用原 Hook Doctor 全部检查，除 Hook 未安装外，「尚无任何 Agent 接入」「bridge 版本旧」「Codex live-sync 未运行」
+也会亮灯，可能在维护者机器上常亮，待真机观察后决定是否收窄为只看 Hook 失败。②`uninstall_all_hooks` 命令已无界面入口，保留。
+③界面未目视。
+
 ### M7 — 派发框架搭建向导
 
 **Scope**：把四个派发 Skill 收进仓库并随安装包分发；在「管理 → 派发框架」提供检测 → 预览 → 确认安装的向导；未知工具交回 Agent；不碰全局指令文件。

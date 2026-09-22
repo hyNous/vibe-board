@@ -198,23 +198,6 @@ pub struct AppConfig {
     /// Global keyboard shortcut to toggle island visibility
     #[serde(default = "default_global_shortcut")]
     pub global_shortcut: String,
-    /// Global keyboard shortcut to approve current permission request
-    #[serde(default = "default_shortcut_approve")]
-    pub shortcut_approve: String,
-    #[serde(default)]
-    pub shortcut_approve_enabled: bool,
-    /// Global keyboard shortcut to deny current permission request
-    #[serde(default = "default_shortcut_deny")]
-    pub shortcut_deny: String,
-    #[serde(default)]
-    pub shortcut_deny_enabled: bool,
-    /// Global keyboard shortcut to skip current question by selecting the first option
-    #[serde(default = "default_shortcut_skip")]
-    pub shortcut_skip: String,
-    #[serde(default)]
-    pub shortcut_skip_enabled: bool,
-    #[serde(default)]
-    pub permission_shortcut_defaults_migrated: bool,
     /// Agents (adapter names) whose Vibe Board hooks the user has enabled. This is
     /// the persisted *intent* that survives external tools (e.g. cc-switch)
     /// overwriting the agent's settings file: hook recovery re-installs hooks for
@@ -273,18 +256,6 @@ fn default_quiet_hours_end() -> String {
 
 fn default_global_shortcut() -> String {
     "CommandOrControl+Shift+I".to_string()
-}
-
-fn default_shortcut_approve() -> String {
-    "CommandOrControl+Shift+A".to_string()
-}
-
-fn default_shortcut_deny() -> String {
-    "CommandOrControl+Shift+D".to_string()
-}
-
-fn default_shortcut_skip() -> String {
-    "CommandOrControl+Shift+S".to_string()
 }
 
 const DEFAULT_CODEX_APP_SERVER_SYNC_INTERVAL_SECONDS: u32 = 30;
@@ -365,13 +336,6 @@ impl Default for AppConfig {
             analytics_consent_prompt_completed: false,
             follow_focus: false,
             global_shortcut: "CommandOrControl+Shift+I".to_string(),
-            shortcut_approve: default_shortcut_approve(),
-            shortcut_approve_enabled: false,
-            shortcut_deny: default_shortcut_deny(),
-            shortcut_deny_enabled: false,
-            shortcut_skip: default_shortcut_skip(),
-            shortcut_skip_enabled: false,
-            permission_shortcut_defaults_migrated: true,
             enabled_agents: Vec::new(),
             setup_wizard_completed: false,
             auto_launch_agents: Vec::new(),
@@ -380,20 +344,6 @@ impl Default for AppConfig {
 }
 
 impl AppConfig {
-    fn migrate_permission_shortcut_defaults(&mut self) {
-        if self.permission_shortcut_defaults_migrated {
-            return;
-        }
-
-        if self.shortcut_approve_enabled && self.shortcut_approve == default_shortcut_approve() {
-            self.shortcut_approve_enabled = false;
-        }
-        if self.shortcut_deny_enabled && self.shortcut_deny == default_shortcut_deny() {
-            self.shortcut_deny_enabled = false;
-        }
-        self.permission_shortcut_defaults_migrated = true;
-    }
-
     fn migrate_boot_sound_default(&mut self) {
         if self.boot_sound_default_migrated {
             return;
@@ -519,7 +469,6 @@ impl ConfigStore {
             config.codex_app_server_sync_enabled = true;
             config.codex_app_server_sync_configured = true;
         }
-        config.migrate_permission_shortcut_defaults();
         config.migrate_boot_sound_default();
         config.migrate_legacy_sound_choices();
         Some(config)
@@ -620,9 +569,6 @@ mod tests {
         assert_eq!(config.volume, 70);
         assert_eq!(config.session_refresh_interval_seconds, 3);
         assert_eq!(config.window_close_behavior, "tray");
-        assert!(!config.shortcut_approve_enabled);
-        assert!(!config.shortcut_deny_enabled);
-        assert!(config.permission_shortcut_defaults_migrated);
         assert!(config.boot_sound_default_migrated);
         assert!(config.analytics_enabled);
         assert!(!config.analytics_consent_prompt_completed);
@@ -677,6 +623,74 @@ mod tests {
         assert!(!written.contains("hostAgent"), "{written}");
         assert!(!written.contains("childAgents"), "{written}");
         assert!(!written.contains("autoStartOnHostSession"), "{written}");
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn ignores_removed_approval_shortcut_fields_without_writing_them_back() {
+        let base = std::env::temp_dir().join(format!(
+            "vibeboard-config-legacy-shortcuts-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("system time")
+                .as_nanos()
+        ));
+        let path = base.join("vibeboard").join("config.json");
+        std::fs::create_dir_all(path.parent().expect("config parent")).expect("config dir");
+        let mut legacy = serde_json::to_value(AppConfig::default()).expect("serialize config");
+        let object = legacy.as_object_mut().expect("config object");
+        object.insert(
+            "shortcutApprove".to_string(),
+            serde_json::json!("CommandOrControl+Shift+P"),
+        );
+        object.insert(
+            "shortcutApproveEnabled".to_string(),
+            serde_json::json!(true),
+        );
+        object.insert(
+            "shortcutDeny".to_string(),
+            serde_json::json!("CommandOrControl+Shift+R"),
+        );
+        object.insert("shortcutDenyEnabled".to_string(), serde_json::json!(true));
+        object.insert(
+            "shortcutSkip".to_string(),
+            serde_json::json!("CommandOrControl+Shift+S"),
+        );
+        object.insert("shortcutSkipEnabled".to_string(), serde_json::json!(true));
+        object.insert(
+            "permissionShortcutDefaultsMigrated".to_string(),
+            serde_json::json!(true),
+        );
+        std::fs::write(
+            &path,
+            serde_json::to_string_pretty(&legacy).expect("serialize legacy config"),
+        )
+        .expect("write legacy config");
+
+        let loaded = super::ConfigStore::load_from_disk(&path).expect("load legacy config");
+        let store = super::ConfigStore {
+            config: std::sync::Arc::new(std::sync::RwLock::new(loaded)),
+            config_path: path.clone(),
+            app_handle: None,
+        };
+        store.update(store.get()).expect("save config");
+
+        let written = std::fs::read_to_string(&path).expect("read saved config");
+        for field in [
+            "shortcutApprove",
+            "shortcutApproveEnabled",
+            "shortcutDeny",
+            "shortcutDenyEnabled",
+            "shortcutSkip",
+            "shortcutSkipEnabled",
+            "permissionShortcutDefaultsMigrated",
+        ] {
+            assert!(
+                !written.contains(field),
+                "{field} was written back: {written}"
+            );
+        }
         let _ = std::fs::remove_dir_all(&base);
     }
 
@@ -830,40 +844,6 @@ mod tests {
             config.window_close_behavior,
             default_window_close_behavior()
         );
-    }
-
-    #[test]
-    fn migrates_legacy_permission_shortcut_defaults_once() {
-        let mut config = AppConfig {
-            shortcut_approve_enabled: true,
-            shortcut_deny_enabled: true,
-            permission_shortcut_defaults_migrated: false,
-            ..AppConfig::default()
-        };
-
-        config.migrate_permission_shortcut_defaults();
-
-        assert!(!config.shortcut_approve_enabled);
-        assert!(!config.shortcut_deny_enabled);
-        assert!(config.permission_shortcut_defaults_migrated);
-    }
-
-    #[test]
-    fn keeps_custom_permission_shortcuts_enabled_during_migration() {
-        let mut config = AppConfig {
-            shortcut_approve: "CommandOrControl+Shift+P".to_string(),
-            shortcut_approve_enabled: true,
-            shortcut_deny: "CommandOrControl+Shift+R".to_string(),
-            shortcut_deny_enabled: true,
-            permission_shortcut_defaults_migrated: false,
-            ..AppConfig::default()
-        };
-
-        config.migrate_permission_shortcut_defaults();
-
-        assert!(config.shortcut_approve_enabled);
-        assert!(config.shortcut_deny_enabled);
-        assert!(config.permission_shortcut_defaults_migrated);
     }
 
     #[test]

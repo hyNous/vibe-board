@@ -148,13 +148,6 @@ interface ConfigState {
   // General extras
   followFocus: boolean
   globalShortcut: string
-  shortcutApprove: string
-  shortcutApproveEnabled: boolean
-  shortcutDeny: string
-  shortcutDenyEnabled: boolean
-  shortcutSkip: string
-  shortcutSkipEnabled: boolean
-  permissionShortcutDefaultsMigrated: boolean
   shortcutSurfaceDefaultsMigrated: boolean
   shortcutPlatformDefaultsMigrated: boolean
   customHooksPath: string
@@ -220,7 +213,6 @@ interface ConfigState {
   // Behavior
   excludedHookCwdSubstrings: string
   sessionSilenceRules: SessionSilenceRule[]
-  autoApproveTools: string[]
   hapticOnHover: boolean
   hapticIntensity: number // 1-3
   carouselIntervalMs: number
@@ -234,7 +226,6 @@ interface ConfigState {
 
   // Vibe Board parity — interaction timing
   clickToDetail: boolean
-  jumpBeforeSend: boolean
   showCacheTTL: boolean
   hoverExpandDelay: number // ms before expanding on hover (0 = instant)
   microHoverExpandDelay: number // ms before expanding micro pill on hover
@@ -316,17 +307,29 @@ const defaultSoundRules: Record<string, SoundRule> = {
   'boot': { enabled: true, sound: 'builtin:hey-bro' },
 }
 
-const DEFAULT_GLOBAL_APPROVE_SHORTCUT = 'CommandOrControl+Shift+A'
-const DEFAULT_GLOBAL_DENY_SHORTCUT = 'CommandOrControl+Shift+D'
 const DEFAULT_TOGGLE_PANEL_SHORTCUT = 'CommandOrControl+Shift+I'
 const DEFAULT_OPEN_SETTINGS_SHORTCUT = 'CommandOrControl+,'
-const LEGACY_IN_WINDOW_APPROVE_SHORTCUT = '⌘+Enter'
-const LEGACY_IN_WINDOW_REJECT_SHORTCUT = '⌘+Backspace'
 const LEGACY_TOGGLE_PANEL_SHORTCUT = '⌘+Shift+I'
 const LEGACY_OPEN_SETTINGS_SHORTCUT = '⌘+,'
 const LEGACY_EXPAND_PANEL_SHORTCUT = '⌘+Shift+E'
 const LEGACY_NEXT_SESSION_SHORTCUT = '⌘+]'
 const LEGACY_PREV_SESSION_SHORTCUT = '⌘+['
+
+// Settings removed after the approval flow was deleted. Old persisted stores
+// may still contain them; strip on load so they are neither shown nor written back.
+const REMOVED_CONFIG_KEYS = [
+  'shortcutApprove',
+  'shortcutApproveEnabled',
+  'shortcutDeny',
+  'shortcutDenyEnabled',
+  'shortcutSkip',
+  'shortcutSkipEnabled',
+  'permissionShortcutDefaultsMigrated',
+  'autoApproveTools',
+  'jumpBeforeSend',
+] as const
+
+const REMOVED_SHORTCUT_ACTIONS = new Set(['approve-action', 'reject-action'])
 
 const defaultShortcuts: ShortcutBinding[] = [
   { action: 'toggle-panel', label: 'Toggle Panel', keys: DEFAULT_TOGGLE_PANEL_SHORTCUT },
@@ -334,22 +337,8 @@ const defaultShortcuts: ShortcutBinding[] = [
   { action: 'collapse-panel', label: 'Collapse Panel', keys: 'Escape' },
   { action: 'next-session', label: 'Next Session', keys: '' },
   { action: 'prev-session', label: 'Previous Session', keys: '' },
-  { action: 'approve-action', label: 'Approve Action', keys: '' },
-  { action: 'reject-action', label: 'Reject Action', keys: '' },
   { action: 'open-settings', label: 'Open Settings', keys: DEFAULT_OPEN_SETTINGS_SHORTCUT },
 ]
-
-function migrateInWindowPermissionShortcuts(shortcuts: ShortcutBinding[]): ShortcutBinding[] {
-  return shortcuts.map((shortcut) => {
-    if (shortcut.action === 'approve-action' && shortcut.keys === LEGACY_IN_WINDOW_APPROVE_SHORTCUT) {
-      return { ...shortcut, keys: '' }
-    }
-    if (shortcut.action === 'reject-action' && shortcut.keys === LEGACY_IN_WINDOW_REJECT_SHORTCUT) {
-      return { ...shortcut, keys: '' }
-    }
-    return shortcut
-  })
-}
 
 function migrateInWindowShortcutSurfaceDefaults(shortcuts: ShortcutBinding[]): ShortcutBinding[] {
   return shortcuts.map((shortcut) => {
@@ -419,13 +408,6 @@ function createIslandDefaults(): Partial<ConfigState> {
     confettiEnabled: true,
     followFocus: false,
     globalShortcut: 'CommandOrControl+Shift+I',
-    shortcutApprove: DEFAULT_GLOBAL_APPROVE_SHORTCUT,
-    shortcutApproveEnabled: false,
-    shortcutDeny: DEFAULT_GLOBAL_DENY_SHORTCUT,
-    shortcutDenyEnabled: false,
-    shortcutSkip: 'CommandOrControl+Shift+S',
-    shortcutSkipEnabled: false,
-    permissionShortcutDefaultsMigrated: true,
     shortcutSurfaceDefaultsMigrated: true,
     shortcutPlatformDefaultsMigrated: true,
     shortcuts: defaultShortcuts.map((shortcut) => ({ ...shortcut })),
@@ -447,10 +429,6 @@ function createIslandDefaults(): Partial<ConfigState> {
     sideIslandSize: SIDE_ISLAND_SIZE_DEFAULT,
     excludedHookCwdSubstrings: '',
     sessionSilenceRules: [],
-    autoApproveTools: [
-      'TaskCreate', 'TaskUpdate', 'TaskGet', 'TaskList',
-      'TaskOutput', 'TaskStop', 'TodoRead', 'TodoWrite', 'EnterPlanMode', 'ExitPlanMode', 'Read',
-    ],
     hapticOnHover: false,
     hapticIntensity: 1,
     carouselIntervalMs: 3000,
@@ -460,7 +438,6 @@ function createIslandDefaults(): Partial<ConfigState> {
     sessionTimeoutMinutes: 30,
     aiMessageLines: 1,
     clickToDetail: true,
-    jumpBeforeSend: true,
     showCacheTTL: true,
     hoverExpandDelay: 50,
     microHoverExpandDelay: 50,
@@ -524,13 +501,6 @@ export const useConfigStore = create<ConfigStore>()(
   // General extras
   followFocus: false,
   globalShortcut: 'CommandOrControl+Shift+I',
-  shortcutApprove: DEFAULT_GLOBAL_APPROVE_SHORTCUT,
-  shortcutApproveEnabled: false,
-  shortcutDeny: DEFAULT_GLOBAL_DENY_SHORTCUT,
-  shortcutDenyEnabled: false,
-  shortcutSkip: 'CommandOrControl+Shift+S',
-  shortcutSkipEnabled: false,
-  permissionShortcutDefaultsMigrated: true,
   shortcutSurfaceDefaultsMigrated: true,
   shortcutPlatformDefaultsMigrated: true,
   customHooksPath: '',
@@ -599,10 +569,6 @@ export const useConfigStore = create<ConfigStore>()(
   // Behavior
   excludedHookCwdSubstrings: '',
   sessionSilenceRules: [],
-  autoApproveTools: [
-    'TaskCreate', 'TaskUpdate', 'TaskGet', 'TaskList',
-    'TaskOutput', 'TaskStop', 'TodoRead', 'TodoWrite', 'EnterPlanMode', 'ExitPlanMode', 'Read',
-  ],
   hapticOnHover: false,
   hapticIntensity: 1,
   carouselIntervalMs: 3000,
@@ -614,10 +580,9 @@ export const useConfigStore = create<ConfigStore>()(
   // Display
   aiMessageLines: 1,
 
-  // Vibe Board parity — interaction timing
-  clickToDetail: true,
-  jumpBeforeSend: true,
-  showCacheTTL: true,
+    // Vibe Board parity — interaction timing
+    clickToDetail: true,
+    showCacheTTL: true,
   hoverExpandDelay: 50,
   microHoverExpandDelay: 50,
   collapseDelay: 200,
@@ -738,32 +703,25 @@ export const useConfigStore = create<ConfigStore>()(
     {
       name: 'vibeboard-config',
       merge: (persistedState, currentState) => {
-        const persisted = persistedState as Partial<ConfigState> | undefined
-        const migratedPermissionShortcuts = persisted?.permissionShortcutDefaultsMigrated === true
+        const persisted = { ...(persistedState as Record<string, unknown> | undefined) }
+        for (const key of REMOVED_CONFIG_KEYS) delete persisted[key]
         const merged = {
           ...currentState,
           ...persisted,
-        }
+        } as ConfigStore
 
-        if (!migratedPermissionShortcuts) {
-          if (merged.shortcutApproveEnabled && merged.shortcutApprove === DEFAULT_GLOBAL_APPROVE_SHORTCUT) {
-            merged.shortcutApproveEnabled = false
-          }
-          if (merged.shortcutDenyEnabled && merged.shortcutDeny === DEFAULT_GLOBAL_DENY_SHORTCUT) {
-            merged.shortcutDenyEnabled = false
-          }
-          merged.shortcuts = migrateInWindowPermissionShortcuts(merged.shortcuts)
-        }
+        merged.shortcuts = (Array.isArray(merged.shortcuts) ? merged.shortcuts : currentState.shortcuts)
+          .filter((shortcut) => !REMOVED_SHORTCUT_ACTIONS.has(shortcut.action))
 
-        if (persisted?.shortcutSurfaceDefaultsMigrated !== true) {
+        if (persisted.shortcutSurfaceDefaultsMigrated !== true) {
           merged.shortcuts = migrateInWindowShortcutSurfaceDefaults(merged.shortcuts)
         }
 
-        if (persisted?.shortcutPlatformDefaultsMigrated !== true) {
+        if (persisted.shortcutPlatformDefaultsMigrated !== true) {
           merged.shortcuts = migrateInWindowShortcutPlatformDefaults(merged.shortcuts)
         }
 
-        if (persisted?.bootSoundDefaultMigrated !== true) {
+        if (persisted.bootSoundDefaultMigrated !== true) {
           const bootRule = merged.soundRules?.boot
           const canUseHeyBroDefault = !bootRule || bootRule.sound === 'default'
           if (canUseHeyBroDefault) {
@@ -780,9 +738,8 @@ export const useConfigStore = create<ConfigStore>()(
 
         return {
           ...merged,
-          detailPanelMaxHeight: persisted?.detailPanelMaxHeight ?? currentState.detailPanelMaxHeight,
-          sessionSilenceRules: Array.isArray(persisted?.sessionSilenceRules) ? persisted.sessionSilenceRules : currentState.sessionSilenceRules,
-          permissionShortcutDefaultsMigrated: true,
+          detailPanelMaxHeight: typeof persisted.detailPanelMaxHeight === 'number' ? persisted.detailPanelMaxHeight : currentState.detailPanelMaxHeight,
+          sessionSilenceRules: Array.isArray(persisted.sessionSilenceRules) ? persisted.sessionSilenceRules as SessionSilenceRule[] : currentState.sessionSilenceRules,
           shortcutSurfaceDefaultsMigrated: true,
           shortcutPlatformDefaultsMigrated: true,
           bootSoundDefaultMigrated: true,

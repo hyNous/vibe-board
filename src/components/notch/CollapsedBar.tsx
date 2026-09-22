@@ -11,6 +11,7 @@ import { sessionNeedsAttention } from '../../utils/islandInteraction'
 import { statusFromSession } from '../../utils/agentRunState'
 import { getAgentDisplayName } from '../../utils/sessionDisplay'
 import { RateLimitBar } from './RateLimitBar'
+import { HookHealthIndicator } from './HookHealthIndicator'
 import './CollapsedBar.css'
 
 interface CollapsedBarProps {
@@ -171,6 +172,7 @@ export function CollapsedBar({ sessions, panelState, rateLimits, usageSnapshots,
           )}
           <div className="collapsed-bar__icons">
             <span className="collapsed-bar__esc-hint">ESC</span>
+            <HookHealthIndicator />
             <button
               className="collapsed-bar__icon-btn"
               title={updateAvailable ? t('notch.updateAvailable', { version: updateAvailable }) : t('notch.settings')}

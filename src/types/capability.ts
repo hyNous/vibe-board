@@ -1,1 +1,1 @@
-export type IslandSettingsView = 'overview' | 'display' | 'behavior' | 'integration' | 'keys' | 'advanced'
+export type IslandSettingsView = 'overview' | 'display' | 'behavior' | 'advanced'

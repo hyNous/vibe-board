@@ -82,7 +82,6 @@ interface SkillV2Actions {
   removeProject: (projectId: string) => Promise<void>
   selectProject: (id: string | null) => Promise<void>
   scanProject: (projectId: string) => Promise<void>
-  loadDiagnosisIssues: () => Promise<void>
   runDiagnosis: () => Promise<void>
   updateSettings: (patch: Partial<SkillManagerSettings>) => Promise<void>
   setBusy: (action: string | null) => void
@@ -450,16 +449,6 @@ export const useSkillStoreV2 = create<SkillV2State & SkillV2Actions>((set, get) 
       if (get().runtimeEnvironmentId === runtimeEnvironmentId) {
         set({ projectDetailLoading: false })
       }
-    }
-  },
-  loadDiagnosisIssues: async () => {
-    const runtimeEnvironmentId = get().runtimeEnvironmentId
-    try {
-      const issues = await skillApiV2.listDiagnosisIssues()
-      if (get().runtimeEnvironmentId !== runtimeEnvironmentId) return
-      set({ issues })
-    } catch (e) {
-      set({ error: String(e) })
     }
   },
   runDiagnosis: async () => {

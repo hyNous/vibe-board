@@ -6,9 +6,12 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { SettingsSidebar } from './SettingsSidebar'
 import { UpdateDialog } from './UpdateDialog'
 import { GeneralSection } from './sections/GeneralSection'
-import { IslandSection } from './sections/IslandSection'
+import { AppearanceSection } from './sections/AppearanceSection'
+import { ShortcutsSection } from './sections/ShortcutsSection'
 import { UnifiedUsageSection } from './sections/UnifiedUsageSection'
 import { AgentMonitorSection } from './sections/AgentMonitorSection'
+import { DispatchSection } from './sections/DispatchSection'
+import { TutorialSection } from './sections/TutorialSection'
 import { AboutSection } from './sections/AboutSection'
 import { SkillManagerSection } from '../skills-v2/SkillManagerSection'
 import { SkillOverviewPage } from '../skills-v2/SkillOverviewPage'
@@ -40,7 +43,7 @@ export function SettingsApp({ onClose }: SettingsAppProps) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [updateMinimized, setUpdateMinimized] = useState(false)
   const SectionComponent = sections[activeSection] ?? GeneralSection
-  const isSkillManager = activeSection === 'skill-manager-v2' || activeSection === 'agents'
+  const isSkillManager = activeSection === 'skill-manager-v2'
   const contentClassName = `settings-content settings-scroll${isSkillManager ? ' settings-content--skill-manager' : ''}`
   // Guard both the in-app close button and the native close event while an
   // update is downloading. The native handler applies tray/exit behavior.
@@ -133,7 +136,7 @@ export function SettingsApp({ onClose }: SettingsAppProps) {
         onSelect={setActiveSection}
       />
       <div className={contentClassName}>
-        {activeSection !== 'skill-manager-v2' && activeSection !== 'agents' && (
+        {activeSection !== 'skill-manager-v2' && (
           <div className="settings-window-brand" aria-hidden="true">
             <span className="settings-window-brand__mark">
               <img src="/vibe-board-app-icon.png" alt="" />
@@ -181,10 +184,14 @@ export function SettingsApp({ onClose }: SettingsAppProps) {
                   setActiveSection('skill-manager-v2')
                 }}
               />
-            ) : activeSection === 'agents' ? (
-              <SkillManagerSection />
+            ) : activeSection === 'dispatch' ? (
+              <DispatchSection />
             ) : activeSection === 'island' ? (
-              <IslandSection activeView={activeIslandView} onViewChange={setActiveIslandView} />
+              <AppearanceSection activeView={activeIslandView} onViewChange={setActiveIslandView} />
+            ) : activeSection === 'shortcuts' ? (
+              <ShortcutsSection />
+            ) : activeSection === 'tutorial' ? (
+              <TutorialSection />
             ) : activeSection === 'about' ? (
               <AboutSection
                 updateStatus={updater.status}

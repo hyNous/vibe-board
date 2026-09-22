@@ -13,7 +13,6 @@ describe('configStore island defaults', () => {
     expect(state.completionCardHeight).toBe(200)
     expect(state.detailPanelMaxHeight).toBe(500)
     expect(state.showCacheTTL).toBe(true)
-    expect(state.jumpBeforeSend).toBe(true)
     expect(state.taskCompleteDwellSeconds).toBe(6)
     expect(state.idleTimeoutMinutes).toBe(5)
     expect(state.volume).toBe(70)
@@ -28,31 +27,54 @@ describe('configStore island defaults', () => {
     expect(state.islandAnimationScale).toBe(1)
   })
 
-  it('keeps safe tools in the default auto-approve list', () => {
-    expect(useConfigStore.getState().autoApproveTools).toEqual(
-      expect.arrayContaining([
-        'TaskCreate',
-        'TaskUpdate',
-        'TaskGet',
-        'TaskList',
-        'TaskOutput',
-        'TaskStop',
-        'EnterPlanMode',
-        'ExitPlanMode',
-        'TodoRead',
-        'TodoWrite',
-        'Read',
-      ]),
-    )
+  it('does not define the removed approval and jump-before-send settings', () => {
+    const state = useConfigStore.getState() as unknown as Record<string, unknown>
+
+    for (const key of [
+      'shortcutApprove',
+      'shortcutApproveEnabled',
+      'shortcutDeny',
+      'shortcutDenyEnabled',
+      'shortcutSkip',
+      'shortcutSkipEnabled',
+      'autoApproveTools',
+      'jumpBeforeSend',
+    ]) {
+      expect(key in state, key).toBe(false)
+    }
+    const actions = useConfigStore.getState().shortcuts.map((shortcut) => shortcut.action)
+    expect(actions).not.toContain('approve-action')
+    expect(actions).not.toContain('reject-action')
   })
 
-  it('keeps permission approval shortcuts opt-in by default', () => {
-    const state = useConfigStore.getState()
+  it('loads legacy configs with removed fields without writing them back', async () => {
+    localStorage.setItem('vibeboard-config', JSON.stringify({
+      state: {
+        shortcutApprove: 'CommandOrControl+Shift+P',
+        shortcutApproveEnabled: true,
+        shortcutDeny: 'CommandOrControl+Shift+R',
+        shortcutDenyEnabled: true,
+        shortcutSkip: 'CommandOrControl+Shift+S',
+        shortcutSkipEnabled: true,
+        autoApproveTools: ['Read', 'Write'],
+        jumpBeforeSend: false,
+        shortcuts: [
+          { action: 'toggle-panel', label: 'Toggle Panel', keys: 'CommandOrControl+Shift+I' },
+          { action: 'approve-action', label: 'Approve Action', keys: 'CommandOrControl+Shift+P' },
+        ],
+        language: 'zh',
+      },
+      version: 0,
+    }))
 
-    expect(state.shortcutApproveEnabled).toBe(false)
-    expect(state.shortcutDenyEnabled).toBe(false)
-    expect(state.shortcuts.find((shortcut) => shortcut.action === 'approve-action')?.keys).toBe('')
-    expect(state.shortcuts.find((shortcut) => shortcut.action === 'reject-action')?.keys).toBe('')
+    await useConfigStore.persist.rehydrate()
+
+    const state = useConfigStore.getState() as unknown as Record<string, unknown>
+    expect(state.language).toBe('zh')
+    for (const key of ['shortcutApprove', 'shortcutApproveEnabled', 'autoApproveTools', 'jumpBeforeSend']) {
+      expect(key in state, key).toBe(false)
+    }
+    expect(useConfigStore.getState().shortcuts.map((shortcut) => shortcut.action)).not.toContain('approve-action')
   })
 
   it('keeps low-frequency in-window shortcuts off by default', () => {

@@ -1,0 +1,176 @@
+.hook-health {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.hook-health__trigger {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 149, 0, 0.14);
+  color: #ff9500;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s;
+}
+
+.hook-health__trigger:hover {
+  background: rgba(255, 149, 0, 0.24);
+  color: #ffb340;
+}
+
+.hook-health__count {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 7px;
+  background: var(--island-danger-bg);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 14px;
+  text-align: center;
+}
+
+.hook-health__panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(420px, 78vw);
+  max-height: 250px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  background: rgba(28, 28, 30, 0.96);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  cursor: default;
+  overflow-y: auto;
+}
+
+.hook-health__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.hook-health__head strong {
+  color: var(--island-text);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.hook-health__close {
+  border: none;
+  background: transparent;
+  color: var(--island-text-secondary);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.hook-health__checks {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.hook-health__check {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.hook-health__status {
+  flex-shrink: 0;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 14px;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.hook-health__check--ok .hook-health__status {
+  background: #34c759;
+}
+
+.hook-health__check--warn .hook-health__status {
+  background: #ff9500;
+}
+
+.hook-health__check--error .hook-health__status {
+  background: #ff3b30;
+}
+
+.hook-health__check--info .hook-health__status {
+  background: #8e8e93;
+}
+
+.hook-health__check-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.hook-health__check-body strong {
+  color: var(--island-text);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.hook-health__check-body span {
+  color: var(--island-text-secondary);
+  font-size: 10px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.hook-health__notice {
+  color: #ffb340;
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.hook-health__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.hook-health__action {
+  padding: 4px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--island-text);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.hook-health__action:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.hook-health__action--primary {
+  border-color: transparent;
+  background: var(--island-accent, #008c8d);
+  color: #fff;
+  font-weight: 600;
+}

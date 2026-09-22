@@ -48,29 +48,7 @@ interface TipDisplayProps {
 
 export function TipDisplay({ show }: TipDisplayProps) {
   const globalShortcut = useConfigStore((s) => s.globalShortcut)
-  const shortcutApprove = useConfigStore((s) => s.shortcutApprove)
-  const shortcutApproveEnabled = useConfigStore((s) => s.shortcutApproveEnabled)
-  const shortcutDeny = useConfigStore((s) => s.shortcutDeny)
-  const shortcutDenyEnabled = useConfigStore((s) => s.shortcutDenyEnabled)
-  const shortcutSkip = useConfigStore((s) => s.shortcutSkip)
-  const shortcutSkipEnabled = useConfigStore((s) => s.shortcutSkipEnabled)
-  const tips = useMemo(() => buildTips({
-    globalShortcut,
-    shortcutApprove,
-    shortcutApproveEnabled,
-    shortcutDeny,
-    shortcutDenyEnabled,
-    shortcutSkip,
-    shortcutSkipEnabled,
-  }), [
-    globalShortcut,
-    shortcutApprove,
-    shortcutApproveEnabled,
-    shortcutDeny,
-    shortcutDenyEnabled,
-    shortcutSkip,
-    shortcutSkipEnabled,
-  ])
+  const tips = useMemo(() => buildTips({ globalShortcut }), [globalShortcut])
   const tip = useTipRotation(show, tips)
   if (!show || !tip) return null
 
