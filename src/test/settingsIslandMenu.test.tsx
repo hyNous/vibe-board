@@ -82,6 +82,7 @@ const providerFixture: UsageSnapshot = {
     detail: '',
     sessionsScanned: null,
     tokenEvents: null,
+    pricingEffectiveDate: null,
     periods: [],
   },
   enabled: true,

@@ -1,16 +1,20 @@
-import { useCallback, useEffect, useState } from 'react'
+import { Fragment, useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { UsageProvidersPanel } from './UsageProvidersPanel'
 import {
   getUsageDashboard,
+  getUsageHistoryScanStatus,
   isTauri,
+  startUsageHistoryScan,
+  type UsageCost,
   type UsageDashboard,
+  type UsageHistoryScanStatus,
   type UsagePeriod,
   type UsageSnapshot,
   type UsageTokens,
 } from '../../../services/tauriApi'
 import type { UsageRateWindow } from '../../../types/agent'
-import { formatTokens } from '../../../utils/tokens'
+import { formatTokens, formatUsageCost } from '../../../utils/tokens'
 import './UnifiedUsageSection.css'
 
 type UsagePeriodId = 'today' | 'week' | 'month'
@@ -108,6 +112,25 @@ function MetricValue({ value, unknown }: { value: number | null | undefined; unk
   return <>{value == null ? unknown : formatTokens(value)}</>
 }
 
+/**
+ * Every equivalent cost is an estimate: the amount comes from the built-in
+ * price table, `≥` marks a lower bound (some models are unpriced), and an
+ * unverified price entry says so. Missing prices are Unknown, never 0.
+ */
+function CostValue({ cost, label, unknown }: { cost: UsageCost | null; label: string; unknown: string }) {
+  if (!cost) return <>{unknown}</>
+  return (
+    <>
+      {cost.complete ? '' : '≥ '}
+      {formatUsageCost(cost.amount, cost.currency)}
+      <span className="unified-usage__cost-estimate" title={label}>
+        {' '}
+        {label}
+      </span>
+    </>
+  )
+}
+
 export function UnifiedUsageSection() {
   const { t } = useTranslation()
   const unknown = t('settings.usagePage.unknown', { defaultValue: 'Unknown' })
@@ -115,6 +138,7 @@ export function UnifiedUsageSection() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [period, setPeriod] = useState<UsagePeriodId>('today')
+  const [scan, setScan] = useState<UsageHistoryScanStatus | null>(null)
 
   const loadUsage = useCallback(async () => {
     if (!isTauri()) {
@@ -132,6 +156,15 @@ export function UnifiedUsageSection() {
     }
   }, [])
 
+  const startScan = useCallback(async () => {
+    if (!isTauri()) return
+    try {
+      await startUsageHistoryScan()
+    } catch (err) {
+      setError(readableError(err))
+    }
+  }, [])
+
   useEffect(() => {
     const id = window.setTimeout(() => {
       void loadUsage()
@@ -139,7 +172,42 @@ export function UnifiedUsageSection() {
     return () => window.clearTimeout(id)
   }, [loadUsage])
 
+  useEffect(() => {
+    if (!isTauri()) return
+    let cancelled = false
+    let unlisten: (() => void) | undefined
+
+    getUsageHistoryScanStatus()
+      .then((status) => {
+        if (!cancelled) setScan(status)
+      })
+      .catch((err) => console.error('[usage] scan status:', err))
+
+    import('@tauri-apps/api/event')
+      .then(({ listen }) => listen<UsageHistoryScanStatus>('usage-history-scan', (event) => {
+        setScan(event.payload)
+        if (!event.payload.scanning) void loadUsage()
+      }))
+      .then((stop) => {
+        if (cancelled) stop()
+        else unlisten = stop
+      })
+      .catch((err) => console.error('[usage] listen usage-history-scan:', err))
+
+    void startScan()
+
+    return () => {
+      cancelled = true
+      unlisten?.()
+    }
+  }, [loadUsage, startScan])
+
   const providers = dashboard?.providers ?? []
+  const pricingEffectiveDate = dashboard?.pricingEffectiveDate
+    ?? providers
+      .map((provider) => provider.history.pricingEffectiveDate)
+      .find((date): date is string => Boolean(date))
+  const costLabel = t('settings.usagePage.estimatedShort', { defaultValue: 'estimated' })
 
   return (
     <section className="unified-usage">
@@ -148,7 +216,15 @@ export function UnifiedUsageSection() {
           <h2>{t('settings.usage', { defaultValue: 'Usage' })}</h2>
           <p>{t('settings.usagePage.subtitle', { defaultValue: 'Remaining quota and local token usage per provider; missing values stay Unknown.' })}</p>
         </div>
-        <button type="button" className="agent-monitor__refresh" disabled={loading} onClick={() => void loadUsage()}>
+        <button
+          type="button"
+          className="agent-monitor__refresh"
+          disabled={loading}
+          onClick={() => {
+            void loadUsage()
+            void startScan()
+          }}
+        >
           {t('settings.refresh', { defaultValue: 'Refresh' })}
         </button>
       </header>
@@ -202,23 +278,36 @@ export function UnifiedUsageSection() {
         <div className="unified-usage__provider-head">
           <div>
             <h3>{t('settings.usagePage.usageCostTitle', { defaultValue: 'Usage & Cost' })}</h3>
-            <p>{t('settings.usagePage.usageCostDesc', { defaultValue: 'Token usage from local data. Cost estimates are not available yet.' })}</p>
+            <p>{t('settings.usagePage.usageCostDesc', { defaultValue: 'Token usage from local session logs, with estimated equivalent cost.' })}</p>
           </div>
-          <div className="unified-usage__tabs unified-usage__tabs--inline" role="tablist" aria-label={t('settings.usagePage.usageCostTitle', { defaultValue: 'Usage & Cost' })}>
-            {USAGE_PERIODS.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                role="tab"
-                aria-selected={period === item.id}
-                className={period === item.id ? 'unified-usage__tab unified-usage__tab--active' : 'unified-usage__tab'}
-                onClick={() => setPeriod(item.id)}
-              >
-                {t(item.labelKey, { defaultValue: item.defaultLabel })}
-              </button>
-            ))}
+          <div className="unified-usage__cost-head">
+            {scan?.scanning && (
+              <span className="unified-usage__provider-loading" data-testid="usage-scan-progress">
+                {t('settings.usagePage.scanning', { defaultValue: 'Collecting usage history…' })}
+                {scan.filesTotal > 0 ? ` ${scan.filesScanned}/${scan.filesTotal}` : ''}
+              </span>
+            )}
+            <div className="unified-usage__tabs unified-usage__tabs--inline" role="tablist" aria-label={t('settings.usagePage.usageCostTitle', { defaultValue: 'Usage & Cost' })}>
+              {USAGE_PERIODS.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={period === item.id}
+                  className={period === item.id ? 'unified-usage__tab unified-usage__tab--active' : 'unified-usage__tab'}
+                  onClick={() => setPeriod(item.id)}
+                >
+                  {t(item.labelKey, { defaultValue: item.defaultLabel })}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
+        {scan?.error && (
+          <div className="unified-usage__provider-error" data-testid="usage-scan-error">
+            {t('settings.usagePage.scanFailed', { defaultValue: 'Usage history scan failed' })}: {scan.error}
+          </div>
+        )}
         <div className="unified-usage__provider-table-wrap">
           <table className="unified-usage__provider-table">
             <thead>
@@ -229,8 +318,8 @@ export function UnifiedUsageSection() {
                 <th>{t('settings.usagePage.output', { defaultValue: 'Output' })}</th>
                 <th>{t('settings.usagePage.cacheRead', { defaultValue: 'Cache read' })}</th>
                 <th>{t('settings.usagePage.cacheWrite', { defaultValue: 'Cache write' })}</th>
-                <th>{t('settings.usagePage.sessions', { defaultValue: 'Sessions' })}</th>
-                <th>{t('settings.usagePage.cost', { defaultValue: 'Cost' })}</th>
+                <th>{t('settings.usagePage.requests', { defaultValue: 'Requests' })}</th>
+                <th>{t('settings.usagePage.costEstimatedHeader', { defaultValue: 'Estimated cost' })}</th>
               </tr>
             </thead>
             <tbody>
@@ -245,30 +334,63 @@ export function UnifiedUsageSection() {
                       .replace('{{count}}', String(snapshot.history.sessionsScanned))
                     : null,
                   snapshot.history.tokenEvents != null
-                    ? t('settings.usagePage.tokenEvents', { defaultValue: '{{count}} token events', count: snapshot.history.tokenEvents })
+                    ? t('settings.usagePage.tokenEvents', { defaultValue: '{{count}} usage events', count: snapshot.history.tokenEvents })
                       .replace('{{count}}', String(snapshot.history.tokenEvents))
                     : null,
                 ].filter(Boolean).join(' · ')
                 return (
-                  <tr key={snapshot.provider}>
-                    <td>
-                      <strong>{snapshot.label}</strong>
-                      {historyDetail && <span className="unified-usage__detail">{historyDetail}</span>}
-                    </td>
-                    <td><MetricValue value={tokens ? tokenTotal(tokens) : null} unknown={unknown} /></td>
-                    <td><MetricValue value={tokens?.input} unknown={unknown} /></td>
-                    <td><MetricValue value={tokens?.output} unknown={unknown} /></td>
-                    <td><MetricValue value={tokens?.cacheRead} unknown={unknown} /></td>
-                    <td><MetricValue value={tokens?.cacheCreate} unknown={unknown} /></td>
-                    <td>{entry?.sessions == null ? unknown : entry.sessions}</td>
-                    <td title={t('settings.usagePage.costPending', { defaultValue: 'Cost estimates are not available yet.' })}>{unknown}</td>
-                  </tr>
+                  <Fragment key={snapshot.provider}>
+                    <tr>
+                      <td>
+                        <strong>{snapshot.label}</strong>
+                        {historyDetail && <span className="unified-usage__detail">{historyDetail}</span>}
+                        {entry && entry.unpricedModels.length > 0 && (
+                          <span className="unified-usage__detail unified-usage__detail--warning">
+                            {t('settings.usagePage.unpricedModels', { defaultValue: 'Not in price table' })}: {entry.unpricedModels.join(', ')}
+                          </span>
+                        )}
+                      </td>
+                      <td><MetricValue value={tokens ? tokenTotal(tokens) : null} unknown={unknown} /></td>
+                      <td><MetricValue value={tokens?.input} unknown={unknown} /></td>
+                      <td><MetricValue value={tokens?.output} unknown={unknown} /></td>
+                      <td><MetricValue value={tokens?.cacheRead} unknown={unknown} /></td>
+                      <td><MetricValue value={tokens?.cacheCreate} unknown={unknown} /></td>
+                      <td>{entry?.requests == null ? unknown : entry.requests}</td>
+                      <td><CostValue cost={entry?.cost ?? null} label={costLabel} unknown={unknown} /></td>
+                    </tr>
+                    {entry?.models.map((model) => (
+                      <tr
+                        key={`${snapshot.provider}:${model.model}`}
+                        className="unified-usage__model-row"
+                        data-testid={`usage-model-${model.model}`}
+                      >
+                        <td><span className="unified-usage__model-name">{model.model}</span></td>
+                        <td><MetricValue value={tokenTotal(model.tokens)} unknown={unknown} /></td>
+                        <td><MetricValue value={model.tokens.input} unknown={unknown} /></td>
+                        <td><MetricValue value={model.tokens.output} unknown={unknown} /></td>
+                        <td><MetricValue value={model.tokens.cacheRead} unknown={unknown} /></td>
+                        <td><MetricValue value={model.tokens.cacheCreate} unknown={unknown} /></td>
+                        <td>{model.requests}</td>
+                        <td><CostValue cost={model.cost} label={costLabel} unknown={unknown} /></td>
+                      </tr>
+                    ))}
+                  </Fragment>
                 )
               })}
             </tbody>
           </table>
         </div>
-        <p className="unified-usage__cost-note">{t('settings.usagePage.costPending', { defaultValue: 'Cost estimates are not available yet.' })}</p>
+        <p className="unified-usage__cost-note">
+          <strong>{t('settings.usagePage.estimated', { defaultValue: 'Estimated' })}</strong>
+          <span>
+            {t('settings.usagePage.costNote', {
+              defaultValue: 'Amounts are estimated from local session logs and the built-in price table; unpriced models stay Unknown.',
+            })}
+            {pricingEffectiveDate
+              ? ` ${t('settings.usagePage.priceEffective', { defaultValue: 'Price table effective' })} ${pricingEffectiveDate}.`
+              : ''}
+          </span>
+        </p>
       </section>
 
       <UsageProvidersPanel />

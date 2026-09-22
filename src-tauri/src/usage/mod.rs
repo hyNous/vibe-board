@@ -12,6 +12,7 @@ pub mod antigravity;
 pub mod catalog;
 pub mod claude;
 pub mod codex;
+pub mod history;
 pub mod normalize;
 pub mod opencode;
 
@@ -58,13 +59,39 @@ pub struct UsageCredential {
     pub can_authorize: bool,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UsageTokens {
     pub input: u64,
     pub output: u64,
     pub cache_read: u64,
     pub cache_create: u64,
+}
+
+/// Equivalent cost for a model or a period, always presented as an estimate.
+/// `complete` is false when some usage in the period has no price entry, so the
+/// UI can mark the amount as a lower bound instead of pretending it is exact.
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UsageCost {
+    pub amount: f64,
+    pub currency: String,
+    pub effective_date: Option<String>,
+    /// False when the maintainer has not yet confirmed this price entry.
+    pub verified: bool,
+    pub complete: bool,
+}
+
+/// One model's contribution to a period.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UsageModelPeriod {
+    pub model: String,
+    pub tokens: UsageTokens,
+    pub requests: u64,
+    /// `None` means the model is not in the built-in price table, so the cost is
+    /// Unknown (never 0).
+    pub cost: Option<UsageCost>,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -74,7 +101,12 @@ pub struct UsagePeriod {
     pub id: String,
     /// `None` means the provider cannot report this period — the UI shows Unknown.
     pub tokens: Option<UsageTokens>,
-    pub sessions: Option<usize>,
+    pub requests: Option<u64>,
+    pub cost: Option<UsageCost>,
+    pub models: Vec<UsageModelPeriod>,
+    /// Models seen in this period that are missing from the price table; their
+    /// cost is Unknown and the period estimate is only a lower bound.
+    pub unpriced_models: Vec<String>,
 }
 
 #[derive(Debug, Clone, Default, serde::Serialize)]
@@ -85,6 +117,7 @@ pub struct UsageHistory {
     pub detail: String,
     pub sessions_scanned: Option<usize>,
     pub token_events: Option<usize>,
+    pub pricing_effective_date: Option<String>,
     pub periods: Vec<UsagePeriod>,
 }
 
@@ -108,7 +141,10 @@ pub(crate) fn unknown_history(detail: impl Into<String>) -> UsageHistory {
             .map(|id| UsagePeriod {
                 id: id.to_string(),
                 tokens: None,
-                sessions: None,
+                requests: None,
+                cost: None,
+                models: Vec::new(),
+                unpriced_models: Vec::new(),
             })
             .collect(),
         ..UsageHistory::default()
@@ -352,6 +388,8 @@ pub async fn load_latest_usage_rate_limits() -> Option<RateLimitInfo> {
 pub struct UsageDashboard {
     pub providers: Vec<UsageSnapshot>,
     pub computed_at: i64,
+    /// When the built-in price table used for the cost estimates took effect.
+    pub pricing_effective_date: Option<String>,
 }
 
 #[tauri::command]
@@ -382,6 +420,7 @@ pub async fn get_usage_dashboard(state: State<'_, AppState>) -> Result<UsageDash
     Ok(UsageDashboard {
         providers,
         computed_at: chrono::Utc::now().timestamp_millis(),
+        pricing_effective_date: history::global_pricing_effective_date(),
     })
 }
 
@@ -437,7 +476,7 @@ mod tests {
     use std::fs;
     use std::path::Path;
 
-    const USAGE_SOURCE_FILES: [&str; 7] = [
+    const USAGE_SOURCE_FILES: [&str; 11] = [
         "mod.rs",
         "normalize.rs",
         "codex.rs",
@@ -445,6 +484,10 @@ mod tests {
         "opencode.rs",
         "antigravity.rs",
         "catalog.rs",
+        "history/mod.rs",
+        "history/scanner.rs",
+        "history/store.rs",
+        "history/pricing.rs",
     ];
 
     /// M8a network guard: new usage code must not add HTTP clients. The one

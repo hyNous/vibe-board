@@ -2,22 +2,30 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import unifiedUsageSource from '../components/settings/sections/UnifiedUsageSection.tsx?raw'
 import usageProvidersPanelSource from '../components/settings/sections/UsageProvidersPanel.tsx?raw'
-import type { UsageDashboard, UsageHistory, UsageSnapshot } from '../services/tauriApi'
+import type { UsageDashboard, UsageHistory, UsageHistoryScanStatus, UsageSnapshot } from '../services/tauriApi'
 
 // The Usage view reads one normalized dashboard command. Stub the module so the
 // assertions below are about how the section renders snapshot fields, not about
 // the Tauri runtime. UsageProvidersPanel shares the same module.
 const getUsageDashboard = vi.fn<() => Promise<UsageDashboard>>()
 const listUsageProviders = vi.fn(() => Promise.resolve([] as UsageSnapshot[]))
+const startUsageHistoryScan = vi.fn(() => Promise.resolve())
+const getUsageHistoryScanStatus = vi.fn<() => Promise<UsageHistoryScanStatus>>()
 
 vi.mock('../services/tauriApi', () => ({
   isTauri: () => true,
   getUsageDashboard: () => getUsageDashboard(),
   listUsageProviders: () => listUsageProviders(),
+  startUsageHistoryScan: () => startUsageHistoryScan(),
+  getUsageHistoryScanStatus: () => getUsageHistoryScanStatus(),
   getConfig: () => Promise.resolve({}),
   updateConfig: () => Promise.resolve(),
   authorizeUsageProvider: () => Promise.resolve(),
   openSystemPath: () => Promise.resolve(),
+}))
+
+vi.mock('@tauri-apps/api/event', () => ({
+  listen: () => Promise.resolve(() => {}),
 }))
 
 vi.mock('react-i18next', () => ({
@@ -27,6 +35,21 @@ vi.mock('react-i18next', () => ({
   }),
 }))
 
+function idleScanStatus(): UsageHistoryScanStatus {
+  return {
+    scanning: false,
+    filesTotal: 0,
+    filesScanned: 0,
+    filesParsed: 0,
+    filesSkipped: 0,
+    oversizedLines: 0,
+    events: 0,
+    error: null,
+    startedAt: null,
+    finishedAt: null,
+  }
+}
+
 function emptyHistory(): UsageHistory {
   return {
     available: false,
@@ -34,6 +57,7 @@ function emptyHistory(): UsageHistory {
     detail: '',
     sessionsScanned: null,
     tokenEvents: null,
+    pricingEffectiveDate: null,
     periods: [],
   }
 }
@@ -68,7 +92,9 @@ describe('UnifiedUsageSection rendering', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     listUsageProviders.mockResolvedValue([])
-    getUsageDashboard.mockResolvedValue({ providers: [], computedAt: Date.now() })
+    getUsageDashboard.mockResolvedValue({ providers: [], computedAt: Date.now(), pricingEffectiveDate: null })
+    getUsageHistoryScanStatus.mockResolvedValue(idleScanStatus())
+    startUsageHistoryScan.mockResolvedValue()
   })
 
   it('renders the Now block purely from normalized snapshot fields', async () => {
@@ -86,6 +112,7 @@ describe('UnifiedUsageSection rendering', () => {
         }],
       })],
       computedAt: Date.now(),
+      pricingEffectiveDate: null,
     })
 
     await renderUsage()
@@ -99,32 +126,69 @@ describe('UnifiedUsageSection rendering', () => {
     expect(within(row).getByText('Connected')).toBeInTheDocument()
   })
 
-  it('switches the Usage & Cost period and shows the token breakdown', async () => {
+  it('switches the Usage & Cost period and shows tokens, requests, and estimated cost', async () => {
     const history: UsageHistory = {
       available: true,
       source: 'Codex local session logs',
-      detail: 'Aggregated from 1 Codex session file(s) with token events',
+      detail: 'Aggregated from 1 local session log(s)',
       sessionsScanned: 1,
       tokenEvents: 2,
+      pricingEffectiveDate: '2025-10-15',
       periods: [
-        { id: 'today', tokens: { input: 1000, output: 200, cacheRead: 100, cacheCreate: 0 }, sessions: 1 },
-        { id: 'week', tokens: { input: 2000, output: 400, cacheRead: 200, cacheCreate: 0 }, sessions: 2 },
-        { id: 'month', tokens: { input: 3000, output: 600, cacheRead: 300, cacheCreate: 0 }, sessions: 3 },
+        {
+          id: 'today',
+          tokens: { input: 1000, output: 200, cacheRead: 100, cacheCreate: 0 },
+          requests: 1,
+          cost: { amount: 1.23, currency: 'USD', effectiveDate: '2025-09-15', verified: false, complete: true },
+          models: [{
+            model: 'gpt-5-codex',
+            tokens: { input: 1000, output: 200, cacheRead: 100, cacheCreate: 0 },
+            requests: 1,
+            cost: { amount: 1.23, currency: 'USD', effectiveDate: '2025-09-15', verified: false, complete: true },
+          }],
+          unpricedModels: [],
+        },
+        {
+          id: 'week',
+          tokens: { input: 2000, output: 400, cacheRead: 200, cacheCreate: 0 },
+          requests: 2,
+          cost: { amount: 2.46, currency: 'USD', effectiveDate: '2025-09-15', verified: false, complete: true },
+          models: [],
+          unpricedModels: [],
+        },
+        {
+          id: 'month',
+          tokens: { input: 3000, output: 600, cacheRead: 300, cacheCreate: 0 },
+          requests: 3,
+          cost: { amount: 3.69, currency: 'USD', effectiveDate: '2025-09-15', verified: false, complete: true },
+          models: [],
+          unpricedModels: [],
+        },
       ],
     }
     getUsageDashboard.mockResolvedValue({
       providers: [snapshotProvider({ history })],
       computedAt: Date.now(),
+      pricingEffectiveDate: null,
     })
 
     await renderUsage()
 
     const cost = await screen.findByTestId('usage-cost')
-    expect(await within(cost).findByText('1.3K')).toBeInTheDocument()
+    await within(cost).findByRole('row', { name: /Codex/ })
+    // The provider row and its per-model row both carry the period totals.
+    expect(within(cost).getAllByText('1.3K').length).toBeGreaterThanOrEqual(2)
+    expect(within(cost).getAllByText(/\$1\.23/).length).toBeGreaterThanOrEqual(2)
+    expect(within(cost).getAllByText('estimated').length).toBeGreaterThanOrEqual(2)
     expect(within(cost).getByText(/Codex local session logs/)).toBeInTheDocument()
+    expect(within(cost).getByText(/Price table effective 2025-10-15/)).toBeInTheDocument()
+    // Per-model breakdown for the priced model.
+    const modelRow = within(cost).getByTestId('usage-model-gpt-5-codex')
+    expect(within(modelRow).getByText('gpt-5-codex')).toBeInTheDocument()
 
     fireEvent.click(within(cost).getByRole('tab', { name: 'This Week' }))
     expect(within(cost).getByText('2.6K')).toBeInTheDocument()
+    expect(within(cost).getByText(/\$2\.46/)).toBeInTheDocument()
 
     fireEvent.click(within(cost).getByRole('tab', { name: 'This Month' }))
     expect(within(cost).getByText('3.9K')).toBeInTheDocument()
@@ -140,6 +204,7 @@ describe('UnifiedUsageSection rendering', () => {
         history: emptyHistory(),
       })],
       computedAt: Date.now(),
+      pricingEffectiveDate: '2025-10-15',
     })
 
     await renderUsage()
@@ -153,6 +218,76 @@ describe('UnifiedUsageSection rendering', () => {
     const costRow = await within(cost).findByRole('row', { name: /Codex/ })
     expect(within(costRow).getAllByText('Unknown').length).toBeGreaterThanOrEqual(7)
     expect(within(costRow).queryByText('0')).not.toBeInTheDocument()
+    // The price-table effective date is visible even before any usage exists.
+    expect(within(cost).getByText(/Price table effective 2025-10-15/)).toBeInTheDocument()
+  })
+
+  it('labels models missing from the price table and never prices them as zero', async () => {
+    const history: UsageHistory = {
+      available: true,
+      source: 'Codex local session logs',
+      detail: '',
+      sessionsScanned: 1,
+      tokenEvents: 2,
+      pricingEffectiveDate: '2025-10-15',
+      periods: [{
+        id: 'today',
+        tokens: { input: 1500, output: 220, cacheRead: 100, cacheCreate: 0 },
+        requests: 2,
+        cost: { amount: 2.25, currency: 'USD', effectiveDate: '2025-10-15', verified: false, complete: false },
+        models: [
+          {
+            model: 'gpt-5-codex',
+            tokens: { input: 1000, output: 200, cacheRead: 100, cacheCreate: 0 },
+            requests: 1,
+            cost: { amount: 2.25, currency: 'USD', effectiveDate: '2025-09-15', verified: false, complete: true },
+          },
+          {
+            model: 'gpt-5.2-codex-unreleased',
+            tokens: { input: 500, output: 20, cacheRead: 0, cacheCreate: 0 },
+            requests: 1,
+            cost: null,
+          },
+        ],
+        unpricedModels: ['gpt-5.2-codex-unreleased'],
+      }],
+    }
+    getUsageDashboard.mockResolvedValue({
+      providers: [snapshotProvider({ history })],
+      computedAt: Date.now(),
+      pricingEffectiveDate: null,
+    })
+
+    await renderUsage()
+
+    const cost = await screen.findByTestId('usage-cost')
+    await within(cost).findByText(/Not in price table: gpt-5\.2-codex-unreleased/)
+    // The period total is a lower bound because one model has no price entry.
+    expect(within(cost).getByText(/≥ \$2\.25/)).toBeInTheDocument()
+    const unknownModel = within(cost).getByTestId('usage-model-gpt-5.2-codex-unreleased')
+    expect(within(unknownModel).getByText('Unknown')).toBeInTheDocument()
+    expect(within(unknownModel).queryByText(/\$0\.00/)).not.toBeInTheDocument()
+  })
+
+  it('shows the background scan progress while usage history is being collected', async () => {
+    getUsageHistoryScanStatus.mockResolvedValue({
+      ...idleScanStatus(),
+      scanning: true,
+      filesTotal: 12,
+      filesScanned: 4,
+    })
+    getUsageDashboard.mockResolvedValue({
+      providers: [snapshotProvider()],
+      computedAt: Date.now(),
+      pricingEffectiveDate: null,
+    })
+
+    await renderUsage()
+
+    const progress = await screen.findByTestId('usage-scan-progress')
+    expect(progress).toHaveTextContent('Collecting usage history')
+    expect(progress).toHaveTextContent('4/12')
+    expect(startUsageHistoryScan).toHaveBeenCalled()
   })
 
   it('keeps provider-specific branching out of the usage page components', () => {

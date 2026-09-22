@@ -1,5 +1,4 @@
-/* Vibe Board — Token formatting and cost estimation utilities */
-import type { TokenUsage } from '../types/agent'
+/* Vibe Board — Token formatting and equivalent-cost display utilities */
 
 export function formatTokens(n: number): string {
   if (n === 0) return '0'
@@ -8,51 +7,25 @@ export function formatTokens(n: number): string {
   return `${(n / 1_000_000).toFixed(2)}M`
 }
 
-export interface ModelPricing {
-  label: string
-  inputPer1M: number
-  outputPer1M: number
-  cacheReadPer1M: number
-}
-
-export const MODEL_PRICING: Record<string, ModelPricing> = {
-  'claude-sonnet-4': {
-    label: 'Claude Sonnet 4',
-    inputPer1M: 3.0,
-    outputPer1M: 15.0,
-    cacheReadPer1M: 0.3,
-  },
-  'claude-opus-4': {
-    label: 'Claude Opus 4',
-    inputPer1M: 15.0,
-    outputPer1M: 75.0,
-    cacheReadPer1M: 1.5,
-  },
-  'gpt-4o': {
-    label: 'GPT-4o',
-    inputPer1M: 2.5,
-    outputPer1M: 10.0,
-    cacheReadPer1M: 1.25,
-  },
-  'gemini-2.5-pro': {
-    label: 'Gemini 2.5 Pro',
-    inputPer1M: 1.25,
-    outputPer1M: 10.0,
-    cacheReadPer1M: 0.315,
-  },
-}
-
-export function estimateCost(tokens: TokenUsage, modelId: string): number {
-  const pricing = MODEL_PRICING[modelId] ?? MODEL_PRICING['claude-sonnet-4']
-  return (
-    (tokens.input * pricing.inputPer1M) / 1_000_000 +
-    (tokens.output * pricing.outputPer1M) / 1_000_000 +
-    (tokens.cacheRead * pricing.cacheReadPer1M) / 1_000_000
-  )
-}
-
 export function formatCost(cost: number): string {
   if (cost === 0) return '$0.00'
   if (cost < 0.01) return '<$0.01'
   return `$${cost.toFixed(2)}`
+}
+
+/**
+ * Formats an amount in the currency reported by the built-in price table.
+ * Unknown models never reach this function — the caller shows Unknown instead.
+ */
+export function formatUsageCost(amount: number, currency: string): string {
+  if (currency.toUpperCase() === 'USD') return formatCost(amount)
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: 'currency',
+      currency,
+      maximumFractionDigits: 2,
+    }).format(amount)
+  } catch {
+    return `${amount.toFixed(2)} ${currency}`
+  }
 }

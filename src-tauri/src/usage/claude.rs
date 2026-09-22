@@ -3,8 +3,8 @@
 
 use super::normalize::{provider_rate_limits, UsageRateLimitSnapshot};
 use super::{
-    build_snapshot, resolve_state, unknown_history, UsageAuthStatus, UsageCredential, UsageFetch,
-    UsageProvider, UsageSnapshot,
+    build_snapshot, resolve_state, UsageAuthStatus, UsageCredential, UsageFetch, UsageProvider,
+    UsageSnapshot,
 };
 use crate::hooks::session_store::RateLimitInfo;
 use futures_util::future::BoxFuture;
@@ -73,7 +73,9 @@ impl UsageProvider for ClaudeUsageProvider {
 
             UsageFetch {
                 rate_limits: snapshot.map(|snapshot| snapshot.rate_limits),
-                history: unknown_history("No local Claude Code token history reader yet"),
+                // Token usage comes from the persisted daily aggregate; the
+                // scanner runs on its own background thread (M8b).
+                history: super::history::provider_history("claude-code"),
                 detail,
                 error: None,
                 ..UsageFetch::default()

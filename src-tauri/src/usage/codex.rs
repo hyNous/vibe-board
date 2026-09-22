@@ -6,8 +6,8 @@ use super::normalize::{
     usage_snapshot_within_age, UsageRateLimitSnapshot,
 };
 use super::{
-    build_snapshot, resolve_state, UsageAuthStatus, UsageCredential, UsageFetch, UsageHistory,
-    UsagePeriod, UsageProvider, UsageSnapshot, UsageTokens,
+    build_snapshot, resolve_state, UsageAuthStatus, UsageCredential, UsageFetch, UsageProvider,
+    UsageSnapshot,
 };
 use crate::hooks::session_store::RateLimitInfo;
 use futures_util::future::BoxFuture;
@@ -24,11 +24,6 @@ use tokio::sync::Mutex as TokioMutex;
 
 const CODEX_USAGE_LIVE_CACHE_TTL: Duration = Duration::from_secs(300);
 const CODEX_USAGE_LIVE_FAILURE_TTL: Duration = Duration::from_secs(60);
-const CODEX_DAYS7_SECONDS: i64 = 7 * 86_400;
-const CODEX_DAYS30_SECONDS: i64 = 30 * 86_400;
-/// Stable, path-free label for the token usage data source so the UI never
-/// exposes the user's absolute sessions directory.
-const CODEX_TOKEN_SOURCE_LABEL: &str = "Codex local session logs";
 
 pub struct CodexUsageProvider;
 
@@ -86,7 +81,9 @@ impl UsageProvider for CodexUsageProvider {
 
             UsageFetch {
                 rate_limits: quota.map(|snapshot| snapshot.rate_limits),
-                history: load_codex_token_usage_history(),
+                // Token usage comes from the persisted daily aggregate; the
+                // scanner runs on its own background thread (M8b).
+                history: super::history::provider_history("codex"),
                 detail,
                 error,
                 ..UsageFetch::default()
@@ -442,14 +439,19 @@ fn codex_window_pair(
     }
 }
 
-// ── Local token usage aggregation ────────────────────────────────────────
+// ── Local token usage parsing ────────────────────────────────────────────
+//
+// The incremental scanner (`usage::history`) owns file discovery, caching,
+// persistence, and the settlement windows. These helpers only turn one rollout
+// line into cache-split token counts and apply the per-turn / cumulative delta
+// rule while a file is being read.
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-struct CodexTokenCounts {
-    input: u64,
-    output: u64,
-    cache_read: u64,
-    cache_create: u64,
+pub(crate) struct CodexTokenCounts {
+    pub(crate) input: u64,
+    pub(crate) output: u64,
+    pub(crate) cache_read: u64,
+    pub(crate) cache_create: u64,
 }
 
 /// Per-event token usage parsed from a Codex rollout line. Current Codex
@@ -457,262 +459,53 @@ struct CodexTokenCounts {
 /// cumulative session totals (`total_token_usage`); older formats expose only
 /// one of the two.
 #[derive(Debug, Clone, Copy, Default)]
-struct CodexTokenCountsEvent {
+pub(crate) struct CodexTokenCountsEvent {
     /// Real per-turn usage from `payload.info.last_token_usage`, when present.
-    per_turn: Option<CodexTokenCounts>,
+    pub(crate) per_turn: Option<CodexTokenCounts>,
     /// Cumulative session totals from `payload.info.total_token_usage` (or the
     /// legacy `payload.tokens` shape), when present.
-    cumulative: Option<CodexTokenCounts>,
+    pub(crate) cumulative: Option<CodexTokenCounts>,
 }
 
-#[derive(Debug, Clone, Default)]
-struct CodexTokenBucket {
-    input: u64,
-    output: u64,
-    cache_read: u64,
-    cache_create: u64,
-    sessions: usize,
-}
-
-#[derive(Debug, Clone, Default)]
-struct CodexTokenUsageSummary {
-    today: CodexTokenBucket,
-    days7: CodexTokenBucket,
-    days30: CodexTokenBucket,
-    source: String,
-    sessions_scanned: usize,
-    token_events: usize,
-    available: bool,
-    detail: String,
-}
-
-fn load_codex_token_usage_history() -> UsageHistory {
-    token_usage_history_from_summary(&load_codex_token_usage_summary())
-}
-
-fn token_usage_history_from_summary(summary: &CodexTokenUsageSummary) -> UsageHistory {
-    let period = |id: &str, bucket: &CodexTokenBucket| UsagePeriod {
-        id: id.to_string(),
-        tokens: summary.available.then_some(UsageTokens {
-            input: bucket.input,
-            output: bucket.output,
-            cache_read: bucket.cache_read,
-            cache_create: bucket.cache_create,
-        }),
-        sessions: summary.available.then_some(bucket.sessions),
-    };
-
-    UsageHistory {
-        available: summary.available,
-        source: Some(if summary.source.is_empty() {
-            CODEX_TOKEN_SOURCE_LABEL.to_string()
-        } else {
-            summary.source.clone()
-        }),
-        detail: summary.detail.clone(),
-        sessions_scanned: Some(summary.sessions_scanned),
-        token_events: Some(summary.token_events),
-        periods: vec![
-            period("today", &summary.today),
-            period("week", &summary.days7),
-            period("month", &summary.days30),
-        ],
+/// Applies the per-turn / cumulative delta rule to one parsed event while a
+/// file is being read. Per-turn `last_token_usage` wins whenever the cumulative
+/// total advanced (or is missing), so usage survives cumulative resets and a
+/// snapshot that repeats an unchanged total is skipped instead of double
+/// counted. Events with only cumulative totals fall back to consecutive-event
+/// deltas; the first event contributes its full recorded total.
+pub(crate) fn codex_token_delta(
+    event: &CodexTokenCountsEvent,
+    previous_cumulative: &mut Option<CodexTokenCounts>,
+) -> Option<CodexTokenCounts> {
+    let cumulative_advanced = event
+        .cumulative
+        .as_ref()
+        .is_none_or(|total| previous_cumulative.as_ref() != Some(total));
+    let delta = event.per_turn.filter(|_| cumulative_advanced).or_else(|| {
+        event.cumulative.as_ref().map(|total| CodexTokenCounts {
+            input: total
+                .input
+                .saturating_sub(previous_cumulative.map_or(0, |previous| previous.input)),
+            output: total
+                .output
+                .saturating_sub(previous_cumulative.map_or(0, |previous| previous.output)),
+            cache_read: total
+                .cache_read
+                .saturating_sub(previous_cumulative.map_or(0, |previous| previous.cache_read)),
+            cache_create: total
+                .cache_create
+                .saturating_sub(previous_cumulative.map_or(0, |previous| previous.cache_create)),
+        })
+    });
+    if let Some(total) = event.cumulative {
+        *previous_cumulative = Some(total);
     }
+    delta
 }
 
-/// Aggregates Codex token usage from real session rollout files
-/// (`~/.codex/sessions/**/rollout-*.jsonl`) for today, the last 7 days, and
-/// the last 30 days. `token_count` events carry the real per-turn usage
-/// (`last_token_usage`) alongside cumulative session totals; per-turn values
-/// are used directly so usage survives cumulative resets, and events that only
-/// expose cumulative totals fall back to consecutive-event deltas attributed
-/// to the later event's timestamp (the first event contributes its full
-/// recorded total). Duplicate snapshots that repeat an unchanged cumulative
-/// total are skipped instead of double counted. Missing or unknown values are
-/// reported as zeros without estimation.
-fn load_codex_token_usage_summary() -> CodexTokenUsageSummary {
-    let Some(home) = dirs::home_dir() else {
-        return CodexTokenUsageSummary {
-            detail: "Codex home directory not found".to_string(),
-            ..CodexTokenUsageSummary::default()
-        };
-    };
-    load_codex_token_usage_summary_from_root(&home.join(".codex").join("sessions"))
-}
-
-fn load_codex_token_usage_summary_from_root(root: &Path) -> CodexTokenUsageSummary {
-    if !root.is_dir() {
-        return CodexTokenUsageSummary {
-            detail: "No Codex local sessions directory found".to_string(),
-            ..CodexTokenUsageSummary::default()
-        };
-    }
-
-    let mut candidates = Vec::new();
-    collect_codex_rollout_files(root, &mut candidates);
-
-    let now = chrono::Utc::now();
-    let today_start = chrono::Local::now()
-        .date_naive()
-        .and_hms_opt(0, 0, 0)
-        .and_then(|time| time.and_local_timezone(chrono::Local).single())
-        .map(|date| date.timestamp())
-        .unwrap_or_else(|| now.timestamp());
-    let cutoff_7d = now.timestamp() - CODEX_DAYS7_SECONDS;
-    let cutoff_30d = now.timestamp() - CODEX_DAYS30_SECONDS;
-    let cutoff_30d_time =
-        std::time::UNIX_EPOCH + std::time::Duration::from_secs(cutoff_30d.max(0) as u64);
-
-    let mut summary = CodexTokenUsageSummary {
-        source: CODEX_TOKEN_SOURCE_LABEL.to_string(),
-        ..CodexTokenUsageSummary::default()
-    };
-    let mut token_events = 0usize;
-    let mut files_with_usage = 0usize;
-
-    for (path, modified_at) in candidates {
-        // Rollout events are chronological and the file mtime tracks the last
-        // event, so files untouched before the 30-day cutoff cannot contribute
-        // to any queried bucket. Skipping them avoids rescanning months of
-        // irrelevant history on every refresh. Unknown mtimes (UNIX_EPOCH
-        // fallback) are still read so valid event timestamps are not lost.
-        if modified_at > std::time::UNIX_EPOCH && modified_at < cutoff_30d_time {
-            continue;
-        }
-        summary.sessions_scanned += 1;
-        let fallback_time = chrono::DateTime::<chrono::Utc>::from(modified_at);
-        let file = match fs::File::open(&path) {
-            Ok(file) => file,
-            Err(_) => continue,
-        };
-        let mut previous_cumulative: Option<CodexTokenCounts> = None;
-        let mut bucket_input = [0u64; 3];
-        let mut bucket_output = [0u64; 3];
-        let mut bucket_cache_read = [0u64; 3];
-        let mut bucket_cache_create = [0u64; 3];
-        let mut bucket_sessions = [false; 3];
-
-        for line in StdBufReader::new(file).lines().map_while(Result::ok) {
-            let Ok(object) = serde_json::from_str::<serde_json::Value>(&line) else {
-                continue;
-            };
-            let Some(event) = codex_token_counts_from_line(&object) else {
-                continue;
-            };
-            token_events += 1;
-
-            let timestamp = object
-                .get("timestamp")
-                .and_then(date_from_value)
-                .unwrap_or(fallback_time)
-                .timestamp();
-
-            // Prefer the real per-turn usage from `last_token_usage` whenever
-            // the cumulative session total advanced (or is missing): per-turn
-            // values stay correct across cumulative resets, while duplicate
-            // snapshots that repeat an unchanged total are skipped instead of
-            // double counted. Events that only expose cumulative totals (older
-            // formats) fall back to consecutive-event deltas; the first event
-            // contributes its full recorded total.
-            let cumulative_advanced = event
-                .cumulative
-                .as_ref()
-                .is_none_or(|total| previous_cumulative.as_ref() != Some(total));
-            let delta = event.per_turn.filter(|_| cumulative_advanced).or_else(|| {
-                event.cumulative.as_ref().map(|total| CodexTokenCounts {
-                    input: total
-                        .input
-                        .saturating_sub(previous_cumulative.map_or(0, |previous| previous.input)),
-                    output: total
-                        .output
-                        .saturating_sub(previous_cumulative.map_or(0, |previous| previous.output)),
-                    cache_read: total.cache_read.saturating_sub(
-                        previous_cumulative.map_or(0, |previous| previous.cache_read),
-                    ),
-                    cache_create: total.cache_create.saturating_sub(
-                        previous_cumulative.map_or(0, |previous| previous.cache_create),
-                    ),
-                })
-            });
-            if let Some(total) = event.cumulative {
-                previous_cumulative = Some(total);
-            }
-            let Some(delta) = delta else {
-                continue;
-            };
-
-            if delta.is_zero() {
-                continue;
-            }
-            if timestamp >= today_start {
-                add_bucket_delta(
-                    &mut bucket_input[0],
-                    &mut bucket_output[0],
-                    &mut bucket_cache_read[0],
-                    &mut bucket_cache_create[0],
-                    &mut bucket_sessions[0],
-                    delta,
-                );
-            }
-            if timestamp >= cutoff_7d {
-                add_bucket_delta(
-                    &mut bucket_input[1],
-                    &mut bucket_output[1],
-                    &mut bucket_cache_read[1],
-                    &mut bucket_cache_create[1],
-                    &mut bucket_sessions[1],
-                    delta,
-                );
-            }
-            if timestamp >= cutoff_30d {
-                add_bucket_delta(
-                    &mut bucket_input[2],
-                    &mut bucket_output[2],
-                    &mut bucket_cache_read[2],
-                    &mut bucket_cache_create[2],
-                    &mut bucket_sessions[2],
-                    delta,
-                );
-            }
-        }
-
-        let file_counted = bucket_sessions.iter().any(|used| *used);
-        if file_counted {
-            files_with_usage += 1;
-        }
-        summary.today.input += bucket_input[0];
-        summary.today.output += bucket_output[0];
-        summary.today.cache_read += bucket_cache_read[0];
-        summary.today.cache_create += bucket_cache_create[0];
-        summary.today.sessions += usize::from(bucket_sessions[0]);
-        summary.days7.input += bucket_input[1];
-        summary.days7.output += bucket_output[1];
-        summary.days7.cache_read += bucket_cache_read[1];
-        summary.days7.cache_create += bucket_cache_create[1];
-        summary.days7.sessions += usize::from(bucket_sessions[1]);
-        summary.days30.input += bucket_input[2];
-        summary.days30.output += bucket_output[2];
-        summary.days30.cache_read += bucket_cache_read[2];
-        summary.days30.cache_create += bucket_cache_create[2];
-        summary.days30.sessions += usize::from(bucket_sessions[2]);
-    }
-
-    summary.token_events = token_events;
-    summary.available = files_with_usage > 0;
-    summary.detail = if summary.available {
-        format!(
-            "Aggregated from {} Codex session file(s) with token events",
-            files_with_usage
-        )
-    } else if token_events == 0 {
-        "No Codex token usage events found in local session files".to_string()
-    } else {
-        "Codex token events found outside the queried time windows".to_string()
-    };
-    summary
-}
-
-fn codex_token_counts_from_line(object: &serde_json::Value) -> Option<CodexTokenCountsEvent> {
+pub(crate) fn codex_token_counts_from_line(
+    object: &serde_json::Value,
+) -> Option<CodexTokenCountsEvent> {
     if object.get("type").and_then(|value| value.as_str()) != Some("event_msg") {
         return None;
     }
@@ -759,7 +552,7 @@ fn codex_token_counts_from_line(object: &serde_json::Value) -> Option<CodexToken
 
 /// Parses one `TokenUsage` object (either `last_token_usage` or
 /// `total_token_usage`) into the cache-split counts.
-fn codex_token_counts_from_usage(usage: &serde_json::Value) -> Option<CodexTokenCounts> {
+pub(crate) fn codex_token_counts_from_usage(usage: &serde_json::Value) -> Option<CodexTokenCounts> {
     let input = number_field(usage, "input_tokens")?;
     let cached = number_field(usage, "cached_input_tokens").unwrap_or(0.0);
     let cache_write = number_field(usage, "cache_write_input_tokens")
@@ -775,25 +568,9 @@ fn codex_token_counts_from_usage(usage: &serde_json::Value) -> Option<CodexToken
 }
 
 impl CodexTokenCounts {
-    fn is_zero(&self) -> bool {
+    pub(crate) fn is_zero(&self) -> bool {
         self.input == 0 && self.output == 0 && self.cache_read == 0 && self.cache_create == 0
     }
-}
-
-#[allow(clippy::too_many_arguments)]
-fn add_bucket_delta(
-    input: &mut u64,
-    output: &mut u64,
-    cache_read: &mut u64,
-    cache_create: &mut u64,
-    sessions: &mut bool,
-    delta: CodexTokenCounts,
-) {
-    *input += delta.input;
-    *output += delta.output;
-    *cache_read += delta.cache_read;
-    *cache_create += delta.cache_create;
-    *sessions = true;
 }
 
 #[cfg(test)]
@@ -867,74 +644,80 @@ mod tests {
     }
 
     #[test]
-    fn codex_token_usage_aggregates_deltas_into_time_buckets() {
-        let root =
-            std::env::temp_dir().join(format!("agentbro-codex-usage-{}", uuid::Uuid::new_v4()));
-        let day_dir = root.join("2026").join("08").join("30");
-        fs::create_dir_all(&day_dir).expect("create day dir");
-        let now = chrono::Utc::now();
-        let today = now.format("%Y-%m-%dT%H:%M:%SZ").to_string();
-        let three_days_ago = (now - chrono::Duration::days(3))
-            .format("%Y-%m-%dT%H:%M:%SZ")
-            .to_string();
-        fs::write(
-            day_dir.join("rollout-today.jsonl"),
-            format!(
-                r#"{{"type":"event_msg","timestamp":"{three_days_ago}","payload":{{"type":"token_count","info":{{"total_token_usage":{{"input_tokens":1000,"cached_input_tokens":200,"output_tokens":100,"total_tokens":1100}}}}}}}}
-{{"type":"event_msg","timestamp":"{today}","payload":{{"type":"token_count","info":{{"total_token_usage":{{"input_tokens":1500,"cached_input_tokens":300,"output_tokens":250,"total_tokens":1750}}}}}}}}"#,
-            ),
-        )
-        .expect("write today rollout");
+    fn codex_token_delta_prefers_per_turn_usage_after_a_cumulative_reset() {
+        let events = [
+            serde_json::json!({
+                "type": "event_msg",
+                "payload": { "type": "token_count", "info": {
+                    "total_token_usage": { "input_tokens": 1000, "cached_input_tokens": 200, "output_tokens": 100 },
+                    "last_token_usage": { "input_tokens": 1000, "cached_input_tokens": 200, "output_tokens": 100 }
+                }}
+            }),
+            serde_json::json!({
+                "type": "event_msg",
+                "payload": { "type": "token_count", "info": {
+                    "total_token_usage": { "input_tokens": 2500, "cached_input_tokens": 300, "output_tokens": 250 },
+                    "last_token_usage": { "input_tokens": 1500, "cached_input_tokens": 100, "output_tokens": 150 }
+                }}
+            }),
+            // The cumulative total dropped below the previous one: a session
+            // reset. Per-turn last_token_usage still carries the real usage.
+            serde_json::json!({
+                "type": "event_msg",
+                "payload": { "type": "token_count", "info": {
+                    "total_token_usage": { "input_tokens": 800, "cached_input_tokens": 0, "output_tokens": 60 },
+                    "last_token_usage": { "input_tokens": 800, "cached_input_tokens": 0, "output_tokens": 60 }
+                }}
+            }),
+            serde_json::json!({
+                "type": "event_msg",
+                "payload": { "type": "token_count", "info": {
+                    "total_token_usage": { "input_tokens": 1000, "cached_input_tokens": 0, "output_tokens": 90 },
+                    "last_token_usage": { "input_tokens": 200, "cached_input_tokens": 0, "output_tokens": 30 }
+                }}
+            }),
+        ];
 
-        let summary = load_codex_token_usage_summary_from_root(&root);
+        let mut previous = None;
+        let mut totals = CodexTokenCounts::default();
+        for object in &events {
+            let event = codex_token_counts_from_line(object).expect("parse");
+            let delta = codex_token_delta(&event, &mut previous).expect("delta");
+            totals.input += delta.input;
+            totals.output += delta.output;
+            totals.cache_read += delta.cache_read;
+            totals.cache_create += delta.cache_create;
+        }
 
-        assert!(summary.available);
-        assert_eq!(summary.sessions_scanned, 1);
-        assert_eq!(summary.token_events, 2);
-        // First event (3 days ago) contributes its full totals; second event
-        // contributes only the advancing deltas (400 fresh input, 100 cached,
-        // 150 out), where fresh input is input_tokens minus cached_input_tokens.
-        assert_eq!(summary.days7.input, 800 + 400);
-        assert_eq!(summary.days7.cache_read, 200 + 100);
-        assert_eq!(summary.days7.output, 100 + 150);
-        assert_eq!(summary.days7.sessions, 1);
-        assert_eq!(summary.days30.input, summary.days7.input);
-        assert_eq!(summary.today.input, 400);
-        assert_eq!(summary.today.output, 150);
-        assert_eq!(summary.today.cache_read, 100);
-        assert_eq!(summary.today.sessions, 1);
-
-        let _ = fs::remove_dir_all(root);
+        assert_eq!(totals.input, 800 + 1_400 + 800 + 200);
+        assert_eq!(totals.cache_read, 200 + 100);
+        assert_eq!(totals.output, 100 + 150 + 60 + 30);
     }
 
     #[test]
-    fn codex_token_usage_reports_missing_directory_without_fabrication() {
-        let root = std::env::temp_dir().join(format!(
-            "agentbro-codex-usage-missing-{}",
-            uuid::Uuid::new_v4()
-        ));
-        let summary = load_codex_token_usage_summary_from_root(&root);
-
-        assert!(!summary.available);
-        assert_eq!(summary.sessions_scanned, 0);
-        assert_eq!(summary.token_events, 0);
-        assert_eq!(summary.today.input, 0);
-        assert_eq!(summary.today.sessions, 0);
-        assert!(summary.detail.contains("No Codex local sessions directory"));
-    }
-
-    #[test]
-    fn codex_token_usage_history_marks_unavailable_periods_as_unknown() {
-        let summary = CodexTokenUsageSummary {
-            detail: "No Codex local sessions directory found".to_string(),
-            ..CodexTokenUsageSummary::default()
+    fn codex_token_delta_skips_duplicate_snapshots() {
+        let event = |total_input: u64, last_input: u64| {
+            codex_token_counts_from_line(&serde_json::json!({
+                "type": "event_msg",
+                "payload": { "type": "token_count", "info": {
+                    "total_token_usage": { "input_tokens": total_input, "cached_input_tokens": 0, "output_tokens": 10 },
+                    "last_token_usage": { "input_tokens": last_input, "cached_input_tokens": 0, "output_tokens": 10 }
+                }}
+            }))
+            .expect("parse")
         };
-        let history = token_usage_history_from_summary(&summary);
-        assert!(!history.available);
-        assert_eq!(history.periods.len(), 3);
-        assert!(history.periods.iter().all(|period| period.tokens.is_none()));
-        assert_eq!(history.periods[0].id, "today");
-        assert_eq!(history.periods[2].id, "month");
+
+        let mut previous = None;
+        let first = codex_token_delta(&event(1_000, 1_000), &mut previous).expect("first");
+        let second = codex_token_delta(&event(1_500, 500), &mut previous).expect("second");
+        // Same cumulative total as the second event: must not be counted again.
+        let duplicate = codex_token_delta(&event(1_500, 500), &mut previous).expect("duplicate");
+        assert_eq!(duplicate.input, 0);
+        let third = codex_token_delta(&event(1_600, 100), &mut previous).expect("third");
+        assert_eq!(
+            first.input + second.input + duplicate.input + third.input,
+            1_000 + 500 + 0 + 100
+        );
     }
 
     #[test]
@@ -969,79 +752,6 @@ mod tests {
     }
 
     #[test]
-    fn codex_token_usage_skips_files_untouched_since_before_cutoff() {
-        let root =
-            std::env::temp_dir().join(format!("agentbro-codex-usage-old-{}", uuid::Uuid::new_v4()));
-        let day_dir = root.join("2026").join("08").join("30");
-        fs::create_dir_all(&day_dir).expect("create day dir");
-        let now = chrono::Utc::now();
-        let today = now.format("%Y-%m-%dT%H:%M:%SZ").to_string();
-        let forty_days_ago = (now - chrono::Duration::days(40))
-            .format("%Y-%m-%dT%H:%M:%SZ")
-            .to_string();
-        let old_path = day_dir.join("rollout-old.jsonl");
-        let new_path = day_dir.join("rollout-new.jsonl");
-        fs::write(
-            &old_path,
-            format!(
-                r#"{{"type":"event_msg","timestamp":"{forty_days_ago}","payload":{{"type":"token_count","info":{{"total_token_usage":{{"input_tokens":900,"cached_input_tokens":0,"output_tokens":90,"total_tokens":990}}}}}}}}"#,
-            ),
-        )
-        .expect("write old rollout");
-        fs::write(
-            &new_path,
-            format!(
-                r#"{{"type":"event_msg","timestamp":"{today}","payload":{{"type":"token_count","info":{{"total_token_usage":{{"input_tokens":100,"cached_input_tokens":0,"output_tokens":10,"total_tokens":110}}}}}}}}"#,
-            ),
-        )
-        .expect("write new rollout");
-        let old_mtime = std::time::UNIX_EPOCH
-            + std::time::Duration::from_secs(
-                (now - chrono::Duration::days(40)).timestamp().max(0) as u64
-            );
-        let file = fs::OpenOptions::new()
-            .write(true)
-            .open(&old_path)
-            .expect("open old rollout");
-        file.set_times(std::fs::FileTimes::new().set_modified(old_mtime))
-            .expect("set old mtime");
-        drop(file);
-
-        let summary = load_codex_token_usage_summary_from_root(&root);
-
-        assert!(summary.available);
-        assert_eq!(summary.sessions_scanned, 1);
-        assert_eq!(summary.token_events, 1);
-        assert_eq!(summary.days30.input, 100);
-        assert_eq!(summary.days30.sessions, 1);
-
-        let _ = fs::remove_dir_all(root);
-    }
-
-    #[test]
-    fn codex_token_usage_source_is_path_free() {
-        let root =
-            std::env::temp_dir().join(format!("agentbro-codex-usage-src-{}", uuid::Uuid::new_v4()));
-        let day_dir = root.join("2026").join("08").join("30");
-        fs::create_dir_all(&day_dir).expect("create day dir");
-        let today = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
-        fs::write(
-            day_dir.join("rollout-src.jsonl"),
-            format!(
-                r#"{{"type":"event_msg","timestamp":"{today}","payload":{{"type":"token_count","info":{{"total_token_usage":{{"input_tokens":10,"cached_input_tokens":0,"output_tokens":5,"total_tokens":15}}}}}}}}"#,
-            ),
-        )
-        .expect("write rollout");
-
-        let summary = load_codex_token_usage_summary_from_root(&root);
-        assert!(summary.available);
-        assert_eq!(summary.source, CODEX_TOKEN_SOURCE_LABEL);
-        assert!(!summary.source.contains(root.to_str().unwrap()));
-
-        let _ = fs::remove_dir_all(root);
-    }
-
-    #[test]
     fn codex_token_counts_parse_per_turn_last_usage() {
         let object = serde_json::json!({
             "type": "event_msg",
@@ -1073,84 +783,5 @@ mod tests {
         assert_eq!(cumulative.input, 100_000);
         assert_eq!(cumulative.output, 50_000);
         assert_eq!(cumulative.cache_read, 400_000);
-    }
-
-    #[test]
-    fn codex_token_usage_recovers_usage_after_cumulative_reset() {
-        let root = std::env::temp_dir().join(format!(
-            "agentbro-codex-usage-reset-{}",
-            uuid::Uuid::new_v4()
-        ));
-        let day_dir = root.join("2026").join("08").join("30");
-        fs::create_dir_all(&day_dir).expect("create day dir");
-        let now = chrono::Utc::now();
-        let ts = |offset_days: i64| {
-            (now - chrono::Duration::days(offset_days))
-                .format("%Y-%m-%dT%H:%M:%SZ")
-                .to_string()
-        };
-        fs::write(
-            day_dir.join("rollout-reset.jsonl"),
-            format!(
-                r#"{{"type":"event_msg","timestamp":"{}","payload":{{"type":"token_count","info":{{"total_token_usage":{{"input_tokens":1000,"cached_input_tokens":200,"output_tokens":100,"total_tokens":1100}},"last_token_usage":{{"input_tokens":1000,"cached_input_tokens":200,"output_tokens":100,"total_tokens":1100}}}}}}}}
-{{"type":"event_msg","timestamp":"{}","payload":{{"type":"token_count","info":{{"total_token_usage":{{"input_tokens":2500,"cached_input_tokens":300,"output_tokens":250,"total_tokens":2750}},"last_token_usage":{{"input_tokens":1500,"cached_input_tokens":100,"output_tokens":150,"total_tokens":1650}}}}}}}}
-{{"type":"event_msg","timestamp":"{}","payload":{{"type":"token_count","info":{{"total_token_usage":{{"input_tokens":800,"cached_input_tokens":0,"output_tokens":60,"total_tokens":860}},"last_token_usage":{{"input_tokens":800,"cached_input_tokens":0,"output_tokens":60,"total_tokens":860}}}}}}}}
-{{"type":"event_msg","timestamp":"{}","payload":{{"type":"token_count","info":{{"total_token_usage":{{"input_tokens":1000,"cached_input_tokens":0,"output_tokens":90,"total_tokens":1090}},"last_token_usage":{{"input_tokens":200,"cached_input_tokens":0,"output_tokens":30,"total_tokens":230}}}}}}}}"#,
-                ts(3),
-                ts(2),
-                ts(1),
-                ts(0),
-            ),
-        )
-        .expect("write reset rollout");
-
-        let summary = load_codex_token_usage_summary_from_root(&root);
-
-        assert!(summary.available);
-        assert_eq!(summary.token_events, 4);
-        // The third event's cumulative total dropped below the previous total
-        // (a session reset/rollback). Per-turn last_token_usage still carries
-        // the real usage, so nothing is lost: 800 + 1400 + 800 + 200 fresh
-        // input across the four events.
-        assert_eq!(summary.days30.input, 800 + 1400 + 800 + 200);
-        assert_eq!(summary.days30.cache_read, 200 + 100);
-        assert_eq!(summary.days30.output, 100 + 150 + 60 + 30);
-        assert_eq!(summary.days30.sessions, 1);
-        assert_eq!(summary.today.input, 200);
-
-        let _ = fs::remove_dir_all(root);
-    }
-
-    #[test]
-    fn codex_token_usage_skips_duplicate_snapshots_with_repeated_last_usage() {
-        let root =
-            std::env::temp_dir().join(format!("agentbro-codex-usage-dup-{}", uuid::Uuid::new_v4()));
-        let day_dir = root.join("2026").join("08").join("30");
-        fs::create_dir_all(&day_dir).expect("create day dir");
-        let today = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
-        fs::write(
-            day_dir.join("rollout-dup.jsonl"),
-            format!(
-                r#"{{"type":"event_msg","timestamp":"{today}","payload":{{"type":"token_count","info":{{"total_token_usage":{{"input_tokens":1000,"cached_input_tokens":200,"output_tokens":100,"total_tokens":1100}},"last_token_usage":{{"input_tokens":1000,"cached_input_tokens":200,"output_tokens":100,"total_tokens":1100}}}}}}}}
-{{"type":"event_msg","timestamp":"{today}","payload":{{"type":"token_count","info":{{"total_token_usage":{{"input_tokens":1500,"cached_input_tokens":300,"output_tokens":250,"total_tokens":1750}},"last_token_usage":{{"input_tokens":500,"cached_input_tokens":100,"output_tokens":150,"total_tokens":650}}}}}}}}
-{{"type":"event_msg","timestamp":"{today}","payload":{{"type":"token_count","info":{{"total_token_usage":{{"input_tokens":1500,"cached_input_tokens":300,"output_tokens":250,"total_tokens":1750}},"last_token_usage":{{"input_tokens":500,"cached_input_tokens":100,"output_tokens":150,"total_tokens":650}}}}}}}}
-{{"type":"event_msg","timestamp":"{today}","payload":{{"type":"token_count","info":{{"total_token_usage":{{"input_tokens":1600,"cached_input_tokens":300,"output_tokens":280,"total_tokens":1880}},"last_token_usage":{{"input_tokens":100,"cached_input_tokens":0,"output_tokens":30,"total_tokens":130}}}}}}}}"#,
-            ),
-        )
-        .expect("write duplicate rollout");
-
-        let summary = load_codex_token_usage_summary_from_root(&root);
-
-        assert!(summary.available);
-        assert_eq!(summary.token_events, 4);
-        // The third event repeats the second event's cumulative totals; even
-        // though it repeats the same per-turn last_token_usage, it must not be
-        // counted twice: 800 + 400 + 0 + 100 fresh input.
-        assert_eq!(summary.today.input, 800 + 400 + 100);
-        assert_eq!(summary.today.cache_read, 200 + 100);
-        assert_eq!(summary.today.output, 100 + 150 + 30);
-        assert_eq!(summary.today.sessions, 1);
-
-        let _ = fs::remove_dir_all(root);
     }
 }

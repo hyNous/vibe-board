@@ -28,6 +28,38 @@
   white-space: normal;
 }
 
+.unified-usage__detail--warning {
+  color: var(--settings-status-error);
+}
+
+.unified-usage__model-row td {
+  padding-top: 4px;
+  padding-bottom: 4px;
+  color: var(--settings-text-secondary);
+}
+
+.unified-usage__model-name {
+  display: block;
+  padding-left: 12px;
+  color: var(--settings-text-secondary);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.unified-usage__cost-estimate {
+  color: var(--settings-text-tertiary);
+  font-size: 9px;
+  font-weight: 500;
+  text-transform: lowercase;
+}
+
+.unified-usage__cost-head {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-end;
+}
+
 .unified-usage__tab {
   min-height: 29px;
   padding: 0 12px;

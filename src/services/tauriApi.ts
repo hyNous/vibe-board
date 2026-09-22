@@ -167,10 +167,34 @@ export interface UsageTokens {
   cacheCreate: number
 }
 
+/**
+ * Equivalent cost for a model or a period. `complete` is false when some usage
+ * in the period has no price entry, so the UI marks the amount as a lower bound
+ * instead of pretending it is exact. `verified` is false while the price entry
+ * has not been confirmed against the vendor price page.
+ */
+export interface UsageCost {
+  amount: number
+  currency: string
+  effectiveDate: string | null
+  verified: boolean
+  complete: boolean
+}
+
+export interface UsageModelPeriod {
+  model: string
+  tokens: UsageTokens
+  requests: number
+  cost: UsageCost | null
+}
+
 export interface UsagePeriod {
   id: 'today' | 'week' | 'month' | string
   tokens: UsageTokens | null
-  sessions: number | null
+  requests: number | null
+  cost: UsageCost | null
+  models: UsageModelPeriod[]
+  unpricedModels: string[]
 }
 
 export interface UsageHistory {
@@ -179,7 +203,21 @@ export interface UsageHistory {
   detail: string
   sessionsScanned: number | null
   tokenEvents: number | null
+  pricingEffectiveDate: string | null
   periods: UsagePeriod[]
+}
+
+export interface UsageHistoryScanStatus {
+  scanning: boolean
+  filesTotal: number
+  filesScanned: number
+  filesParsed: number
+  filesSkipped: number
+  oversizedLines: number
+  events: number
+  error: string | null
+  startedAt: number | null
+  finishedAt: number | null
 }
 
 /**
@@ -207,6 +245,8 @@ export interface UsageSnapshot {
 export interface UsageDashboard {
   providers: UsageSnapshot[]
   computedAt: number
+  /** Effective date of the built-in price table used for cost estimates. */
+  pricingEffectiveDate: string | null
 }
 
 export interface CodexAppServerThreadSummary {
@@ -319,8 +359,32 @@ export async function getUsageSnapshots(): Promise<RateLimitInfo[]> {
 }
 
 export async function getUsageDashboard(): Promise<UsageDashboard> {
-  if (!isTauri()) return { providers: [], computedAt: Date.now() }
+  if (!isTauri()) return { providers: [], computedAt: Date.now(), pricingEffectiveDate: null }
   return invoke<UsageDashboard>('get_usage_dashboard')
+}
+
+const EMPTY_USAGE_HISTORY_SCAN: UsageHistoryScanStatus = {
+  scanning: false,
+  filesTotal: 0,
+  filesScanned: 0,
+  filesParsed: 0,
+  filesSkipped: 0,
+  oversizedLines: 0,
+  events: 0,
+  error: null,
+  startedAt: null,
+  finishedAt: null,
+}
+
+/** Starts the local usage-history scan; it runs in the background. */
+export async function startUsageHistoryScan(): Promise<void> {
+  if (!isTauri()) return
+  return invoke('start_usage_history_scan')
+}
+
+export async function getUsageHistoryScanStatus(): Promise<UsageHistoryScanStatus> {
+  if (!isTauri()) return EMPTY_USAGE_HISTORY_SCAN
+  return invoke<UsageHistoryScanStatus>('get_usage_history_scan_status')
 }
 
 export interface AppStateFlags {

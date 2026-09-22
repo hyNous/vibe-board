@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatTokens, estimateCost, formatCost } from '../utils/tokens'
+import { formatTokens, formatCost, formatUsageCost } from '../utils/tokens'
 
 describe('formatTokens', () => {
   it('returns "0" for zero', () => {
@@ -19,19 +19,6 @@ describe('formatTokens', () => {
   })
 })
 
-describe('estimateCost', () => {
-  it('calculates cost for claude-sonnet-4', () => {
-    const tokens = { input: 1_000_000, output: 100_000, cacheRead: 0, cacheCreate: 0 }
-    const cost = estimateCost(tokens, 'claude-sonnet-4')
-    expect(cost).toBeCloseTo(3.0 + 1.5, 5)
-  })
-
-  it('falls back to sonnet pricing for unknown model', () => {
-    const tokens = { input: 1_000_000, output: 0, cacheRead: 0, cacheCreate: 0 }
-    expect(estimateCost(tokens, 'unknown-model')).toBeCloseTo(3.0, 5)
-  })
-})
-
 describe('formatCost', () => {
   it('formats zero', () => {
     expect(formatCost(0)).toBe('$0.00')
@@ -43,5 +30,18 @@ describe('formatCost', () => {
 
   it('formats normal costs', () => {
     expect(formatCost(1.234)).toBe('$1.23')
+  })
+})
+
+describe('formatUsageCost', () => {
+  // The built-in price table is the only source of amounts; this helper only
+  // renders them and never applies a fallback price of its own.
+  it('renders USD amounts like formatCost', () => {
+    expect(formatUsageCost(2.5, 'USD')).toBe('$2.50')
+  })
+
+  it('renders other currencies without assuming a symbol', () => {
+    expect(formatUsageCost(2.5, 'CNY')).toMatch(/2\.50/)
+    expect(formatUsageCost(1, 'XYZ')).toMatch(/1\.00/)
   })
 })

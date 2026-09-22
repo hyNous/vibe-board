@@ -4672,6 +4672,11 @@ pub fn run() {
 
             let telemetry = Arc::new(TelemetryService::new());
 
+            // Local usage history (M8b): persisted daily aggregates from the
+            // Agent session logs. The first full scan is started by the Usage
+            // page and runs on a background thread.
+            usage::history::init(app.handle());
+
             let app_state = AppState {
                 session_store,
                 hook_server,
@@ -4730,6 +4735,8 @@ pub fn run() {
             commands::get_app_state_flags,
             usage::list_usage_providers,
             usage::authorize_usage_provider,
+            usage::history::start_usage_history_scan,
+            usage::history::get_usage_history_scan_status,
             commands::jump_to_terminal,
             commands::activate_session_host,
             commands::get_config,

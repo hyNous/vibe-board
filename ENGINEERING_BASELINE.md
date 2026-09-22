@@ -405,6 +405,17 @@ OpenCode 取数，在 10 分钟缓存过期后用本地 API key 请求 `opencode
 4. 周、月结算由日汇总加总得出，与直接逐条汇总结果一致（测试）。
 5. 等价成本按内置价格表计算，界面一律标 `Estimated`；价格表带生效日期并在界面可见；未知模型显示 Unknown 而非 0 元。
 
+**M8b 状态（2026-09-22）：PASS WITH RISKS，已合入。**
+新增 `src-tauri/src/usage/history/`（流式扫描、SQLite 日汇总 `~/.vibeboard/usage-history.db`、价格表）与随包 `resources/usage/pricing.json`。
+扫描由打开额度页触发、在后台线程执行，不在应用启动时自动跑。
+父级独立验证：前端 43 文件 413 项全过，lint / build / fmt / check 通过；`cargo test --lib` 553 通过 / 23 失败，失败集合 = 已知名单子集；
+大日志测试（约 152 MiB 合成日志）实测进程峰值约 15.2 MiB，断言 ≤ 128 MiB；测试未残留大文件。
+
+**风险记录**：①价格表 17 条全部 `verified:false`，父级按已知公开价核对数值无误，但只覆盖较早的模型；维护者在用的新型号
+（较新的 Claude Opus / Sonnet、`gpt-5.x` 系列等）不在表内，会显示 Unknown，需维护者按官网补表。②Codex 模型名字段与 Claude
+日志结构由仓库既有解析推断，**未用维护者真实日志核对**（读取真实会话日志被权限检查拦下，按维护者「需确认的先跳过」处理），
+待维护者回来后用真实日志核对统计数字。③Claude 的子 Agent 日志一并计入。
+
 #### M8c — 逐 Provider 授权与联网取数
 
 1. 先填写第 4 节 Provider 能力矩阵：每个拟联网的 Provider 做一次最小真实 probe，结果写入交付说明；未验证的 Provider 不上线联网取数。
