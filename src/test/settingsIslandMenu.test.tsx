@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { SettingsApp } from '../components/settings'
-import type { BackendDisplayInfo, UsageProviderStatus } from '../services/tauriApi'
+import type { BackendDisplayInfo, UsageSnapshot } from '../services/tauriApi'
 import { useConfigStore } from '../stores/configStore'
 import { useThemeStore } from '../stores/themeStore'
 import { isApplePlatform } from '../utils/platform'
@@ -18,7 +18,7 @@ const tauriMocks = vi.hoisted(() => ({
   registerGlobalShortcut: vi.fn(() => Promise.resolve()),
   setIslandSurfaceOptions: vi.fn(() => Promise.resolve()),
   setAnalyticsEnabled: vi.fn(() => Promise.resolve()),
-  listUsageProviders: vi.fn(() => Promise.resolve([] as UsageProviderStatus[])),
+  listUsageProviders: vi.fn(() => Promise.resolve([] as UsageSnapshot[])),
   authorizeUsageProvider: vi.fn(() => Promise.resolve()),
   updateConfig: vi.fn(() => Promise.resolve()),
   isTauri: vi.fn(() => false),
@@ -68,15 +68,26 @@ vi.mock('../components/settings/sections/AgentMonitorSection', () => ({
   AgentMonitorSection: () => <section><h2>Tasks</h2></section>,
 }))
 
-const providerFixture: UsageProviderStatus = {
+const providerFixture: UsageSnapshot = {
   provider: 'codex',
   label: 'Codex',
+  state: 'unauthorized',
+  detail: 'authorization required',
+  source: 'local',
+  fetchedAt: null,
+  windows: [],
+  history: {
+    available: false,
+    source: null,
+    detail: '',
+    sessionsScanned: null,
+    tokenEvents: null,
+    periods: [],
+  },
   enabled: true,
-  available: false,
   catalogSupported: true,
   implementationStatus: 'active',
-  source: 'local',
-  detail: 'authorization required',
+  settingsOrder: 0,
   authStatus: 'missing',
   authPath: '/home/user/.codex/auth.json',
   canAuthorize: true,

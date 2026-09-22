@@ -385,6 +385,18 @@ worker 未改动其内容（父级 `diff -r` 与 `~/.agents/skills` 逐字节一
 3. 无数据时显示 Unknown，不显示 0。
 4. 本阶段不新增任何网络请求（测试断言：用量模块中新增代码无 HTTP 调用）。
 
+**M8a 状态（2026-09-22）：PASS WITH RISKS，已合入。**
+新增 `src-tauri/src/usage/`（`UsageProvider` trait：`read_credentials` → `fetch` → `normalize`，统一 `UsageSnapshot`），
+Codex / Claude Code / OpenCode / Antigravity 与目录项均走同一结构；页面分「现在」「用量与成本」两块，缺数据显示 Unknown；
+删除 `CodexUsageSection` 与 `get_codex_usage_summary`（信息并入统一快照）。
+父级独立验证：前端 43 文件 411 项（全量两次重跑均全过），lint / build / fmt / check 通过；`cargo test --lib` 532 通过 / 23 失败，
+失败集合 = 已知名单子集；静态测试断言用量模块中 HTTP 客户端只在 `usage/opencode.rs`（原有调用）。
+
+**风险记录**：①**既有隐私问题（非本次引入，父级比对 `HEAD` 确认）**：`list_usage_providers` 无论「用量查询」开关是否打开，都会调用
+OpenCode 取数，在 10 分钟缓存过期后用本地 API key 请求 `opencode.ai`。M8c AC3「未授权零请求」必须修掉。
+②「本周 / 本月」暂用近 7 / 30 天桶，真正的周月结算在 M8b。③旧页「每个 Agent 最近一次会话 token 合计」随改版移除。
+④全量前端测试负载下偶发超时加重（本轮 4 条，超时后未清理 DOM 引发连锁「multiple elements」），单跑与重跑全过。
+
 #### M8b — 历史与结算
 
 1. 增量扫描 Codex 与 Claude Code 会话日志；以路径 + 大小 + 修改时间为缓存键，未变化的文件第二次扫描不重新解析（测试断言解析次数）。

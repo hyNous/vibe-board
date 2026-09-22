@@ -1,198 +1,134 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { CodexUsageSection } from './CodexUsageSection'
+import { useCallback, useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { UsageProvidersPanel } from './UsageProvidersPanel'
-import { getAgentStatuses, getUsageSnapshots, isTauri, listUsageProviders, type UsageProviderStatus } from '../../../services/tauriApi'
-import type { AgentStatusSnapshot, RateLimitInfo } from '../../../types/agent'
+import {
+  getUsageDashboard,
+  isTauri,
+  type UsageDashboard,
+  type UsagePeriod,
+  type UsageSnapshot,
+  type UsageTokens,
+} from '../../../services/tauriApi'
+import type { UsageRateWindow } from '../../../types/agent'
 import { formatTokens } from '../../../utils/tokens'
 import './UnifiedUsageSection.css'
 
-type UsageView = 'overview' | 'quota' | 'token-trend'
+type UsagePeriodId = 'today' | 'week' | 'month'
 
-const USAGE_VIEWS: Array<{ id: UsageView; label: string }> = [
-  { id: 'overview', label: 'Overview' },
-  { id: 'quota', label: 'Quota' },
-  { id: 'token-trend', label: 'Token Usage' },
+const USAGE_PERIODS: Array<{ id: UsagePeriodId; labelKey: string; defaultLabel: string }> = [
+  { id: 'today', labelKey: 'settings.usagePage.periodToday', defaultLabel: 'Today' },
+  { id: 'week', labelKey: 'settings.usagePage.periodWeek', defaultLabel: 'This Week' },
+  { id: 'month', labelKey: 'settings.usagePage.periodMonth', defaultLabel: 'This Month' },
 ]
 
-type CoverageId = 'codex' | 'claude' | 'gemini' | 'pi' | 'opencode' | 'other'
-
-const PROVIDER_COVERAGE: Array<{ id: CoverageId; label: string; statusProviders: string[] }> = [
-  { id: 'codex', label: 'Codex', statusProviders: ['codex'] },
-  { id: 'claude', label: 'Claude', statusProviders: ['claude-code', 'claude'] },
-  { id: 'gemini', label: 'Gemini', statusProviders: ['gemini-cli', 'gemini'] },
-  { id: 'pi', label: 'Pi', statusProviders: ['pi'] },
-  { id: 'opencode', label: 'OpenCode', statusProviders: ['opencode'] },
-  { id: 'other', label: 'Other', statusProviders: [] },
-]
-
-function coverageIdForProvider(provider: string): CoverageId {
-  const normalized = provider.trim().toLowerCase()
-  if (normalized.includes('codex')) return 'codex'
-  if (normalized.includes('claude') || normalized.includes('anthropic')) return 'claude'
-  if (normalized.includes('gemini') || normalized.includes('google')) return 'gemini'
-  if (normalized.includes('opencode')) return 'opencode'
-  if (normalized === 'pi' || normalized.startsWith('pi-')) return 'pi'
-  return 'other'
-}
-
-function formatQuotaRemaining(snapshot: RateLimitInfo | null): string {
-  if (!snapshot) return ''
-  const windows = snapshot.windows ?? []
-  if (windows.length > 0) {
-    return windows.map((window) => {
-      const remaining = window.remainingPercent ?? (100 - window.usedPercent)
-      return `${window.title} ${Math.round(Math.max(0, Math.min(100, remaining)))}%`
-    }).join(' · ')
+function readableError(error: unknown): string {
+  if (error instanceof Error) return error.message
+  if (typeof error === 'string') return error
+  if (error && typeof error === 'object' && 'message' in error) {
+    return String((error as { message?: unknown }).message)
   }
-  return [
-    `5h ${Math.round(Math.max(0, Math.min(100, 100 - snapshot.fiveHourUsage)))}%`,
-    `7d ${Math.round(Math.max(0, Math.min(100, 100 - snapshot.sevenDayUsage)))}%`,
-  ].join(' · ')
+  return String(error)
 }
 
-function findQuotaSnapshot(snapshots: RateLimitInfo[], id: CoverageId): RateLimitInfo | null {
-  return snapshots.find((snapshot) => coverageIdForProvider(snapshot.provider ?? snapshot.providerLabel ?? '') === id) ?? null
+function windowRemainingLabel(window: UsageRateWindow): string {
+  const remaining = window.remainingPercent ?? 100 - window.usedPercent
+  if (!Number.isFinite(remaining)) return ''
+  return `${window.title} ${Math.round(Math.max(0, Math.min(100, remaining)))}%`
 }
 
-function formatFreshness(timestamp: number | null): string {
-  if (!timestamp) return '未采集'
+function remainingText(snapshot: UsageSnapshot, unknown: string): string {
+  const parts = snapshot.windows.map(windowRemainingLabel).filter(Boolean)
+  return parts.length > 0 ? parts.join(' · ') : unknown
+}
+
+function formatResetTime(resetsAt: string | null | undefined): string {
+  if (!resetsAt) return ''
+  const date = new Date(resetsAt)
+  if (Number.isNaN(date.getTime())) return ''
+  return date.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+
+function resetText(snapshot: UsageSnapshot, unknown: string): string {
+  const parts = snapshot.windows
+    .map((window) => {
+      const reset = formatResetTime(window.resetsAt)
+      if (reset) return `${window.title} ${reset}`
+      if (window.remainingLabel) return `${window.title} ${window.remainingLabel}`
+      return ''
+    })
+    .filter(Boolean)
+  return parts.length > 0 ? parts.join(' · ') : unknown
+}
+
+type Translate = (key: string, options?: { defaultValue?: string; count?: number }) => string
+
+function formatFreshness(t: Translate, timestamp: number | null): string {
+  const unknown = t('settings.usagePage.unknown', { defaultValue: 'Unknown' })
+  if (!timestamp) return unknown
   const age = Math.max(0, Date.now() - timestamp)
-  if (age < 60_000) return '刚刚'
-  if (age < 3_600_000) return `${Math.floor(age / 60_000)} 分钟前`
-  if (age < 86_400_000) return `${Math.floor(age / 3_600_000)} 小时前`
-  return `${Math.floor(age / 86_400_000)} 天前`
+  if (age < 60_000) return t('settings.usagePage.justNow', { defaultValue: 'Just now' })
+  if (age < 3_600_000) {
+    return t('settings.usagePage.minutesAgo', { defaultValue: '{{count}} min ago', count: Math.floor(age / 60_000) })
+      .replace('{{count}}', String(Math.floor(age / 60_000)))
+  }
+  if (age < 86_400_000) {
+    return t('settings.usagePage.hoursAgo', { defaultValue: '{{count}} h ago', count: Math.floor(age / 3_600_000) })
+      .replace('{{count}}', String(Math.floor(age / 3_600_000)))
+  }
+  return t('settings.usagePage.daysAgo', { defaultValue: '{{count}} d ago', count: Math.floor(age / 86_400_000) })
+    .replace('{{count}}', String(Math.floor(age / 86_400_000)))
 }
 
-function usageStatusLabel(status: UsageProviderStatus | null): string {
-  if (!status) return '未采集'
-  if (!status.enabled) return '已停用'
-  if (status.available) return '可用'
-  if (status.authStatus === 'missing') return '待授权'
-  if (status.implementationStatus === 'unsupported') return '未接入'
-  if (status.implementationStatus === 'available') return '已发现'
-  return '待数据'
+function stateLabel(t: Translate, snapshot: UsageSnapshot): string {
+  switch (snapshot.state) {
+    case 'ok':
+      return t('settings.connected', { defaultValue: 'Connected' })
+    case 'disabled':
+      return t('settings.disabled', { defaultValue: 'Disabled' })
+    case 'unauthorized':
+      return t('settings.needsAuth', { defaultValue: 'Needs authorization' })
+    case 'failed':
+      return t('settings.usagePage.stateFailed', { defaultValue: 'Failed' })
+    case 'unsupported':
+      return t('settings.usagePage.stateUnsupported', { defaultValue: 'Not integrated' })
+    default:
+      return t('settings.waitingData', { defaultValue: 'Waiting for data' })
+  }
 }
 
-type ProviderCoverageStats = {
-  id: CoverageId
-  label: string
-  status: UsageProviderStatus | null
-  quota: RateLimitInfo | null
-  tokens: number
-  tokenUpdatedAt: number | null
+function periodEntry(snapshot: UsageSnapshot, period: UsagePeriodId): UsagePeriod | null {
+  return snapshot.history.periods.find((entry) => entry.id === period) ?? null
 }
 
-function ProviderCoverage({
-  statuses,
-  snapshots,
-  agentStatuses,
-  loading,
-  error,
-}: {
-  statuses: UsageProviderStatus[]
-  snapshots: RateLimitInfo[]
-  agentStatuses: AgentStatusSnapshot[]
-  loading: boolean
-  error: string
-}) {
-  const rows = useMemo<ProviderCoverageStats[]>(() => PROVIDER_COVERAGE.map((provider) => {
-    const status = statuses.find((item) => provider.statusProviders.includes(item.provider)) ?? null
-    const quota = findQuotaSnapshot(snapshots, provider.id)
-    const matchingAgents = agentStatuses.filter((item) => coverageIdForProvider(item.agent) === provider.id)
-    // `AgentStatusSnapshot.tokens` is overwritten with the agent's most recent
-    // session each time that session reports, so this sums one last-known
-    // session per agent — never an all-session or per-day total.
-    const tokens = matchingAgents.reduce((total, item) => total + item.tokens.input + item.tokens.output + item.tokens.cacheRead + item.tokens.cacheCreate, 0)
-    const tokenUpdatedAt = matchingAgents.reduce<number | null>(
-      (latest, item) => latest == null || item.lastSeenAt > latest ? item.lastSeenAt : latest,
-      null,
-    )
-    return {
-      id: provider.id,
-      label: provider.label,
-      status,
-      quota,
-      tokens,
-      tokenUpdatedAt,
-    }
-  }), [agentStatuses, snapshots, statuses])
+function tokenTotal(tokens: UsageTokens): number {
+  return tokens.input + tokens.output + tokens.cacheRead + tokens.cacheCreate
+}
 
-  return (
-    <section className="unified-usage__provider-card">
-      <div className="unified-usage__provider-head">
-        <div>
-          <h3>Provider Coverage</h3>
-          <p>
-            每个 Provider 独立显示真实 token 或 quota。Usage 列是该 Provider 下每个 Agent
-            <strong>最近一次会话</strong>的 token 之和，不是当天或历史全部会话的累计。
-          </p>
-        </div>
-        {loading && <span className="unified-usage__provider-loading">读取中...</span>}
-      </div>
-      {error && <div className="unified-usage__provider-error">Provider 状态读取失败：{error}</div>}
-      <div className="unified-usage__provider-table-wrap">
-        <table className="unified-usage__provider-table">
-          <thead>
-            <tr><th>Provider</th><th>Usage</th><th>Quota</th><th>Source</th><th>Freshness</th><th>说明</th></tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => {
-              const updatedAt = [row.status?.updatedAt ?? null, row.quota?.updatedAt ?? null, row.tokenUpdatedAt]
-                .filter((value): value is number => value != null)
-                .reduce<number | null>((latest, value) => latest == null || value > latest ? value : latest, null)
-              const detail = row.status?.detail
-                ?? (row.id === 'other' ? '未匹配到已支持 Provider 的请求会归入 Other。' : '尚未发现本地用量或 quota 数据。')
-              const usage = row.tokens > 0 ? `${formatTokens(row.tokens)} tok` : usageStatusLabel(row.status)
-              const quota = formatQuotaRemaining(row.quota) || usageStatusLabel(row.status)
-              return (
-                <tr key={row.id}>
-                  <td>
-                    <strong>{row.label}</strong>
-                  </td>
-                  <td>{usage}</td>
-                  <td>{quota || 'Unknown'}</td>
-                  <td>{row.quota?.source ?? row.status?.source ?? (row.tokens > 0 ? 'last session tokens' : '—')}</td>
-                  <td>{formatFreshness(updatedAt)}</td>
-                  <td title={detail}>{detail}</td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
-    </section>
-  )
+function MetricValue({ value, unknown }: { value: number | null | undefined; unknown: string }) {
+  return <>{value == null ? unknown : formatTokens(value)}</>
 }
 
 export function UnifiedUsageSection() {
-  const [view, setView] = useState<UsageView>('overview')
-  const [providerStatuses, setProviderStatuses] = useState<UsageProviderStatus[]>([])
-  const [providerError, setProviderError] = useState('')
-  const [providerLoading, setProviderLoading] = useState(false)
-  const [quotaSnapshots, setQuotaSnapshots] = useState<RateLimitInfo[]>([])
-  const [agentStatuses, setAgentStatuses] = useState<AgentStatusSnapshot[]>([])
+  const { t } = useTranslation()
+  const unknown = t('settings.usagePage.unknown', { defaultValue: 'Unknown' })
+  const [dashboard, setDashboard] = useState<UsageDashboard | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [period, setPeriod] = useState<UsagePeriodId>('today')
 
   const loadUsage = useCallback(async () => {
     if (!isTauri()) {
-      setProviderStatuses([])
-      setQuotaSnapshots([])
-      setAgentStatuses([])
+      setDashboard(null)
       return
     }
-    setProviderLoading(true)
-    setProviderError('')
+    setLoading(true)
+    setError('')
     try {
-      const [providerResult, quotaResult, agentResult] = await Promise.allSettled([
-        listUsageProviders(false),
-        getUsageSnapshots(),
-        getAgentStatuses(),
-      ])
-      if (providerResult.status === 'fulfilled') setProviderStatuses(providerResult.value)
-      else setProviderError(String(providerResult.reason))
-      setQuotaSnapshots(quotaResult.status === 'fulfilled' ? quotaResult.value : [])
-      setAgentStatuses(agentResult.status === 'fulfilled' ? agentResult.value : [])
+      setDashboard(await getUsageDashboard())
+    } catch (err) {
+      setError(readableError(err))
     } finally {
-      setProviderLoading(false)
+      setLoading(false)
     }
   }, [])
 
@@ -203,71 +139,137 @@ export function UnifiedUsageSection() {
     return () => window.clearTimeout(id)
   }, [loadUsage])
 
-  const availableProviders = providerStatuses.filter((status) => status.available).length
-  // Sum of each agent's last known session, not a daily or all-session total.
-  const lastSessionTokenTotal = agentStatuses.reduce(
-    (total, status) => total + status.tokens.input + status.tokens.output + status.tokens.cacheRead + status.tokens.cacheCreate,
-    0,
-  )
-  const quotaSummary = quotaSnapshots
-    .map((snapshot) => {
-      const label = snapshot.providerLabel ?? snapshot.provider ?? 'Provider'
-      const remaining = formatQuotaRemaining(snapshot)
-      return remaining ? `${label} ${remaining}` : ''
-    })
-    .filter(Boolean)
-    .join(' / ')
+  const providers = dashboard?.providers ?? []
 
   return (
     <section className="unified-usage">
       <header className="agent-monitor__header">
         <div>
-          <h2>Usage</h2>
-          <p>统一查看每个 Agent 最近一次会话的真实 token 与当前 quota；没有真实数据时保持 Unknown。</p>
+          <h2>{t('settings.usage', { defaultValue: 'Usage' })}</h2>
+          <p>{t('settings.usagePage.subtitle', { defaultValue: 'Remaining quota and local token usage per provider; missing values stay Unknown.' })}</p>
         </div>
-        <button type="button" className="agent-monitor__refresh" disabled={providerLoading} onClick={() => void loadUsage()}>刷新用量</button>
+        <button type="button" className="agent-monitor__refresh" disabled={loading} onClick={() => void loadUsage()}>
+          {t('settings.refresh', { defaultValue: 'Refresh' })}
+        </button>
       </header>
 
-      <div className="unified-usage__tabs" role="tablist" aria-label="Usage views">
-        {USAGE_VIEWS.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            role="tab"
-            aria-selected={view === item.id}
-            className={view === item.id ? 'unified-usage__tab unified-usage__tab--active' : 'unified-usage__tab'}
-            onClick={() => setView(item.id)}
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
+      {error && <div className="unified-usage__error">{error}</div>}
 
-      {providerError && <div className="unified-usage__error">Provider 状态读取失败：{providerError}</div>}
-
-      {view === 'overview' && (
-        <>
-          <div className="unified-usage__summary">
-            <div><span>{lastSessionTokenTotal > 0 ? 'Last Session Tokens' : 'Quota Remaining'}</span><strong>{lastSessionTokenTotal > 0 ? formatTokens(lastSessionTokenTotal) : quotaSummary || 'Unknown'}</strong><em>{lastSessionTokenTotal > 0 ? '每个 Agent 最近一次会话之和' : 'provider usage reader'}</em></div>
-            <div><span>Active Providers</span><strong>{providerStatuses.length > 0 ? `${availableProviders} / ${providerStatuses.length}` : '未采集'}</strong><em>可用 Provider / 已登记</em></div>
+      <section className="unified-usage__provider-card" data-testid="usage-now">
+        <div className="unified-usage__provider-head">
+          <div>
+            <h3>{t('settings.usagePage.nowTitle', { defaultValue: 'Now' })}</h3>
+            <p>{t('settings.usagePage.nowDesc', { defaultValue: 'Remaining quota, reset time, source, and freshness reported by each provider.' })}</p>
           </div>
-          <ProviderCoverage statuses={providerStatuses} snapshots={quotaSnapshots} agentStatuses={agentStatuses} loading={providerLoading} error={providerError} />
-          <CodexUsageSection showHeader={false} />
-        </>
-      )}
-
-      {view === 'quota' && (
-        <>
-          <ProviderCoverage statuses={providerStatuses} snapshots={quotaSnapshots} agentStatuses={agentStatuses} loading={providerLoading} error={providerError} />
-          <CodexUsageSection showHeader={false} />
-        </>
-      )}
-      {view === 'token-trend' && (
-        <div className="unified-usage__panel">
-          <p className="unified-usage__panel-note">能读取 token 时展示真实 token：Codex 用量来自本地 rollout 聚合，其他 Agent 来自 Hook 会话累计；没有 token 时只展示 Provider quota 剩余值。</p>
-          <CodexUsageSection showHeader={false} />
+          {loading && <span className="unified-usage__provider-loading">{t('settings.detecting', { defaultValue: 'Checking...' })}</span>}
         </div>
-      )}
+        {providers.length === 0 ? (
+          <div className="hook-empty">{t('settings.usagePage.noProviders', { defaultValue: 'No usage provider data is available yet.' })}</div>
+        ) : (
+          <div className="unified-usage__provider-table-wrap">
+            <table className="unified-usage__provider-table">
+              <thead>
+                <tr>
+                  <th>{t('settings.usagePage.provider', { defaultValue: 'Provider' })}</th>
+                  <th>{t('settings.usagePage.remaining', { defaultValue: 'Remaining' })}</th>
+                  <th>{t('settings.usagePage.resetAt', { defaultValue: 'Resets' })}</th>
+                  <th>{t('settings.usagePage.source', { defaultValue: 'Source' })}</th>
+                  <th>{t('settings.usagePage.freshness', { defaultValue: 'Freshness' })}</th>
+                  <th>{t('settings.usagePage.status', { defaultValue: 'Status' })}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {providers.map((snapshot) => (
+                  <tr key={snapshot.provider}>
+                    <td><strong>{snapshot.label}</strong></td>
+                    <td>{remainingText(snapshot, unknown)}</td>
+                    <td>{resetText(snapshot, unknown)}</td>
+                    <td>{snapshot.source ?? unknown}</td>
+                    <td>{formatFreshness(t, snapshot.fetchedAt)}</td>
+                    <td>
+                      <strong>{stateLabel(t, snapshot)}</strong>
+                      {snapshot.detail && <span className="unified-usage__detail">{snapshot.detail}</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <section className="unified-usage__provider-card" data-testid="usage-cost">
+        <div className="unified-usage__provider-head">
+          <div>
+            <h3>{t('settings.usagePage.usageCostTitle', { defaultValue: 'Usage & Cost' })}</h3>
+            <p>{t('settings.usagePage.usageCostDesc', { defaultValue: 'Token usage from local data. Cost estimates are not available yet.' })}</p>
+          </div>
+          <div className="unified-usage__tabs unified-usage__tabs--inline" role="tablist" aria-label={t('settings.usagePage.usageCostTitle', { defaultValue: 'Usage & Cost' })}>
+            {USAGE_PERIODS.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                role="tab"
+                aria-selected={period === item.id}
+                className={period === item.id ? 'unified-usage__tab unified-usage__tab--active' : 'unified-usage__tab'}
+                onClick={() => setPeriod(item.id)}
+              >
+                {t(item.labelKey, { defaultValue: item.defaultLabel })}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="unified-usage__provider-table-wrap">
+          <table className="unified-usage__provider-table">
+            <thead>
+              <tr>
+                <th>{t('settings.usagePage.provider', { defaultValue: 'Provider' })}</th>
+                <th>{t('settings.usagePage.tokens', { defaultValue: 'Tokens' })}</th>
+                <th>{t('settings.usagePage.input', { defaultValue: 'Input' })}</th>
+                <th>{t('settings.usagePage.output', { defaultValue: 'Output' })}</th>
+                <th>{t('settings.usagePage.cacheRead', { defaultValue: 'Cache read' })}</th>
+                <th>{t('settings.usagePage.cacheWrite', { defaultValue: 'Cache write' })}</th>
+                <th>{t('settings.usagePage.sessions', { defaultValue: 'Sessions' })}</th>
+                <th>{t('settings.usagePage.cost', { defaultValue: 'Cost' })}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {providers.map((snapshot) => {
+                const entry = periodEntry(snapshot, period)
+                const tokens = entry?.tokens ?? null
+                const historyDetail = [
+                  snapshot.history.source,
+                  snapshot.history.detail,
+                  snapshot.history.sessionsScanned != null
+                    ? t('settings.usagePage.sessionsScanned', { defaultValue: '{{count}} session file(s) scanned', count: snapshot.history.sessionsScanned })
+                      .replace('{{count}}', String(snapshot.history.sessionsScanned))
+                    : null,
+                  snapshot.history.tokenEvents != null
+                    ? t('settings.usagePage.tokenEvents', { defaultValue: '{{count}} token events', count: snapshot.history.tokenEvents })
+                      .replace('{{count}}', String(snapshot.history.tokenEvents))
+                    : null,
+                ].filter(Boolean).join(' · ')
+                return (
+                  <tr key={snapshot.provider}>
+                    <td>
+                      <strong>{snapshot.label}</strong>
+                      {historyDetail && <span className="unified-usage__detail">{historyDetail}</span>}
+                    </td>
+                    <td><MetricValue value={tokens ? tokenTotal(tokens) : null} unknown={unknown} /></td>
+                    <td><MetricValue value={tokens?.input} unknown={unknown} /></td>
+                    <td><MetricValue value={tokens?.output} unknown={unknown} /></td>
+                    <td><MetricValue value={tokens?.cacheRead} unknown={unknown} /></td>
+                    <td><MetricValue value={tokens?.cacheCreate} unknown={unknown} /></td>
+                    <td>{entry?.sessions == null ? unknown : entry.sessions}</td>
+                    <td title={t('settings.usagePage.costPending', { defaultValue: 'Cost estimates are not available yet.' })}>{unknown}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+        <p className="unified-usage__cost-note">{t('settings.usagePage.costPending', { defaultValue: 'Cost estimates are not available yet.' })}</p>
+      </section>
 
       <UsageProvidersPanel />
     </section>

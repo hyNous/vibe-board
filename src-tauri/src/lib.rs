@@ -13,6 +13,7 @@ pub mod skills;
 pub mod sound;
 pub mod telemetry;
 pub mod terminal;
+pub mod usage;
 pub mod webhook;
 
 use std::path::{Path, PathBuf};
@@ -4725,10 +4726,10 @@ pub fn run() {
             commands::get_agent_statuses,
             commands::get_usage_rate_limits,
             commands::get_usage_snapshots,
-            commands::get_codex_usage_summary,
+            usage::get_usage_dashboard,
             commands::get_app_state_flags,
-            commands::list_usage_providers,
-            commands::authorize_usage_provider,
+            usage::list_usage_providers,
+            usage::authorize_usage_provider,
             commands::jump_to_terminal,
             commands::activate_session_host,
             commands::get_config,

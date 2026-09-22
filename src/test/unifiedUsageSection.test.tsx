@@ -1,59 +1,60 @@
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { AgentStatusSnapshot, RateLimitInfo } from '../types/agent'
-import type { UsageProviderStatus } from '../services/tauriApi'
+import unifiedUsageSource from '../components/settings/sections/UnifiedUsageSection.tsx?raw'
+import usageProvidersPanelSource from '../components/settings/sections/UsageProvidersPanel.tsx?raw'
+import type { UsageDashboard, UsageHistory, UsageSnapshot } from '../services/tauriApi'
 
-// The Usage view reads three independent backend commands. Stub the module so
-// the assertions below are about how the section aggregates and labels that
-// data, not about the Tauri runtime.
-const getAgentStatuses = vi.fn<() => Promise<AgentStatusSnapshot[]>>()
-const getUsageSnapshots = vi.fn<() => Promise<RateLimitInfo[]>>()
-const listUsageProviders = vi.fn<(refresh: boolean) => Promise<UsageProviderStatus[]>>()
-const getCodexUsageSummary = vi.fn()
+// The Usage view reads one normalized dashboard command. Stub the module so the
+// assertions below are about how the section renders snapshot fields, not about
+// the Tauri runtime. UsageProvidersPanel shares the same module.
+const getUsageDashboard = vi.fn<() => Promise<UsageDashboard>>()
+const listUsageProviders = vi.fn(() => Promise.resolve([] as UsageSnapshot[]))
 
 vi.mock('../services/tauriApi', () => ({
   isTauri: () => true,
-  getAgentStatuses: () => getAgentStatuses(),
-  getUsageSnapshots: () => getUsageSnapshots(),
-  listUsageProviders: (refresh: boolean) => listUsageProviders(refresh),
-  getCodexUsageSummary: () => getCodexUsageSummary(),
+  getUsageDashboard: () => getUsageDashboard(),
+  listUsageProviders: () => listUsageProviders(),
+  getConfig: () => Promise.resolve({}),
+  updateConfig: () => Promise.resolve(),
+  authorizeUsageProvider: () => Promise.resolve(),
+  openSystemPath: () => Promise.resolve(),
 }))
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
     t: (key: string, options?: { defaultValue?: string }) => options?.defaultValue ?? key,
-    i18n: { language: 'zh' },
+    i18n: { language: 'en' },
   }),
 }))
 
-function provider(overrides: Partial<UsageProviderStatus> = {}): UsageProviderStatus {
+function emptyHistory(): UsageHistory {
   return {
-    provider: 'codex',
-    label: 'Codex',
-    enabled: true,
-    available: true,
-    catalogSupported: true,
-    implementationStatus: 'active',
+    available: false,
     source: null,
     detail: '',
-    authStatus: 'authorized',
-    authPath: null,
-    canAuthorize: false,
-    updatedAt: Date.now(),
-    ...overrides,
+    sessionsScanned: null,
+    tokenEvents: null,
+    periods: [],
   }
 }
 
-function agentStatus(overrides: Partial<AgentStatusSnapshot> = {}): AgentStatusSnapshot {
+function snapshotProvider(overrides: Partial<UsageSnapshot> = {}): UsageSnapshot {
   return {
-    agent: 'codex',
+    provider: 'codex',
     label: 'Codex',
-    online: true,
-    lastSeenAt: Date.now(),
-    lastCompletedAt: null,
-    tokens: { input: 0, output: 0, cacheRead: 0, cacheCreate: 0 },
-    rateLimits: null,
-    detail: null,
+    state: 'ok',
+    detail: 'Codex account rate limits found.',
+    source: 'codex-jsonl',
+    fetchedAt: Date.now() - 30_000,
+    windows: [],
+    history: emptyHistory(),
+    enabled: true,
+    catalogSupported: true,
+    implementationStatus: 'active',
+    settingsOrder: 0,
+    authStatus: 'authorized',
+    authPath: null,
+    canAuthorize: false,
     ...overrides,
   }
 }
@@ -63,84 +64,105 @@ async function renderUsage() {
   return render(<UnifiedUsageSection />)
 }
 
-describe('UnifiedUsageSection token aggregation', () => {
+describe('UnifiedUsageSection rendering', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    getCodexUsageSummary.mockResolvedValue(null)
     listUsageProviders.mockResolvedValue([])
-    getUsageSnapshots.mockResolvedValue([])
-    getAgentStatuses.mockResolvedValue([])
+    getUsageDashboard.mockResolvedValue({ providers: [], computedAt: Date.now() })
   })
 
-  it('sums the real token counts reported by each agent status snapshot', async () => {
-    listUsageProviders.mockResolvedValue([provider()])
-    getAgentStatuses.mockResolvedValue([
-      agentStatus({
-        agent: 'codex',
-        tokens: { input: 1000, output: 500, cacheRead: 300, cacheCreate: 200 },
-      }),
-      agentStatus({
-        agent: 'claude-code',
-        label: 'Claude Code',
-        tokens: { input: 2000, output: 1000, cacheRead: 0, cacheCreate: 0 },
-      }),
-    ])
+  it('renders the Now block purely from normalized snapshot fields', async () => {
+    const resetsAt = new Date(Date.now() + 3_600_000).toISOString()
+    getUsageDashboard.mockResolvedValue({
+      providers: [snapshotProvider({
+        windows: [{
+          id: 'five_hour',
+          title: '5h',
+          usedPercent: 40,
+          remainingPercent: 60,
+          remainingLabel: '3h',
+          resetsAt,
+          windowMinutes: 300,
+        }],
+      })],
+      computedAt: Date.now(),
+    })
 
     await renderUsage()
 
-    // 2,000 for Codex + 3,000 for Claude Code.
-    expect(await screen.findByText('5.0K')).toBeInTheDocument()
-    expect(screen.getByText('Last Session Tokens')).toBeInTheDocument()
-
-    const codexRow = screen.getByRole('row', { name: /Codex/ })
-    expect(within(codexRow).getByText('2.0K tok')).toBeInTheDocument()
-    expect(within(codexRow).getByText('last session tokens')).toBeInTheDocument()
+    const now = await screen.findByTestId('usage-now')
+    const row = await within(now).findByRole('row', { name: /Codex/ })
+    expect(within(row).getByText('5h 60%')).toBeInTheDocument()
+    expect(within(row).getAllByText(/^5h /).length).toBeGreaterThanOrEqual(2)
+    expect(within(row).getByText('codex-jsonl')).toBeInTheDocument()
+    expect(within(row).getByText('Just now')).toBeInTheDocument()
+    expect(within(row).getByText('Connected')).toBeInTheDocument()
   })
 
-  it('labels the total as one last session per agent rather than a cumulative total', async () => {
-    getAgentStatuses.mockResolvedValue([
-      agentStatus({ tokens: { input: 10, output: 0, cacheRead: 0, cacheCreate: 0 } }),
-    ])
+  it('switches the Usage & Cost period and shows the token breakdown', async () => {
+    const history: UsageHistory = {
+      available: true,
+      source: 'Codex local session logs',
+      detail: 'Aggregated from 1 Codex session file(s) with token events',
+      sessionsScanned: 1,
+      tokenEvents: 2,
+      periods: [
+        { id: 'today', tokens: { input: 1000, output: 200, cacheRead: 100, cacheCreate: 0 }, sessions: 1 },
+        { id: 'week', tokens: { input: 2000, output: 400, cacheRead: 200, cacheCreate: 0 }, sessions: 2 },
+        { id: 'month', tokens: { input: 3000, output: 600, cacheRead: 300, cacheCreate: 0 }, sessions: 3 },
+      ],
+    }
+    getUsageDashboard.mockResolvedValue({
+      providers: [snapshotProvider({ history })],
+      computedAt: Date.now(),
+    })
 
     await renderUsage()
 
-    expect(await screen.findByText('每个 Agent 最近一次会话之和')).toBeInTheDocument()
-    expect(
-      screen.getByText(/Usage 列是该 Provider 下每个 Agent/),
-    ).toBeInTheDocument()
-    expect(screen.getByText(/不是当天或历史全部会话的累计/)).toBeInTheDocument()
+    const cost = await screen.findByTestId('usage-cost')
+    expect(await within(cost).findByText('1.3K')).toBeInTheDocument()
+    expect(within(cost).getByText(/Codex local session logs/)).toBeInTheDocument()
+
+    fireEvent.click(within(cost).getByRole('tab', { name: 'This Week' }))
+    expect(within(cost).getByText('2.6K')).toBeInTheDocument()
+
+    fireEvent.click(within(cost).getByRole('tab', { name: 'This Month' }))
+    expect(within(cost).getByText('3.9K')).toBeInTheDocument()
   })
 
-  it('falls back to quota instead of inventing a token number when no session reported tokens', async () => {
-    listUsageProviders.mockResolvedValue([provider()])
-    getUsageSnapshots.mockResolvedValue([{
-      fiveHourUsage: 40,
-      fiveHourRemaining: '3h',
-      sevenDayUsage: 20,
-      sevenDayRemaining: '5d',
-      provider: 'codex',
-      providerLabel: 'Codex',
-      source: 'codex quota reader',
-      updatedAt: Date.now(),
-    }])
-    getAgentStatuses.mockResolvedValue([agentStatus()])
+  it('shows Unknown instead of zero when quota and history are missing', async () => {
+    getUsageDashboard.mockResolvedValue({
+      providers: [snapshotProvider({
+        state: 'unavailable',
+        source: null,
+        fetchedAt: null,
+        windows: [],
+        history: emptyHistory(),
+      })],
+      computedAt: Date.now(),
+    })
 
     await renderUsage()
 
-    expect(await screen.findByText('Quota Remaining')).toBeInTheDocument()
-    expect(screen.queryByText('Host Quota Remaining')).not.toBeInTheDocument()
-    expect(screen.queryByText('Last Session Tokens')).not.toBeInTheDocument()
-    // Shown both in the headline tile and in the provider coverage row.
-    expect(await screen.findByText('Codex 5h 60% · 7d 80%')).toBeInTheDocument()
-    expect(screen.getAllByText('5h 60% · 7d 80%').length).toBeGreaterThan(0)
+    const now = await screen.findByTestId('usage-now')
+    const cost = screen.getByTestId('usage-cost')
+    const nowRow = await within(now).findByRole('row', { name: /Codex/ })
+    expect(within(nowRow).getAllByText('Unknown').length).toBeGreaterThanOrEqual(4)
+    expect(within(nowRow).getByText('Waiting for data')).toBeInTheDocument()
+
+    const costRow = await within(cost).findByRole('row', { name: /Codex/ })
+    expect(within(costRow).getAllByText('Unknown').length).toBeGreaterThanOrEqual(7)
+    expect(within(costRow).queryByText('0')).not.toBeInTheDocument()
   })
 
-  it('shows Unknown rather than zero when neither tokens nor quota are available', async () => {
-    listUsageProviders.mockResolvedValue([provider({ available: false, authStatus: 'missing' })])
-
-    await renderUsage()
-
-    expect(await screen.findByText('Unknown')).toBeInTheDocument()
-    expect(screen.queryByText('Last Session Tokens')).not.toBeInTheDocument()
+  it('keeps provider-specific branching out of the usage page components', () => {
+    const providerNames = /\b(codex|claude|anthropic|gemini|opencode|antigravity|copilot|cursor|deepseek|kimi|kiro|qoder|qwen|droid|stepfun|hermes|codebuddy)\b/i
+    const sources: Array<[string, string]> = [
+      ['UnifiedUsageSection.tsx', unifiedUsageSource],
+      ['UsageProvidersPanel.tsx', usageProvidersPanelSource],
+    ]
+    for (const [file, source] of sources) {
+      expect(source, file).not.toMatch(providerNames)
+    }
   })
 })

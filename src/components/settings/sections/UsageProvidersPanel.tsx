@@ -9,32 +9,13 @@ import {
   openSystemPath,
   updateConfig as updateBackendConfig,
 } from '../../../services/tauriApi'
-import type { UsageProviderStatus } from '../../../services/tauriApi'
+import type { UsageSnapshot } from '../../../services/tauriApi'
 import { SettingGroup } from '../SettingGroup'
 import { SettingRow } from '../SettingRow'
 import { Toggle } from '../Toggle'
 import { GlassButton } from '../../shared'
 
 const USAGE_PROVIDER_REFRESH_TIMEOUT_MS = 10_000
-const ACCOUNT_USAGE_PROVIDER_ORDER = [
-  'codex',
-  'claude-code',
-  'z-ai',
-  'kimi',
-  'gemini-cli',
-  'copilot',
-  'cursor',
-  'cursor-cli',
-  'deepseek',
-  'opencode',
-  'droid',
-  'stepfun',
-  'antigravity',
-  'kiro',
-]
-const ACCOUNT_USAGE_PROVIDER_RANK = new Map(
-  ACCOUNT_USAGE_PROVIDER_ORDER.map((provider, index) => [provider, index]),
-)
 
 function readableError(error: unknown): string {
   if (error instanceof Error) return error.message
@@ -72,7 +53,7 @@ function persistUsageQuerySettings(next: Partial<{ usageQueryEnabled: boolean; s
 export function UsageProvidersPanel() {
   const { t } = useTranslation()
   const config = useConfigStore()
-  const [usageProviders, setUsageProviders] = useState<UsageProviderStatus[]>([])
+  const [usageProviders, setUsageProviders] = useState<UsageSnapshot[]>([])
   const [usageLoading, setUsageLoading] = useState(false)
   const [usageAction, setUsageAction] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -133,18 +114,11 @@ export function UsageProvidersPanel() {
   }
 
   const accountUsageProviders = usageProviders
-    .filter((provider) =>
-      ACCOUNT_USAGE_PROVIDER_RANK.has(provider.provider)
-      && (provider.catalogSupported || provider.implementationStatus === 'active'),
-    )
-    .sort((a, b) =>
-      (ACCOUNT_USAGE_PROVIDER_RANK.get(a.provider) ?? Number.MAX_SAFE_INTEGER)
-      - (ACCOUNT_USAGE_PROVIDER_RANK.get(b.provider) ?? Number.MAX_SAFE_INTEGER)
-      || a.label.localeCompare(b.label),
-    )
-  const usageStatusLabel = (provider: UsageProviderStatus) => {
+    .filter((provider) => provider.settingsOrder != null)
+    .sort((a, b) => (a.settingsOrder ?? 0) - (b.settingsOrder ?? 0))
+  const usageStatusLabel = (provider: UsageSnapshot) => {
     if (!provider.enabled) return t('settings.disabled', { defaultValue: 'Disabled' })
-    if (provider.available) return t('settings.connected', { defaultValue: 'Connected' })
+    if (provider.state === 'ok') return t('settings.connected', { defaultValue: 'Connected' })
     if (provider.authStatus === 'authorized') return t('settings.waitingData', { defaultValue: 'Waiting for data' })
     if (provider.authStatus === 'missing') return t('settings.needsAuth', { defaultValue: 'Needs authorization' })
     if (provider.implementationStatus === 'available') return t('settings.usageReaderAvailable', { defaultValue: '可接入' })
@@ -152,11 +126,11 @@ export function UsageProvidersPanel() {
     return t('settings.needsAuth', { defaultValue: 'Needs authorization' })
   }
 
-  const shouldShowUsageAuthorize = (provider: UsageProviderStatus) =>
+  const shouldShowUsageAuthorize = (provider: UsageSnapshot) =>
     config.usageQueryEnabled
     && provider.canAuthorize
     && provider.authStatus !== 'authorized'
-    && !provider.available
+    && provider.state !== 'ok'
 
   return (
     <SettingGroup

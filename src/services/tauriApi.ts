@@ -2,7 +2,7 @@
  * Typed wrappers for Tauri commands with graceful browser-dev-mode fallbacks.
  */
 
-import type { AgentRunState, AgentStatusSnapshot, RateLimitInfo, SessionNotice, SessionState } from '../types/agent'
+import type { AgentRunState, AgentStatusSnapshot, RateLimitInfo, SessionNotice, SessionState, UsageRateWindow } from '../types/agent'
 import type { SideIslandSize, IslandDragAnchor } from '../utils/islandLayout'
 import type { AppLanguage } from '../i18n/language'
 
@@ -158,49 +158,54 @@ export interface MonitorSessionSummary {
   title: string | null
 }
 
-export interface UsageProviderStatus {
-  provider: string
-  label: string
-  enabled: boolean
-  available: boolean
-  catalogSupported: boolean
-  implementationStatus: 'active' | 'available' | 'unsupported'
-  source: string | null
-  detail: string
-  authStatus: 'authorized' | 'missing' | 'unknown'
-  authPath: string | null
-  canAuthorize: boolean
-  updatedAt?: number | null
-}
+export type UsageState = 'ok' | 'disabled' | 'unauthorized' | 'unavailable' | 'failed' | 'unsupported'
 
-export interface CodexQuotaState {
-  state: 'ok' | 'unavailable' | 'failed' | 'disabled'
-  detail: string
-}
-
-export interface CodexTokenBucket {
+export interface UsageTokens {
   input: number
   output: number
   cacheRead: number
   cacheCreate: number
-  sessions: number
 }
 
-export interface CodexTokenUsageSummary {
-  today: CodexTokenBucket
-  days7: CodexTokenBucket
-  days30: CodexTokenBucket
-  source: string
-  sessionsScanned: number
-  tokenEvents: number
+export interface UsagePeriod {
+  id: 'today' | 'week' | 'month' | string
+  tokens: UsageTokens | null
+  sessions: number | null
+}
+
+export interface UsageHistory {
   available: boolean
+  source: string | null
   detail: string
+  sessionsScanned: number | null
+  tokenEvents: number | null
+  periods: UsagePeriod[]
 }
 
-export interface CodexUsageSummary {
-  quota: RateLimitInfo | null
-  quotaState: CodexQuotaState
-  tokenUsage: CodexTokenUsageSummary
+/**
+ * Normalized usage snapshot returned by the backend for every provider. The
+ * Usage page renders these fields only — no provider-name branching.
+ */
+export interface UsageSnapshot {
+  provider: string
+  label: string
+  state: UsageState
+  detail: string
+  source: string | null
+  fetchedAt: number | null
+  windows: UsageRateWindow[]
+  history: UsageHistory
+  enabled: boolean
+  catalogSupported: boolean
+  implementationStatus: 'active' | 'available' | 'unsupported'
+  settingsOrder: number | null
+  authStatus: 'authorized' | 'missing' | 'unknown'
+  authPath: string | null
+  canAuthorize: boolean
+}
+
+export interface UsageDashboard {
+  providers: UsageSnapshot[]
   computedAt: number
 }
 
@@ -313,25 +318,9 @@ export async function getUsageSnapshots(): Promise<RateLimitInfo[]> {
   return invoke<RateLimitInfo[]>('get_usage_snapshots')
 }
 
-export async function getCodexUsageSummary(): Promise<CodexUsageSummary> {
-  if (!isTauri()) {
-    return {
-      quota: null,
-      quotaState: { state: 'unavailable', detail: 'Desktop app only' },
-      tokenUsage: {
-        today: { input: 0, output: 0, cacheRead: 0, cacheCreate: 0, sessions: 0 },
-        days7: { input: 0, output: 0, cacheRead: 0, cacheCreate: 0, sessions: 0 },
-        days30: { input: 0, output: 0, cacheRead: 0, cacheCreate: 0, sessions: 0 },
-        source: '',
-        sessionsScanned: 0,
-        tokenEvents: 0,
-        available: false,
-        detail: 'Desktop app only',
-      },
-      computedAt: Date.now(),
-    }
-  }
-  return invoke<CodexUsageSummary>('get_codex_usage_summary')
+export async function getUsageDashboard(): Promise<UsageDashboard> {
+  if (!isTauri()) return { providers: [], computedAt: Date.now() }
+  return invoke<UsageDashboard>('get_usage_dashboard')
 }
 
 export interface AppStateFlags {
@@ -343,9 +332,9 @@ export async function getAppStateFlags(): Promise<AppStateFlags> {
   return invoke<AppStateFlags>('get_app_state_flags')
 }
 
-export async function listUsageProviders(live = true): Promise<UsageProviderStatus[]> {
+export async function listUsageProviders(live = true): Promise<UsageSnapshot[]> {
   if (!isTauri()) return []
-  return invoke<UsageProviderStatus[]>('list_usage_providers', { live })
+  return invoke<UsageSnapshot[]>('list_usage_providers', { live })
 }
 
 export async function authorizeUsageProvider(provider: string): Promise<void> {
