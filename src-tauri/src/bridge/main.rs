@@ -57,11 +57,17 @@ fn is_antigravity_source(source: &str) -> bool {
     source == "antigravity"
 }
 
+/// Antigravity reads the hook's stdout. `PreToolUse` must carry a `decision`
+/// (`allow` / `deny` / `ask` / `force_ask`); a missing one is treated as a
+/// denial with no reason, which blocked every tool call after the approval
+/// flow was removed. Vibe Board only observes, so it hands the decision back
+/// to Antigravity's own permission handling with `ask` (which respects the
+/// user's "Always Allow" choices) instead of approving on the user's behalf.
 fn antigravity_hook_output(event: &str) -> serde_json::Value {
-    if event == "Stop" {
-        serde_json::json!({ "decision": "stop" })
-    } else {
-        serde_json::json!({})
+    match event {
+        "PreToolUse" => serde_json::json!({ "decision": "ask" }),
+        "Stop" => serde_json::json!({ "decision": "stop" }),
+        _ => serde_json::json!({}),
     }
 }
 
@@ -1144,6 +1150,43 @@ mod tests {
             "PermissionResult"
         );
         assert_eq!(normalize_hook_event("interrupt"), "Interrupt");
+    }
+
+    #[test]
+    fn antigravity_pre_tool_use_returns_a_valid_decision() {
+        let output = antigravity_hook_output("PreToolUse");
+        let decision = output["decision"].as_str().expect("decision is required");
+        assert!(
+            ["allow", "deny", "ask", "force_ask"].contains(&decision),
+            "{output}"
+        );
+        // Vibe Board observes; it must not approve tool calls for the user.
+        assert_eq!(decision, "ask");
+    }
+
+    #[test]
+    fn every_registered_antigravity_event_gets_a_protocol_valid_output() {
+        // Guards against dropping an event's output again: each event the
+        // installer registers for Antigravity must answer in its documented
+        // shape (PreToolUse needs a decision, Stop decides whether to stop,
+        // the rest expect an empty object).
+        for descriptor in vibe_board_lib::agents::profiles::ANTIGRAVITY_EVENTS {
+            let output = antigravity_hook_output(descriptor.name);
+            match descriptor.name {
+                "PreToolUse" => assert!(
+                    matches!(
+                        output["decision"].as_str(),
+                        Some("allow" | "deny" | "ask" | "force_ask")
+                    ),
+                    "PreToolUse: {output}"
+                ),
+                "Stop" => assert_eq!(output, serde_json::json!({ "decision": "stop" })),
+                "PostToolUse" | "PreInvocation" | "PostInvocation" => {
+                    assert_eq!(output, serde_json::json!({}), "{}", descriptor.name)
+                }
+                other => panic!("no Antigravity output contract for registered event {other}"),
+            }
+        }
     }
 
     #[test]
