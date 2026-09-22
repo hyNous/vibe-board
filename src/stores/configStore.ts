@@ -2,6 +2,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { AgentType } from '../types/agent'
+import { normalizeLanguage, type AppLanguage } from '../i18n/language'
 import { CUSTOM_NOTCH_HEIGHT_DEFAULT, SIDE_ISLAND_SIZE_DEFAULT, type SideIslandSize } from '../utils/islandLayout'
 
 export interface AgentHook {
@@ -172,7 +173,7 @@ interface ConfigState {
   notchVerticalOffset: number
 
   // Language
-  language: 'en' | 'zh' | 'ja' | 'ko' | 'tr'
+  language: AppLanguage
 
   // Quiet Hours
   quietHours: {
@@ -528,11 +529,8 @@ export const useConfigStore = create<ConfigStore>()(
   language: (() => {
     const lang = navigator.language.toLowerCase()
     if (lang.startsWith('zh')) return 'zh'
-    if (lang.startsWith('ja')) return 'ja'
-    if (lang.startsWith('ko')) return 'ko'
-    if (lang.startsWith('tr')) return 'tr'
     return 'en'
-  })() as 'en' | 'zh' | 'ja' | 'ko' | 'tr',
+  })() as AppLanguage,
 
   // Quiet Hours
   quietHours: { enabled: false, start: '22:00', end: '08:00' },
@@ -705,6 +703,8 @@ export const useConfigStore = create<ConfigStore>()(
       merge: (persistedState, currentState) => {
         const persisted = { ...(persistedState as Record<string, unknown> | undefined) }
         for (const key of REMOVED_CONFIG_KEYS) delete persisted[key]
+        // Japanese, Korean and Turkish were dropped; earlier choices fall back to English.
+        if ('language' in persisted) persisted.language = normalizeLanguage(persisted.language)
         const merged = {
           ...currentState,
           ...persisted,

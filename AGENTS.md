@@ -37,7 +37,7 @@ Vibe Board build; this fork does not require submitting changes upstream.
 | Add a new Agent adapter | `src-tauri/src/agents/<name>.rs` + register in `src-tauri/src/agents/mod.rs` (`all_adapters()`, `impl_default_adapter!`) + add profile in `src-tauri/src/agents/profiles.rs`. Simplest reference: `kimi.rs`. |
 | Add a Tauri IPC command | `#[tauri::command]` in `src-tauri/src/commands/`, register in `src-tauri/src/lib.rs` `invoke_handler`, wrap in `src/services/tauriApi.ts`, listen via `src/hooks/useTauri.ts` if event-driven |
 | Add a frontend component | `src/components/{notch|settings|shared|overlay}/`, plain `.css` + BEM, theme via `var(--*)` CSS variables, state via existing Zustand stores in `src/stores/` |
-| Add a translation | `src/i18n/locales/{en,zh,ja,ko,tr}.json` — **all five must be updated together** |
+| Add a translation | `src/i18n/locales/{en,zh}.json` — **both must be updated together** (only Chinese and English ship) |
 | Add a theme | `src/themes/` + README theme table + i18n names |
 
 Detailed extension recipes: see [`.claude/CLAUDE.md`](.claude/CLAUDE.md) and [`CONTRIBUTING.md`](CONTRIBUTING.md).

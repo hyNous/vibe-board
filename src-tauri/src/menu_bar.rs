@@ -16,21 +16,6 @@ pub fn labels(language: &str) -> MenuBarLabels {
             settings: "设置",
             quit: "退出",
         },
-        "ja" => MenuBarLabels {
-            open: "Vibe Board を開く",
-            settings: "設定",
-            quit: "終了",
-        },
-        "ko" => MenuBarLabels {
-            open: "Vibe Board 열기",
-            settings: "설정",
-            quit: "종료",
-        },
-        "tr" => MenuBarLabels {
-            open: "Vibe Board'yu Aç",
-            settings: "Ayarlar",
-            quit: "Çıkış",
-        },
         _ => MenuBarLabels {
             open: "Open Vibe Board",
             settings: "Settings",

@@ -4,6 +4,7 @@
 
 import type { AgentRunState, AgentStatusSnapshot, RateLimitInfo, SessionNotice, SessionState } from '../types/agent'
 import type { SideIslandSize, IslandDragAnchor } from '../utils/islandLayout'
+import type { AppLanguage } from '../i18n/language'
 
 declare const __APP_VERSION__: string
 
@@ -238,7 +239,7 @@ export interface BackendConfig {
   hostVisibilityMode: 'independent' | 'follow'
   notchPositionMode: 'top' | 'left' | 'right'
   notchVerticalOffset: number
-  language: 'en' | 'zh' | 'ja' | 'ko' | 'tr'
+  language: AppLanguage
   displayId: string
   panelHorizontalOffset: number
   autoHideNoSessions: boolean
@@ -440,7 +441,7 @@ export async function updateConfig(config: BackendConfig): Promise<void> {
   return invoke('update_config', { config })
 }
 
-export async function setLanguage(language: 'en' | 'zh' | 'ja' | 'ko' | 'tr'): Promise<void> {
+export async function setLanguage(language: AppLanguage): Promise<void> {
   if (!isTauri()) return
   return invoke('set_language', { language })
 }

@@ -137,7 +137,7 @@ Add the theme in `src/themes/` → update the theme table in both READMEs → ad
 
 ### New translation
 
-`src/i18n/locales/{en,zh,ja,ko,tr}.json` — **all five files must add the key together**. Missing keys fall back to English, which gives an inconsistent experience.
+`src/i18n/locales/{en,zh}.json` — **both files must add the key together**. Vibe Board ships Chinese and English only. Missing keys fall back to English, which gives an inconsistent experience.
 
 ### Docs
 

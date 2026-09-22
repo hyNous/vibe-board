@@ -59,7 +59,7 @@ Claude Code 失明的 P0 缺陷，删除观察之外的交互与非目标模块�
 | Codex 等其它 Agent 在 Windows 上执行 Hook 所用的 shell | Assumption | UNKNOWN — M1 需同时满足 bash 与 cmd |
 | 桌面版 Agent（Claude 桌面 App、Codex 桌面版）不执行命令行 Hook | Assumption | ASSUMPTION — NOT VERIFIED，需维护者开 Codex 命令行会话实测 |
 | 价格表随安装包内置、随版本更新，运行时不下载 | Assumption（设计取舍） | 由「默认不联网」原则推出，维护者未单独确认；可改为可选下载 |
-| 教程第一版提供中文、英文，其余三种语言回落英文 | Assumption（设计取舍） | 维护者未单独确认 |
+| 界面只提供中文、英文；日、韩、土三种语言已删除，旧配置中的这三种语言回落英文 | Constraint | 维护者 2026-09-22 决定 |
 | 旧配置里默认开启的「宿主会话拉起」不迁移为新的每 Agent 开关（升级后一律为关） | Assumption（设计取舍） | 由「自动行为默认关」原则推出，维护者未单独确认 |
 
 ### 检查命令（每个里程碑的最低门槛）
@@ -420,3 +420,4 @@ lint / build / fmt / `cargo check --all-targets` 通过；`cargo test --lib` 519
 | Date | Change | Why |
 | --- | --- | --- |
 | 2026-09-21 | 建立 | 维护者确认范围后拆分里程碑与验收标准 |
+| 2026-09-22 | 界面语言收窄为中文、英文；此后各里程碑的「五语言」一律按「中英两份」执行 | 维护者决定，M6 之后单独提交 |

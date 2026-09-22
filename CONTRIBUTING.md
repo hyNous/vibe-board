@@ -137,7 +137,7 @@ chore: 升级 vitest 到 4.2
 
 ### 新增翻译
 
-`src/i18n/locales/{en,zh,ja,ko,tr}.json` **五份必须同步加键**。漏一种语言会触发兜底,体验不一致。
+`src/i18n/locales/{en,zh}.json` **两份必须同步加键**（Vibe Board 只提供中文和英文）。漏一种语言会触发兜底,体验不一致。
 
 ### 写文档
 

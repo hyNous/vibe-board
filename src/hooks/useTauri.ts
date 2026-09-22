@@ -11,6 +11,7 @@ import type { SoundChoice } from '../stores/configStore'
 import type { SessionState, DiffContent, AgentType, AgentStatusSnapshot, ToolStatus, ChatMessage, RateLimitInfo } from '../types/agent'
 import { energyIntervalMs, getAppEnergyMode } from '../utils/energyPolicy'
 import { agentRunStateFromSession } from '../utils/agentRunState'
+import { normalizeLanguage } from '../i18n/language'
 
 type Unlisten = () => void
 type TauriInitScope = string | null
@@ -312,8 +313,9 @@ function applyBackendConfig(config: BackendConfig) {
   })
 
   if (config.language) {
-    if (i18n.language !== config.language) {
-      void i18n.changeLanguage(config.language)
+    const language = normalizeLanguage(config.language)
+    if (i18n.language !== language) {
+      void i18n.changeLanguage(language)
     }
   }
 }

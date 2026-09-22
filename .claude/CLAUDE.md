@@ -24,7 +24,8 @@ cargo check --manifest-path src-tauri/Cargo.toml
 ```
 
 Use existing stores, IPC wrappers, and adapter/profile helpers before adding
-new abstractions or dependencies. Keep translations in all five locale files.
+new abstractions or dependencies. Keep translations in both locale files (`en`, `zh`); Vibe Board ships
+Chinese and English only.
 
 ## Compatibility boundary
 

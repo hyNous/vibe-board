@@ -1,9 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import en from '../i18n/locales/en.json'
 import zh from '../i18n/locales/zh.json'
-import ja from '../i18n/locales/ja.json'
-import ko from '../i18n/locales/ko.json'
-import tr from '../i18n/locales/tr.json'
 
 function flatKeys(obj: Record<string, unknown>, prefix = ''): string[] {
   return Object.entries(obj).flatMap(([k, v]) => {
@@ -17,9 +14,9 @@ function flatKeys(obj: Record<string, unknown>, prefix = ''): string[] {
 const enKeys = flatKeys(en)
 
 describe('Skill management copy', () => {
-  const locales = { en, zh, ja, ko, tr }
+  const locales = { en, zh }
 
-  it('keeps the Skill management namespaces identical across all five locales', () => {
+  it('keeps the Skill management namespaces identical across both locales', () => {
     const namespaces = [
       'settings.skillsOverview',
       'skills.sourceCategory',
@@ -59,9 +56,6 @@ describe('Skill management copy', () => {
     const patterns: Record<string, RegExp> = {
       en: /distribut/i,
       zh: /分发/,
-      ja: /配布|配信/,
-      ko: /배포|분배/,
-      tr: /dağıt|dağit/i,
     }
     const namespaces = ['settings.skillsOverview', 'skills.sourceCategory', 'skills.claim', 'skills.blocker', 'skills.agentManagement']
     for (const [name, locale] of Object.entries(locales)) {
@@ -77,8 +71,8 @@ describe('Skill management copy', () => {
 })
 
 describe('i18n locale completeness', () => {
-  it('all five locales have exactly the same key set', () => {
-    const locales = { en, zh, ja, ko, tr }
+  it('both locales have exactly the same key set', () => {
+    const locales = { en, zh }
     const expected = [...enKeys].sort()
     for (const [name, locale] of Object.entries(locales)) {
       expect([...flatKeys(locale as Record<string, unknown>)].sort(), name).toEqual(expected)
@@ -89,15 +83,11 @@ describe('i18n locale completeness', () => {
     expect(Object.keys(en)).toEqual(expect.arrayContaining(['notch', 'settings', 'tray']))
   })
 
-  it('ja tray.quit is translated', () => {
-    expect(ja.tray.quit).not.toBe(en.tray.quit)
+  it('zh tray.quit is translated', () => {
+    expect(zh.tray.quit).not.toBe(en.tray.quit)
   })
 
-  it('ko tray.quit is translated', () => {
-    expect(ko.tray.quit).not.toBe(en.tray.quit)
-  })
-
-  it('all five locales cover layered Agent Skill scope copy', () => {
+  it('both locales cover layered Agent Skill scope copy', () => {
     const keys = [
       'skillSource',
       'skillStatus',
@@ -108,7 +98,7 @@ describe('i18n locale completeness', () => {
       'inheritedUnmanagedNoResults',
       'builtinSkills',
     ]
-    const locales = [en, zh, ja, ko, tr].map(
+    const locales = [en, zh].map(
       (locale) => locale.skills.agentManagement as Record<string, unknown>,
     )
 
@@ -122,9 +112,6 @@ describe('i18n locale completeness', () => {
     expect(locales.map((locale) => locale.builtinSkills)).toEqual([
       'Built-in read-only',
       '内置只读',
-      '組み込み読み取り専用',
-      '기본 제공 읽기 전용',
-      'Yerleşik salt okunur',
     ])
 
     const sharedDeleteKeys = [

@@ -370,6 +370,14 @@ impl AppConfig {
         self.boot_sound_default_migrated = true;
     }
 
+    /// Only Chinese and English ship. Japanese, Korean and Turkish were dropped,
+    /// so an earlier choice of any of them falls back to English.
+    fn normalize_language(&mut self) {
+        if self.language != "zh" && self.language != "en" {
+            self.language = "en".to_string();
+        }
+    }
+
     fn migrate_legacy_sound_choices(&mut self) {
         for rule in self.sound_rules.values_mut() {
             if rule.sound == LEGACY_CHIME_SOUND_CHOICE {
@@ -471,6 +479,7 @@ impl ConfigStore {
         }
         config.migrate_boot_sound_default();
         config.migrate_legacy_sound_choices();
+        config.normalize_language();
         Some(config)
     }
 
@@ -692,6 +701,24 @@ mod tests {
             );
         }
         let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn dropped_languages_fall_back_to_english_and_supported_ones_are_kept() {
+        for (stored, expected) in [
+            ("ja", "en"),
+            ("ko", "en"),
+            ("tr", "en"),
+            ("zh", "zh"),
+            ("en", "en"),
+        ] {
+            let mut config = AppConfig {
+                language: stored.to_string(),
+                ..AppConfig::default()
+            };
+            config.normalize_language();
+            assert_eq!(config.language, expected, "stored language {stored}");
+        }
     }
 
     #[test]

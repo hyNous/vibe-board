@@ -4905,7 +4905,7 @@ pub async fn set_language(
     language: String,
 ) -> Result<(), String> {
     let language = match language.as_str() {
-        "en" | "zh" | "ja" | "ko" | "tr" => language,
+        "en" | "zh" => language,
         other => return Err(format!("Unsupported language: {}", other)),
     };
     let mut config = state.config_store.get();

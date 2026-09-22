@@ -9,6 +9,7 @@ import { Toggle } from '../Toggle'
 import { Dropdown } from '../Dropdown'
 import { quitApp, setLanguage, setLaunchAtLogin } from '../../../services/tauriApi'
 import { reopenSetupWizard } from '../../../utils/setupWizard'
+import type { AppLanguage } from '../../../i18n/language'
 import { GlassButton } from '../../shared'
 
 export function GeneralSection() {
@@ -37,9 +38,6 @@ export function GeneralSection() {
   const languageOptions = [
     { value: 'en', label: 'English' },
     { value: 'zh', label: '中文' },
-    { value: 'ja', label: '日本語' },
-    { value: 'ko', label: '한국어' },
-    { value: 'tr', label: 'Türkçe' },
   ]
 
   return (
@@ -50,15 +48,12 @@ export function GeneralSection() {
             value={(() => {
               const lang = i18n.language
               if (lang.startsWith('zh')) return 'zh'
-              if (lang.startsWith('ja')) return 'ja'
-              if (lang.startsWith('ko')) return 'ko'
-              if (lang.startsWith('tr')) return 'tr'
               return 'en'
             })()}
             options={languageOptions}
             onChange={(v) => {
               const previousLanguage = language
-              const nextLanguage = v as 'en' | 'zh' | 'ja' | 'ko' | 'tr'
+              const nextLanguage = v as AppLanguage
               i18n.changeLanguage(v)
               updateConfig('language', nextLanguage)
               setLanguage(nextLanguage).catch((error) => {
