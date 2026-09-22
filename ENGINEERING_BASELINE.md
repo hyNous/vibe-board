@@ -108,14 +108,14 @@ Antigravity）的取数方式真实不同，且现有「一家一个定制函数
 | 派发 Skill 安装 | 预览列出的文件 = 实际写入的文件；未确认不写；不写 `CLAUDE.md` / `AGENTS.md` | 夹具测试（M7） |
 | Provider 官方用量接口 | 仅在该 Provider 授权后请求；超时有上限；失败显示 Unknown 不伪造；凭据不进日志 | M8c 能力矩阵 + 测试 |
 
-### Provider 能力矩阵（M8c 第一步填写，当前均为 UNKNOWN）
+### Provider 能力矩阵（2026-09-22 父级 probe，维护者已批准联网）
 
 | Provider | 剩余额度来源 | 历史用量来源 | 需联网 | Verified |
 | --- | --- | --- | --- | --- |
-| Codex | 本地 app-server 桥接（现有） | `~/.codex/sessions/*.jsonl`（本机 654 个，含 token 分项与模型名） | 否 | 历史字段 VERIFIED；接口 UNKNOWN |
-| Claude Code | UNKNOWN | `~/.claude/projects/*.jsonl`（本机 18 个） | UNKNOWN | UNKNOWN |
-| OpenCode | `OPENCODE_GO_USAGE_URL`（现有，读本地 API key） | UNKNOWN | 是 | 现有实现，未 probe |
-| Antigravity | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN |
+| Codex | Codex 自带 CLI 的 `app-server`（JSON-RPC `account/rateLimits/read`，由 Codex 用自己的登录向 OpenAI 查询）；次选：会话日志中 6 小时内的限额快照（纯本地） | `~/.codex/sessions/*.jsonl`（本机 654 个） | 是（间接，经 Codex 进程） | **VERIFIED**：用 `%LOCALAPPDATA%/OpenAI/Codex/bin/codex.exe` 手动调用返回 5 小时与 7 天窗口。**缺陷**：现有代码用 `find_binary("codex")`，找不到桌面版自带的 CLI（本机 PATH 上没有 codex），实测返回空；应改用 `find_codex_cli_binary` 一类含自带目录的查找 |
+| Claude Code | 本地临时文件 `island-rate-limits.json`（statusline 写入，纯本地）；联网查询需其 OAuth 令牌 | `~/.claude/projects/*.jsonl`（本机 21 个） | 联网路径：是 | 本地文件路径：本机无数据。联网路径 **UNKNOWN**：本机无 `~/.claude/.credentials.json`，查看凭据存放位置被权限检查拦下，未 probe——**不上线联网取数** |
+| OpenCode | `https://opencode.ai/zen/go/v1/usage`（Bearer 本地 API key） | 无 | 是 | **VERIFIED**：返回 5 小时 / 7 天 / 30 天窗口，约 1.3 秒 |
+| Antigravity | 本地运行 `agy /usage`（由 agy 自己联网） | 无 | 是（间接，经 agy 进程） | **VERIFIED**：返回额度，但耗时 12–15 秒，首次 probe 超时返回空 |
 
 ---
 
