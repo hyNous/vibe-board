@@ -378,7 +378,10 @@
     },
     "tutorial": {
       "title": "重看教程与向导",
-      "desc": "重新打开首次向导。教程内容将在后续里程碑加入。",
+      "desc": "在应用内窗口打开随包分发的离线教程，或重新运行首次向导。",
+      "openTutorial": "打开完整教程",
+      "openTutorialDesc": "岛怎么用、看板在显示什么、点任务会发生什么、Agent 接入，以及 Skill 管理与使用额度。",
+      "openTutorialAction": "打开教程",
       "reopen": "重新打开首次向导",
       "reopenDesc": "再次选择要接入的 Agent，并重新安装 Hook。",
       "open": "打开向导"

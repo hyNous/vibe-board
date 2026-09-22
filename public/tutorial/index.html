@@ -1,0 +1,1011 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title data-zh="Vibe Board 教程" data-en="Vibe Board Tutorial">Vibe Board Tutorial</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0b0f17;
+        --bg-soft: #121826;
+        --panel: rgba(255, 255, 255, 0.05);
+        --panel-strong: rgba(255, 255, 255, 0.09);
+        --line: rgba(255, 255, 255, 0.12);
+        --text: #eef2f8;
+        --text-soft: #a6b0c3;
+        --accent: #5b8cff;
+        --accent-soft: rgba(91, 140, 255, 0.16);
+        --ok: #34c759;
+        --warn: #f5a623;
+        --danger: #ff5f57;
+        --radius: 18px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        color: var(--text);
+        background:
+          radial-gradient(1200px 520px at 15% -10%, rgba(91, 140, 255, 0.22), transparent 60%),
+          radial-gradient(900px 420px at 110% 8%, rgba(52, 199, 89, 0.12), transparent 55%),
+          var(--bg);
+        font-family: "Segoe UI", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
+        font-size: 15px;
+        line-height: 1.7;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      .page {
+        max-width: 980px;
+        margin: 0 auto;
+        padding: 48px 28px 72px;
+      }
+
+      .hero__mark {
+        display: inline-grid;
+        place-items: center;
+        width: 44px;
+        height: 44px;
+        border-radius: 14px;
+        background: linear-gradient(135deg, #6ea8ff, #3f6dff);
+        box-shadow: 0 12px 30px rgba(63, 109, 255, 0.35);
+        font-weight: 800;
+      }
+
+      .hero__eyebrow {
+        margin: 22px 0 8px;
+        color: var(--accent);
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.18em;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(30px, 5vw, 44px);
+        font-weight: 800;
+        letter-spacing: -0.02em;
+        line-height: 1.1;
+      }
+
+      .hero__lead {
+        max-width: 700px;
+        margin: 16px 0 0;
+        color: var(--text-soft);
+      }
+
+      .hero__offline {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 20px;
+        padding: 7px 12px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        color: var(--text-soft);
+        background: var(--panel);
+        font-size: 12px;
+      }
+
+      .hero__offline::before {
+        width: 8px;
+        height: 8px;
+        border-radius: 999px;
+        background: var(--ok);
+        content: "";
+      }
+
+      .nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin: 26px 0 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .nav a {
+        display: inline-block;
+        padding: 7px 12px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        color: var(--text-soft);
+        text-decoration: none;
+        font-size: 12.5px;
+        transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+      }
+
+      .nav a:hover {
+        color: var(--text);
+        border-color: rgba(91, 140, 255, 0.5);
+        background: var(--accent-soft);
+      }
+
+      section {
+        margin-top: 46px;
+        padding: 26px 26px 30px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.02));
+      }
+
+      section h2 {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin: 0;
+        font-size: 22px;
+        font-weight: 750;
+        letter-spacing: -0.01em;
+      }
+
+      .step-index {
+        display: inline-grid;
+        place-items: center;
+        width: 28px;
+        height: 28px;
+        border-radius: 9px;
+        background: var(--accent-soft);
+        color: #bcd0ff;
+        font-size: 13px;
+        font-weight: 800;
+      }
+
+      .section-lead {
+        margin: 12px 0 0;
+        color: var(--text-soft);
+      }
+
+      .facts {
+        margin: 18px 0 0;
+        padding: 0;
+        list-style: none;
+        display: grid;
+        gap: 10px;
+      }
+
+      .facts li {
+        position: relative;
+        padding-left: 20px;
+        color: var(--text-soft);
+      }
+
+      .facts li::before {
+        position: absolute;
+        left: 0;
+        top: 10px;
+        width: 7px;
+        height: 7px;
+        border-radius: 999px;
+        background: var(--accent);
+        content: "";
+      }
+
+      .facts strong {
+        color: var(--text);
+      }
+
+      .facts code,
+      .callout code {
+        padding: 1px 6px;
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        background: rgba(255, 255, 255, 0.06);
+        font-family: "Cascadia Mono", Consolas, monospace;
+        font-size: 12.5px;
+      }
+
+      .callout {
+        margin: 18px 0 0;
+        padding: 13px 16px;
+        border-left: 3px solid var(--accent);
+        border-radius: 10px;
+        color: var(--text-soft);
+        background: var(--accent-soft);
+      }
+
+      .callout--warn {
+        border-left-color: var(--warn);
+        background: rgba(245, 166, 35, 0.12);
+      }
+
+      .diagram {
+        margin: 22px 0 0;
+        padding: 20px;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: rgba(6, 10, 18, 0.55);
+        overflow: hidden;
+      }
+
+      .diagram__caption {
+        margin: 14px 0 0;
+        color: var(--text-soft);
+        font-size: 12.5px;
+      }
+
+      /* ── Island morph diagram ── */
+      .screen {
+        position: relative;
+        height: 240px;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.01));
+        overflow: hidden;
+      }
+
+      .screen__island {
+        position: absolute;
+        top: 12px;
+        left: 50%;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding: 9px 12px;
+        border-radius: 16px;
+        background: #05070c;
+        box-shadow: 0 16px 34px rgba(0, 0, 0, 0.5);
+        transform: translateX(-50%);
+        animation: island-morph 7s ease-in-out infinite;
+      }
+
+      .screen__island-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        opacity: 0;
+        animation: island-content 7s ease-in-out infinite;
+      }
+
+      .screen__pill {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--text-soft);
+        font-size: 12px;
+        white-space: nowrap;
+      }
+
+      .screen__dot {
+        width: 9px;
+        height: 9px;
+        border-radius: 999px;
+        background: var(--ok);
+        animation: dot-pulse 1.6s ease-in-out infinite;
+      }
+
+      .screen__task {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 7px 9px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: rgba(255, 255, 255, 0.05);
+        color: var(--text-soft);
+        font-size: 11.5px;
+        white-space: nowrap;
+      }
+
+      .screen__task b {
+        color: var(--text);
+        font-weight: 650;
+      }
+
+      @keyframes island-morph {
+        0%, 30% { width: 150px; }
+        45%, 80% { width: 320px; }
+        95%, 100% { width: 150px; }
+      }
+
+      @keyframes island-content {
+        0%, 30% { opacity: 0; }
+        45%, 80% { opacity: 1; }
+        95%, 100% { opacity: 0; }
+      }
+
+      @keyframes dot-pulse {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.45; transform: scale(0.82); }
+      }
+
+      /* ── Board diagram ── */
+      .board {
+        display: grid;
+        gap: 9px;
+      }
+
+      .board__counters {
+        display: flex;
+        gap: 7px;
+      }
+
+      .board__counter {
+        padding: 3px 9px;
+        border-radius: 999px;
+        color: var(--text-soft);
+        background: rgba(255, 255, 255, 0.07);
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+      }
+
+      .board__counter--act {
+        color: #b7f5c8;
+        background: rgba(52, 199, 89, 0.18);
+      }
+
+      .board__counter--wait {
+        color: #ffd9a1;
+        background: rgba(245, 166, 35, 0.18);
+      }
+
+      .board__row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 12px;
+        border: 1px solid var(--line);
+        border-radius: 11px;
+        background: rgba(255, 255, 255, 0.04);
+        opacity: 0;
+        animation: row-in 6s ease-in-out infinite;
+      }
+
+      .board__row:nth-child(3) { animation-delay: 0.35s; }
+      .board__row:nth-child(4) { animation-delay: 0.7s; }
+
+      .board__status {
+        width: 9px;
+        height: 9px;
+        border-radius: 999px;
+        flex: 0 0 auto;
+      }
+
+      .board__status--run { background: var(--ok); animation: dot-pulse 1.6s ease-in-out infinite; }
+      .board__status--wait { background: var(--warn); animation: dot-pulse 1.6s ease-in-out infinite; }
+      .board__status--done { background: #7b869b; }
+
+      .board__name {
+        min-width: 92px;
+        font-weight: 700;
+        font-size: 13px;
+      }
+
+      .board__title {
+        flex: 1;
+        overflow: hidden;
+        color: var(--text-soft);
+        font-size: 12.5px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .board__state {
+        color: var(--text-soft);
+        font-size: 12px;
+      }
+
+      .board__health {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 4px;
+        color: #ffd9a1;
+        font-size: 12px;
+        opacity: 0;
+        animation: health-blink 6s ease-in-out infinite;
+      }
+
+      .board__health-icon {
+        width: 14px;
+        height: 14px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.8;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        animation: dot-pulse 1.8s ease-in-out infinite;
+      }
+
+      .board__health-icon circle {
+        fill: currentColor;
+        stroke: none;
+      }
+
+      @keyframes row-in {
+        0%, 12% { opacity: 0; transform: translateY(6px); }
+        25%, 88% { opacity: 1; transform: translateY(0); }
+        100% { opacity: 0; }
+      }
+
+      @keyframes health-blink {
+        0%, 45% { opacity: 0; }
+        60%, 88% { opacity: 1; }
+        100% { opacity: 0; }
+      }
+
+      /* ── Click diagram ── */
+      .click {
+        position: relative;
+        height: 180px;
+      }
+
+      .click__card {
+        position: absolute;
+        left: 0;
+        top: 24px;
+        width: 200px;
+        padding: 12px;
+        border: 1px solid rgba(91, 140, 255, 0.5);
+        border-radius: 12px;
+        background: rgba(91, 140, 255, 0.12);
+        font-size: 12.5px;
+      }
+
+      .click__cursor {
+        position: absolute;
+        left: 60px;
+        top: 70px;
+        font-size: 18px;
+        animation: cursor-move 6s ease-in-out infinite;
+      }
+
+      .click__arrow {
+        position: absolute;
+        left: 218px;
+        top: 58px;
+        color: var(--accent);
+        font-size: 20px;
+        animation: arrow-slide 6s ease-in-out infinite;
+      }
+
+      .click__window {
+        position: absolute;
+        right: 0;
+        top: 12px;
+        width: 190px;
+        height: 120px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.04);
+      }
+
+      .click__window-bar {
+        height: 26px;
+        border-bottom: 1px solid var(--line);
+        border-radius: 12px 12px 0 0;
+        background: rgba(255, 255, 255, 0.06);
+      }
+
+      .click__notice {
+        position: absolute;
+        right: 0;
+        bottom: 0;
+        padding: 8px 12px;
+        border: 1px solid rgba(245, 166, 35, 0.4);
+        border-radius: 10px;
+        color: #ffd9a1;
+        background: rgba(245, 166, 35, 0.12);
+        font-size: 12px;
+        animation: notice-pop 6s ease-in-out infinite;
+      }
+
+      @keyframes cursor-move {
+        0%, 20% { transform: translate(0, 0); }
+        40%, 100% { transform: translate(-28px, -26px) scale(0.9); }
+      }
+
+      @keyframes arrow-slide {
+        0%, 20% { opacity: 0; transform: translateX(-12px); }
+        40%, 88% { opacity: 1; transform: translateX(0); }
+        100% { opacity: 0; }
+      }
+
+      @keyframes notice-pop {
+        0%, 55% { opacity: 0; transform: translateY(8px); }
+        70%, 92% { opacity: 1; transform: translateY(0); }
+        100% { opacity: 0; }
+      }
+
+      /* ── Agent flow diagram ── */
+      .flow {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 12px;
+      }
+
+      .flow__chip {
+        padding: 9px 13px;
+        border: 1px solid var(--line);
+        border-radius: 11px;
+        background: rgba(255, 255, 255, 0.05);
+        font-size: 12.5px;
+      }
+
+      .flow__chip--on {
+        border-color: rgba(91, 140, 255, 0.5);
+        background: var(--accent-soft);
+      }
+
+      .flow__line {
+        position: relative;
+        flex: 1;
+        min-width: 60px;
+        height: 2px;
+        background: linear-gradient(90deg, rgba(91, 140, 255, 0.15), rgba(91, 140, 255, 0.85));
+        animation: line-flow 2.4s ease-in-out infinite;
+      }
+
+      .flow__line::after {
+        position: absolute;
+        right: -1px;
+        top: -4px;
+        border-top: 5px solid transparent;
+        border-bottom: 5px solid transparent;
+        border-left: 8px solid var(--accent);
+        content: "";
+      }
+
+      @keyframes line-flow {
+        0%, 100% { opacity: 0.45; }
+        50% { opacity: 1; }
+      }
+
+      .toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--text-soft);
+        font-size: 12.5px;
+      }
+
+      .toggle__track {
+        display: inline-block;
+        width: 34px;
+        height: 19px;
+        padding: 2px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.16);
+      }
+
+      .toggle__knob {
+        display: block;
+        width: 15px;
+        height: 15px;
+        border-radius: 999px;
+        background: #8d97a9;
+        animation: toggle-nudge 4s ease-in-out infinite;
+      }
+
+      @keyframes toggle-nudge {
+        0%, 70% { transform: translateX(0); }
+        80%, 90% { transform: translateX(4px); }
+        100% { transform: translateX(0); }
+      }
+
+      /* ── Skills diagram ── */
+      .sources {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 9px;
+      }
+
+      .source {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 9px 13px;
+        border: 1px solid var(--line);
+        border-radius: 11px;
+        background: rgba(255, 255, 255, 0.05);
+        font-size: 12.5px;
+      }
+
+      .source__tag {
+        padding: 2px 8px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 700;
+      }
+
+      .source--custom .source__tag { color: #cdd7ea; background: rgba(255, 255, 255, 0.12); }
+      .source--github .source__tag { color: #bcd0ff; background: var(--accent-soft); }
+      .source--agent .source__tag { color: #b7f5c8; background: rgba(52, 199, 89, 0.16); }
+
+      .apply-rows {
+        display: grid;
+        gap: 8px;
+        margin-top: 16px;
+      }
+
+      .apply-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 9px 12px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: rgba(255, 255, 255, 0.03);
+        font-size: 12.5px;
+      }
+
+      .apply-row__skill { font-weight: 700; }
+      .apply-row__arrow { color: var(--accent); }
+      .apply-row__agent { color: var(--text-soft); }
+
+      /* ── Usage diagram ── */
+      .usage {
+        display: grid;
+        gap: 12px;
+      }
+
+      .usage__head {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+        font-size: 12.5px;
+      }
+
+      .usage__badge {
+        padding: 3px 9px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.08);
+        color: var(--text-soft);
+        font-size: 11px;
+      }
+
+      .usage__badge--now { color: #bcd0ff; background: var(--accent-soft); }
+
+      .usage__table {
+        display: grid;
+        grid-template-columns: 1.2fr 0.9fr 0.9fr 1fr;
+        gap: 1px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        overflow: hidden;
+        background: var(--line);
+        font-size: 12px;
+      }
+
+      .usage__table span {
+        padding: 8px 10px;
+        background: rgba(9, 13, 21, 0.92);
+        color: var(--text-soft);
+      }
+
+      .usage__table span.is-head {
+        color: var(--text);
+        font-weight: 700;
+      }
+
+      .usage__bars {
+        display: flex;
+        align-items: flex-end;
+        gap: 14px;
+        height: 92px;
+        padding: 0 6px;
+      }
+
+      .usage__bar {
+        flex: 1;
+        border-radius: 7px 7px 0 0;
+        background: linear-gradient(180deg, rgba(91, 140, 255, 0.85), rgba(91, 140, 255, 0.25));
+        transform-origin: bottom;
+        animation: bar-grow 5s ease-in-out infinite;
+      }
+
+      .usage__bar:nth-child(2) { animation-delay: 0.3s; }
+      .usage__bar:nth-child(3) { animation-delay: 0.6s; }
+
+      @keyframes bar-grow {
+        0%, 15% { transform: scaleY(0.12); opacity: 0.4; }
+        40%, 88% { transform: scaleY(1); opacity: 1; }
+        100% { transform: scaleY(0.12); opacity: 0.4; }
+      }
+
+      .unknown-chip {
+        padding: 2px 8px;
+        border: 1px dashed rgba(245, 166, 35, 0.5);
+        border-radius: 999px;
+        color: #ffd9a1;
+        font-size: 11px;
+      }
+
+      footer {
+        margin-top: 46px;
+        padding-top: 22px;
+        border-top: 1px solid var(--line);
+        color: var(--text-soft);
+        font-size: 12.5px;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        * {
+          animation: none !important;
+          transition: none !important;
+        }
+
+        .screen__island-row,
+        .board__row,
+        .board__health,
+        .click__notice {
+          opacity: 1;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <header class="hero">
+        <span class="hero__mark" aria-hidden="true">AI</span>
+        <p class="hero__eyebrow" data-zh="使用教程" data-en="GUIDE">GUIDE</p>
+        <h1 data-zh="看懂 Vibe Board" data-en="Understand Vibe Board">Understand Vibe Board</h1>
+        <p class="hero__lead" data-zh="Vibe Board 是一个只看不操作的桌面看板：它把本机 Agent 的任务状态、剩余额度和本地用量成本放到一个悬浮的灵动岛上。本教程按四个主题讲清它会做什么、不会做什么。" data-en="Vibe Board is a desktop board that watches without operating: it surfaces your local Agents' task state, remaining quota, and local usage cost in a floating island. This tutorial explains, in four themes, what it does and what it never does.">Vibe Board is a desktop board that watches without operating: it surfaces your local Agents' task state, remaining quota, and local usage cost in a floating island. This tutorial explains, in four themes, what it does and what it never does.</p>
+        <span class="hero__offline" data-zh="随安装包离线分发 · 不加载任何网络资源" data-en="Ships offline with the app · loads no network resources">Ships offline with the app · loads no network resources</span>
+        <nav aria-label="Tutorial sections">
+          <ul class="nav">
+            <li><a href="#island" data-zh="① 岛怎么用" data-en="① Using the island">① Using the island</a></li>
+            <li><a href="#board" data-zh="② 看板在显示什么" data-en="② What the board shows">② What the board shows</a></li>
+            <li><a href="#click" data-zh="③ 点任务会发生什么" data-en="③ What a task click does">③ What a task click does</a></li>
+            <li><a href="#agents" data-zh="④ Agent 接入" data-en="④ Connecting Agents">④ Connecting Agents</a></li>
+            <li><a href="#skills" data-zh="Skill 管理" data-en="Skill management">Skill management</a></li>
+            <li><a href="#usage" data-zh="使用额度" data-en="Usage &amp; quota">Usage &amp; quota</a></li>
+            <li><a href="#dispatch" data-zh="派发框架" data-en="Dispatch framework">Dispatch framework</a></li>
+          </ul>
+        </nav>
+      </header>
+
+      <main>
+        <section id="island">
+          <h2><span class="step-index" aria-hidden="true">1</span><span data-zh="岛怎么用" data-en="Using the island">Using the island</span></h2>
+          <p class="section-lead" data-zh="灵动岛默认停在屏幕顶部，也可以拖到左边缘或右边缘。它有两种主要形态：收起时是一颗小胶囊，悬停或点一下就展开成面板。" data-en="The island sits at the top of the screen by default and can also be dragged to the left or right edge. It has two main shapes: a small pill when collapsed, a panel when you hover or click it.">The island sits at the top of the screen by default and can also be dragged to the left or right edge. It has two main shapes: a small pill when collapsed, a panel when you hover or click it.</p>
+
+          <div class="diagram">
+            <div class="screen">
+              <div class="screen__island">
+                <div class="screen__pill">
+                  <span class="screen__dot" aria-hidden="true"></span>
+                  <span>Claude Code</span>
+                </div>
+                <div class="screen__island-row">
+                  <div class="screen__task"><b>Codex</b><span data-zh="修复登录流程" data-en="Fix the login flow">Fix the login flow</span></div>
+                  <div class="screen__task"><b>Claude Code</b><span data-zh="运行测试" data-en="Run the tests">Run the tests</span></div>
+                </div>
+              </div>
+            </div>
+            <p class="diagram__caption" data-zh="收起 → 悬停展开 → 移开自动收起。示意动画，实际形态由外观设置决定。" data-en="Collapsed → hover to expand → move away to collapse. An illustration; the real shape follows your appearance settings.">Collapsed → hover to expand → move away to collapse. An illustration; the real shape follows your appearance settings.</p>
+          </div>
+
+          <ul class="facts">
+            <li data-zh="展开与收起：鼠标移入胶囊展开，移开后自动收起；按 Esc 逐级收回（展开 → 悬停 → 收起），在收起状态再按 Esc 会让它在 30 秒内安静下来，不再被普通通知唤醒。" data-en="Expand and collapse: hovering the pill expands it, moving away collapses it, and Esc steps back one level (expanded → hover → collapsed). Pressing Esc again while collapsed keeps it quiet for 30 seconds, so ordinary notifications no longer wake it.">Expand and collapse: hovering the pill expands it, moving away collapses it, and Esc steps back one level (expanded → hover → collapsed). Pressing Esc again while collapsed keeps it quiet for 30 seconds, so ordinary notifications no longer wake it.</li>
+            <li data-zh="全局快捷键：默认 Ctrl/Cmd+Shift+I 切换面板，Ctrl/Cmd+, 打开设置；都能在「设置 → 快捷键」里改成自己的组合，也可以给展开、收起、上一个/下一个会话单独绑定。" data-en="Global shortcuts: Ctrl/Cmd+Shift+I toggles the panel and Ctrl/Cmd+, opens Settings by default. Both can be rebound in Settings → Shortcuts, where expand, collapse, and previous/next session can get their own keys too.">Global shortcuts: Ctrl/Cmd+Shift+I toggles the panel and Ctrl/Cmd+, opens Settings by default. Both can be rebound in Settings → Shortcuts, where expand, collapse, and previous/next session can get their own keys too.</li>
+            <li data-zh="挂靠位置：默认居中停在屏幕顶部；「允许水平拖动」默认开启，把胶囊拖到屏幕左缘或右缘就会停靠成竖向胶囊。位置、水平偏移、垂直偏移都能在「设置 → 外观」里调整。" data-en="Docking: it sits centered at the top of the screen by default; horizontal dragging is on by default, so dragging the pill to the left or right edge docks it there as a vertical pill. Position, horizontal offset, and vertical offset are all adjustable in Settings → Appearance.">Docking: it sits centered at the top of the screen by default; horizontal dragging is on by default, so dragging the pill to the left or right edge docks it there as a vertical pill. Position, horizontal offset, and vertical offset are all adjustable in Settings → Appearance.</li>
+            <li data-zh="多显示器：默认跟随鼠标所在的显示器；也可以在「设置 → 外观」里固定到某一块屏幕。" data-en="Multiple monitors: it follows the monitor under your cursor by default; Settings → Appearance can pin it to one screen instead.">Multiple monitors: it follows the monitor under your cursor by default; Settings → Appearance can pin it to one screen instead.</li>
+          </ul>
+        </section>
+
+        <section id="board">
+          <h2><span class="step-index" aria-hidden="true">2</span><span data-zh="看板在显示什么" data-en="What the board shows">What the board shows</span></h2>
+          <p class="section-lead" data-zh="展开后的面板列出当前会话，按优先级从高到低排序：出错和等待输入的会话排在最上面，然后是工作中的会话，最后是任务完成或已中断的会话。" data-en="The expanded panel lists current sessions, sorted by priority: errors and waiting sessions first, then working ones, then completed or interrupted sessions.">The expanded panel lists current sessions, sorted by priority: errors and waiting sessions first, then working ones, then completed or interrupted sessions.</p>
+
+          <div class="diagram">
+            <div class="board">
+              <div class="board__counters">
+                <span class="board__counter">ALL 3</span>
+                <span class="board__counter board__counter--act">ACT 1</span>
+                <span class="board__counter board__counter--wait">WAIT 1</span>
+              </div>
+              <div class="board__row">
+                <span class="board__status board__status--wait" aria-hidden="true"></span>
+                <span class="board__name">Claude Code</span>
+                <span class="board__title" data-zh="重构设置页导航" data-en="Rebuild the settings navigation">Rebuild the settings navigation</span>
+                <span class="board__state" data-zh="等待输入..." data-en="Waiting for input...">Waiting for input...</span>
+              </div>
+              <div class="board__row">
+                <span class="board__status board__status--run" aria-hidden="true"></span>
+                <span class="board__name">Codex</span>
+                <span class="board__title" data-zh="修复登录流程" data-en="Fix the login flow">Fix the login flow</span>
+                <span class="board__state" data-zh="工作中..." data-en="Working...">Working...</span>
+              </div>
+              <div class="board__row">
+                <span class="board__status board__status--done" aria-hidden="true"></span>
+                <span class="board__name">Gemini CLI</span>
+                <span class="board__title" data-zh="补充单元测试" data-en="Add unit tests">Add unit tests</span>
+                <span class="board__state" data-zh="任务完成" data-en="Task complete">Task complete</span>
+              </div>
+              <div class="board__health">
+                <svg class="board__health-icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 4 2.5 20h19L12 4Z" />
+                  <path d="M12 10v4" />
+                  <circle cx="12" cy="17" r="1" />
+                </svg>
+                <span data-zh="2 项 Hook 自检未通过" data-en="2 hook self-checks failing">2 hook self-checks failing</span>
+              </div>
+            </div>
+            <p class="diagram__caption" data-zh="每张任务卡：状态点、Agent 名称、会话标题、状态文字。示意动画。" data-en="Each task card: status dot, Agent name, session title, status text. An illustration.">Each task card: status dot, Agent name, session title, status text. An illustration.</p>
+          </div>
+
+          <ul class="facts">
+            <li data-zh="会话状态：工作中、等待输入、已阻塞、额度受限、发生错误、任务完成、已中断。看板只反映 Agent 自己报告的状态，不会替它判断。" data-en="Session states: working, waiting for input, blocked, rate limited, error, task complete, interrupted. The board only mirrors what the Agent reports; it never judges on its own.">Session states: working, waiting for input, blocked, rate limited, error, task complete, interrupted. The board only mirrors what the Agent reports; it never judges on its own.</li>
+            <li data-zh="顶部计数：ALL / ACT / WAIT 分别是会话总数、执行中、等待输入的数量；打开额度显示时，这一行会换成剩余额度条。" data-en="Top counters: ALL / ACT / WAIT count total, running, and waiting sessions. When quota display is on, this row shows the remaining-quota bar instead.">Top counters: ALL / ACT / WAIT count total, running, and waiting sessions. When quota display is on, this row shows the remaining-quota bar instead.</li>
+            <li data-zh="Hook 健康指示：只在自检发现问题时才出现在右上角（三角图标 + 未通过数量），全部通过时不显示。点开可以看到每一项自检结果，并用「一键修复」重新安装 Hook。" data-en="Hook health indicator: it appears in the top-right only when the self-check finds a problem (triangle icon plus the failing count), and stays hidden when everything passes. Open it to see each check result and reinstall hooks with one click.">Hook health indicator: it appears in the top-right only when the self-check finds a problem (triangle icon plus the failing count), and stays hidden when everything passes. Open it to see each check result and reinstall hooks with one click.</li>
+            <li data-zh="底部是品牌和标语；检测到新版本时，面板里会出现更新提示。" data-en="The bottom carries the brand and slogan; when a new version is detected, an update notice appears in the panel.">The bottom carries the brand and slogan; when a new version is detected, an update notice appears in the panel.</li>
+          </ul>
+        </section>
+
+        <section id="click">
+          <h2><span class="step-index" aria-hidden="true">3</span><span data-zh="点任务会发生什么" data-en="What a task click does">What a task click does</span></h2>
+          <p class="section-lead" data-zh="点任务卡只有一个作用：把你带回这个会话真正所在的地方。看板不会替你回复、批准或执行任何操作。" data-en="Clicking a task card does exactly one thing: it takes you back to where that session actually lives. The board never replies, approves, or executes anything for you.">Clicking a task card does exactly one thing: it takes you back to where that session actually lives. The board never replies, approves, or executes anything for you.</p>
+
+          <div class="diagram">
+            <div class="click">
+              <div class="click__card">
+                <b>Codex</b><br />
+                <span data-zh="修复登录流程 · 工作中..." data-en="Fix the login flow · Working...">Fix the login flow · Working...</span>
+              </div>
+              <span class="click__cursor" aria-hidden="true">➤</span>
+              <span class="click__arrow" aria-hidden="true">→</span>
+              <div class="click__window" aria-hidden="true">
+                <div class="click__window-bar"></div>
+              </div>
+              <div class="click__notice" data-zh="请手动打开 CLI 查看执行进度" data-en="Open the CLI manually to view progress">Open the CLI manually to view progress</div>
+            </div>
+            <p class="diagram__caption" data-zh="桌面版 Agent 会被唤回前台；纯命令行会话没有可唤起的窗口，岛上只给出提示。" data-en="Desktop Agents are brought back to the front; CLI-only sessions have no window to raise, so the island just shows a hint.">Desktop Agents are brought back to the front; CLI-only sessions have no window to raise, so the island just shows a hint.</p>
+          </div>
+
+          <ul class="facts">
+            <li data-zh="桌面版 Agent（例如 Codex 桌面版，或带有桌面窗口的会话）：点击任务会把承载这个会话的 App 窗口唤到前台。" data-en="Desktop Agents (for example Codex Desktop, or a session with a desktop window): clicking the task brings the app window hosting that session to the front.">Desktop Agents (for example Codex Desktop, or a session with a desktop window): clicking the task brings the app window hosting that session to the front.</li>
+            <li data-zh="纯命令行会话：没有可唤起的窗口，看板会提示「请手动打开 CLI 查看执行进度」。" data-en="CLI-only sessions: there is no window to raise, so the board says “Open the CLI manually to view progress”.">CLI-only sessions: there is no window to raise, so the board says “Open the CLI manually to view progress”.</li>
+            <li data-zh="在灵动岛上按 Ctrl/Cmd+J 可以直接跳到当前活动会话的终端窗口。" data-en="Pressing Ctrl/Cmd+J while the island is focused jumps straight to the active session's terminal window.">Pressing Ctrl/Cmd+J while the island is focused jumps straight to the active session's terminal window.</li>
+            <li data-zh="看板只观察：没有批准、回答、与 Agent 对话的入口。" data-en="The board only watches: there is no way to approve, answer, or chat with an Agent from it.">The board only watches: there is no way to approve, answer, or chat with an Agent from it.</li>
+          </ul>
+        </section>
+
+        <section id="agents">
+          <h2><span class="step-index" aria-hidden="true">4</span><span data-zh="Agent 接入" data-en="Connecting Agents">Connecting Agents</span></h2>
+          <p class="section-lead" data-zh="第一次打开时会出现设置向导：它检测本机已安装的 Agent，让你选择要接入哪些，然后为它们安装本地 Hook。" data-en="The setup wizard appears the first time you open the app: it detects the Agents installed on this machine, lets you pick which ones to connect, then installs local hooks for them.">The setup wizard appears the first time you open the app: it detects the Agents installed on this machine, lets you pick which ones to connect, then installs local hooks for them.</p>
+
+          <div class="diagram">
+            <div class="flow">
+              <span class="flow__chip flow__chip--on">Claude Code</span>
+              <span class="flow__chip flow__chip--on">Codex</span>
+              <span class="flow__chip">Gemini CLI</span>
+              <span class="flow__line" aria-hidden="true"></span>
+              <span class="flow__chip flow__chip--on" data-zh="灵动岛" data-en="Island">Island</span>
+            </div>
+            <p class="diagram__caption" data-zh="Hook 只把事件转发到看板；看板不回话，Agent 也不会等它。" data-en="Hooks only forward events to the board; the board never replies, and the Agent never waits for it.">Hooks only forward events to the board; the board never replies, and the Agent never waits for it.</p>
+          </div>
+
+          <ul class="facts">
+            <li data-zh="只有检测到可执行 CLI 的 Agent 才能接入；只找到配置目录的会提示先安装 CLI。" data-en="Only Agents with a runnable CLI can be connected; ones with just a config directory are shown with a prompt to install the CLI first.">Only Agents with a runnable CLI can be connected; ones with just a config directory are shown with a prompt to install the CLI first.</li>
+            <li data-zh="每个 Agent 旁边有「会话开始时拉起看板」开关，默认关闭。打开后，该 Agent 开始会话时会尝试唤起看板；桌面版 Agent 可能不触发「会话开始」事件，开关可能不生效。" data-en="Each Agent has a “Start Vibe Board on session start” switch that is off by default. When on, the board tries to come up as that Agent starts a session; desktop Agents may not emit session-start events, so the switch may have no effect for them.">Each Agent has a “Start Vibe Board on session start” switch that is off by default. When on, the board tries to come up as that Agent starts a session; desktop Agents may not emit session-start events, so the switch may have no effect for them.</li>
+            <li data-zh="向导只修改你确认的 Agent 配置：不上传凭据、提示词或项目文件，也不安装或升级 Agent 本身。" data-en="The wizard only changes the Agent configurations you confirm: it uploads no credentials, prompts, or project files, and it neither installs nor upgrades Agents.">The wizard only changes the Agent configurations you confirm: it uploads no credentials, prompts, or project files, and it neither installs nor upgrades Agents.</li>
+            <li data-zh="之后想重来：在「设置 → 系统 → 重看教程与向导」重新打开向导；Hook 出问题时用灵动岛上的健康指示一键重装。" data-en="To redo it later: reopen the wizard from Settings → System → Tutorial &amp; Wizard, and reinstall hooks with one click from the island's health indicator when something fails.">To redo it later: reopen the wizard from Settings → System → Tutorial &amp; Wizard, and reinstall hooks with one click from the island's health indicator when something fails.</li>
+          </ul>
+
+          <div class="callout" data-zh="还没装 Agent？先安装对应 CLI，完全退出并重新打开 Vibe Board，再回到向导里重新检测。" data-en="No Agent installed yet? Install the CLI, fully quit and reopen Vibe Board, then run detection again in the wizard.">No Agent installed yet? Install the CLI, fully quit and reopen Vibe Board, then run detection again in the wizard.</div>
+        </section>
+
+        <section id="skills">
+          <h2><span class="step-index" aria-hidden="true">5</span><span data-zh="Skill 管理" data-en="Skill management">Skill management</span></h2>
+          <p class="section-lead" data-zh="「管理 → Skill」显示用户级 Skill，以及每个 Skill「生效于」哪些 Agent。中心库里的 Skill 默认不对任何 Agent 生效，要手动安装到 Agent 才会生效。" data-en="Manage → Skill shows user-level Skills and which Agents each one applies to. A Skill in the center library applies to no Agent by default; it takes effect only after you install it into an Agent.">Manage → Skill shows user-level Skills and which Agents each one applies to. A Skill in the center library applies to no Agent by default; it takes effect only after you install it into an Agent.</p>
+
+          <div class="diagram">
+            <div class="sources">
+              <span class="source source--custom"><span class="source__tag" data-zh="自定义" data-en="Custom">Custom</span><span data-zh="本地导入或手写" data-en="Imported or hand-written locally">Imported or hand-written locally</span></span>
+              <span class="source source--github"><span class="source__tag">GitHub</span><span data-zh="可检查远端更新" data-en="Remote updates can be checked">Remote updates can be checked</span></span>
+              <span class="source source--agent"><span class="source__tag" data-zh="从 Agent 同步" data-en="Synced from Agent">Synced from Agent</span><span data-zh="从 Agent 目录接管" data-en="Adopted from an Agent directory">Adopted from an Agent directory</span></span>
+            </div>
+            <div class="apply-rows">
+              <div class="apply-row">
+                <span class="apply-row__skill">opencode-agent</span>
+                <span class="apply-row__arrow" aria-hidden="true">→</span>
+                <span class="apply-row__agent">Claude Code</span>
+              </div>
+              <div class="apply-row">
+                <span class="apply-row__skill">opencode-agent</span>
+                <span class="apply-row__arrow" aria-hidden="true">→</span>
+                <span class="apply-row__agent">Codex</span>
+              </div>
+            </div>
+            <p class="diagram__caption" data-zh="来源分三类；「生效于」是真实的安装关系，不是专属绑定。" data-en="Three source categories; “applies to” is a real install relationship, not an exclusive binding.">Three source categories; “applies to” is a real install relationship, not an exclusive binding.</p>
+          </div>
+
+          <ul class="facts">
+            <li data-zh="按来源分类：自定义（本地文件夹、压缩包、手动加入中心库）、GitHub（记录在来源锁文件里的远端仓库）、从 Agent 同步（从某个 Agent 的 Skill 目录接管）。" data-en="Grouped by source: Custom (local folders, archives, manual center imports), GitHub (remote repositories recorded in the source lock file), and Synced from Agent (adopted from an Agent's Skill directory).">Grouped by source: Custom (local folders, archives, manual center imports), GitHub (remote repositories recorded in the source lock file), and Synced from Agent (adopted from an Agent's Skill directory).</li>
+            <li data-zh="GitHub 来源可以检查更新：先展示远端与中心库的差异预览，确认后才覆盖中心库；本地来源不支持远端更新检查。" data-en="GitHub sources can check for updates: the difference between remote and center library is previewed first, and only a confirmation overwrites the center copy. Local sources have no remote update check.">GitHub sources can check for updates: the difference between remote and center library is previewed first, and only a confirmation overwrites the center copy. Local sources have no remote update check.</li>
+            <li data-zh="只统计用户级 Skill，不扫描项目里的 .skills 目录；坏链接等问题会以提示形式出现在 Skill 库页面上。" data-en="Only user-level Skills are counted; project-level .skills directories are not scanned. Problems such as broken links show up as notices on the Skill library page.">Only user-level Skills are counted; project-level .skills directories are not scanned. Problems such as broken links show up as notices on the Skill library page.</li>
+          </ul>
+        </section>
+
+        <section id="usage">
+          <h2><span class="step-index" aria-hidden="true">6</span><span data-zh="使用额度" data-en="Usage &amp; quota">Usage &amp; quota</span></h2>
+          <p class="section-lead" data-zh="「运行 → 使用额度」分两块：「现在」看剩余额度，「用量与成本」看本地日志结算出的 token 与估算成本。" data-en="Run → Usage has two blocks: “Now” for remaining quota, and “Usage &amp; Cost” for tokens and estimated cost settled from local logs.">Run → Usage has two blocks: “Now” for remaining quota, and “Usage &amp; Cost” for tokens and estimated cost settled from local logs.</p>
+
+          <div class="diagram">
+            <div class="usage">
+              <div class="usage__head">
+                <span class="usage__badge usage__badge--now" data-zh="现在" data-en="Now">Now</span>
+                <span class="usage__badge" data-zh="剩余额度" data-en="Remaining">Remaining</span>
+                <span class="usage__badge" data-zh="重置时间" data-en="Resets">Resets</span>
+                <span class="usage__badge" data-zh="来源" data-en="Source">Source</span>
+                <span class="usage__badge" data-zh="新鲜度" data-en="Freshness">Freshness</span>
+              </div>
+              <div class="usage__table">
+                <span class="is-head" data-zh="Provider" data-en="Provider">Provider</span>
+                <span class="is-head" data-zh="今天 / 本周 / 本月" data-en="Today / Week / Month">Today / Week / Month</span>
+                <span class="is-head" data-zh="Token" data-en="Tokens">Tokens</span>
+                <span class="is-head" data-zh="估算成本" data-en="Estimated cost">Estimated cost</span>
+                <span>Codex</span>
+                <span data-zh="今天" data-en="Today">Today</span>
+                <span>128.4k</span>
+                <span data-zh="估算 $1.92" data-en="Estimated $1.92">Estimated $1.92</span>
+                <span>Claude Code</span>
+                <span data-zh="本周" data-en="This week">This week</span>
+                <span>42.0k</span>
+                <span class="unknown-chip" data-zh="未知（价格表未收录）" data-en="Unknown (not in price table)">Unknown (not in price table)</span>
+              </div>
+              <div class="usage__bars" aria-hidden="true">
+                <div class="usage__bar" style="height: 78%"></div>
+                <div class="usage__bar" style="height: 46%"></div>
+                <div class="usage__bar" style="height: 92%"></div>
+              </div>
+            </div>
+            <p class="diagram__caption" data-zh="数值为示意；拿不到的额度、token 或价格一律显示未知，而不是 0。" data-en="Numbers are illustrative; quota, tokens, or prices that cannot be read show Unknown instead of 0.">Numbers are illustrative; quota, tokens, or prices that cannot be read show Unknown instead of 0.</p>
+          </div>
+
+          <ul class="facts">
+            <li data-zh="「现在」：每个 Provider 的剩余额度、重置时间、来源与新鲜度，状态可能是已连接、需要授权、已停用、失败或未接入。" data-en="“Now”: each provider's remaining quota, reset time, source, and freshness, with a status of connected, needs authorization, disabled, failed, or not integrated.">“Now”: each provider's remaining quota, reset time, source, and freshness, with a status of connected, needs authorization, disabled, failed, or not integrated.</li>
+            <li data-zh="「用量与成本」：今天 / 本周 / 本月三个口径，按 Provider 和模型列出输入、输出、缓存读取、缓存写入、请求数；打开页面时会在后台扫描本地会话日志。" data-en="“Usage &amp; Cost”: today / this week / this month, listing input, output, cache read, cache write, and request counts per provider and model; opening the page scans local session logs in the background.">“Usage &amp; Cost”: today / this week / this month, listing input, output, cache read, cache write, and request counts per provider and model; opening the page scans local session logs in the background.</li>
+            <li data-zh="成本一律是 Estimated（估算）等价成本：由内置价格表折算，价格表带生效日期；价格表未收录的模型显示未知，不会显示 0 元。日汇总会持久化，即使原始日志被 Agent 清理，历史仍可查询。" data-en="Costs are always Estimated equivalent costs derived from the built-in price table, which carries an effective date; models missing from the table show Unknown, never a zero amount. Daily totals are persisted, so history stays queryable even after the Agent cleans up raw logs.">Costs are always Estimated equivalent costs derived from the built-in price table, which carries an effective date; models missing from the table show Unknown, never a zero amount. Daily totals are persisted, so history stays queryable even after the Agent cleans up raw logs.</li>
+            <li data-zh="用量查询有一个总开关「启用用量查询」（默认开启）：关闭后灵动岛不再显示额度，页面也不再提供授权入口。需要额度的 Provider 可以在页面上点「用量授权」，按提示在终端完成官方登录，再回来刷新状态；拿不到的值保持未知。" data-en="Usage has one master switch, “Enable usage queries” (on by default): turn it off and the island stops showing quota and the page stops offering authorization. For a provider that needs it, click “Authorize usage”, complete the official login in the terminal, then refresh the status here; anything unreadable stays Unknown.">Usage has one master switch, “Enable usage queries” (on by default): turn it off and the island stops showing quota and the page stops offering authorization. For a provider that needs it, click “Authorize usage”, complete the official login in the terminal, then refresh the status here; anything unreadable stays Unknown.</li>
+          </ul>
+        </section>
+
+        <section id="dispatch">
+          <h2><span class="step-index" aria-hidden="true">7</span><span data-zh="派发框架（简）" data-en="Dispatch framework (brief)">Dispatch framework (brief)</span></h2>
+          <p class="section-lead" data-zh="「管理 → 派发框架」提供一个搭建向导：检测 → 预览 → 确认安装，把四个派发 Skill 装进 Claude Code 与 Codex 的用户级 Skill 目录。" data-en="Manage → Dispatch framework offers a setup wizard: detect → preview → confirm, installing four dispatch Skills into the user-level Skill directories of Claude Code and Codex.">Manage → Dispatch framework offers a setup wizard: detect → preview → confirm, installing four dispatch Skills into the user-level Skill directories of Claude Code and Codex.</p>
+
+          <div class="diagram">
+            <div class="sources">
+              <span class="source"><span class="source__tag">external-agent-core</span></span>
+              <span class="source"><span class="source__tag">external-agent-setup</span></span>
+              <span class="source"><span class="source__tag">opencode-agent</span></span>
+              <span class="source"><span class="source__tag">antigravity-agent</span></span>
+            </div>
+            <p class="diagram__caption" data-zh="向导只安装 Skill；安装前会列出将写入的文件，确认后才写。" data-en="The wizard only installs Skills; it lists the files to be written before anything is written.">The wizard only installs Skills; it lists the files to be written before anything is written.</p>
+          </div>
+
+          <ul class="facts">
+            <li data-zh="不代写派发规则：向导不会写入你的全局指令文件（如 CLAUDE.md、AGENTS.md），何时派、派给谁要自己写。" data-en="Dispatch rules stay yours: the wizard never writes your global instruction files (such as CLAUDE.md or AGENTS.md), and when or to whom to dispatch is yours to decide.">Dispatch rules stay yours: the wizard never writes your global instruction files (such as CLAUDE.md or AGENTS.md), and when or to whom to dispatch is yours to decide.</li>
+            <li data-zh="其它 CLI 工具：向导不提供配置表单，请在你的 Agent 中运行 external-agent-setup 生成具名 Skill。" data-en="Other CLI tools: the wizard offers no configuration form; run external-agent-setup inside your Agent to generate a named Skill.">Other CLI tools: the wizard offers no configuration form; run external-agent-setup inside your Agent to generate a named Skill.</li>
+            <li data-zh="派发本身不经过 Vibe Board：装好 Skill 后由主 Agent 直接派发，看板只负责观察。" data-en="Dispatching never goes through Vibe Board: once the Skills are installed, your main Agent dispatches directly, and the board just watches.">Dispatching never goes through Vibe Board: once the Skills are installed, your main Agent dispatches directly, and the board just watches.</li>
+          </ul>
+        </section>
+      </main>
+
+      <footer>
+        <p data-zh="本页是 Vibe Board 自带教程的第一版，随应用离线分发；界面语言切换后重新打开本页即可看到对应语言。" data-en="This is the first version of the tutorial bundled with Vibe Board; it ships offline with the app. Reopen this page after switching the app language to see the other language.">This is the first version of the tutorial bundled with Vibe Board; it ships offline with the app. Reopen this page after switching the app language to see the other language.</p>
+      </footer>
+    </div>
+
+    <script>
+      (function () {
+        var requested = new URLSearchParams(window.location.search).get('lang');
+        var language = requested && requested.toLowerCase().indexOf('zh') === 0 ? 'zh' : 'en';
+        document.documentElement.lang = language;
+        var nodes = document.querySelectorAll('[data-zh][data-en]');
+        for (var index = 0; index < nodes.length; index += 1) {
+          nodes[index].textContent = nodes[index].getAttribute('data-' + language);
+        }
+      })();
+    </script>
+  </body>
+</html>

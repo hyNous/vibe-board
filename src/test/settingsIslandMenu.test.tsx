@@ -21,6 +21,7 @@ const tauriMocks = vi.hoisted(() => ({
   listUsageProviders: vi.fn(() => Promise.resolve([] as UsageSnapshot[])),
   authorizeUsageProvider: vi.fn(() => Promise.resolve()),
   updateConfig: vi.fn(() => Promise.resolve()),
+  openTutorialWindow: vi.fn(() => Promise.resolve()),
   isTauri: vi.fn(() => false),
 }))
 
@@ -42,6 +43,7 @@ vi.mock('../services/tauriApi', async (importOriginal) => {
     listUsageProviders: tauriMocks.listUsageProviders,
     authorizeUsageProvider: tauriMocks.authorizeUsageProvider,
     updateConfig: tauriMocks.updateConfig,
+    openTutorialWindow: tauriMocks.openTutorialWindow,
     isTauri: tauriMocks.isTauri,
   }
 })
@@ -515,5 +517,17 @@ describe('settings island menu', () => {
       expect.objectContaining({ setupWizardCompleted: false }),
     ))
     expect(useConfigStore.getState().setupWizardCompleted).toBe(false)
+  })
+
+  it('opens the bundled tutorial window from the tutorial entry', async () => {
+    render(<SettingsApp onClose={vi.fn()} />)
+
+    fireEvent.click(screen.getByRole('button', { name: '重看教程与向导' }))
+
+    expect(await screen.findByText('打开完整教程')).toBeInTheDocument()
+    fireEvent.click(screen.getByText('打开教程'))
+
+    await waitFor(() => expect(tauriMocks.openTutorialWindow).toHaveBeenCalledTimes(1))
+    expect(tauriMocks.updateConfig).not.toHaveBeenCalled()
   })
 })

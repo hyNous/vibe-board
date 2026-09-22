@@ -7,6 +7,7 @@ import {
   getConfig,
   installAgentHook,
   isTauri,
+  openTutorialWindow,
   setLaunchAtLogin as persistLaunchAtLogin,
   uninstallAgentHook,
   updateConfig as updateBackendConfig,
@@ -15,7 +16,63 @@ import type { BackendConfig, DetectedTool, HookStatus } from '../../services/tau
 import { GlassButton } from '../shared'
 import { PlatformIcon } from '../platform/PlatformIcon'
 
-type WizardStep = 'welcome' | 'agents' | 'options' | 'applying' | 'done'
+type WizardStep = 'welcome' | 'tutorial' | 'agents' | 'options' | 'applying' | 'done'
+
+const WIZARD_PROGRESS_STEPS = ['welcome', 'tutorial', 'agents', 'options', 'done'] as const
+
+function progressIndex(step: WizardStep): number {
+  if (step === 'applying') return WIZARD_PROGRESS_STEPS.indexOf('options')
+  return WIZARD_PROGRESS_STEPS.indexOf(step)
+}
+
+/** Small animated figures for the four tutorial themes shown inside the wizard. */
+function TopicFigure({ kind }: { kind: 'island' | 'board' | 'click' | 'agents' }) {
+  if (kind === 'island') {
+    return (
+      <svg className="setup-wizard__topic-svg" viewBox="0 0 48 48" aria-hidden="true">
+        <rect className="wz-island-shell" x="10" y="10" width="28" height="11" rx="5.5" />
+        <circle className="wz-island-dot" cx="16" cy="15.5" r="2" />
+        <rect className="wz-island-card" x="12" y="28" width="24" height="6" rx="3" />
+        <rect className="wz-island-card wz-island-card--late" x="12" y="37" width="24" height="6" rx="3" />
+      </svg>
+    )
+  }
+  if (kind === 'board') {
+    return (
+      <svg className="setup-wizard__topic-svg" viewBox="0 0 48 48" aria-hidden="true">
+        <rect className="wz-board-row" x="8" y="9" width="32" height="9" rx="4.5" />
+        <circle className="wz-board-dot wz-board-dot--wait" cx="14" cy="13.5" r="2" />
+        <rect className="wz-board-line" x="20" y="11.5" width="16" height="4" rx="2" />
+        <rect className="wz-board-row" x="8" y="20" width="32" height="9" rx="4.5" />
+        <circle className="wz-board-dot wz-board-dot--run" cx="14" cy="24.5" r="2" />
+        <rect className="wz-board-line" x="20" y="22.5" width="16" height="4" rx="2" />
+        <rect className="wz-board-row" x="8" y="31" width="32" height="9" rx="4.5" />
+        <circle className="wz-board-dot wz-board-dot--done" cx="14" cy="35.5" r="2" />
+        <rect className="wz-board-line" x="20" y="33.5" width="16" height="4" rx="2" />
+      </svg>
+    )
+  }
+  if (kind === 'click') {
+    return (
+      <svg className="setup-wizard__topic-svg" viewBox="0 0 48 48" aria-hidden="true">
+        <rect className="wz-click-card" x="6" y="16" width="17" height="14" rx="4" />
+        <path className="wz-click-arrow" d="M26 23 H38" />
+        <path className="wz-click-arrow-head" d="M36 19 L41 23 L36 27" />
+        <rect className="wz-click-window" x="28" y="8" width="16" height="30" rx="4" />
+        <path className="wz-click-window-bar" d="M28 14 H44" />
+      </svg>
+    )
+  }
+  return (
+    <svg className="setup-wizard__topic-svg" viewBox="0 0 48 48" aria-hidden="true">
+      <circle className="wz-agents-agent" cx="11" cy="15" r="5" />
+      <circle className="wz-agents-agent wz-agents-agent--late" cx="11" cy="33" r="5" />
+      <circle className="wz-agents-island" cx="37" cy="24" r="6.5" />
+      <path className="wz-agents-line" d="M16 15 C27 15 27 24 31 24" />
+      <path className="wz-agents-line wz-agents-line--late" d="M16 33 C27 33 27 24 31 24" />
+    </svg>
+  )
+}
 
 function readableError(error: unknown): string {
   if (error instanceof Error) return error.message
@@ -54,6 +111,7 @@ export function SetupWizard({ onClose }: SetupWizardProps) {
   const [error, setError] = useState<string | null>(null)
   const [warnings, setWarnings] = useState<string[]>([])
   const [completedConfig, setCompletedConfig] = useState<BackendConfig | null>(null)
+  const [openingTutorial, setOpeningTutorial] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -112,6 +170,18 @@ export function SetupWizard({ onClose }: SetupWizardProps) {
     setLaunchAgents((current) => current.includes(agent)
       ? current.filter((candidate) => candidate !== agent)
       : [...current, agent])
+  }
+
+  const openFullTutorial = async () => {
+    setError(null)
+    setOpeningTutorial(true)
+    try {
+      await openTutorialWindow()
+    } catch (reason) {
+      setError(readableError(reason))
+    } finally {
+      setOpeningTutorial(false)
+    }
   }
 
   const finishWithoutSetup = async () => {
@@ -244,8 +314,8 @@ export function SetupWizard({ onClose }: SetupWizardProps) {
           <span>Vibe Board</span>
         </div>
         <div className="setup-wizard__progress" aria-label={text('设置进度', 'Setup progress')}>
-          {(['welcome', 'agents', 'options', 'done'] as const).map((item, index) => (
-            <span key={item} className={step === item || (step === 'applying' && item === 'options') ? 'is-active' : index < ['welcome', 'agents', 'options', 'done'].indexOf(step) ? 'is-complete' : ''} />
+          {WIZARD_PROGRESS_STEPS.map((item, index) => (
+            <span key={item} className={index === progressIndex(step) ? 'is-active' : index < progressIndex(step) ? 'is-complete' : ''} />
           ))}
         </div>
 
@@ -267,14 +337,67 @@ export function SetupWizard({ onClose }: SetupWizardProps) {
             </div>
             <div className="setup-wizard__actions">
               <GlassButton variant="ghost" onClick={finishWithoutSetup}>{text('稍后设置', 'Set up later')}</GlassButton>
-              <GlassButton variant="primary" onClick={() => setStep('agents')}>{text('开始检测', 'Start detection')} <span aria-hidden="true">→</span></GlassButton>
+              <GlassButton variant="primary" onClick={() => setStep('tutorial')}>{text('继续', 'Continue')} <span aria-hidden="true">→</span></GlassButton>
+            </div>
+          </div>
+        )}
+
+        {step === 'tutorial' && (
+          <div className="setup-wizard__content">
+            <p className="setup-wizard__eyebrow">01 / 03</p>
+            <h1>{text('先花一分钟看懂看板', 'Take a minute to read the board')}</h1>
+            <p className="setup-wizard__lead">
+              {text(
+                '四个主题，都是看板真实会做的事。完整教程还包含 Skill 管理与使用额度两节。',
+                'Four themes, all things the board really does. The full tutorial also covers Skill management and usage.',
+              )}
+            </p>
+            <div className="setup-wizard__topics">
+              <article className="setup-wizard__topic">
+                <TopicFigure kind="island" />
+                <div>
+                  <strong>{text('岛怎么用', 'Using the island')}</strong>
+                  <p>{text('默认停在屏幕顶部：悬停或点击展开，移开自动收起，Esc 逐级收回；快捷键与挂靠位置都能在设置里改。', 'It sits at the top of the screen: hover or click to expand, move away to collapse, Esc steps back. Shortcuts and docking are configurable.')}</p>
+                </div>
+              </article>
+              <article className="setup-wizard__topic">
+                <TopicFigure kind="board" />
+                <div>
+                  <strong>{text('看板在显示什么', 'What the board shows')}</strong>
+                  <p>{text('当前会话按优先级排序，每张任务卡有状态点、Agent 名称、会话标题和状态；Hook 自检有问题时右上角才出现健康指示。', 'Current sessions sorted by priority; each card shows a status dot, Agent name, session title, and state. The hook health indicator appears only when a self-check fails.')}</p>
+                </div>
+              </article>
+              <article className="setup-wizard__topic">
+                <TopicFigure kind="click" />
+                <div>
+                  <strong>{text('点任务会发生什么', 'What a task click does')}</strong>
+                  <p>{text('桌面版 Agent 会被唤回前台；纯命令行会话没有可唤起的窗口，只提示手动打开 CLI。看板不会替你回复或批准。', 'Desktop Agents are brought back to the front; CLI-only sessions have no window to raise, so it just asks you to open the CLI. The board never replies or approves for you.')}</p>
+                </div>
+              </article>
+              <article className="setup-wizard__topic">
+                <TopicFigure kind="agents" />
+                <div>
+                  <strong>{text('Agent 接入', 'Connecting Agents')}</strong>
+                  <p>{text('下一步会检测本机 Agent 并安装本地 Hook；「会话开始时拉起看板」开关默认关闭，桌面版 Agent 可能不触发。', 'The next step detects local Agents and installs their hooks. The “start the board on session start” switch is off by default, and desktop Agents may not trigger it.')}</p>
+                </div>
+              </article>
+            </div>
+            {error && <div className="setup-wizard__error" role="alert">{error}</div>}
+            <div className="setup-wizard__actions">
+              <GlassButton variant="ghost" onClick={() => setStep('welcome')}>{text('返回', 'Back')}</GlassButton>
+              <div className="setup-wizard__actions-right">
+                <GlassButton variant="secondary" onClick={() => void openFullTutorial()} disabled={openingTutorial}>
+                  {openingTutorial ? text('正在打开…', 'Opening…') : text('打开完整教程', 'Open full tutorial')}
+                </GlassButton>
+                <GlassButton variant="primary" onClick={() => setStep('agents')}>{text('开始检测', 'Start detection')} <span aria-hidden="true">→</span></GlassButton>
+              </div>
             </div>
           </div>
         )}
 
         {step === 'agents' && (
           <div className="setup-wizard__content">
-            <p className="setup-wizard__eyebrow">01 / 02</p>
+            <p className="setup-wizard__eyebrow">02 / 03</p>
             <h1>{text('选择要接入的 Agent', 'Choose the Agents to connect')}</h1>
             <p className="setup-wizard__lead">
               {text('勾选要接入的 Agent，Vibe Board 会为它们安装本地 Hook。每个 Agent 可以单独决定是否在会话开始时拉起看板。', 'Pick the Agents to connect; Vibe Board installs their local hooks. Each Agent can separately start Vibe Board when its session begins.')}
@@ -340,7 +463,7 @@ export function SetupWizard({ onClose }: SetupWizardProps) {
 
         {step === 'options' && (
           <div className="setup-wizard__content">
-            <p className="setup-wizard__eyebrow">02 / 02</p>
+            <p className="setup-wizard__eyebrow">03 / 03</p>
             <h1>{text('确认自动化方式', 'Confirm automation')}</h1>
             <p className="setup-wizard__lead">
               {text('确认后，Vibe Board 会安装选中的 Hook，并立即重新读取状态验证配置。', 'After you confirm, Vibe Board installs the selected hooks and immediately rereads their status to verify the setup.')}

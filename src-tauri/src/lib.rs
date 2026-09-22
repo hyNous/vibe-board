@@ -1794,6 +1794,33 @@ const SETTINGS_MIN_HEIGHT: f64 = 640.0;
 const SETTINGS_DEFAULT_WIDTH: f64 = 1420.0;
 const SETTINGS_DEFAULT_HEIGHT: f64 = 840.0;
 
+/// The tutorial ships as a static page inside the bundled frontend
+/// (`public/tutorial/index.html`), so it is available offline and is opened in
+/// an app window instead of the user's browser.
+const TUTORIAL_WINDOW_LABEL: &str = "tutorial";
+const TUTORIAL_MIN_WIDTH: f64 = 720.0;
+const TUTORIAL_MIN_HEIGHT: f64 = 520.0;
+const TUTORIAL_DEFAULT_WIDTH: f64 = 1040.0;
+const TUTORIAL_DEFAULT_HEIGHT: f64 = 760.0;
+
+/// Only Chinese and English ship; every other value falls back to English,
+/// matching the frontend `normalizeLanguage` helper.
+fn normalize_tutorial_language(language: &str) -> &'static str {
+    if language.to_lowercase().starts_with("zh") {
+        "zh"
+    } else {
+        "en"
+    }
+}
+
+/// Frontend-relative path of the offline tutorial page for a language.
+fn tutorial_page_path(language: &str) -> String {
+    format!(
+        "tutorial/index.html?lang={}",
+        normalize_tutorial_language(language)
+    )
+}
+
 fn normalize_settings_window_frame(window: &tauri::WebviewWindow) {
     let min_size = tauri::Size::Logical(tauri::LogicalSize::new(
         SETTINGS_MIN_WIDTH,
@@ -1989,6 +2016,89 @@ fn restore_island_surface_after_settings_close(app: &tauri::AppHandle) {
 #[tauri::command]
 async fn open_settings_window(app: tauri::AppHandle) -> Result<(), String> {
     show_settings_window(&app)
+}
+
+/// Open the bundled offline tutorial in its own app window, rendered in the
+/// language the app is currently configured for.
+#[tauri::command]
+async fn open_tutorial_window(app: tauri::AppHandle) -> Result<(), String> {
+    let language = app.state::<AppState>().config_store.get().language;
+    show_tutorial_window(&app, &language)
+}
+
+fn show_tutorial_window(app: &tauri::AppHandle, language: &str) -> Result<(), String> {
+    let handle = app.clone();
+    let language = normalize_tutorial_language(language);
+    let path = tutorial_page_path(language);
+    let expected_query = format!("lang={language}");
+    let title = if language == "zh" {
+        "Vibe Board 教程"
+    } else {
+        "Vibe Board Tutorial"
+    };
+    app.run_on_main_thread(move || {
+        if let Some(existing) = handle.get_webview_window(TUTORIAL_WINDOW_LABEL) {
+            if let Ok(mut url) = existing.url() {
+                let same_language =
+                    url.query().map(str::to_string).as_deref() == Some(expected_query.as_str());
+                if !same_language {
+                    // The app language changed since the window was opened;
+                    // reload the page with the current language instead of
+                    // rebuilding the window, so its size and position are kept.
+                    url.set_query(Some(&expected_query));
+                    let _ = existing.navigate(url);
+                }
+            }
+            let _ = existing.set_title(title);
+            let _ = existing.show();
+            let _ = existing.set_focus();
+            return;
+        }
+
+        #[cfg(target_os = "macos")]
+        let _ = handle.set_activation_policy(tauri::ActivationPolicy::Regular);
+
+        match tauri::WebviewWindowBuilder::new(
+            &handle,
+            TUTORIAL_WINDOW_LABEL,
+            tauri::WebviewUrl::App(path.into()),
+        )
+        .title(title)
+        .inner_size(TUTORIAL_DEFAULT_WIDTH, TUTORIAL_DEFAULT_HEIGHT)
+        .min_inner_size(TUTORIAL_MIN_WIDTH, TUTORIAL_MIN_HEIGHT)
+        .center()
+        .build()
+        {
+            Ok(window) => {
+                let _ = window.show();
+                let _ = window.set_focus();
+                #[cfg(target_os = "macos")]
+                activate_agent_island_app();
+            }
+            Err(error) => log::warn!("Failed to create tutorial window: {error}"),
+        }
+    })
+    .map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod tutorial_window_tests {
+    use super::{normalize_tutorial_language, tutorial_page_path};
+
+    #[test]
+    fn tutorial_language_falls_back_to_english() {
+        assert_eq!(normalize_tutorial_language("zh"), "zh");
+        assert_eq!(normalize_tutorial_language("zh-CN"), "zh");
+        assert_eq!(normalize_tutorial_language("en"), "en");
+        assert_eq!(normalize_tutorial_language("ja"), "en");
+        assert_eq!(normalize_tutorial_language(""), "en");
+    }
+
+    #[test]
+    fn tutorial_page_path_points_at_the_bundled_static_page() {
+        assert_eq!(tutorial_page_path("zh"), "tutorial/index.html?lang=zh");
+        assert_eq!(tutorial_page_path("fr"), "tutorial/index.html?lang=en");
+    }
 }
 
 #[tauri::command]
@@ -4727,6 +4837,7 @@ pub fn run() {
             quit_app,
             set_dock_visible,
             open_settings_window,
+            open_tutorial_window,
             commands::get_sessions,
             commands::get_agent_statuses,
             commands::get_usage_rate_limits,

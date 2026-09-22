@@ -982,6 +982,12 @@ export async function openSettingsWindow(): Promise<void> {
   return invoke('open_settings_window')
 }
 
+/** Open the offline tutorial bundled with the app in its own window. */
+export async function openTutorialWindow(): Promise<void> {
+  if (!isTauri()) return
+  return invoke('open_tutorial_window')
+}
+
 // ── Suppression Commands ────────────────────────────────────────
 
 /** Check if a session's terminal is currently focused (smart suppression). */

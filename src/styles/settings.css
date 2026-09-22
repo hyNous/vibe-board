@@ -402,6 +402,162 @@
   to { transform: rotate(360deg); }
 }
 
+/* ── First-run tutorial step ── */
+.setup-wizard__topics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.setup-wizard__topic {
+  display: flex;
+  gap: 12px;
+  min-width: 0;
+  padding: 13px;
+  border: 1px solid rgba(40, 51, 77, 0.10);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.62);
+}
+
+.setup-wizard__topic strong {
+  color: var(--settings-text-primary);
+  font-size: 13px;
+}
+
+.setup-wizard__topic p {
+  margin: 5px 0 0;
+  color: var(--settings-text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.setup-wizard__topic-svg {
+  flex: 0 0 auto;
+  width: 46px;
+  height: 46px;
+  border-radius: 13px;
+  background: rgba(10, 132, 255, 0.10);
+}
+
+.setup-wizard__actions-right {
+  display: flex;
+  gap: 10px;
+}
+
+/* Topic figures: CSS-animated inline SVG, no images or web fonts. */
+.wz-island-shell {
+  fill: #1d2739;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: setup-wizard-island-morph 3.6s ease-in-out infinite;
+}
+
+.wz-island-dot {
+  fill: #34c759;
+  animation: setup-wizard-topic-pulse 1.6s ease-in-out infinite;
+}
+
+.wz-island-card {
+  fill: rgba(29, 39, 57, 0.35);
+  animation: setup-wizard-topic-fade 3.6s ease-in-out infinite;
+}
+
+.wz-island-card--late {
+  animation-delay: 0.35s;
+}
+
+.wz-board-row {
+  fill: rgba(29, 39, 57, 0.10);
+}
+
+.wz-board-dot {
+  animation: setup-wizard-topic-pulse 2.2s ease-in-out infinite;
+}
+
+.wz-board-dot--wait { fill: #f5a623; }
+.wz-board-dot--run { fill: #34c759; animation-delay: 0.4s; }
+.wz-board-dot--done { fill: #98a2b3; animation-delay: 0.8s; }
+
+.wz-board-line {
+  fill: rgba(29, 39, 57, 0.30);
+}
+
+.wz-click-card {
+  fill: rgba(10, 132, 255, 0.22);
+  stroke: rgba(10, 132, 255, 0.5);
+  stroke-width: 1.4;
+}
+
+.wz-click-arrow,
+.wz-click-arrow-head {
+  fill: none;
+  stroke: var(--settings-accent);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  animation: setup-wizard-topic-nudge 3s ease-in-out infinite;
+}
+
+.wz-click-window {
+  fill: rgba(29, 39, 57, 0.06);
+  stroke: rgba(40, 51, 77, 0.22);
+  stroke-width: 1.4;
+}
+
+.wz-click-window-bar {
+  stroke: rgba(40, 51, 77, 0.22);
+  stroke-width: 1.4;
+}
+
+.wz-agents-agent {
+  fill: rgba(29, 39, 57, 0.22);
+}
+
+.wz-agents-island {
+  fill: #1d2739;
+}
+
+.wz-agents-line {
+  fill: none;
+  stroke: var(--settings-accent);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-dasharray: 4 4;
+  animation: setup-wizard-topic-flow 1.6s linear infinite;
+}
+
+.wz-agents-line--late {
+  animation-delay: 0.4s;
+}
+
+@keyframes setup-wizard-island-morph {
+  0%, 30% { transform: scaleX(0.86); }
+  55%, 85% { transform: scaleX(1.18); }
+  100% { transform: scaleX(0.86); }
+}
+
+@keyframes setup-wizard-topic-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+@keyframes setup-wizard-topic-fade {
+  0%, 30% { opacity: 0; }
+  55%, 85% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+@keyframes setup-wizard-topic-nudge {
+  0%, 20% { transform: translateX(-2px); opacity: 0.5; }
+  45%, 85% { transform: translateX(2px); opacity: 1; }
+  100% { transform: translateX(-2px); opacity: 0.5; }
+}
+
+@keyframes setup-wizard-topic-flow {
+  to { stroke-dashoffset: -8; }
+}
+
 .settings-app::before {
   position: absolute;
   inset: 0;

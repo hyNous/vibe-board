@@ -378,7 +378,10 @@
     },
     "tutorial": {
       "title": "Tutorial & Wizard",
-      "desc": "Reopen the first-run wizard. Tutorial content arrives in a later milestone.",
+      "desc": "Open the offline tutorial bundled with the app in its own window, or run the first-run wizard again.",
+      "openTutorial": "Open the full tutorial",
+      "openTutorialDesc": "Using the island, what the board shows, what a task click does, connecting Agents, plus Skill management and usage.",
+      "openTutorialAction": "Open tutorial",
       "reopen": "Reopen the first-run wizard",
       "reopenDesc": "Choose the Agents to connect again and reinstall their hooks.",
       "open": "Open wizard"
