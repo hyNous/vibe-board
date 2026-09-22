@@ -112,6 +112,8 @@ export interface AgentSummary {
   version: string | null
   latestVersion: string | null
   installed: boolean
+  /** The Agent's own executable/application was detected; `installed` is also true when only configuration exists. */
+  programInstalled?: boolean
   managedSkillCount: number
   unmanagedSkillCount: number
   readOnlySkillCount?: number
@@ -364,6 +366,8 @@ export interface AgentSkillInventoryAgent {
   iconKey: string
   skillsDir: string | null
   installed: boolean
+  /** The Agent's own executable/application was detected. */
+  programInstalled?: boolean
   managedCount: number
   unmanagedCount: number
   readOnlyCount?: number

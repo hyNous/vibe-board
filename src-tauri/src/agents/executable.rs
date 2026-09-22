@@ -21,6 +21,39 @@ pub fn find_binary(binary: &str) -> Option<PathBuf> {
     find_binary_generic(binary)
 }
 
+/// Filesystem-only check for the Codex CLI bundled by the Codex desktop app,
+/// which lives under a versioned `bin/<hash>` directory that a plain `PATH`
+/// scan misses.
+#[cfg(target_os = "windows")]
+pub fn codex_cli_bundled_exists() -> bool {
+    windows_codex_bundled_cli_candidates()
+        .iter()
+        .any(|path| path.is_file())
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn codex_cli_bundled_exists() -> bool {
+    false
+}
+
+/// Filesystem-only binary lookup: `PATH` plus the well-known install
+/// directories, without spawning a shell or `where.exe`. Used where the full
+/// probe would block the UI thread for every Agent.
+pub fn binary_exists_without_probe(binary: &str) -> bool {
+    let candidates = binary_candidates(binary);
+    if candidates
+        .iter()
+        .any(|candidate| Path::new(candidate).is_file())
+    {
+        return true;
+    }
+    candidate_dirs_without_login_shell().into_iter().any(|dir| {
+        candidates
+            .iter()
+            .any(|candidate| dir.join(candidate).is_file())
+    })
+}
+
 pub fn find_codex_cli_binary() -> Option<PathBuf> {
     #[cfg(target_os = "windows")]
     {
@@ -378,15 +411,23 @@ fn login_shell_path() -> Option<Vec<PathBuf>> {
 }
 
 fn candidate_dirs() -> Vec<PathBuf> {
+    let mut dirs = candidate_dirs_without_login_shell();
+    #[cfg(not(target_os = "windows"))]
+    if let Some(shell_paths) = login_shell_path() {
+        dirs.extend(shell_paths);
+    }
+    let mut deduped = BTreeSet::new();
+    deduped.extend(dirs);
+    deduped.into_iter().collect()
+}
+
+/// The same candidate directories without asking the login shell for its
+/// `PATH`, which spawns a process on macOS.
+fn candidate_dirs_without_login_shell() -> Vec<PathBuf> {
     let mut dirs = BTreeSet::new();
 
     if let Some(path) = std::env::var_os("PATH") {
         dirs.extend(std::env::split_paths(&path));
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    if let Some(shell_paths) = login_shell_path() {
-        dirs.extend(shell_paths);
     }
 
     dirs.extend([

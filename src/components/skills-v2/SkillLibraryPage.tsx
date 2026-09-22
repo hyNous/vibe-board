@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { filteredSkills, useSkillStoreV2 } from '../../stores/skillStoreV2'
+import { filteredSkills, SKILL_SOURCE_CATEGORIES, useSkillStoreV2 } from '../../stores/skillStoreV2'
 import { skillApiV2 } from '../../services/skillApiV2'
 import type { SkillSummary, DeleteCenterSkillPreview } from '../../services/skillApiV2'
 import { AgentIconBadge } from './AgentIconBadge'
 import { DistributeDialog } from './DistributeDialog'
 import { SkillDetailSlider } from './SkillDetailSlider'
+import { SkillIssuesPanel } from './SkillIssuesPanel'
 import { PreviewDialog } from './PreviewDialog'
-import { skillSourceTypeLabel } from './skillLabels'
+import { skillSourceCategoryLabel, skillSourceTypeLabel } from './skillLabels'
 
 const STATUS_LABEL: Record<string, string> = {
   ok: '正常',
@@ -34,10 +35,6 @@ export function SkillLibraryPage() {
   const [sliderSkillId, setSliderSkillId] = useState<string | null>(null)
   const [deletePreview, setDeletePreview] = useState<DeleteCenterSkillPreview | null>(null)
   const [busy, setBusy] = useState(false)
-  const sources = useMemo(
-    () => Array.from(new Set(state.skills.map((s) => s.sourceType).filter(Boolean))).sort(),
-    [state.skills],
-  )
   const skills = baseSkills
   const selectedSkills = useMemo(
     () => state.skills.filter((skill) => selectedSkillIds.has(skill.id)),
@@ -58,8 +55,11 @@ export function SkillLibraryPage() {
   ], [])
   const sourceOptions = useMemo<FilterSelectOption[]>(() => [
     { value: '', label: '全部来源' },
-    ...sources.map((source) => ({ value: source, label: skillSourceTypeLabel(t, source) })),
-  ], [sources, t])
+    ...SKILL_SOURCE_CATEGORIES.map((category) => ({
+      value: category,
+      label: skillSourceCategoryLabel(t, category),
+    })),
+  ], [t])
 
   useEffect(() => {
     state.init()
@@ -84,8 +84,9 @@ export function SkillLibraryPage() {
     state.setTab('install')
   }
 
-  const openDiagnostics = () => {
-    state.setTab('diagnostics')
+  const openIssues = () => {
+    void state.runDiagnosis()
+    document.getElementById('skill-issues')?.scrollIntoView?.({ block: 'nearest' })
   }
 
   const toggleBatchMode = () => {
@@ -168,7 +169,7 @@ export function SkillLibraryPage() {
       <div className="sm2__header sm2__header--stacked">
         <div>
           <h2 className="sm2__title">Skill 库</h2>
-          <p className="sm2__header-subtitle">统一管理中心库 Skills，查看安装到哪些 Agent，并处理分发、更新和删除。</p>
+          <p className="sm2__header-subtitle">统一管理中心库 Skills，查看对哪些 Agent 生效，并处理生效关系、更新和删除。</p>
         </div>
         <div className="sm2__tabs">
           <button className="sm2__btn sm2__btn--primary" onClick={() => state.setTab('install')}>安装 Skill</button>
@@ -186,9 +187,13 @@ export function SkillLibraryPage() {
           <Metric value={overview.metrics.centerSkillCount} label="中心库 Skill" />
           <Metric value={overview.metrics.targetCount} label="Agent 安装" />
           <Metric value={overview.metrics.unmanagedCount} label="未管理" onClick={openAgentSync} />
-          <Metric value={overview.metrics.issueCount} label="诊断问题" onClick={openDiagnostics} />
+          <Metric value={overview.metrics.issueCount} label="诊断问题" onClick={openIssues} />
         </div>
       )}
+
+      <div id="skill-issues">
+        <SkillIssuesPanel />
+      </div>
 
       <div className="sm2__library-filterbar">
         <div className="sm2__filter-search">
@@ -225,7 +230,7 @@ export function SkillLibraryPage() {
         <div className="sm2__batch-distribute-bar">
           <div className="sm2__batch-distribute-copy">
             <strong>已选择 {selectedSkillIds.size} 个 Skill</strong>
-            <span>批量分发到同一组 Agent，或从中心库删除多个 Skill</span>
+            <span>批量让同一组 Agent 生效，或从中心库删除多个 Skill</span>
           </div>
           <div className="sm2__batch-distribute-actions">
             <button className="sm2__btn sm2__btn--ghost" onClick={selectVisibleSkills} disabled={skills.length === 0}>
@@ -235,7 +240,7 @@ export function SkillLibraryPage() {
               清空
             </button>
             <button className="sm2__btn sm2__btn--primary" onClick={openBatchDistribute} disabled={selectedSkillIds.size === 0}>
-              分发 {selectedSkillIds.size} 个 Skill
+              让 {selectedSkillIds.size} 个 Skill 生效
             </button>
             <button className="sm2__btn sm2__btn--danger" onClick={openBatchDelete} disabled={selectedSkillIds.size === 0 || busy}>
               删除 {selectedSkillIds.size} 个 Skill
@@ -610,7 +615,7 @@ function SkillCard({
             ))}
           </div>
         )}
-        {skill.installedAgents.length === 0 && <span className="sm2__row-sub">尚未分发到 Agent</span>}
+        {skill.installedAgents.length === 0 && <span className="sm2__row-sub">尚未对任何 Agent 生效</span>}
       </div>
     </div>
   )

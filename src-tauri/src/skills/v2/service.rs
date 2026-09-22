@@ -11,6 +11,7 @@ use crate::skills::v2::agent_meta;
 use crate::skills::v2::db::{self, Db};
 use crate::skills::v2::fsutil::{self, inspect_path, PathKind};
 use crate::skills::v2::models::*;
+use crate::skills::v2::skill_lock;
 use rusqlite::{params, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -948,21 +949,25 @@ impl Service {
             }
         }
 
+        let lock_index = skill_lock::load(&self.home);
         let mut targets_by_skill = self.targets_by_skill()?;
         let mut summaries = Vec::new();
         for row in rows {
             let targets = targets_by_skill.remove(&row.id).unwrap_or_default();
             let installed_agents = self.installed_agent_refs(&targets);
             let status = self.aggregate_skill_status(&row, &targets);
+            let mut source_type = row
+                .source_type
+                .unwrap_or_else(|| "manual_center".to_string());
+            let mut source_uri = row.source_uri;
+            apply_lock_source(&mut source_type, &mut source_uri, &row.id, &lock_index);
             summaries.push(SkillSummary {
                 id: row.id,
                 name: row.name,
                 description: row.description,
                 skill_type: row.skill_type,
-                source_type: row
-                    .source_type
-                    .unwrap_or_else(|| "manual_center".to_string()),
-                source_uri: row.source_uri,
+                source_type,
+                source_uri,
                 center_path: row.center_path,
                 current_hash: row.current_hash,
                 status,
@@ -1072,16 +1077,44 @@ impl Service {
         let frontmatter = self.frontmatter_for_skill(skill_id)?;
         let files = fsutil::build_file_tree(Path::new(&row.center_path), 4);
 
+        let mut source_type = source
+            .as_ref()
+            .map(|s| s.source_type.clone())
+            .unwrap_or_else(|| "manual_center".to_string());
+        let mut source_uri = source.as_ref().and_then(|s| s.source_uri.clone());
+        let lock_index = skill_lock::load(&self.home);
+        apply_lock_source(&mut source_type, &mut source_uri, skill_id, &lock_index);
+        let source = if source_type == "github"
+            && source
+                .as_ref()
+                .is_none_or(|detail| detail.source_type != "github")
+        {
+            let entry = skill_lock::find(&lock_index, skill_id);
+            Some(SkillSourceDetail {
+                source_type: source_type.clone(),
+                source_uri: source_uri.clone(),
+                source_ref: None,
+                imported_from_agent: None,
+                imported_from_path: None,
+                installed_via: "skill-lock".to_string(),
+                created_at: entry
+                    .and_then(|entry| entry.installed_at.clone())
+                    .unwrap_or_default(),
+                updated_at: entry
+                    .and_then(|entry| entry.updated_at.clone())
+                    .unwrap_or_default(),
+            })
+        } else {
+            source
+        };
+
         let summary = SkillSummary {
             id: row.id.clone(),
             name: row.name.clone(),
             description: row.description.clone(),
             skill_type: row.skill_type.clone(),
-            source_type: source
-                .as_ref()
-                .map(|s| s.source_type.clone())
-                .unwrap_or_else(|| "manual_center".to_string()),
-            source_uri: source.as_ref().and_then(|s| s.source_uri.clone()),
+            source_type,
+            source_uri,
             center_path: row.center_path.clone(),
             current_hash: row.current_hash.clone(),
             status,
@@ -1127,20 +1160,25 @@ impl Service {
         let row = self
             .skill_row(skill_id)?
             .ok_or_else(|| format!("Skill not found: {skill_id}"))?;
-        let source = self
-            .source_for_skill(skill_id)?
-            .ok_or_else(|| "This Skill has no recorded source.".to_string())?;
-        let source_uri = source
-            .source_uri
-            .clone()
-            .ok_or_else(|| "This Skill has no recorded GitHub URI.".to_string())?;
-        if source.source_type != "github"
-            && !source_uri.starts_with("github:")
-            && !source_uri.starts_with("https://github.com/")
-            && !source_uri.starts_with("http://github.com/")
-        {
+        let source = self.source_for_skill(skill_id)?;
+        let mut is_github = source
+            .as_ref()
+            .is_some_and(|detail| detail.source_type == "github");
+        let mut source_uri = source.as_ref().and_then(|detail| detail.source_uri.clone());
+        if let Some(uri) = source_uri.as_deref() {
+            is_github = is_github || is_github_source_uri(uri);
+        }
+        if !is_github {
+            // The external `skills` tool records GitHub origins that Vibe Board
+            // never imported itself; fall back to that read-only record.
+            source_uri = self.skill_lock_github_source(skill_id);
+            is_github = source_uri.is_some();
+        }
+        if !is_github {
             return Err("Only GitHub-backed Skills can be checked for updates.".to_string());
         }
+        let source_uri =
+            source_uri.ok_or_else(|| "This Skill has no recorded GitHub URI.".to_string())?;
         let center = Path::new(&row.center_path);
         if !center.is_dir() {
             return Err(format!(
@@ -1229,6 +1267,14 @@ impl Service {
                 None => Ok(BTreeMap::new()),
             }
         })
+    }
+
+    /// GitHub origin recorded by the external `skills` tool. The lock file is
+    /// only ever read; a missing or malformed file simply yields `None`.
+    fn skill_lock_github_source(&self, skill_id: &str) -> Option<String> {
+        let index = skill_lock::load(&self.home);
+        let entry = skill_lock::find(&index, skill_id)?;
+        skill_lock::github_source_spec(entry)
     }
 
     fn source_for_skill(&self, skill_id: &str) -> Result<Option<SkillSourceDetail>, String> {
@@ -1363,6 +1409,7 @@ impl Service {
                 version,
                 latest_version: latest,
                 installed,
+                program_installed: agent_meta::agent_program_detected(id, installed),
                 managed_skill_count,
                 unmanaged_skill_count,
                 read_only_skill_count,
@@ -1569,6 +1616,7 @@ impl Service {
                     icon_key: agent.icon_key,
                     skills_dir: agent.skills_dir,
                     installed: agent.installed,
+                    program_installed: agent.program_installed,
                     managed_count,
                     unmanaged_count,
                     read_only_count,
@@ -6493,6 +6541,34 @@ fn is_remote_skill_source(input: &AddCenterSkillInput) -> bool {
 
 fn is_local_folder_import(input: &AddCenterSkillInput) -> bool {
     input.source_type == "local_folder" && !is_remote_skill_source(input)
+}
+
+fn is_github_source_uri(uri: &str) -> bool {
+    uri.starts_with("github:")
+        || uri.starts_with("https://github.com/")
+        || uri.starts_with("http://github.com/")
+}
+
+/// Fill in the GitHub origin recorded by the external lock file when the Skill
+/// database has no (or only a local) source for it. Read-only: nothing is
+/// persisted, so removing the lock file reverts the labels.
+fn apply_lock_source(
+    source_type: &mut String,
+    source_uri: &mut Option<String>,
+    skill_id: &str,
+    index: &skill_lock::SkillLockIndex,
+) {
+    if *source_type == "github" || source_uri.as_deref().is_some_and(is_github_source_uri) {
+        return;
+    }
+    let Some(entry) = skill_lock::find(index, skill_id) else {
+        return;
+    };
+    let Some(spec) = skill_lock::github_source_spec(entry) else {
+        return;
+    };
+    *source_type = "github".to_string();
+    *source_uri = Some(spec);
 }
 
 // transactional helpers

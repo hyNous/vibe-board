@@ -258,6 +258,9 @@ pub struct AgentSummary {
     pub version: Option<String>,
     pub latest_version: Option<String>,
     pub installed: bool,
+    /// The Agent's own executable/application was detected. `installed` is also
+    /// true when only configuration or Skill directories exist.
+    pub program_installed: bool,
     pub managed_skill_count: usize,
     pub unmanaged_skill_count: usize,
     pub read_only_skill_count: usize,
@@ -605,6 +608,8 @@ pub struct AgentSkillInventoryAgent {
     pub icon_key: String,
     pub skills_dir: Option<String>,
     pub installed: bool,
+    /// The Agent's own executable/application was detected.
+    pub program_installed: bool,
     pub managed_count: usize,
     pub unmanaged_count: usize,
     pub read_only_count: usize,

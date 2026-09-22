@@ -66,7 +66,7 @@ export function SettingsPageV2() {
         {notice && <div className="sm2__notice sm2__notice--ok">{notice}</div>}
 
         <div className="sm2__issue">
-          <h4 className="sm2__settings-label">默认分发方式</h4>
+          <h4 className="sm2__settings-label">默认生效方式</h4>
           <select
             className="sm2__select"
             value={settings.defaultDistributeMode}

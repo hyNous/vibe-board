@@ -2,7 +2,6 @@ import { useSkillStoreV2 } from '../../stores/skillStoreV2'
 import { SkillLibraryPage } from './SkillLibraryPage'
 import { InstallPage } from './InstallPage'
 import { AgentManagementPage } from './AgentManagementPage'
-import { DiagnosisPage } from './DiagnosisPage'
 import { SettingsPageV2 } from './SettingsPageV2'
 import './SkillManagerV2.css'
 
@@ -16,7 +15,6 @@ export function SkillManagerShell() {
       {visibleTab === 'library' && <SkillLibraryPage />}
       {visibleTab === 'install' && <InstallPage />}
       {visibleTab === 'agents' && <AgentManagementPage />}
-      {visibleTab === 'diagnostics' && <DiagnosisPage />}
       {visibleTab === 'settings' && <SettingsPageV2 />}
     </div>
   )

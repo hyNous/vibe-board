@@ -16,6 +16,66 @@ function flatKeys(obj: Record<string, unknown>, prefix = ''): string[] {
 
 const enKeys = flatKeys(en)
 
+describe('Skill management copy', () => {
+  const locales = { en, zh, ja, ko, tr }
+
+  it('keeps the Skill management namespaces identical across all five locales', () => {
+    const namespaces = [
+      'settings.skillsOverview',
+      'skills.sourceCategory',
+      'skills.sourceType',
+      'skills.claim',
+      'skills.blocker',
+      'skills.agentManagement',
+    ]
+    const scopedKeys = (locale: Record<string, unknown>, namespace: string) =>
+      flatKeys(locale).filter((key) => key === namespace || key.startsWith(`${namespace}.`))
+
+    for (const namespace of namespaces) {
+      const expected = scopedKeys(en, namespace).sort()
+      for (const [name, locale] of Object.entries(locales)) {
+        expect(scopedKeys(locale as Record<string, unknown>, namespace).sort(), `${name} ${namespace}`).toEqual(expected)
+      }
+    }
+  })
+
+  it('labels Skill origins as 自定义 / GitHub / 从 Agent 同步 in every locale', () => {
+    const expected = ['custom', 'github', 'agent']
+    for (const [name, locale] of Object.entries(locales)) {
+      const sourceCategory = (locale as Record<string, unknown>).skills as Record<string, Record<string, unknown>>
+      expect(Object.keys(sourceCategory.sourceCategory).sort(), name).toEqual([...expected].sort())
+      for (const key of expected) {
+        expect(String(sourceCategory.sourceCategory[key]).trim(), `${name} ${key}`).not.toBe('')
+      }
+    }
+    expect(locales.zh.skills.sourceCategory).toEqual({
+      custom: '自定义',
+      github: 'GitHub',
+      agent: '从 Agent 同步',
+    })
+  })
+
+  it('no Skill management string falls back to the removed distribution wording', () => {
+    const patterns: Record<string, RegExp> = {
+      en: /distribut/i,
+      zh: /分发/,
+      ja: /配布|配信/,
+      ko: /배포|분배/,
+      tr: /dağıt|dağit/i,
+    }
+    const namespaces = ['settings.skillsOverview', 'skills.sourceCategory', 'skills.claim', 'skills.blocker', 'skills.agentManagement']
+    for (const [name, locale] of Object.entries(locales)) {
+      const pattern = patterns[name]
+      for (const key of flatKeys(locale as Record<string, unknown>)) {
+        if (!namespaces.some((namespace) => key === namespace || key.startsWith(`${namespace}.`))) continue
+        const value = key.split('.').reduce<unknown>((node, part) => (node as Record<string, unknown>)?.[part], locale)
+        if (typeof value !== 'string') continue
+        expect(pattern.test(value), `${name} ${key}: ${value}`).toBe(false)
+      }
+    }
+  })
+})
+
 describe('i18n locale completeness', () => {
   it('zh has all keys from en', () => {
     const zhKeys = flatKeys(zh)

@@ -83,7 +83,7 @@
     },
     "skillsOverview": {
       "title": "Skills",
-      "subtitle": "Manage user-level Skills only, with the real distribution state shown as-is.",
+      "subtitle": "Manage user-level Skills only, with the real \"active in\" state shown as-is.",
       "scopeTitle": "User-level Skills only",
       "scope": " (center library {{centerPath}} and each Agent's user directory). Project-level .skills folders are not scanned. GitHub updates show a preview first and overwrite the center library only after you confirm.",
       "searchPlaceholder": "Search Skill name or description",
@@ -93,11 +93,11 @@
       "openAdvanced": "Full management",
       "categoriesLabel": "Skill categories",
       "categoryAll": "All (center library)",
-      "categoryAgent": "Distributed to {{name}}",
-      "noteAll": "Center-library Skills are uncategorized by default: they do not apply to every Agent. Vibe Board has no automatic \"generic / exclusive\" assignment and does not auto-cover Agents installed later. Skills without Agent icons are not distributed anywhere and must be distributed manually from Full management.",
-      "noteAgent": "These Skills are currently distributed to {{name}}; some may also be distributed to other Agents. This reflects real distribution records, not an exclusive binding. Installing or removing them is always a manual action in Full management.",
-      "unassigned": "Not distributed",
-      "unassignedSummary": "{{n}} Skills are not distributed to any Agent.",
+      "categoryAgent": "Active in {{name}}",
+      "noteAll": "Center-library Skills are inactive by default: they do not apply to every Agent. Vibe Board has no automatic \"generic / exclusive\" assignment and never auto-covers Agents installed later. Skills without Agent icons are not active anywhere yet and must be enabled manually from Full management.",
+      "noteAgent": "These Skills are currently active in {{name}}; some may also be active in other Agents. This reflects real records, not an exclusive binding. Enabling or removing them is always a manual action in Full management.",
+      "unassigned": "Not active yet",
+      "unassignedSummary": "{{n}} Skills are not active in any Agent yet.",
       "loading": "Loading Skill library...",
       "empty": "No Skills in this category yet. Import from a local folder, Git, or an Agent directory in Full management.",
       "updatesTitle": "Update check",
@@ -119,7 +119,8 @@
       "syncDialogRemoteHash": "Remote hash",
       "syncDialogCheckedAt": "Checked at",
       "syncConfirm": "Overwrite and sync",
-      "syncCancel": "Cancel"
+      "syncCancel": "Cancel",
+      "moreAgentsHint": "Agents whose executable was not detected are grouped here"
     },
     "title": "Settings",
     "close": "Close",
@@ -732,7 +733,7 @@
       "missing": "Missing"
     },
     "claim": {
-      "direct": "Direct distribution",
+      "direct": "Direct",
       "pack": "Pack",
       "packNamed": "Pack: {{name}}"
     },
@@ -742,7 +743,7 @@
       "scanCompleteSharedReadOnly": "Scan complete: this Agent has {{managed}} managed, {{unmanaged}} unmanaged, and {{readOnly}} built-in read-only; the .agents shared directory has {{sharedManaged}} managed, {{sharedUnmanaged}} unmanaged, and {{sharedReadOnly}} read-only",
       "scanCompleteReadOnly": "Scan complete: {{managed}} managed, {{unmanaged}} unmanaged, {{readOnly}} built-in read-only",
       "deleteRefreshFailed": "Deletion completed, but the list could not be refreshed: {{error}}. Refresh the overview or rescan this Agent.",
-      "sharedDirectoryNotice": "{{count}} Skills are from the .agents shared directory. After adoption, they will be moved into the center library and removed from the shared directory. Manage future distribution through the center library or skill packs.",
+      "sharedDirectoryNotice": "{{count}} Skills are from the .agents shared directory. After adoption, they will be moved into the center library and removed from the shared directory. Manage future activation through the center library.",
       "pathSettings": {
         "tab": "Paths & settings",
         "title": "Local resources and configuration",
@@ -854,7 +855,7 @@
         "confirm": "Delete from shared directory",
         "busy": "Deleting...",
         "managedDescription": "This removes {{count}} managed Skill from ~/.agents/skills. Every Agent that reads the shared directory will stop seeing it.",
-        "managedPreserved": "The Skill remains in the center library and can be distributed again later.",
+        "managedPreserved": "The Skill remains in the center library and can be enabled for Agents again later.",
         "unmanagedDescription": "This permanently deletes {{count}} unmanaged Skill from ~/.agents/skills. Every Agent that reads the shared directory is affected.",
         "unmanagedPermanent": "The Skill is not copied to the center library and cannot be restored by Vibe Board. Adopt it instead if you want to keep it."
       },
@@ -876,7 +877,7 @@
     },
     "blocker": {
       "unmanagedExists": "An unmanaged Skill “{{skillId}}” already exists at the target path. Choose overwrite or skip for this target.",
-      "managedCopyBeforeRedistribute": "The managed copy “{{skillId}}” has local changes. Choose whether the center library or Agent copy wins before redistributing.",
+      "managedCopyBeforeRedistribute": "The managed copy \"{{skillId}}\" has local changes. Choose whether the center library or Agent copy wins before enabling it for Agents again.",
       "managedCopyBeforeConvert": "The managed copy “{{skillId}}” has local changes. Choose whether the center library or Agent copy wins before changing the install mode.",
       "notInCenterLibrary": "Skill “{{skillId}}” is not in the center library.",
       "unknownAgentDirectory": "The Skills directory for Agent “{{agentId}}” is unknown."
@@ -969,7 +970,12 @@
     "fileEmpty": "This file is empty",
     "fileLarge": "Large file ({{size}}) — source view only",
     "frontmatter": "Frontmatter",
-    "frontmatterAdditional": "{{count}} additional fields"
+    "frontmatterAdditional": "{{count}} additional fields",
+    "sourceCategory": {
+      "custom": "Custom",
+      "github": "GitHub",
+      "agent": "Synced from Agent"
+    }
   },
   "update": {
     "availableTitle": "Update Available",

@@ -1091,6 +1091,22 @@ fn installed_app_path(agent_id: &str, meta: &ProgramMetadata) -> Option<String> 
         .find(|path| Path::new(path).exists())
 }
 
+/// Filesystem-only program detection. Mirrors
+/// [`detected_status_for_agent_program`] without spawning a shell or
+/// `where.exe`, so the Skill manager can tell installed Agents apart from
+/// config-only directories without blocking the settings window.
+pub(crate) fn program_detected_without_probe(agent_id: &str) -> bool {
+    let Some(meta) = metadata_for(agent_id) else {
+        return false;
+    };
+    let has_binary = binary_candidates_for_agent(agent_id, &meta)
+        .into_iter()
+        .any(executable::binary_exists_without_probe)
+        || (agent_id == "codex" && executable::codex_cli_bundled_exists());
+    let has_app = installed_app_path(agent_id, &meta).is_some();
+    program_is_installed_for_agent(agent_id, &meta, has_binary, has_app)
+}
+
 pub(crate) fn detected_status_for_agent_program(agent_id: &str) -> AdapterStatus {
     let Some(meta) = metadata_for(agent_id) else {
         return AdapterStatus::Unavailable;

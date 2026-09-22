@@ -1,8 +1,13 @@
 import type { TFunction } from 'i18next'
 import type { ConflictBlocker, TargetClaim } from '../../services/skillApiV2'
+import type { SkillSourceCategory } from '../../stores/skillStoreV2'
 
 const SOURCE_TYPE_KEYS: Record<string, string> = {
   'skills.sh': 'skills_sh',
+}
+
+export function skillSourceCategoryLabel(t: TFunction, category: SkillSourceCategory): string {
+  return t(`skills.sourceCategory.${category}`, { defaultValue: category })
 }
 
 const STALE_UNMANAGED_ERROR_CODE = 'SKILL_UNMANAGED_STALE'

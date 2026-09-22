@@ -7,6 +7,7 @@ pub mod diagnosis;
 pub mod fsutil;
 pub mod models;
 pub mod service;
+pub mod skill_lock;
 pub mod snapshot;
 #[cfg(test)]
 mod tests;

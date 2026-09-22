@@ -83,7 +83,7 @@
     },
     "skillsOverview": {
       "title": "Skills",
-      "subtitle": "只管理用户级 Skills，并按真实数据展示当前的分发情况。",
+      "subtitle": "只管理用户级 Skills，并按真实数据展示对各个 Agent 的生效情况。",
       "scopeTitle": "仅用户级 Skills",
       "scope": "（中心库 {{centerPath}} 与各 Agent 用户目录），不扫描项目级 .skills。GitHub 来源的更新会先展示预览，确认后才覆盖中心库。",
       "searchPlaceholder": "搜索 Skill 名称或描述",
@@ -93,11 +93,11 @@
       "openAdvanced": "完整管理",
       "categoriesLabel": "Skill 分类",
       "categoryAll": "全部（中心库）",
-      "categoryAgent": "已分发到 {{name}}",
-      "noteAll": "中心库 Skill 默认处于未分类状态，不会自动作用于所有 Agent；Vibe Board 目前没有「通用 / 专属」自动分配能力，也不会自动覆盖未来新安装的 Agent。未显示 Agent 图标的 Skill（未分发）只存在于中心库，需在「完整管理」中手动分发。",
-      "noteAgent": "以下 Skill 当前已分发到 {{name}}，部分可能同时分发到其他 Agent。这是真实的分发记录，不是「专属」绑定；安装或取消安装都要在「完整管理」中手动操作。",
-      "unassigned": "未分发",
-      "unassignedSummary": "当前有 {{n}} 个 Skill 尚未分发到任何 Agent。",
+      "categoryAgent": "生效于 {{name}}",
+      "noteAll": "中心库 Skill 默认不对任何 Agent 生效；Vibe Board 不会自动让它们作用于所有 Agent，也不会自动覆盖未来新安装的 Agent，没有「通用 / 专属」自动分配。未显示 Agent 图标的 Skill（尚未生效于任何 Agent）只存在于中心库，需在「完整管理」中手动让它生效。",
+      "noteAgent": "以下 Skill 当前生效于 {{name}}，部分可能同时对其他 Agent 生效。这是真实的生效记录，不是「专属」绑定；安装或取消安装都要在「完整管理」中手动操作。",
+      "unassigned": "尚未生效",
+      "unassignedSummary": "当前有 {{n}} 个 Skill 尚未对任何 Agent 生效。",
       "loading": "加载 Skill 库…",
       "empty": "当前分类还没有 Skill。可在「完整管理」中从本地、Git 或 Agent 目录导入。",
       "updatesTitle": "更新检查",
@@ -119,7 +119,8 @@
       "syncDialogRemoteHash": "远端 Hash",
       "syncDialogCheckedAt": "检查时间",
       "syncConfirm": "覆盖并同步",
-      "syncCancel": "取消"
+      "syncCancel": "取消",
+      "moreAgentsHint": "未检测到可执行程序的 Agent 收在这里"
     },
     "title": "设置",
     "usage": "用量统计",
@@ -772,7 +773,7 @@
       "missing": "失效"
     },
     "claim": {
-      "direct": "直接分发",
+      "direct": "直接生效",
       "pack": "技能包",
       "packNamed": "技能包：{{name}}"
     },
@@ -782,7 +783,7 @@
       "scanCompleteSharedReadOnly": "扫描完成：此 Agent 已管理 {{managed}}，未管理 {{unmanaged}}，内置只读 {{readOnly}}；.agents 共享目录已管理 {{sharedManaged}}，未管理 {{sharedUnmanaged}}，只读 {{sharedReadOnly}}",
       "scanCompleteReadOnly": "扫描完成：已管理 {{managed}}，未管理 {{unmanaged}}，内置只读 {{readOnly}}",
       "deleteRefreshFailed": "删除已完成，但列表刷新失败：{{error}}。可手动刷新总览或重新扫描此 Agent。",
-      "sharedDirectoryNotice": "{{count}} 个 Skill 来自 .agents 共享目录。接管后会进入中心库，并从共享目录清理；后续请通过中心库或技能包控制分发。",
+      "sharedDirectoryNotice": "{{count}} 个 Skill 来自 .agents 共享目录。接管后会进入中心库，并从共享目录清理；后续请通过中心库控制它们对哪些 Agent 生效。",
       "pathSettings": {
         "tab": "路径与设置",
         "title": "本地资源与配置",
@@ -894,7 +895,7 @@
         "confirm": "从共享目录删除",
         "busy": "删除中...",
         "managedDescription": "这会从 ~/.agents/skills 移除 {{count}} 个已管理 Skill，所有读取该共享目录的 Agent 都将无法再使用它。",
-        "managedPreserved": "中心库中的 Skill 会保留，之后仍可重新分发。",
+        "managedPreserved": "中心库中的 Skill 会保留，之后仍可重新让 Agent 生效。",
         "unmanagedDescription": "这会从 ~/.agents/skills 永久删除 {{count}} 个未管理 Skill，所有读取该共享目录的 Agent 都会受到影响。",
         "unmanagedPermanent": "这些 Skill 不会复制到中心库，Vibe Board 无法恢复；如果需要保留，请改用接管。"
       },
@@ -916,7 +917,7 @@
     },
     "blocker": {
       "unmanagedExists": "目标路径已存在未管理的 Skill「{{skillId}}」。请选择覆盖安装或忽略此目标。",
-      "managedCopyBeforeRedistribute": "已管理的副本「{{skillId}}」含有本地修改。重新分发前，请选择以中心库或 Agent 副本为准。",
+      "managedCopyBeforeRedistribute": "已管理的副本「{{skillId}}」含有本地修改。重新让 Agent 生效前，请选择以中心库或 Agent 副本为准。",
       "managedCopyBeforeConvert": "已管理的副本「{{skillId}}」含有本地修改。转换安装方式前，请选择以中心库或 Agent 副本为准。",
       "notInCenterLibrary": "中心库中不存在 Skill「{{skillId}}」。",
       "unknownAgentDirectory": "无法确定 Agent「{{agentId}}」的 Skills 目录。"
@@ -1009,7 +1010,12 @@
     "fileEmpty": "文件为空",
     "fileLarge": "大文件 ({{size}}) — 仅显示源码",
     "frontmatter": "元数据",
-    "frontmatterAdditional": "{{count}} 个附加字段"
+    "frontmatterAdditional": "{{count}} 个附加字段",
+    "sourceCategory": {
+      "custom": "自定义",
+      "github": "GitHub",
+      "agent": "从 Agent 同步"
+    }
   },
   "update": {
     "availableTitle": "发现新版本",

@@ -242,7 +242,7 @@ describe('settings island menu', () => {
     expect(document.querySelector('.island-effect-preview')).toBeNull()
   })
 
-  it('opens the user-level Skills overview with honest distribution categories', async () => {
+  it('opens the user-level Skills overview with honest effect categories', async () => {
     render(<SettingsApp onClose={vi.fn()} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Skill管理' }))
@@ -250,7 +250,7 @@ describe('settings island menu', () => {
     expect(await screen.findByRole('heading', { name: 'Skills' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: /全部（中心库）/ })).toBeInTheDocument()
     expect(screen.getByText(/仅用户级 Skills/)).toBeInTheDocument()
-    expect(screen.getByText(/没有「通用 \/ 专属」自动分配能力/)).toBeInTheDocument()
+    expect(screen.getByText(/「通用 \/ 专属」自动分配/)).toBeInTheDocument()
     expect(screen.queryByText(/通用分类来自中心库/)).not.toBeInTheDocument()
   })
 

@@ -84,7 +84,7 @@
     },
     "skillsOverview": {
       "title": "Skills",
-      "subtitle": "사용자 수준 Skill만 관리하고 실제 배포 상태를 있는 그대로 보여줍니다.",
+      "subtitle": "사용자 수준 Skill만 관리하고 각 Agent에서의 실제 적용 상태를 있는 그대로 보여줍니다.",
       "scopeTitle": "사용자 수준 Skill만",
       "scope": " (센터 라이브러리 {{centerPath}} 및 각 Agent 사용자 디렉터리). 프로젝트 수준 .skills는 검사하지 않습니다. GitHub 소스 업데이트는 먼저 미리보기를 보여주고 확인한 뒤에만 센터 라이브러리를 덮어씁니다.",
       "searchPlaceholder": "Skill 이름 또는 설명 검색",
@@ -94,11 +94,11 @@
       "openAdvanced": "전체 관리",
       "categoriesLabel": "Skill 분류",
       "categoryAll": "전체(센터 라이브러리)",
-      "categoryAgent": "{{name}}에 배포됨",
-      "noteAll": "센터 라이브러리 Skill은 기본적으로 미분류 상태이며 모든 Agent에 자동 적용되지 않습니다. Vibe Board에는 「범용 / 전용」 자동 할당 기능이 없고 나중에 설치한 Agent를 자동으로 포함하지도 않습니다. Agent 아이콘이 없는 Skill은 어디에도 배포되지 않았으므로 전체 관리에서 직접 배포해야 합니다.",
-      "noteAgent": "아래 Skill은 현재 {{name}}에 배포되어 있으며 일부는 다른 Agent에도 배포되어 있을 수 있습니다. 이는 실제 배포 기록이며 「전용」 고정이 아닙니다. 설치와 해제는 항상 전체 관리에서 직접 수행합니다.",
-      "unassigned": "미배포",
-      "unassignedSummary": "현재 {{n}}개의 Skill이 어떤 Agent에도 배포되지 않았습니다.",
+      "categoryAgent": "{{name}}에서 적용 중",
+      "noteAll": "센터 라이브러리 Skill은 기본적으로 어떤 Agent에도 적용되지 않습니다. 모든 Agent에 자동 적용되지 않으며 나중에 설치한 Agent를 자동으로 포함하지도 않습니다. 「범용 / 전용」 자동 할당 기능도 없습니다. Agent 아이콘이 없는 Skill은 아직 어디에도 적용되지 않았으므로 전체 관리에서 직접 적용해야 합니다.",
+      "noteAgent": "아래 Skill은 현재 {{name}}에서 적용 중이며 일부는 다른 Agent에도 적용되어 있을 수 있습니다. 이는 실제 적용 기록이며 「전용」 고정이 아닙니다. 적용과 해제는 항상 전체 관리에서 직접 수행합니다.",
+      "unassigned": "미적용",
+      "unassignedSummary": "현재 {{n}}개의 Skill이 어떤 Agent에도 적용되지 않았습니다.",
       "loading": "Skill 라이브러리 불러오는 중…",
       "empty": "이 분류에는 아직 Skill이 없습니다. 전체 관리에서 로컬, Git 또는 Agent 디렉터리에서 가져올 수 있습니다.",
       "updatesTitle": "업데이트 확인",
@@ -120,7 +120,8 @@
       "syncDialogRemoteHash": "원격 Hash",
       "syncDialogCheckedAt": "확인 시각",
       "syncConfirm": "덮어쓰고 동기화",
-      "syncCancel": "취소"
+      "syncCancel": "취소",
+      "moreAgentsHint": "실행 파일이 감지되지 않은 Agent가 여기에 모입니다"
     },
     "title": "설정",
     "usage": "사용량",
@@ -733,7 +734,7 @@
       "missing": "없음"
     },
     "claim": {
-      "direct": "직접 배포",
+      "direct": "직접 적용",
       "pack": "팩",
       "packNamed": "팩: {{name}}"
     },
@@ -743,7 +744,7 @@
       "scanCompleteSharedReadOnly": "스캔 완료: 이 Agent는 관리됨 {{managed}}, 관리되지 않음 {{unmanaged}}, 기본 제공 읽기 전용 {{readOnly}}; .agents 공유 디렉터리는 관리됨 {{sharedManaged}}, 관리되지 않음 {{sharedUnmanaged}}, 읽기 전용 {{sharedReadOnly}}",
       "scanCompleteReadOnly": "스캔 완료: 관리됨 {{managed}}, 관리되지 않음 {{unmanaged}}, 기본 제공 읽기 전용 {{readOnly}}",
       "deleteRefreshFailed": "삭제는 완료되었지만 목록을 새로 고치지 못했습니다: {{error}}. 개요를 새로 고치거나 이 Agent를 다시 스캔하세요.",
-      "sharedDirectoryNotice": "{{count}}개의 Skill이 .agents 공유 디렉터리에 있습니다. 인계 후 중앙 라이브러리로 이동되고 공유 디렉터리에서는 제거됩니다. 이후 배포는 중앙 라이브러리 또는 스킬 팩에서 관리하세요.",
+      "sharedDirectoryNotice": "{{count}}개의 Skill이 .agents 공유 디렉터리에 있습니다. 인계 후 중앙 라이브러리로 이동되고 공유 디렉터리에서는 제거됩니다. 이후에는 중앙 라이브러리에서 어떤 Agent에 적용할지 관리하세요.",
       "pathSettings": {
         "tab": "경로 및 설정",
         "title": "로컬 리소스 및 설정",
@@ -855,7 +856,7 @@
         "confirm": "공유 디렉터리에서 삭제",
         "busy": "삭제 중...",
         "managedDescription": "~/.agents/skills에서 관리 Skill {{count}}개를 제거합니다. 공유 디렉터리를 읽는 모든 Agent에서 더 이상 사용할 수 없습니다.",
-        "managedPreserved": "중앙 라이브러리의 Skill은 유지되며 나중에 다시 배포할 수 있습니다.",
+        "managedPreserved": "중앙 라이브러리의 Skill은 유지되며 나중에 다시 Agent에 적용할 수 있습니다.",
         "unmanagedDescription": "~/.agents/skills에서 미관리 Skill {{count}}개를 영구 삭제합니다. 공유 디렉터리를 읽는 모든 Agent가 영향을 받습니다.",
         "unmanagedPermanent": "Skill은 중앙 라이브러리에 복사되지 않으며 Vibe Board에서 복원할 수 없습니다. 보관하려면 인계를 사용하세요."
       },
@@ -877,7 +878,7 @@
     },
     "blocker": {
       "unmanagedExists": "대상 경로에 관리되지 않는 Skill ‘{{skillId}}’이(가) 이미 있습니다. 이 대상을 덮어쓸지 건너뛸지 선택하세요.",
-      "managedCopyBeforeRedistribute": "관리 중인 복사본 ‘{{skillId}}’에 로컬 변경 사항이 있습니다. 다시 배포하기 전에 센터 라이브러리와 Agent 복사본 중 우선할 항목을 선택하세요.",
+      "managedCopyBeforeRedistribute": "관리 중인 복사본 ‘{{skillId}}’에 로컬 변경 사항이 있습니다. 다시 Agent에 적용하기 전에 센터 라이브러리와 Agent 복사본 중 우선할 항목을 선택하세요.",
       "managedCopyBeforeConvert": "관리 중인 복사본 ‘{{skillId}}’에 로컬 변경 사항이 있습니다. 설치 방식을 변경하기 전에 센터 라이브러리와 Agent 복사본 중 우선할 항목을 선택하세요.",
       "notInCenterLibrary": "Skill ‘{{skillId}}’이(가) 센터 라이브러리에 없습니다.",
       "unknownAgentDirectory": "Agent ‘{{agentId}}’의 Skills 디렉터리를 확인할 수 없습니다."
@@ -970,7 +971,12 @@
     "fileEmpty": "This file is empty",
     "fileLarge": "Large file ({{size}}) — source view only",
     "frontmatter": "Frontmatter",
-    "frontmatterAdditional": "{{count}} additional fields"
+    "frontmatterAdditional": "{{count}} additional fields",
+    "sourceCategory": {
+      "custom": "사용자 지정",
+      "github": "GitHub",
+      "agent": "Agent에서 동기화"
+    }
   },
   "update": {
     "availableTitle": "업데이트 가능",

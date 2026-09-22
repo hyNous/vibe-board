@@ -291,8 +291,8 @@ describe('skillStoreV2 tab navigation', () => {
   it('switches active tab', () => {
     useSkillStoreV2.getState().setTab('library')
     expect(useSkillStoreV2.getState().activeTab).toBe('library')
-    useSkillStoreV2.getState().setTab('diagnostics')
-    expect(useSkillStoreV2.getState().activeTab).toBe('diagnostics')
+    useSkillStoreV2.getState().setTab('agents')
+    expect(useSkillStoreV2.getState().activeTab).toBe('agents')
   })
 
   it('switches the install subtab', () => {

@@ -5,8 +5,7 @@ import { open } from '@tauri-apps/plugin-dialog'
 import { useSkillStoreV2 } from '../../stores/skillStoreV2'
 import { skillApiV2 } from '../../services/skillApiV2'
 import { agentApi, type AgentOutputEvent, type AgentProgramInfo, type CustomAgentConfig } from '../../services/agentApi'
-import { configureAgentHookEvents, getAllHookStatus, installAgentHook, uninstallAgentHook, type HookEventStatus, type HookStatus } from '../../services/tauriApi'
-import type { AgentConfigDocument, AgentDetail, AdoptPreview, ConflictBlocker, DistributionPreview, SkillSummary, UnmanagedItemDto } from '../../services/skillApiV2'
+import type { AgentDetail, AdoptPreview, ConflictBlocker, DistributionPreview, SkillSummary, UnmanagedItemDto } from '../../services/skillApiV2'
 import { useSessionStore } from '../../stores/sessionStore'
 import { AgentIconBadge } from './AgentIconBadge'
 import { AdoptDialog } from './AdoptDialog'
@@ -15,7 +14,9 @@ import { SkillDetailSlider, type SkillDetailFallback } from './SkillDetailSlider
 import { distributionBlockerReason, isAdoptOptionUnavailableError, skillErrorMessage, skillModeLabel, skillSourceTypeLabel, skillStatusLabel, targetClaimLabel, unmanagedReasonLabel } from './skillLabels'
 import { buildAgentUsageScores, readStoredAgentOrder, sortAgentSummaries } from '../../utils/agentOrdering'
 
-type DetailTab = 'overview' | 'skills' | 'hooks' | 'config'
+// The Agent view now only shows which Skills are in effect for it; the tab id
+// stays so the section keeps its label, count and test hook.
+type DetailTab = 'skills'
 type AgentSkillViewMode = 'cards' | 'list'
 type AgentSkillSource = 'agent' | 'shared'
 type AgentSkillStatus = 'managed' | 'unmanaged' | 'builtin'
@@ -88,17 +89,10 @@ function agentDetection(
 function inventoryMetaLabel(agent: AgentInventoryEntry): string {
   const skillCount = agent.managedSkillCount + agent.unmanagedSkillCount
   if (agent.installed) {
-    return [
-      agent.version ? `v${agent.version}` : '已安装',
-      agent.hooksInstalled ? 'Hook 已装' : '',
-      skillCount > 0 ? `Skills ${skillCount}` : '',
-    ].filter(Boolean).join(' · ')
+    return skillCount > 0 ? `Skills ${skillCount}` : '暂未发现 Skill'
   }
   if (agent.status === 'configOnly') {
-    const programLabel = agent.programDetected ? '程序未安装' : '未检测到程序'
-    return skillCount > 0
-      ? `${programLabel} · 发现 Skills ${skillCount}`
-      : `${programLabel} · 仅发现配置`
+    return skillCount > 0 ? `发现 Skills ${skillCount}` : '仅发现配置'
   }
   if (agent.status === 'unavailable') {
     return '本机未安装，且没有可用的安装方式'
@@ -127,7 +121,8 @@ export function AgentManagementPage() {
     { manualOrder: readStoredAgentOrder(), usageScores: agentUsageScores },
   ), [agentUsageScores, state.agents])
   const detail = state.selectedAgentDetail?.id === SHARED_SKILLS_AGENT_ID ? null : state.selectedAgentDetail
-  const [tab, setTab] = useState<DetailTab>('overview')
+  const [tab, setTab] = useState<DetailTab>('skills')
+  const [showOtherAgents, setShowOtherAgents] = useState(false)
   const [adopt, setAdopt] = useState<AdoptDialogState | null>(null)
   const [detailSkillId, setDetailSkillId] = useState<string | null>(null)
   const [detailFallback, setDetailFallback] = useState<SkillDetailFallback | null>(null)
@@ -166,13 +161,19 @@ export function AgentManagementPage() {
       }
     }).sort((a, b) => Number(b.installed) - Number(a.installed))
   ), [agents, programs])
-  const installedProgramCount = inventory.filter((agent) => agent.installed).length
+  const programInfoLoaded = Object.keys(programs).length > 0
+  // 默认只显示检测到可执行程序（或应用）的 Agent；其余收在「+」后面。程序信息
+  // 尚未取到时不做过滤，避免把已安装的 Agent 误藏起来。
+  const detectedInventory = useMemo(() => inventory.filter((agent) => agent.installed), [inventory])
+  const hiddenInventory = useMemo(() => inventory.filter((agent) => !agent.installed), [inventory])
+  const visibleInventory = showOtherAgents || !programInfoLoaded ? inventory : detectedInventory
+  const installedProgramCount = detectedInventory.length
   const configOnlyCount = inventory.filter((agent) => agent.status === 'configOnly').length
 
   const loadPrograms = useCallback(async () => {
     setProgramLoading(true)
     try {
-      const next = await agentApi.refresh()
+      const next = await agentApi.list()
       setPrograms(Object.fromEntries(next.map((agent) => [agent.id, agent])))
     } catch (e) {
       state.setError(skillErrorMessage(t, e))
@@ -222,13 +223,15 @@ export function AgentManagementPage() {
       return
     }
     if (state.selectedAgentId && inventory.some((agent) => agent.id === state.selectedAgentId)) return
-    const first = inventory.find((agent) => agent.installed) || inventory[0]
+    const first = programInfoLoaded
+      ? detectedInventory[0] ?? inventory[0]
+      : inventory.find((agent) => agent.installed) || inventory[0]
     if (first) state.selectAgent(first.id)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [inventory, state.selectedAgentId])
+  }, [inventory, programInfoLoaded, state.selectedAgentId])
 
   useEffect(() => {
-    setTab('overview')
+    setTab('skills')
     setNotice(null)
     setAgentOutput([])
   }, [state.selectedAgentId])
@@ -485,7 +488,7 @@ export function AgentManagementPage() {
       <div className="sm2__header sm2__header--stacked">
         <div>
           <h2 className="sm2__title">Agent 管理</h2>
-          <p className="sm2__header-subtitle">检测本机可管理的 Agent，并维护每个 Agent 的 Skills、技能包、Hook 与配置。</p>
+          <p className="sm2__header-subtitle">查看每个 Agent 上生效了哪些 Skill，并处理接管与移除。</p>
         </div>
         <div className="sm2__tabs">
           {detail && canUninstallSelectedAgent && (
@@ -502,8 +505,8 @@ export function AgentManagementPage() {
           <ActionButton className="sm2__btn" onClick={refreshOverview} disabled={state.loading || actionBusy} busy={refreshingOverview} busyLabel="刷新中">
             刷新总览
           </ActionButton>
-          <ActionButton className="sm2__btn" onClick={refreshAll} disabled={state.loading || actionBusy || programLoading} busy={refreshingAll || programLoading} busyLabel="获取中">
-            获取版本
+          <ActionButton className="sm2__btn" onClick={refreshAll} disabled={state.loading || actionBusy || programLoading} busy={refreshingAll || programLoading} busyLabel="扫描中">
+            重新扫描
           </ActionButton>
         </div>
       </div>
@@ -521,8 +524,8 @@ export function AgentManagementPage() {
             <div>
               <h3>本机 Agent</h3>
               <p>
-                这里汇总 Vibe Board 支持的 Agent，并给出本机真实检测结果：程序、版本与 Hook 是否就绪。
-                「仅发现配置」表示只找到该 Agent 的本机配置或 Skills 目录，不代表程序已安装；「未安装 / 不可用 / 未检测到」只代表本机没有检测到对应程序，不是在线状态。
+                默认只列出检测到可执行程序（或应用）的 Agent。「仅发现配置」表示只找到本机配置或 Skills 目录，不代表程序已安装；
+                「未安装 / 不可用 / 未检测到」只代表本机没有检测到对应程序，不是在线状态。这些 Agent 收在「＋」后面，点开即可查看。
               </p>
             </div>
             <span className="sm2-agent-inventory__count">
@@ -531,7 +534,7 @@ export function AgentManagementPage() {
             </span>
           </div>
           <div className="sm2-agent-inventory__grid">
-            {inventory.map((agent) => (
+            {visibleInventory.map((agent) => (
               <button
                 key={agent.id}
                 type="button"
@@ -550,6 +553,24 @@ export function AgentManagementPage() {
                 </span>
               </button>
             ))}
+            {hiddenInventory.length > 0 && (
+              <button
+                type="button"
+                className={`sm2-agent-inventory__card sm2-agent-inventory__card--more${showOtherAgents ? ' is--selected' : ''}`}
+                aria-expanded={showOtherAgents}
+                title="显示未检测到程序的 Agent"
+                onClick={() => setShowOtherAgents((open) => !open)}
+              >
+                <span className="sm2-agent-inventory__more-mark" aria-hidden="true">＋</span>
+                <span className="sm2-agent-inventory__copy">
+                  <span className="sm2-agent-inventory__name">其他 Agent</span>
+                  <span className="sm2-agent-inventory__meta">{showOtherAgents ? '收起' : '未检测到程序或仅发现配置'}</span>
+                </span>
+                <span className="sm2-agent-inventory__status sm2-agent-inventory__status--unavailable">
+                  {hiddenInventory.length}
+                </span>
+              </button>
+            )}
           </div>
         </section>
         {!detail ? (
@@ -567,7 +588,6 @@ export function AgentManagementPage() {
             program={programs[detail.id] || null}
             agentInstalled={inventory.find((agent) => agent.id === detail.id)?.installed ?? false}
             agentDetected={inventory.find((agent) => agent.id === detail.id)?.detectedByInventory ?? false}
-            programLoading={programLoading}
             agentOutput={agentOutput}
             onAdopt={openAdopt}
             onScan={scanAgent}
@@ -956,7 +976,6 @@ function AgentDetailView({
   program,
   agentInstalled,
   agentDetected,
-  programLoading,
   agentOutput,
   onAdopt,
   onScan,
@@ -966,14 +985,13 @@ function AgentDetailView({
 }: {
   detail: AgentDetail
   tab: DetailTab
-  onTab: (t: DetailTab) => void
+  onTab: (tab: DetailTab) => void
   busy: boolean
   scanning: boolean
   adoptingUnmanagedId: string | null
   program: AgentProgramInfo | null
   agentInstalled: boolean
   agentDetected: boolean
-  programLoading: boolean
   agentOutput: string[]
   onAdopt: (agentId: string, unmanagedId: string) => void
   onScan: (agentId: string) => void
@@ -993,11 +1011,7 @@ function AgentDetailView({
   const installed = program ? program.status === 'installed' || program.status === 'updateAvailable' : agentInstalled
   // 扫描针对本机 Skills/配置，即使程序未安装，只要库存发现过配置就仍可扫描。
   const canScan = installed || agentDetected
-  const canInstall = Boolean(program?.installCommand)
-  const canOpenDownload = Boolean(program?.downloadUrl)
   const canDeleteCustom = program?.isCustom === true
-  const installedVersion = program?.installedVersion ?? detail.version
-  const latestVersion = program?.latestVersion ?? detail.latestVersion
   const logicalSkillCount = countLogicalAgentSkills(
     detail.skills,
     unmanaged,
@@ -1005,18 +1019,8 @@ function AgentDetailView({
     inheritedUnmanagedSkills,
     readOnlySkills,
   )
-  const hasUpdate = installed && Boolean(latestVersion && latestVersion !== installedVersion)
-  const versionLabel = installed ? installedVersion || '未知' : '未安装'
-  const updateLabel = !installed
-    ? canInstall ? '可一键安装' : canOpenDownload ? '可打开安装页' : '未提供安装方式'
-    : latestVersion
-      ? hasUpdate ? `可更新到 ${latestVersion}` : '已是最新版本'
-      : programLoading ? '正在获取最新版本' : '未检测到最新版本'
   const tabs: Array<{ id: DetailTab; label: string }> = [
-    { id: 'overview', label: '概览' },
     { id: 'skills', label: `Skills (${logicalSkillCount})` },
-    { id: 'hooks', label: 'Hooks' },
-    { id: 'config', label: t('skills.agentManagement.pathSettings.tab') },
   ]
 
   return (
@@ -1025,15 +1029,10 @@ function AgentDetailView({
         <AgentIconBadge iconKey={detail.iconKey} size={38} />
         <div className="sm2__agent-hero-main">
           <div className="sm2__agent-hero-title">{detail.displayName}</div>
-          <div className="sm2__agent-version-row">
-            <span className="sm2__agent-version-pill">当前版本 {versionLabel}</span>
-            <span className={`sm2__agent-update-state${hasUpdate ? ' sm2__agent-update-state--available' : ''}`}>
-              {updateLabel}
-            </span>
-          </div>
+          <div className="sm2__agent-hero-sub">生效中的 Skill 与接管状态</div>
         </div>
-        <div className="sm2__agent-summary-strip" aria-label="Agent 摘要">
-          <Stat value={detail.skills.length} label="已管理" />
+        <div className="sm2__agent-summary-strip" aria-label="Agent Skill 摘要">
+          <Stat value={detail.skills.length} label="生效中" />
           {showUnmanaged && <Stat value={unmanaged.length} label="未管理" tone={unmanaged.length > 0 ? 'warn' : 'ok'} />}
           {inheritsSharedSkills && <Stat value={inheritedSkillCount} label={t('skills.agentManagement.inheritedSkills')} />}
           {readOnlySkills.length > 0 && <Stat value={readOnlySkills.length} label={t('skills.agentManagement.builtinSkills')} />}
@@ -1063,43 +1062,33 @@ function AgentDetailView({
       )}
 
       <div className="sm2__subtabs">
-        {tabs.map((t) => (
+        {tabs.map((item) => (
           <button
-            key={t.id}
-            className={`sm2__subtab${tab === t.id ? ' sm2__subtab--active' : ''}`}
-            onClick={() => onTab(t.id)}
+            key={item.id}
+            className={`sm2__subtab${tab === item.id ? ' sm2__subtab--active' : ''}`}
+            onClick={() => onTab(item.id)}
           >
-            {t.label}
+            {item.label}
           </button>
         ))}
       </div>
 
       <div className="sm2__subtab-body">
-        {tab === 'overview' && (
-          <OverviewTab
-            detail={detail}
-            onOpenSection={onTab}
-          />
-        )}
-        {tab === 'skills' && (
-          <SkillsTab
-            key={detail.id}
-            detail={detail}
-            unmanaged={unmanaged}
-            inheritedManagedSkills={inheritedManagedSkills}
-            inheritedUnmanagedSkills={inheritedUnmanagedSkills}
-            readOnlySkills={readOnlySkills}
-            showUnmanaged={showUnmanaged}
-            busy={busy}
-            scanning={scanning}
-            adoptingUnmanagedId={adoptingUnmanagedId}
-            onAdopt={onAdopt}
-            onScan={onScan}
-            onOpenSkillDetail={onOpenSkillDetail}
-          />
-        )}
-        {tab === 'hooks' && <HooksTab detail={detail} program={program} />}
-        {tab === 'config' && <ConfigTab detail={detail} program={program} />}
+        <SkillsTab
+          key={detail.id}
+          detail={detail}
+          unmanaged={unmanaged}
+          inheritedManagedSkills={inheritedManagedSkills}
+          inheritedUnmanagedSkills={inheritedUnmanagedSkills}
+          readOnlySkills={readOnlySkills}
+          showUnmanaged={showUnmanaged}
+          busy={busy}
+          scanning={scanning}
+          adoptingUnmanagedId={adoptingUnmanagedId}
+          onAdopt={onAdopt}
+          onScan={onScan}
+          onOpenSkillDetail={onOpenSkillDetail}
+        />
       </div>
     </div>
   )
@@ -1114,163 +1103,6 @@ function Stat({ value, label, tone }: { value: number; label: string; tone?: 'ok
   )
 }
 
-function OverviewTab({
-  detail,
-  onOpenSection,
-}: {
-  detail: AgentDetail
-  onOpenSection: (tab: DetailTab) => void
-}) {
-  const showUnmanaged = useSkillStoreV2((s) => s.settings?.showUnmanaged ?? true)
-  const observedSkills = useSkillStoreV2((s) => s.unmanaged)
-    .filter((item) => item.agentId === detail.id)
-  const unmanagedCount = observedSkills
-    .filter((item) => showUnmanaged && !isReadOnlyUnmanaged(item)).length
-  const readOnlyCount = observedSkills.filter(isReadOnlyUnmanaged).length
-  const inheritedCount = (detail.inheritedManagedSkills?.length ?? 0) + (detail.inheritedUnmanagedSkills?.length ?? 0)
-  const configuredPaths = [detail.skillsDir, detail.configPath]
-    .filter(Boolean).length
-  const healthErrors = detail.health.filter((issue) => ['error', 'critical'].includes(issue.severity.toLowerCase())).length
-  const attentionCount = detail.health.length + unmanagedCount
-  const statusTone = healthErrors > 0 ? 'danger' : attentionCount > 0 ? 'attention' : 'ready'
-  const statusTitle = healthErrors > 0
-    ? `${healthErrors} 项配置异常`
-    : attentionCount > 0
-      ? `${attentionCount} 项需要关注`
-      : '运行状态良好'
-  const statusDescription = healthErrors > 0
-    ? '关键配置存在异常，建议先修复后再同步能力。'
-    : attentionCount > 0
-      ? 'Agent 可以继续使用，完成下方事项后会更稳定。'
-      : 'Skills、Hooks 与配置均未发现待处理问题。'
-  const nextActions: Array<{ label: string; meta: string; tab: DetailTab; tone?: 'warn' }> = []
-
-  if (unmanagedCount > 0) {
-    nextActions.push({ label: `接管 ${unmanagedCount} 个未管理 Skill`, meta: '统一纳入中心库管理', tab: 'skills', tone: 'warn' })
-  }
-  if (detail.health.length > 0) {
-    nextActions.push({ label: `查看 ${detail.health.length} 项健康提示`, meta: '检查路径与配置详情', tab: 'config', tone: 'warn' })
-  }
-
-  const capabilities: Array<{
-    id: string
-    label: string
-    value: number
-    unit: string
-    detail: string
-    tab: DetailTab
-    tone: 'blue' | 'green' | 'amber' | 'violet'
-    progress: number
-  }> = [
-    {
-      id: 'skills',
-      label: 'Skills',
-      value: detail.skills.length + inheritedCount + readOnlyCount,
-      unit: '可用',
-      detail: unmanagedCount > 0
-        ? `${unmanagedCount} 个待接管`
-        : inheritedCount > 0
-          ? `${inheritedCount} 个来自 .agents 共享继承`
-          : readOnlyCount > 0 ? `${readOnlyCount} 个 Agent 内置只读` : '全部已纳入管理',
-      tab: 'skills',
-      tone: unmanagedCount > 0 ? 'amber' : 'blue',
-      progress: detail.skills.length + unmanagedCount === 0 ? 100 : detail.skills.length / (detail.skills.length + unmanagedCount) * 100,
-    },
-  ]
-
-  return (
-    <div className="sm2__agent-overview">
-      <section className={`sm2__agent-overview-status sm2__agent-overview-status--${statusTone}`}>
-        <div className="sm2__agent-overview-status-copy">
-          <div className="sm2__agent-overview-kicker">
-            <span className="sm2__agent-overview-pulse" />
-            Agent 状态
-          </div>
-          <h3>{statusTitle}</h3>
-          <p>{statusDescription}</p>
-        </div>
-        <div className="sm2__agent-overview-readiness" aria-label={`配置完整度 ${configuredPaths} / 2`}>
-          <div>
-            <span>配置完整度</span>
-            <strong>{configuredPaths}<small>/2</small></strong>
-          </div>
-          <div className="sm2__agent-overview-readiness-track" aria-hidden="true">
-            <span style={{ width: `${configuredPaths / 2 * 100}%` }} />
-          </div>
-          <button type="button" onClick={() => onOpenSection('config')}>查看配置 <span aria-hidden="true">→</span></button>
-        </div>
-      </section>
-
-      <section className="sm2__agent-overview-section" aria-labelledby="agent-capability-title">
-        <div className="sm2__agent-overview-section-head">
-          <div>
-            <h3 id="agent-capability-title">能力快照</h3>
-            <p>点击卡片查看和管理对应能力</p>
-          </div>
-            <span>{detail.skills.length + readOnlyCount} 项能力已连接</span>
-        </div>
-        <div className="sm2__agent-capability-grid">
-          {capabilities.map((capability) => (
-            <button
-              key={capability.id}
-              type="button"
-              className={`sm2__agent-capability-card sm2__agent-capability-card--${capability.tone}`}
-              onClick={() => onOpenSection(capability.tab)}
-            >
-              <span className="sm2__agent-capability-label">
-                <i aria-hidden="true">{capability.label.slice(0, 1)}</i>
-                {capability.label}
-                <b aria-hidden="true">↗</b>
-              </span>
-              <span className="sm2__agent-capability-value">
-                <strong>{capability.value}</strong>
-                <small>{capability.unit}</small>
-              </span>
-              <span className="sm2__agent-capability-detail">{capability.detail}</span>
-              <span className="sm2__agent-capability-track" aria-hidden="true">
-                <span style={{ width: `${Math.max(0, Math.min(100, capability.progress))}%` }} />
-              </span>
-            </button>
-          ))}
-        </div>
-      </section>
-
-      <div className="sm2__agent-overview-lower">
-        <section className="sm2__agent-overview-panel sm2__agent-overview-panel--next">
-          <div className="sm2__agent-overview-panel-head">
-            <div>
-              <h3>下一步</h3>
-              <p>{nextActions.length > 0 ? '根据当前状态整理的建议' : '当前没有必须处理的事项'}</p>
-            </div>
-            {nextActions.length > 0 && <span>{nextActions.length}</span>}
-          </div>
-          {nextActions.length > 0 ? (
-            <div className="sm2__agent-overview-actions">
-              {nextActions.slice(0, 4).map((action) => (
-                <button key={`${action.tab}-${action.label}`} type="button" onClick={() => onOpenSection(action.tab)}>
-                  <i className={action.tone === 'warn' ? 'is-warn' : ''} aria-hidden="true" />
-                  <div>
-                    <strong>{action.label}</strong>
-                    <small>{action.meta}</small>
-                  </div>
-                  <b aria-hidden="true">→</b>
-                </button>
-              ))}
-            </div>
-          ) : (
-            <div className="sm2__agent-overview-all-clear">
-              <span aria-hidden="true">✓</span>
-              <div>
-                <strong>已准备就绪</strong>
-                <small>可以开始在任务中使用这个 Agent。</small>
-              </div>
-            </div>
-          )}
-        </section>
-      </div>
-    </div>
-  )
-}
 
 function SkillsTab({
   detail,
@@ -1459,7 +1291,7 @@ function SkillsTab({
     const runtimeEnvironmentId = state.runtimeEnvironmentId
     const agentId = detail.id
     setDeletingIds((current) => new Set([...current, ...ids]))
-    setLocalNotice(`正在删除 ${targets.length} 个 Skill 分发...`)
+    setLocalNotice(`正在移除 ${targets.length} 个 Skill 生效...`)
     state.setError(null)
     try {
       const targetNames = new Map(targets.map((target) => [target.id, pathBasename(target.targetPath) || target.skillId]))
@@ -1470,7 +1302,7 @@ function SkillsTab({
       useSkillStoreV2.getState().removeAgentSkillItems(runtimeEnvironmentId, agentId, deletedIds, [])
       setSelectedManagedIds(failedIds)
       setManagedSelectionMode(failedIds.size > 0)
-      setLocalNotice(`已删除 ${result.deleted} 个 Skill 分发${failed.length ? `，${failed.length} 个失败` : ''}`)
+      setLocalNotice(`已删除 ${result.deleted} 个 Skill 生效${failed.length ? `，${failed.length} 个失败` : ''}`)
       if (failed.length === 0) state.setError(null)
       if (failed.length > 0) state.setError(failed.slice(0, 3).join('\n'))
       if (deletedIds.length > 0) reconcileDeletedAgentSkills(agentId, runtimeEnvironmentId)
@@ -1594,7 +1426,7 @@ function SkillsTab({
     setDeleteUnmanagedError(null)
     setLocalNotice(items.length === 1
       ? t('skills.agentManagement.unmanagedDelete.deleting', { name: itemNames.get(items[0].id) })
-      : `正在删除 ${items.length} 个未管理 Skill...`)
+      : `正在移除 ${items.length} 个未管理 Skill...`)
     state.setError(null)
 
     const deletedIds = new Set<string>()
@@ -2261,7 +2093,7 @@ function AgentSkillInstallDialog({
     return (
       <PreviewDialog
         title="确认安装 Skill"
-        confirmLabel={preview.blockers.length > 0 ? '按选择执行' : '执行分发'}
+        confirmLabel={preview.blockers.length > 0 ? '按选择执行' : '执行生效'}
         cancelLabel="返回选择"
         busy={busy}
         disabled={unresolvedBlockers > 0}
@@ -2960,752 +2792,4 @@ function initials(value: string) {
     .join('')
     .toUpperCase()
     .slice(0, 2) || 'SK'
-}
-
-function HooksTab({ detail, program }: { detail: AgentDetail; program: AgentProgramInfo | null }) {
-  const agentId = detail.id
-  const [hook, setHook] = useState<HookStatus | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  const load = async () => {
-    setLoading(true)
-    try {
-      const all = await getAllHookStatus()
-      const found = all.find((h) => hookMatchesAgent(h, detail, program))
-      setHook(found || null)
-    } catch (e) {
-      setError(String(e))
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    load()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [agentId])
-
-  const install = async () => {
-    setBusy(true)
-    setError(null)
-    try {
-      await installAgentHook(hook?.toolId || agentId)
-      await load()
-    } catch (e) {
-      setError(String(e))
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const toggleEvent = async (eventName: string, enabled: boolean) => {
-    if (!hook?.events) return
-    setBusy(true)
-    setError(null)
-    try {
-      const next = hook.events
-        .filter((event) => (event.name === eventName ? enabled : event.enabled))
-        .map((event) => event.name)
-      await configureAgentHookEvents(hook.toolId || agentId, next)
-      await load()
-    } catch (e) {
-      setError(String(e))
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const uninstall = async () => {
-    if (!confirm(`移除 ${agentId} 的 Hook？`)) return
-    setBusy(true)
-    setError(null)
-    try {
-      await uninstallAgentHook(hook?.toolId || agentId)
-      await load()
-    } catch (e) {
-      setError(String(e))
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  if (loading) return <div className="sm2__empty sm2__empty--compact">加载 Hook 状态…</div>
-  if (!hook) return <div className="sm2__empty sm2__empty--compact">该 Agent 暂不支持 Hook 接入</div>
-
-  const statusLabel = hook.installStatus === 'installed'
-    ? '已安装'
-    : hook.installStatus === 'needs_reinstall'
-      ? '需重新安装'
-      : hook.installStatus === 'settings_corrupted'
-        ? '配置异常'
-        : '未安装'
-
-  const grouped = groupHookEvents(hook.events || [])
-
-  return (
-    <div className="sm2__hooks-workspace">
-      <section className="sm2__panel sm2__hook-summary">
-        <div className="sm2__hook-summary-main">
-          <strong>Hook 接入</strong>
-          <span>{statusLabel}</span>
-          {hook.configPath && <code>{hook.configPath}</code>}
-        </div>
-        <div className="sm2__btn-row sm2__hook-actions">
-          {hook.configPath && (
-            <button className="sm2__btn sm2__btn--ghost" disabled={busy} onClick={() => skillApiV2.openPath(hook.configPath!)}>
-              打开配置
-            </button>
-          )}
-          {hook.configDir && (
-            <button className="sm2__btn sm2__btn--ghost" disabled={busy} onClick={() => skillApiV2.openPath(hook.configDir!)}>
-              打开目录
-            </button>
-          )}
-          {hook.installed ? (
-            <ActionButton className="sm2__btn sm2__btn--danger" disabled={busy} busy={busy} busyLabel="正在卸载" onClick={uninstall}>卸载 Hook</ActionButton>
-          ) : (
-            <ActionButton className="sm2__btn sm2__btn--primary" disabled={busy} busy={busy} busyLabel="正在安装" onClick={install}>安装 Hook</ActionButton>
-          )}
-        </div>
-      </section>
-      {(hook.bridgeCommand || hook.bridgePath) && (
-        <section className="sm2__panel sm2__hook-bridge">
-          <div className="sm2__panel-head">
-            <h3>桥接命令</h3>
-            {hook.bridgePath && (
-              <button className="sm2__btn sm2__btn--ghost" disabled={busy} onClick={() => skillApiV2.openPath(hook.bridgePath!)}>
-                打开脚本
-              </button>
-            )}
-          </div>
-          {hook.bridgeCommand && <code>{hook.bridgeCommand}</code>}
-          {hook.bridgePath && <span>脚本路径：{hook.bridgePath}</span>}
-        </section>
-      )}
-      {hook.supportsEventSelection && grouped.length > 0 ? (
-        grouped.map((group) => (
-          <section key={group.category} className="sm2__panel sm2__hook-group">
-            <div className="sm2__panel-head sm2__hook-group-head">
-              <div>
-                <h3>{group.title}</h3>
-                <p>{group.subtitle}</p>
-              </div>
-              <span>{group.events.filter((event) => event.enabled).length}/{group.events.length} 已启用</span>
-            </div>
-            <div className="sm2__hook-event-list">
-              {group.events.map((event) => (
-                <HookEventRow
-                  key={event.name}
-                  event={event}
-                  installed={hook.installed}
-                  configPath={hook.configPath}
-                  busy={busy}
-                  onToggle={toggleEvent}
-                />
-              ))}
-            </div>
-          </section>
-        ))
-      ) : (
-        <section className="sm2__panel">
-          <div className="sm2__empty sm2__empty--compact">该 Agent 没有暴露可查看的 Hook 事件配置</div>
-        </section>
-      )}
-      {error && <div className="sm2__error" style={{ margin: 0 }}>{error}</div>}
-    </div>
-  )
-}
-
-function hookMatchesAgent(hook: HookStatus, detail: AgentDetail, program: AgentProgramInfo | null) {
-  const agentId = detail.id
-  if (hook.adapterId === agentId || hook.toolId === agentId || hook.name === agentId) return true
-  const displayName = detail.displayName.toLowerCase()
-  if (hook.isCustom && hook.displayName.toLowerCase() === displayName) return true
-  const hookValues = [
-    hook.displayName,
-    hook.name,
-    hook.toolId,
-    hook.adapterId,
-    hook.profileId,
-    hook.configPath,
-    hook.configDir,
-    hook.bridgeCommand,
-  ].map((value) => String(value || '').toLowerCase())
-  const targetValues = [
-    agentId,
-    detail.displayName,
-    detail.configPath,
-    detail.skillsDir,
-    program?.configDir,
-    program?.skillsDir,
-  ].map((value) => String(value || '').toLowerCase()).filter(Boolean)
-  return hookValues.some((hookValue) =>
-    targetValues.some((target) => hookValue === target || hookValue.includes(target)),
-  )
-}
-
-function groupHookEvents(events: HookEventStatus[]) {
-  const order = ['approvals', 'notifications', 'lifecycle', 'activity']
-  return order
-    .map((category) => {
-      const groupEvents = events.filter((event) => event.category === category)
-      return {
-        category,
-        title: groupEvents[0]?.categoryTitle || category,
-        subtitle: groupEvents[0]?.categorySubtitle || '',
-        events: groupEvents,
-      }
-    })
-    .filter((group) => group.events.length > 0)
-}
-
-function HookEventRow({
-  event,
-  installed,
-  configPath,
-  busy,
-  onToggle,
-}: {
-  event: HookEventStatus
-  installed: boolean
-  configPath?: string
-  busy: boolean
-  onToggle: (eventName: string, enabled: boolean) => void
-}) {
-  return (
-    <div className="sm2__hook-event-row">
-      <label className="sm2__hook-event-toggle">
-        <input
-          type="checkbox"
-          checked={event.enabled}
-          disabled={busy}
-          onChange={(e) => onToggle(event.name, e.target.checked)}
-        />
-        <span />
-      </label>
-      <div className="sm2__hook-event-main">
-        <div className="sm2__hook-event-title">
-          <strong>{event.name}</strong>
-          <span className={`sm2__tag sm2__tag--${event.enabled ? 'ok' : 'unmanaged'}`}>
-            {event.enabled ? '启用' : '停用'}
-          </span>
-        </div>
-        <div className="sm2__hook-event-hooks">
-          <span>{installed && event.enabled ? 'Vibe Board Bridge' : '未生效'}</span>
-          {typeof event.timeout === 'number' && <span>timeout {event.timeout}s</span>}
-        </div>
-        {configPath && <code>{configPath}</code>}
-      </div>
-    </div>
-  )
-}
-
-type ConfigResourceKind = 'application' | 'directory' | 'executable' | 'file' | 'link'
-type ConfigResource = {
-  id: string
-  label: string
-  value: string
-  kind: ConfigResourceKind
-  editable: boolean
-}
-
-function ConfigTab({ detail, program }: { detail: AgentDetail; program: AgentProgramInfo | null }) {
-  const { t } = useTranslation()
-  const currentVersion = program?.installedVersion ?? detail.version
-  const latestVersion = program?.latestVersion ?? detail.latestVersion
-  const executablePath = program?.appPath ?? program?.binaryPath ?? null
-  const executableIsApp = Boolean(program?.appPath)
-  const skillsDir = detail.skillsDir ?? program?.skillsDir ?? null
-  const [editorTarget, setEditorTarget] = useState<ConfigResource | null>(null)
-  const [actionError, setActionError] = useState<string | null>(null)
-  const [actionNotice, setActionNotice] = useState<string | null>(null)
-  const resources = useMemo(() => {
-    const candidates: Array<Omit<ConfigResource, 'value' | 'editable'> & { value: string | null; editable?: boolean }> = [
-      {
-        id: 'executable',
-        label: executableIsApp
-          ? t('skills.agentManagement.pathSettings.resources.application')
-          : t('skills.agentManagement.pathSettings.resources.executable'),
-        value: executablePath,
-        kind: executableIsApp ? 'application' : 'executable',
-      },
-      {
-        id: 'config-directory',
-        label: t('skills.agentManagement.pathSettings.resources.configDirectory'),
-        value: program?.configDir ?? null,
-        kind: 'directory',
-      },
-      {
-        id: 'config-file',
-        label: t('skills.agentManagement.pathSettings.resources.configFile'),
-        value: detail.configPath,
-        kind: looksLikeWebUrl(detail.configPath) ? 'link' : 'file',
-        editable: isEditableConfigFile(detail.configPath),
-      },
-      {
-        id: 'skills-directory',
-        label: t('skills.agentManagement.pathSettings.resources.skillsDirectory'),
-        value: skillsDir,
-        kind: 'directory',
-      },
-      {
-        id: 'agent-directory',
-        label: t('skills.agentManagement.pathSettings.resources.agentDirectory'),
-        value: detail.agentDir ?? null,
-        kind: 'directory',
-      },
-    ]
-    return candidates
-      .filter((resource): resource is Omit<ConfigResource, 'editable'> & { editable?: boolean } => Boolean(resource.value))
-      .map((resource) => ({ ...resource, editable: resource.editable ?? false }))
-  }, [
-    detail.agentDir,
-    detail.configPath,
-    executableIsApp,
-    executablePath,
-    program?.configDir,
-    skillsDir,
-    t,
-  ])
-
-  const runResourceAction = async (action: () => Promise<void>, notice: string) => {
-    setActionError(null)
-    setActionNotice(null)
-    try {
-      await action()
-      setActionNotice(notice)
-    } catch (error) {
-      setActionError(skillErrorMessage(t, error))
-    }
-  }
-
-  const openResource = (resource: ConfigResource) => runResourceAction(
-    () => resource.kind === 'directory' || resource.kind === 'link'
-      ? skillApiV2.openPath(resource.value)
-      : skillApiV2.revealPath(resource.value),
-    resource.kind === 'directory'
-      ? t('skills.agentManagement.pathSettings.notices.directoryOpened', { name: resource.label })
-      : t('skills.agentManagement.pathSettings.notices.resourceLocated', { name: resource.label }),
-  )
-
-  return (
-    <>
-      <section className="sm2__panel sm2__config-panel">
-        <div className="sm2__config-panel-head">
-          <div>
-            <h3>{t('skills.agentManagement.pathSettings.title')}</h3>
-            <p>{t('skills.agentManagement.pathSettings.description')}</p>
-          </div>
-        </div>
-        <div className="sm2__config-facts">
-          <div>
-            <span>{t('skills.agentManagement.pathSettings.agentId')}</span>
-            <strong>{detail.id}</strong>
-          </div>
-          <div>
-            <span>{t('skills.agentManagement.pathSettings.currentVersion')}</span>
-            <strong>{currentVersion || t('skills.agentManagement.pathSettings.notDetected')}</strong>
-          </div>
-          <div>
-            <span>{t('skills.agentManagement.pathSettings.latestVersion')}</span>
-            <strong>{latestVersion || t('skills.agentManagement.pathSettings.notDetected')}</strong>
-          </div>
-        </div>
-        <div className="sm2__config-resource-heading">
-          <strong>{t('skills.agentManagement.pathSettings.localResources')}</strong>
-          <span>{t('skills.agentManagement.pathSettings.resourceCount', { count: resources.length })}</span>
-        </div>
-        <div className="sm2__config-resource-list">
-          {resources.length === 0 && (
-            <div className="sm2__config-empty">
-              <strong>{t('skills.agentManagement.pathSettings.emptyTitle')}</strong>
-              <span>{t('skills.agentManagement.pathSettings.emptyDescription')}</span>
-            </div>
-          )}
-          {resources.map((resource) => (
-            <div key={resource.id} className="sm2__config-resource">
-              <span className="sm2__config-resource-type">{configResourceBadge(resource)}</span>
-              <div className="sm2__config-resource-main">
-                <strong>{resource.label}</strong>
-                <code title={resource.value}>{resource.value}</code>
-              </div>
-              <div className="sm2__config-resource-actions">
-                {resource.editable && (
-                  <button
-                    type="button"
-                    className="sm2__btn sm2__btn--primary sm2__config-resource-primary"
-                    onClick={() => {
-                      setActionError(null)
-                      setEditorTarget(resource)
-                    }}
-                  >
-                    {t('skills.agentManagement.pathSettings.actions.edit')}
-                  </button>
-                )}
-                <button
-                  type="button"
-                  className="sm2__btn sm2__btn--ghost"
-                  onClick={() => void openResource(resource)}
-                >
-                  {resource.kind === 'directory'
-                    ? t('skills.agentManagement.pathSettings.actions.openDirectory')
-                    : resource.kind === 'link'
-                      ? t('skills.agentManagement.pathSettings.actions.openLink')
-                      : t('skills.agentManagement.pathSettings.actions.reveal')}
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-        {(actionError || actionNotice) && (
-          <div
-            className={`sm2__config-action-status${actionError ? ' sm2__config-action-status--error' : ''}`}
-            role={actionError ? 'alert' : 'status'}
-          >
-            {actionError || actionNotice}
-          </div>
-        )}
-      </section>
-      {editorTarget && (
-        <ConfigFileEditorDialog
-          agentId={detail.id}
-          resource={editorTarget}
-          onClose={() => setEditorTarget(null)}
-          onSaved={() => {
-            setActionError(null)
-            setActionNotice(t('skills.agentManagement.pathSettings.editor.saved'))
-          }}
-        />
-      )}
-    </>
-  )
-}
-
-function ConfigFileEditorDialog({
-  agentId,
-  resource,
-  onClose,
-  onSaved,
-}: {
-  agentId: string
-  resource: ConfigResource
-  onClose: () => void
-  onSaved: () => void
-}) {
-  const { t } = useTranslation()
-  const [configDocument, setConfigDocument] = useState<AgentConfigDocument | null>(null)
-  const [draft, setDraft] = useState('')
-  const [baseline, setBaseline] = useState('')
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [saved, setSaved] = useState(false)
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const lineNumbersRef = useRef<HTMLDivElement>(null)
-  const isJson = /\.json$/i.test(resource.value)
-  const dirty = configDocument !== null && draft !== baseline
-  const jsonValid = useMemo(() => {
-    if (!isJson) return true
-    try {
-      JSON.parse(draft)
-      return true
-    } catch {
-      return false
-    }
-  }, [draft, isJson])
-
-  const loadDocument = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    setSaved(false)
-    try {
-      const next = await skillApiV2.readAgentConfigFile(agentId, resource.value)
-      const prepared = prepareConfigEditorContent(next.content, resource.value)
-      setConfigDocument(next)
-      setDraft(prepared)
-      setBaseline(prepared)
-    } catch (nextError) {
-      setConfigDocument(null)
-      setError(skillErrorMessage(t, nextError))
-    } finally {
-      setLoading(false)
-    }
-  }, [agentId, resource.value, t])
-
-  useEffect(() => {
-    void loadDocument()
-  }, [loadDocument])
-
-  const requestClose = () => {
-    if (saving) return
-    if (dirty && !window.confirm(t('skills.agentManagement.pathSettings.editor.discardConfirm'))) return
-    onClose()
-  }
-
-  const save = async () => {
-    if (!configDocument || !dirty || saving || !jsonValid) return
-    setSaving(true)
-    setError(null)
-    setSaved(false)
-    try {
-      const next = await skillApiV2.writeAgentConfigFile(
-        agentId,
-        configDocument.path,
-        draft,
-        configDocument.revision,
-      )
-      const prepared = prepareConfigEditorContent(next.content, resource.value)
-      setConfigDocument(next)
-      setDraft(prepared)
-      setBaseline(prepared)
-      setSaved(true)
-      onSaved()
-    } catch (nextError) {
-      setError(skillErrorMessage(t, nextError))
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const format = resource.value.split('.').pop()?.toUpperCase() || 'TEXT'
-  const lineCount = Math.max(1, draft.split(/\r?\n/).length)
-
-  const formatJson = () => {
-    if (!isJson || !jsonValid) return
-    setDraft(formatJsonContent(draft))
-    setSaved(false)
-    textareaRef.current?.focus()
-  }
-
-  return (
-    <PreviewDialog
-      title={t('skills.agentManagement.pathSettings.editor.title', { name: resource.label })}
-      modalClassName="sm2__modal--config-editor"
-      busy={saving}
-      onCancel={requestClose}
-      onConfirm={() => void save()}
-      actions={(
-        <>
-          <div className="sm2__config-editor-action-status" aria-live="polite">
-            {saved && t('skills.agentManagement.pathSettings.editor.saved')}
-          </div>
-          <button type="button" className="sm2__btn" disabled={saving} onClick={requestClose}>
-            {t('skills.agentManagement.pathSettings.editor.close')}
-          </button>
-          <button
-            type="button"
-            className="sm2__btn sm2__btn--primary"
-            disabled={!dirty || saving || loading || !configDocument || !jsonValid}
-            aria-busy={saving || undefined}
-            onClick={() => void save()}
-          >
-            {saving && <span className="sm2__spinner" aria-hidden="true" />}
-            <span>{saving
-              ? t('skills.agentManagement.pathSettings.editor.saving')
-              : t('skills.agentManagement.pathSettings.editor.save')}</span>
-          </button>
-        </>
-      )}
-    >
-      <div className="sm2__config-editor-toolbar">
-        <div className="sm2__config-editor-path">
-          <span>{format}</span>
-          <code title={resource.value}>{resource.value}</code>
-        </div>
-        {isJson && (
-          <button
-            type="button"
-            className="sm2__btn sm2__btn--ghost sm2__config-editor-format"
-            disabled={!jsonValid || loading}
-            onClick={formatJson}
-          >
-            <span aria-hidden="true">{'{ }'}</span>
-            {t('skills.agentManagement.pathSettings.editor.formatJson')}
-          </button>
-        )}
-      </div>
-      {loading && (
-        <div className="sm2__config-editor-state">
-          <span className="sm2__spinner" aria-hidden="true" />
-          {t('skills.agentManagement.pathSettings.editor.loading')}
-        </div>
-      )}
-      {!loading && error && !configDocument && (
-        <div className="sm2__config-editor-state sm2__config-editor-state--error">
-          <span>{error}</span>
-          <button type="button" className="sm2__btn" onClick={() => void loadDocument()}>
-            {t('skills.agentManagement.pathSettings.editor.retry')}
-          </button>
-        </div>
-      )}
-      {!loading && configDocument && (
-        <>
-          <div className="sm2__config-editor-surface">
-            <div ref={lineNumbersRef} className="sm2__config-editor-line-numbers" aria-hidden="true">
-              {Array.from({ length: lineCount }, (_, index) => (
-                <span key={index}>{index + 1}</span>
-              ))}
-            </div>
-            <textarea
-              ref={textareaRef}
-              className="sm2__config-editor-textarea"
-              value={draft}
-              spellCheck={false}
-              autoCapitalize="off"
-              autoCorrect="off"
-              autoFocus
-              aria-invalid={isJson && !jsonValid}
-              aria-label={t('skills.agentManagement.pathSettings.editor.textareaLabel', { name: resource.label })}
-              onChange={(event) => {
-                setDraft(event.target.value)
-                setSaved(false)
-              }}
-              onScroll={(event) => {
-                if (lineNumbersRef.current) {
-                  lineNumbersRef.current.scrollTop = event.currentTarget.scrollTop
-                }
-              }}
-              onKeyDown={(event) => {
-                if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
-                  event.preventDefault()
-                  void save()
-                  return
-                }
-                if (event.key === 'Tab' && !event.shiftKey) {
-                  event.preventDefault()
-                  const target = event.currentTarget
-                  const next = `${draft.slice(0, target.selectionStart)}  ${draft.slice(target.selectionEnd)}`
-                  const cursor = target.selectionStart + 2
-                  setDraft(next)
-                  setSaved(false)
-                  requestAnimationFrame(() => {
-                    textareaRef.current?.setSelectionRange(cursor, cursor)
-                  })
-                }
-              }}
-            />
-          </div>
-          <div className="sm2__config-editor-statusbar">
-            <span
-              className={`sm2__config-editor-syntax${isJson && !jsonValid ? ' sm2__config-editor-syntax--invalid' : ''}`}
-              role="status"
-            >
-              <i aria-hidden="true" />
-              {isJson
-                ? t(`skills.agentManagement.pathSettings.editor.${jsonValid ? 'validJson' : 'invalidJson'}`)
-                : t('skills.agentManagement.pathSettings.editor.tomlValidation')}
-            </span>
-            <span>{t('skills.agentManagement.pathSettings.editor.lines', { count: lineCount })}</span>
-            <span>{dirty
-              ? t('skills.agentManagement.pathSettings.editor.unsaved')
-              : t('skills.agentManagement.pathSettings.editor.savedState')}</span>
-            <span className="sm2__config-editor-shortcuts">
-              <kbd>Tab</kbd>
-              <kbd>⌘S</kbd>
-            </span>
-          </div>
-        </>
-      )}
-      {error && configDocument && (
-        <div className="sm2__config-editor-inline-error" role="alert">{error}</div>
-      )}
-      <p className="sm2__config-editor-backup-note">
-        {t('skills.agentManagement.pathSettings.editor.backupNote')}
-      </p>
-    </PreviewDialog>
-  )
-}
-
-function looksLikeWebUrl(value: string | null | undefined) {
-  return Boolean(value && /^https?:\/\//i.test(value))
-}
-
-function isEditableConfigFile(value: string | null | undefined) {
-  return Boolean(value && !looksLikeWebUrl(value) && /\.(json|toml)$/i.test(value))
-}
-
-function configResourceBadge(resource: ConfigResource) {
-  if (resource.kind === 'directory') return 'DIR'
-  if (resource.kind === 'application') return 'APP'
-  if (resource.kind === 'executable') return 'BIN'
-  if (resource.kind === 'link') return 'URL'
-  return resource.value.split('.').pop()?.toUpperCase() || 'FILE'
-}
-
-function prepareConfigEditorContent(content: string, path: string) {
-  if (!/\.json$/i.test(path)) return content
-  try {
-    return formatJsonContent(content)
-  } catch {
-    return content
-  }
-}
-
-function formatJsonContent(content: string) {
-  JSON.parse(content)
-  const source = content.trim()
-  let formatted = ''
-  let depth = 0
-  let inString = false
-  let escaped = false
-
-  for (let index = 0; index < source.length; index += 1) {
-    const character = source[index]
-
-    if (inString) {
-      formatted += character
-      if (escaped) {
-        escaped = false
-      } else if (character === '\\') {
-        escaped = true
-      } else if (character === '"') {
-        inString = false
-      }
-      continue
-    }
-
-    if (character === '"') {
-      inString = true
-      formatted += character
-      continue
-    }
-    if (/\s/.test(character)) continue
-
-    if (character === '{' || character === '[') {
-      formatted += character
-      let nextIndex = index + 1
-      while (nextIndex < source.length && /\s/.test(source[nextIndex])) nextIndex += 1
-      const closesImmediately = (character === '{' && source[nextIndex] === '}')
-        || (character === '[' && source[nextIndex] === ']')
-      if (!closesImmediately) {
-        depth += 1
-        formatted += `\n${'  '.repeat(depth)}`
-      }
-      continue
-    }
-
-    if (character === '}' || character === ']') {
-      let previousIndex = index - 1
-      while (previousIndex >= 0 && /\s/.test(source[previousIndex])) previousIndex -= 1
-      const closesEmptyValue = (character === '}' && source[previousIndex] === '{')
-        || (character === ']' && source[previousIndex] === '[')
-      if (!closesEmptyValue) {
-        depth = Math.max(0, depth - 1)
-        formatted += `\n${'  '.repeat(depth)}`
-      }
-      formatted += character
-      continue
-    }
-
-    if (character === ',') {
-      formatted += `,\n${'  '.repeat(depth)}`
-      continue
-    }
-
-    formatted += character === ':' ? ': ' : character
-  }
-
-  return `${formatted}\n`
 }

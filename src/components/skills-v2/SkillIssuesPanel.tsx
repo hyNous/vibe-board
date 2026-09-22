@@ -1,63 +1,28 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useSkillStoreV2 } from '../../stores/skillStoreV2'
 import { skillApiV2 } from '../../services/skillApiV2'
 import type { DiagnosisIssue } from '../../services/skillApiV2'
 
-const FILTER_LABEL: Record<DiagnosisFilter, string> = {
-  all: '全部',
-  auto: '可安全修复',
-  confirm: '需要你确认',
-  info: '仅提示',
-}
-
-const ISSUE_GROUPS: Array<{ id: IssueGroupId; title: string; description: string }> = [
-  {
-    id: 'unmanaged',
-    title: '未接管的 Skill',
-    description: '这些 Skill 已经在某个 Agent 目录里，但还没有交给 Vibe Board 管理。Vibe Board 会先提示，不会擅自覆盖。',
-  },
-  {
-    id: 'sync',
-    title: '同步与快照',
-    description: '这些问题通常可以安全处理，用来让中心库、Agent 目录和 JSON 快照重新对齐。',
-  },
-  {
-    id: 'confirm',
-    title: '需要你决定',
-    description: '这些项可能涉及本地修改或冲突，需要确认保留哪一份内容。',
-  },
-  {
-    id: 'library',
-    title: '中心库整理',
-    description: '这些提示来自中心库或 Skill 包关系，通常用于提醒你补录或清理管理信息。',
-  },
-]
-
-type DiagnosisFilter = 'all' | 'auto' | 'confirm' | 'info'
+// Skill issues used to live on their own "诊断与修复" tab. They now surface as
+// hints inside the Skill library, so the checks and their fixes stay next to
+// the Skills they talk about.
 type IssueGroupId = 'unmanaged' | 'sync' | 'confirm' | 'library'
 
-export function DiagnosisPage() {
+const ISSUE_GROUPS: Array<{ id: IssueGroupId; title: string }> = [
+  { id: 'sync', title: '同步与快照' },
+  { id: 'confirm', title: '需要你决定' },
+  { id: 'unmanaged', title: '未接管的 Skill' },
+  { id: 'library', title: '中心库整理' },
+]
+
+export function SkillIssuesPanel() {
   const state = useSkillStoreV2()
   const [busy, setBusy] = useState(false)
-  const [filter, setFilter] = useState<DiagnosisFilter>('all')
   const [notice, setNotice] = useState<string | null>(null)
 
-  useEffect(() => {
-    state.loadDiagnosisIssues()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
   const stats = useMemo(() => summarizeIssues(state.issues), [state.issues])
-  const visibleIssues = useMemo(
-    () => state.issues.filter((issue) => filter === 'all' || issue.fixKind === filter),
-    [filter, state.issues],
-  )
-  const groups = useMemo(() => groupIssues(visibleIssues), [visibleIssues])
+  const groups = useMemo(() => groupIssues(state.issues), [state.issues])
   const busyNow = busy || state.busyAction === 'diagnosis'
-  const statusTitle = state.issues.length === 0 ? 'Skill 状态正常' : 'Skill 状态需要整理'
-  const statusDetail = state.issues.length === 0
-    ? '中心库与 Agent 目录当前一致。若刚手动安装过 Skill，可以重新检查。'
-    : `${state.issues.length} 项需要查看，其中 ${stats.auto} 项可以安全修复。`
 
   const runDiagnosis = async () => {
     setNotice(null)
@@ -98,123 +63,70 @@ export function DiagnosisPage() {
   }
 
   return (
-    <div className="sm2 sm2--diagnosis">
-      <div className="sm2__diagnosis-hero">
-        <div className="sm2__diagnosis-hero-main">
-          <span className={`sm2__diagnosis-status sm2__diagnosis-status--${state.issues.length === 0 ? 'ok' : 'warn'}`}>
-            {state.issues.length === 0 ? '状态正常' : '需要处理'}
-          </span>
-          <h2 className="sm2__title sm2__diagnosis-title">{statusTitle}</h2>
-          <p>{statusDetail}</p>
-          {stats.auto > 0 && (
-            <p className="sm2__diagnosis-safe-note">
-              安全修复只会清理失效记录、断开的链接或刷新快照，不会删除你的 Skill 内容。
-            </p>
-          )}
+    <section className={`sm2__issues${state.issues.length > 0 ? ' sm2__issues--warn' : ''}`} aria-label="Skill 问题提示">
+      <div className="sm2__issues-head">
+        <div>
+          <h3>{state.issues.length === 0 ? 'Skill 状态正常' : `Skill 状态需要整理 · ${state.issues.length} 项`}</h3>
+          <p>
+            {state.issues.length === 0
+              ? '中心库与 Agent 目录当前一致。若刚手动安装过 Skill，可以重新检查。'
+              : `其中 ${stats.auto} 项可以安全修复，安全检查只会清理失效记录、断开的链接或刷新快照，不会删除 Skill 内容。`}
+          </p>
         </div>
-        <div className="sm2__diagnosis-actions">
-          <button className="sm2__btn" onClick={runDiagnosis} disabled={busyNow}>
+        <div className="sm2__issues-actions">
+          <button className="sm2__btn sm2__btn--ghost" onClick={() => void runDiagnosis()} disabled={busyNow}>
             重新检查
           </button>
-          <button className="sm2__btn sm2__btn--primary" onClick={safeFix} disabled={busyNow || stats.auto === 0}>
+          <button className="sm2__btn sm2__btn--primary" onClick={() => void safeFix()} disabled={busyNow || stats.auto === 0}>
             修复安全项
           </button>
         </div>
       </div>
 
-      <div className="sm2__diagnosis-metrics" aria-label="诊断摘要">
-        <DiagnosisMetric value={stats.auto} label="可安全修复" tone={stats.auto > 0 ? 'warn' : 'ok'} />
-        <DiagnosisMetric value={stats.confirm} label="需要你确认" tone={stats.confirm > 0 ? 'danger' : 'ok'} />
-        <DiagnosisMetric value={stats.info} label="仅提示" tone={stats.info > 0 ? 'muted' : 'ok'} />
-      </div>
-
       {notice && <div className="sm2__notice sm2__notice--ok">{notice}</div>}
       {state.error && <div className="sm2__error">{state.error}</div>}
 
-      <div className="sm2__toolbar sm2__diagnosis-toolbar">
-        <div className="sm2__diagnosis-filter" role="group" aria-label="问题筛选">
-          {(['all', 'auto', 'confirm', 'info'] as DiagnosisFilter[]).map((item) => (
-            <button
-              key={item}
-              type="button"
-              className={`sm2__tab ${filter === item ? 'sm2__tab--active' : ''}`}
-              onClick={() => setFilter(item)}
-            >
-              {FILTER_LABEL[item]}（{filterCount(item, state.issues.length, stats)}）
-            </button>
-          ))}
-        </div>
-        <button className="sm2__btn sm2__btn--ghost" onClick={() => skillApiV2.exportSnapshot()}>
-          刷新 JSON 快照
-        </button>
-      </div>
-
-      <div className="sm2__main sm2__main--full sm2__diagnosis-main">
-        {visibleIssues.length === 0 ? (
-          <div className="sm2__empty sm2__diagnosis-empty">
-            <strong>{filter === 'all' ? '没有发现需要处理的问题' : `没有${FILTER_LABEL[filter]}项`}</strong>
-            <span>中心库与 Agent 目录当前一致。若刚手动安装过 Skill，可以重新检查。</span>
-          </div>
-        ) : (
-          ISSUE_GROUPS.map((group) => {
+      {state.issues.length > 0 && (
+        <div className="sm2__issues-list">
+          {ISSUE_GROUPS.map((group) => {
             const items = groups[group.id]
             if (items.length === 0) return null
             return (
-              <section key={group.id} className="sm2__diagnosis-group">
-                <div className="sm2__diagnosis-group-head">
-                  <div>
-                    <h3>{group.title}</h3>
-                    <p>{group.description}</p>
-                  </div>
-                  <span className="sm2__tag">{items.length} 项</span>
+              <div key={group.id} className="sm2__issues-group">
+                <div className="sm2__issues-group-head">
+                  <span>{group.title}</span>
+                  <em>{items.length}</em>
                 </div>
-                <div className="sm2__diagnosis-list">
-                  {items.map((issue) => (
-                    <IssueCard key={issue.id} issue={issue} busy={busyNow} onFix={fix} />
-                  ))}
-                </div>
-              </section>
+                {items.map((issue) => (
+                  <IssueRow key={issue.id} issue={issue} busy={busyNow} onFix={fix} />
+                ))}
+              </div>
             )
-          })
-        )}
-      </div>
-    </div>
-  )
-}
-
-function DiagnosisMetric({ value, label, tone }: { value: number; label: string; tone: 'ok' | 'warn' | 'danger' | 'muted' }) {
-  return (
-    <div className={`sm2__diagnosis-metric sm2__diagnosis-metric--${tone}`}>
-      <strong>{value} 项</strong>
-      <span>{label}</span>
-    </div>
-  )
-}
-
-function IssueCard({ issue, busy, onFix }: { issue: DiagnosisIssue; busy: boolean; onFix: (issue: DiagnosisIssue) => void }) {
-  return (
-    <article className={`sm2__diagnosis-issue sm2__diagnosis-issue--${issue.fixKind}`}>
-      <div className="sm2__diagnosis-issue-body">
-        <div className="sm2__diagnosis-issue-title-row">
-          <h4>{friendlyTitle(issue)}</h4>
-          <span className={`sm2__tag sm2__tag--${issueTagTone(issue)}`}>{fixKindLabel(issue)}</span>
+          })}
         </div>
-        <p>{friendlyDetail(issue)}</p>
-        {issue.entityId && <code>{issue.entityId}</code>}
+      )}
+    </section>
+  )
+}
+
+function IssueRow({ issue, busy, onFix }: { issue: DiagnosisIssue; busy: boolean; onFix: (issue: DiagnosisIssue) => void }) {
+  return (
+    <article className={`sm2__issues-row sm2__issues-row--${issue.fixKind}`}>
+      <div className="sm2__issues-row-body">
+        <strong>{friendlyTitle(issue)}</strong>
+        <span>{friendlyDetail(issue)}</span>
       </div>
-      <div className="sm2__diagnosis-issue-actions">
-        {issue.fixKind === 'info' ? (
-          <span className="sm2__diagnosis-hint">{infoActionHint(issue)}</span>
-        ) : (
-          <button
-            className={`sm2__btn ${issue.fixKind === 'confirm' ? 'sm2__btn--danger' : 'sm2__btn--primary'}`}
-            disabled={busy}
-            onClick={() => onFix(issue)}
-          >
-            {friendlyActionLabel(issue)}
-          </button>
-        )}
-      </div>
+      {issue.fixKind === 'info' ? (
+        <span className="sm2__issues-hint">{infoActionHint(issue)}</span>
+      ) : (
+        <button
+          className={`sm2__btn ${issue.fixKind === 'confirm' ? 'sm2__btn--danger' : 'sm2__btn--primary'}`}
+          disabled={busy}
+          onClick={() => onFix(issue)}
+        >
+          {friendlyActionLabel(issue)}
+        </button>
+      )}
     </article>
   )
 }
@@ -225,10 +137,6 @@ function summarizeIssues(issues: DiagnosisIssue[]) {
     confirm: issues.filter((issue) => issue.fixKind === 'confirm').length,
     info: issues.filter((issue) => issue.fixKind === 'info').length,
   }
-}
-
-function filterCount(filter: DiagnosisFilter, total: number, stats: ReturnType<typeof summarizeIssues>): number {
-  return filter === 'all' ? total : stats[filter]
 }
 
 function groupIssues(issues: DiagnosisIssue[]): Record<IssueGroupId, DiagnosisIssue[]> {
@@ -321,11 +229,9 @@ function unmanagedReasonText(reason: string): string {
     case 'same_name_as_center_skill':
       return '本地已有同名 Skill，Vibe Board 暂时不会接管，避免覆盖你的内容。'
     case 'not_in_center_library':
-      return '这个 Skill 不在中心库里。你可以在 Agent 管理页把它导入中心库，之后再统一分发。'
+      return '这个 Skill 不在中心库里。你可以在 Agent 管理页把它导入中心库，之后再让它对 Agent 生效。'
     case 'path_conflict':
       return '这个路径和现有管理记录冲突，需要先确认保留哪一份。'
-    case '':
-      return 'Vibe Board 还没有接管这个 Skill。需要统一管理时，可以去 Agent 管理页接管。'
     default:
       return 'Vibe Board 还没有接管这个 Skill。需要统一管理时，可以去 Agent 管理页接管。'
   }
@@ -352,20 +258,6 @@ function friendlyActionLabel(issue: DiagnosisIssue): string {
     default:
       return issue.actions[0]?.label || '处理'
   }
-}
-
-function fixKindLabel(issue: DiagnosisIssue): string {
-  if (issue.fixKind === 'auto') return '可安全修复'
-  if (issue.fixKind === 'confirm') return '需要确认'
-  if (issue.fixKind === 'info') return '仅提示'
-  return '手动处理'
-}
-
-function issueTagTone(issue: DiagnosisIssue): string {
-  if (issue.fixKind === 'auto') return 'copyDiverged'
-  if (issue.fixKind === 'confirm') return 'conflict'
-  if (issue.fixKind === 'info') return 'unmanaged'
-  return 'ok'
 }
 
 function infoActionHint(issue: DiagnosisIssue): string {

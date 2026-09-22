@@ -81,7 +81,7 @@
     },
     "skillsOverview": {
       "title": "Skills",
-      "subtitle": "Yalnızca kullanıcı düzeyi Skill'leri yönetin; gerçek dağıtım durumu olduğu gibi gösterilir.",
+      "subtitle": "Yalnızca kullanıcı düzeyi Skill'leri yönetin; her Agent'taki gerçek etkinlik durumu olduğu gibi gösterilir.",
       "scopeTitle": "Yalnızca kullanıcı düzeyi Skill'ler",
       "scope": " (merkez kitaplığı {{centerPath}} ve her Agent'ın kullanıcı dizini). Proje düzeyi .skills taranmaz. GitHub kaynaklı güncellemeler önce önizleme gösterir ve merkez kitaplığı yalnızca onayladıktan sonra üzerine yazar.",
       "searchPlaceholder": "Skill adı veya açıklaması ara",
@@ -91,11 +91,11 @@
       "openAdvanced": "Tam yönetim",
       "categoriesLabel": "Skill kategorileri",
       "categoryAll": "Tümü (merkez kitaplığı)",
-      "categoryAgent": "{{name}} için dağıtıldı",
-      "noteAll": "Merkez kitaplığı Skill'leri varsayılan olarak kategorisizdir ve tüm Agent'lara otomatik uygulanmaz. Vibe Board'ta otomatik \"genel / özel\" atama yoktur ve sonradan kurulan Agent'lar otomatik kapsanmaz. Agent simgesi göstermeyen Skill'ler hiçbir yere dağıtılmamıştır ve Tam yönetim üzerinden elle dağıtılmalıdır.",
-      "noteAgent": "Aşağıdaki Skill'ler şu anda {{name}} için dağıtılmıştır; bazıları başka Agent'lara da dağıtılmış olabilir. Bu gerçek dağıtım kaydıdır, \"özel\" bir bağlama değildir. Kurma ve kaldırma her zaman Tam yönetimde elle yapılır.",
-      "unassigned": "Dağıtılmadı",
-      "unassignedSummary": "{{n}} Skill hiçbir Agent'a dağıtılmadı.",
+      "categoryAgent": "{{name}} için etkin",
+      "noteAll": "Merkez kitaplığı Skill'leri varsayılan olarak hiçbir Agent'ta etkin değildir. Tüm Agent'lara otomatik uygulanmaz ve sonradan kurulan Agent'ları otomatik kapsamaz. Otomatik \"genel / özel\" atama da yoktur. Agent simgesi göstermeyen Skill'ler henüz hiçbir yerde etkin değildir ve Tam yönetim üzerinden elle etkinleştirilmelidir.",
+      "noteAgent": "Aşağıdaki Skill'ler şu anda {{name}} için etkin; bazıları başka Agent'larda da etkin olabilir. Bu gerçek kayıtlardır, \"özel\" bir bağlama değildir. Etkinleştirme ve kaldırma her zaman Tam yönetimde elle yapılır.",
+      "unassigned": "Henüz etkin değil",
+      "unassignedSummary": "{{n}} Skill hiçbir Agent'ta etkin değil.",
       "loading": "Skill kitaplığı yükleniyor…",
       "empty": "Bu kategoride henüz Skill yok. Tam yönetimden yerel klasör, Git veya Agent dizininden içe aktarabilirsiniz.",
       "updatesTitle": "Güncelleme denetimi",
@@ -117,7 +117,8 @@
       "syncDialogRemoteHash": "Uzak Hash",
       "syncDialogCheckedAt": "Denetim zamanı",
       "syncConfirm": "Üzerine yaz ve eşitle",
-      "syncCancel": "İptal"
+      "syncCancel": "İptal",
+      "moreAgentsHint": "Çalıştırılabilir dosyası bulunamayan Agent'lar burada toplanır"
     },
     "island": {
       "effects": {
@@ -587,7 +588,7 @@
       "missing": "Eksik"
     },
     "claim": {
-      "direct": "Doğrudan dağıtım",
+      "direct": "Doğrudan",
       "pack": "Paket",
       "packNamed": "Paket: {{name}}"
     },
@@ -597,7 +598,7 @@
       "scanCompleteSharedReadOnly": "Tarama tamamlandı: bu Agent için {{managed}} yönetilen, {{unmanaged}} yönetilmeyen ve {{readOnly}} yerleşik salt okunur; .agents paylaşılan dizininde {{sharedManaged}} yönetilen, {{sharedUnmanaged}} yönetilmeyen ve {{sharedReadOnly}} salt okunur",
       "scanCompleteReadOnly": "Tarama tamamlandı: {{managed}} yönetilen, {{unmanaged}} yönetilmeyen, {{readOnly}} yerleşik salt okunur",
       "deleteRefreshFailed": "Silme tamamlandı ancak liste yenilenemedi: {{error}}. Genel bakışı yenileyin veya bu Agent'ı yeniden tarayın.",
-      "sharedDirectoryNotice": "{{count}} Skill .agents paylaşılan dizininden geliyor. Devralındıktan sonra merkez kütüphaneye taşınır ve paylaşılan dizinden kaldırılır. Sonraki dağıtımları merkez kütüphane veya Skill paketleri üzerinden yönetin.",
+      "sharedDirectoryNotice": "{{count}} Skill .agents paylaşılan dizininden geliyor. Devralındıktan sonra merkez kütüphaneye taşınır ve paylaşılan dizinden kaldırılır. Bundan sonra hangi Agent'larda etkin olacağını merkez kütüphaneden yönetin.",
       "pathSettings": {
         "tab": "Yollar ve ayarlar",
         "title": "Yerel kaynaklar ve yapılandırma",
@@ -709,7 +710,7 @@
         "confirm": "Paylaşılan dizinden sil",
         "busy": "Siliniyor...",
         "managedDescription": "Bu işlem ~/.agents/skills içinden {{count}} yönetilen Skill'i kaldırır. Paylaşılan dizini okuyan tüm Agent'lar artık onu göremez.",
-        "managedPreserved": "Skill merkez kütüphanede kalır ve daha sonra yeniden dağıtılabilir.",
+        "managedPreserved": "Skill merkez kütüphanede kalır ve daha sonra yeniden Agent'larda etkinleştirilebilir.",
         "unmanagedDescription": "Bu işlem ~/.agents/skills içinden {{count}} yönetilmeyen Skill'i kalıcı olarak siler. Paylaşılan dizini okuyan tüm Agent'lar etkilenir.",
         "unmanagedPermanent": "Skill merkez kütüphaneye kopyalanmaz ve Vibe Board tarafından geri yüklenemez. Saklamak istiyorsanız bunun yerine devralın."
       },
@@ -731,7 +732,7 @@
     },
     "blocker": {
       "unmanagedExists": "Hedef yolda yönetilmeyen “{{skillId}}” Skill'i zaten var. Bu hedefin üzerine yazmayı veya hedefi atlamayı seçin.",
-      "managedCopyBeforeRedistribute": "Yönetilen “{{skillId}}” kopyasında yerel değişiklikler var. Yeniden dağıtmadan önce merkez kitaplık ile Agent kopyasından hangisinin kullanılacağını seçin.",
+      "managedCopyBeforeRedistribute": "Yönetilen \"{{skillId}}\" kopyasında yerel değişiklikler var. Yeniden Agent'larda etkinleştirmeden önce merkez kitaplık ile Agent kopyasından hangisinin kullanılacağını seçin.",
       "managedCopyBeforeConvert": "Yönetilen “{{skillId}}” kopyasında yerel değişiklikler var. Kurulum modunu değiştirmeden önce merkez kitaplık ile Agent kopyasından hangisinin kullanılacağını seçin.",
       "notInCenterLibrary": "“{{skillId}}” Skill'i merkez kitaplıkta yok.",
       "unknownAgentDirectory": "“{{agentId}}” Agent'ının Skills dizini bilinmiyor."
@@ -794,6 +795,11 @@
       "overwrite": "Üzerine kur",
       "agentWins": "Agent sürümünü kullan",
       "skip": "Bu hedefi atla"
+    },
+    "sourceCategory": {
+      "custom": "Özel",
+      "github": "GitHub",
+      "agent": "Agent'tan eşitlendi"
     }
   },
   "update": {

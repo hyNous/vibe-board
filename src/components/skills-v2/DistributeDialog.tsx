@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
 import { skillApiV2 } from '../../services/skillApiV2'
+import { splitAgentsByProgram } from '../../stores/skillStoreV2'
 import type { ConflictBlocker, DistributionPreview, AgentSummary, SkillSummary } from '../../services/skillApiV2'
 import { PreviewDialog } from './PreviewDialog'
 import { AgentIconBadge } from './AgentIconBadge'
@@ -107,6 +108,7 @@ export function DistributeDialog({
   const [blockerDecisions, setBlockerDecisions] = useState<Record<string, BlockerDecision>>({})
   const [busy, setBusy] = useState(false)
   const [distributionProgress, setDistributionProgress] = useState<{ total: number; percent: number } | null>(null)
+  const [showOtherAgents, setShowOtherAgents] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const selectedSkills = skills ?? (skill ? [skill] : [])
   const skillIds = selectedSkills.map((item) => item.id)
@@ -124,8 +126,10 @@ export function DistributeDialog({
     }
   }
   const installedCountForAgent = (agentId: string) => installedRefsByAgent.get(agentId)?.length ?? 0
-  const visibleAgents = agents
-    .filter((agent) => agent.installed && agent.id !== SHARED_SKILLS_AGENT_ID)
+  const knownAgents = agents.filter((agent) => agent.id !== SHARED_SKILLS_AGENT_ID)
+  // 默认只列出检测到可执行程序的 Agent，其余收在「+」后面。
+  const { detected: detectedAgents, hidden: otherAgents } = splitAgentsByProgram(knownAgents)
+  const visibleAgents = (showOtherAgents ? [...detectedAgents, ...otherAgents] : detectedAgents)
     .sort((a, b) => {
       const installedDelta = installedCountForAgent(b.id) - installedCountForAgent(a.id)
       return installedDelta || (agentOrder.get(a.id) ?? 0) - (agentOrder.get(b.id) ?? 0)
@@ -194,7 +198,7 @@ export function DistributeDialog({
   if (!preview) {
     return (
       <PreviewDialog
-        title={isBatch ? `批量分发 ${selectedSkills.length} 个 Skill` : `分发「${selectedSkills[0]?.name ?? ''}」`}
+        title={isBatch ? `让 ${selectedSkills.length} 个 Skill 生效于 Agent` : `让「${selectedSkills[0]?.name ?? ''}」生效于 Agent`}
         confirmLabel="预览影响"
         modalClassName="sm2__modal--distribute"
         busy={busy}
@@ -211,7 +215,7 @@ export function DistributeDialog({
             </div>
             <div className="sm2-distribute__summary-copy">
               <strong>{isBatch ? `${selectedSkills.length} 个 Skill` : selectedSkills[0]?.name}</strong>
-              <span>{isBatch ? '从中心库批量分发到已安装 Hook 的 Agent' : '从中心库分发到已安装 Hook 的 Agent'}</span>
+              <span>{isBatch ? '批量让中心库 Skill 在这些 Agent 上生效' : '让中心库 Skill 在这个 Agent 上生效'}</span>
             </div>
             <div className="sm2-distribute__count">
               {selected.size}/{selectableAgents.length}
@@ -220,7 +224,7 @@ export function DistributeDialog({
 
           <section className="sm2-distribute__section">
             <div className="sm2-distribute__section-head">
-              <span>分发方式</span>
+              <span>生效方式</span>
               <em>{mode === 'link' ? '随中心库更新' : '生成独立副本'}</em>
             </div>
             <div className="sm2-distribute__mode-grid">
@@ -259,9 +263,19 @@ export function DistributeDialog({
               <span>目标 Agent</span>
               <em>{selectableAgents.length} 个可选</em>
             </div>
+            {otherAgents.length > 0 && (
+              <button
+                type="button"
+                className="sm2__btn sm2__btn--ghost sm2-distribute__more-agents"
+                aria-expanded={showOtherAgents}
+                onClick={() => setShowOtherAgents((open) => !open)}
+              >
+                {showOtherAgents ? '收起未检测到程序的 Agent' : `＋ 其他 Agent（未检测到程序，${otherAgents.length}）`}
+              </button>
+            )}
             <div className="sm2-distribute__agent-list">
               {visibleAgents.length === 0 ? (
-                <div className="sm2__empty sm2__empty--compact">没有可用的 Agent。请先在 Agent 管理中安装 Hook。</div>
+                <div className="sm2__empty sm2__empty--compact">没有可用的 Agent。请先安装 Agent 程序。</div>
               ) : (
                 visibleAgents.map((a) => {
                   const installedRefs = installedRefsByAgent.get(a.id) ?? []
@@ -313,8 +327,8 @@ export function DistributeDialog({
 
   return (
     <PreviewDialog
-      title="确认分发"
-      confirmLabel={preview.blockers.length > 0 ? '按选择执行' : '执行分发'}
+      title="确认生效"
+      confirmLabel={preview.blockers.length > 0 ? '按选择执行' : '执行生效'}
       modalClassName="sm2__modal--distribute"
       busy={busy}
       disabled={unresolvedBlockers > 0}
@@ -333,7 +347,7 @@ export function DistributeDialog({
             <span>
               {preview.blockers.length > 0
                 ? unresolvedBlockers > 0 ? `还有 ${unresolvedBlockers} 个阻止项需要选择处理方式` : '阻止项已选择处理方式，可以继续'
-                : '检查无阻止项，可以执行分发'}
+                : '检查无阻止项，可以执行生效'}
             </span>
           </div>
         </div>
@@ -418,13 +432,13 @@ export function DistributeDialog({
         {distributionProgress && (
           <div className="sm2-distribute__progress" aria-live="polite">
             <div className="sm2-distribute__progress-head">
-              <strong>正在分发 {distributionProgress.total} 个目标</strong>
+              <strong>正在让 {distributionProgress.total} 个目标生效</strong>
               <span>{distributionProgress.percent}%</span>
             </div>
             <div
               className="sm2-distribute__progress-track"
               role="progressbar"
-              aria-label="分发进度"
+              aria-label="生效进度"
               aria-valuemin={0}
               aria-valuemax={100}
               aria-valuenow={distributionProgress.percent}

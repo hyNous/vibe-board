@@ -4,7 +4,16 @@
 //! a stable display-name + icon-key mapping on top.
 
 use crate::skills::{agent_paths, registry};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant};
+
+/// The filesystem probe costs a few hundred milliseconds for every known
+/// Agent, so results are reused briefly instead of re-walking `PATH` on each
+/// overview refresh.
+const PROGRAM_PROBE_TTL: Duration = Duration::from_secs(60);
+static PROGRAM_PROBE_CACHE: OnceLock<Mutex<HashMap<String, (Instant, bool)>>> = OnceLock::new();
 
 pub struct AgentMeta {
     pub id: &'static str,
@@ -397,6 +406,29 @@ pub fn agent_installed(home: &std::path::Path, agent: &str) -> bool {
     false
 }
 
+/// Whether the local program that backs this Agent was detected. The probe is
+/// filesystem-only so the Skill manager can group non-installed Agents behind
+/// an explicit control without blocking the settings window. Custom or unknown
+/// Agents have no known executable; their config presence is the only signal.
+pub fn agent_program_detected(agent: &str, installed: bool) -> bool {
+    if !crate::agents::programs::has_program_metadata(agent) {
+        return installed;
+    }
+    let cache = PROGRAM_PROBE_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    let mut cache = match cache.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    if let Some((probed_at, value)) = cache.get(agent) {
+        if probed_at.elapsed() < PROGRAM_PROBE_TTL {
+            return *value;
+        }
+    }
+    let value = crate::agents::programs::program_detected_without_probe(agent);
+    cache.insert(agent.to_string(), (Instant::now(), value));
+    value
+}
+
 fn directory_has_valid_skill(path: &Path, recursive: bool) -> bool {
     directory_has_valid_skill_inner(path, recursive, 0)
 }
@@ -640,5 +672,11 @@ mod tests {
             Path::new(r"C:\Users\AgentBro"),
             Path::new(r"c:\users\agentbro")
         ));
+    }
+
+    #[test]
+    fn agents_without_program_metadata_fall_back_to_their_config_state() {
+        assert!(agent_program_detected("definitely-not-an-agent", true));
+        assert!(!agent_program_detected("definitely-not-an-agent", false));
     }
 }

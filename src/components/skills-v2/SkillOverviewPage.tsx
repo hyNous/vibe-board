@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { filterSkillsByQuery, useSkillStoreV2 } from '../../stores/skillStoreV2'
+import { filterSkillsByQuery, isGitHubSkillSource, splitAgentsByProgram, useSkillStoreV2 } from '../../stores/skillStoreV2'
 import { skillApiV2 } from '../../services/skillApiV2'
 import type { GitHubSkillUpdatePreview, SkillSummary } from '../../services/skillApiV2'
 import { AgentIconBadge } from './AgentIconBadge'
@@ -23,12 +23,6 @@ interface UpdateCheckResult {
   preview?: GitHubSkillUpdatePreview
 }
 
-function isGitHubSource(skill: SkillSummary): boolean {
-  const sourceType = skill.sourceType?.toLowerCase()
-  const sourceUri = skill.sourceUri ?? ''
-  return sourceType === 'github' || sourceUri.startsWith('github:') || sourceUri.includes('github.com/')
-}
-
 function shortHash(hash: string): string {
   return hash.length > 12 ? hash.slice(0, 12) : hash
 }
@@ -45,6 +39,7 @@ export function SkillOverviewPage({ onOpenAdvanced }: { onOpenAdvanced?: () => v
   const [syncTarget, setSyncTarget] = useState<UpdateCheckResult | null>(null)
   const [syncingId, setSyncingId] = useState<string | null>(null)
   const [syncError, setSyncError] = useState<string | null>(null)
+  const [showHiddenAgents, setShowHiddenAgents] = useState(false)
 
   useEffect(() => {
     void state.init()
@@ -57,10 +52,17 @@ export function SkillOverviewPage({ onOpenAdvanced }: { onOpenAdvanced?: () => v
     () => filterSkillsByQuery(state.skills, state.filters.query),
     [state.skills, state.filters.query],
   )
-  const agentCategories = useMemo(
-    () => state.agents.filter((agent) => agent.id !== SHARED_SKILLS_AGENT_ID && agent.installed),
+  // Only Agents whose own program was detected are listed by default; the rest
+  // (config-only directories, not installed) stay behind the "+" control.
+  const knownAgents = useMemo(
+    () => state.agents.filter((agent) => agent.id !== SHARED_SKILLS_AGENT_ID),
     [state.agents],
   )
+  const { detected: detectedAgents, hidden: hiddenAgents } = useMemo(
+    () => splitAgentsByProgram(knownAgents),
+    [knownAgents],
+  )
+  const agentCategories = showHiddenAgents ? [...detectedAgents, ...hiddenAgents] : detectedAgents
   const activeAgent = agentCategories.find((agent) => agent.id === categoryId)
   const categorySkills = useMemo(() => {
     if (categoryId === ALL_CATEGORY_ID) return skills
@@ -70,7 +72,7 @@ export function SkillOverviewPage({ onOpenAdvanced }: { onOpenAdvanced?: () => v
     () => skills.filter((skill) => skill.installedAgents.length === 0).length,
     [skills],
   )
-  const githubSkills = useMemo(() => skills.filter(isGitHubSource), [skills])
+  const githubSkills = useMemo(() => skills.filter(isGitHubSkillSource), [skills])
   const githubSkillCount = githubSkills.length
 
   const resultGroups = useMemo(() => {
@@ -147,7 +149,7 @@ export function SkillOverviewPage({ onOpenAdvanced }: { onOpenAdvanced?: () => v
     <div className="vb-skills-page">
       <header className="island-effect-picker__head">
         <h3>{t('settings.skillsOverview.title', { defaultValue: 'Skills' })}</h3>
-        <p>{t('settings.skillsOverview.subtitle', { defaultValue: '只管理用户级 Skills，并按真实数据展示当前的分发情况。' })}</p>
+        <p>{t('settings.skillsOverview.subtitle', { defaultValue: '只管理用户级 Skills，并按真实数据展示对各个 Agent 的生效情况。' })}</p>
       </header>
 
       <section className="vb-skills-scope">
@@ -221,28 +223,44 @@ export function SkillOverviewPage({ onOpenAdvanced }: { onOpenAdvanced?: () => v
               onClick={() => setCategoryId(agent.id)}
             >
               <AgentIconBadge iconKey={agent.iconKey} title={agent.displayName} size={16} />
-              {t('settings.skillsOverview.categoryAgent', { name: agent.displayName, defaultValue: '已分发到 {{name}}' })}
+              {t('settings.skillsOverview.categoryAgent', { name: agent.displayName, defaultValue: '生效于 {{name}}' })}
               <span className="vb-skills-chip__count">{count}</span>
             </button>
           )
         })}
+        {hiddenAgents.length > 0 && (
+          <button
+            type="button"
+            className={`vb-skills-chip vb-skills-chip--more${showHiddenAgents ? ' is--active' : ''}`}
+            aria-expanded={showHiddenAgents}
+            title={t('settings.skillsOverview.moreAgentsHint', { defaultValue: '未检测到可执行程序的 Agent 收在这里' })}
+            onClick={() => {
+              const next = !showHiddenAgents
+              setShowHiddenAgents(next)
+              if (!next && hiddenAgents.some((agent) => agent.id === categoryId)) setCategoryId(ALL_CATEGORY_ID)
+            }}
+          >
+            +
+            <span className="vb-skills-chip__count">{hiddenAgents.length}</span>
+          </button>
+        )}
       </div>
 
       <div className="vb-skills-note">
         {categoryId === ALL_CATEGORY_ID
           ? t('settings.skillsOverview.noteAll', {
-              defaultValue: '中心库 Skill 默认处于未分类状态，不会自动作用于所有 Agent；Vibe Board 目前没有「通用 / 专属」自动分配能力，也不会自动覆盖未来新安装的 Agent。未显示 Agent 图标的 Skill（未分发）只存在于中心库，需在「完整管理」中手动分发。',
+              defaultValue: '中心库 Skill 默认不对任何 Agent 生效；Vibe Board 不会自动让它们作用于所有 Agent，也不会自动覆盖未来新安装的 Agent，没有「通用 / 专属」自动分配。未显示 Agent 图标的 Skill（尚未生效于任何 Agent）只存在于中心库，需在「完整管理」中手动让它生效。',
             })
           : t('settings.skillsOverview.noteAgent', {
               name: activeAgent?.displayName ?? categoryId,
-              defaultValue: '以下 Skill 当前已分发到 {{name}}，部分可能同时分发到其他 Agent。这是真实的分发记录，不是「专属」绑定；安装或取消安装都要在「完整管理」中手动操作。',
+              defaultValue: '以下 Skill 当前生效于 {{name}}，部分可能同时对其他 Agent 生效。这是真实的生效记录，不是「专属」绑定；安装或取消安装都要在「完整管理」中手动操作。',
             })}
       </div>
 
       <div className="vb-skills-note vb-skills-note--muted">
         {t('settings.skillsOverview.unassignedSummary', {
           n: unassignedCount,
-          defaultValue: '当前有 {{n}} 个 Skill 尚未分发到任何 Agent。',
+          defaultValue: '当前有 {{n}} 个 Skill 尚未对任何 Agent 生效。',
         })}
       </div>
 
@@ -274,7 +292,7 @@ export function SkillOverviewPage({ onOpenAdvanced }: { onOpenAdvanced?: () => v
                 <span>{skillSourceTypeLabel(t, skill.sourceType)}</span>
                 {skill.installedAgents.length === 0 ? (
                   <span className="vb-skills-badge vb-skills-badge--muted">
-                    {t('settings.skillsOverview.unassigned', { defaultValue: '未分发' })}
+                    {t('settings.skillsOverview.unassigned', { defaultValue: '尚未生效' })}
                   </span>
                 ) : (
                   <span className="vb-skills-card__agents">

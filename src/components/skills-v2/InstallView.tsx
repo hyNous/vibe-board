@@ -6,6 +6,7 @@ import remarkGfm from 'remark-gfm'
 import { open } from '@tauri-apps/plugin-dialog'
 import { open as openShell } from '@tauri-apps/plugin-shell'
 import { skillApiV2 } from '../../services/skillApiV2'
+import { agentProgramDetected } from '../../stores/skillStoreV2'
 import type { AddCenterSkillInput, AddCenterSkillPreview, AddCenterSkillDecision, AdoptPreview, AgentSkillInventoryAgent, AgentSkillInventoryItem, FileTreeNode } from '../../services/skillApiV2'
 import type { GitHubRepoPreview } from '../../services/skillApiV2'
 import { AdoptDialog } from './AdoptDialog'
@@ -83,6 +84,16 @@ function installedAgentInventory(agents: AgentSkillInventoryAgent[]) {
     })
 }
 
+/** Agent skill sources whose own program was detected. Config-only and
+ *  not-installed Agents stay behind the "+" control. */
+function programAgentInventory(agents: AgentSkillInventoryAgent[]) {
+  return agents.filter(agentProgramDetected)
+}
+
+function otherAgentInventory(agents: AgentSkillInventoryAgent[]) {
+  return agents.filter((agent) => !agentProgramDetected(agent))
+}
+
 function sharedAgentInventory(agents: AgentSkillInventoryAgent[]) {
   return agents.find((agent) => agent.installed && agent.agentId === SHARED_SKILLS_AGENT_ID) ?? null
 }
@@ -143,6 +154,7 @@ export function AgentSyncPanel({ onDone }: { onDone: InstallDoneHandler }) {
   const [query, setQuery] = useState('')
   const [viewMode, setViewMode] = useState<AgentSyncViewMode>('cards')
   const [showManaged, setShowManaged] = useState(false)
+  const [showOtherAgents, setShowOtherAgents] = useState(false)
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
   const [detailRow, setDetailRow] = useState<AgentSyncRow | null>(null)
@@ -211,8 +223,18 @@ export function AgentSyncPanel({ onDone }: { onDone: InstallDoneHandler }) {
     }
   }
 
+  // 默认只列出检测到可执行程序的 Agent；其余（仅发现配置 / 未安装）收在「+」后面。
+  const programAgents = useMemo(
+    () => programAgentInventory(agents),
+    [agents],
+  )
+  const otherAgents = useMemo(
+    () => otherAgentInventory(agents),
+    [agents],
+  )
+  const displayedAgents = showOtherAgents ? agents : programAgents
   const sortedAgents = useMemo(
-    () => agents
+    () => displayedAgents
       .map((agent, index) => ({ agent, index }))
       .sort((a, b) => {
         const conflictDiff = agentConflictCount(b.agent) - agentConflictCount(a.agent)
@@ -220,7 +242,7 @@ export function AgentSyncPanel({ onDone }: { onDone: InstallDoneHandler }) {
         return a.index - b.index
       })
       .map(({ agent }) => agent),
-    [agents],
+    [displayedAgents],
   )
 
   const visibleAgents = useMemo(
@@ -295,8 +317,8 @@ export function AgentSyncPanel({ onDone }: { onDone: InstallDoneHandler }) {
   const batchConflictRows = batchConflictScope === 'visible' ? visibleConflictRows : oneClickConflictRows
   const scopedImportableCount = oneClickImportable.length
   const scopedConflictCount = oneClickConflicts.length
-  const allSources = sharedAgent ? [...agents, sharedAgent] : agents
-  const noInstalledAgents = !loading && allSources.length === 0
+  const allSources = sharedAgent ? [...displayedAgents, sharedAgent] : displayedAgents
+  const noInstalledAgents = !loading && allSources.length === 0 && (showOtherAgents || otherAgents.length === 0)
   const totalManaged = allSources.reduce((sum, agent) => sum + agent.managedCount, 0)
   const totalImportable = allSources.reduce((sum, agent) => sum + agent.importableCount, 0)
   const totalConflicts = allSources.reduce(
@@ -442,7 +464,7 @@ export function AgentSyncPanel({ onDone }: { onDone: InstallDoneHandler }) {
       setDetailRow(null)
       setDeleteDetailRow(null)
       const failed = result.failures.map((failure) => `${row.item.name}: ${failure.error}`)
-      setNotice(`已删除 ${result.deleted} 个 Skill 分发${failed.length ? `，${failed.length} 个失败` : ''}`)
+      setNotice(`已删除 ${result.deleted} 个 Skill 生效${failed.length ? `，${failed.length} 个失败` : ''}`)
       if (failed.length > 0) setError(failed.slice(0, 3).join('\n'))
     } catch (e) {
       setError(String(e))
@@ -563,7 +585,7 @@ export function AgentSyncPanel({ onDone }: { onDone: InstallDoneHandler }) {
           <strong>{summaryTitle}</strong>
           <span>{summaryRecommendation}</span>
           <div className="sm2__agent-sync-summary-chips" aria-label="同步摘要">
-            <em>{agents.length} Agent</em>
+            <em>{displayedAgents.length} Agent</em>
             {sharedAgent && <em>.agents Skills {localSkillCount(sharedAgent)}</em>}
             <em>{totalManaged} 已管理，默认隐藏</em>
             <em>{sharedAgent && sharedAgent.importableCount > 0 ? '.agents 清理推荐' : totalImportable > 0 ? '软连接推荐' : `${pendingCount} 待处理`}</em>
@@ -618,6 +640,21 @@ export function AgentSyncPanel({ onDone }: { onDone: InstallDoneHandler }) {
             </button>
           )
         })}
+        {otherAgents.length > 0 && (
+          <button
+            type="button"
+            className={`sm2__agent-sync-agent-card sm2__agent-sync-agent-card--more${showOtherAgents ? ' sm2__agent-sync-agent-card--active' : ''}`}
+            aria-expanded={showOtherAgents}
+            title="显示未检测到程序的 Agent"
+            onClick={() => setShowOtherAgents((open) => !open)}
+          >
+            <span className="sm2__agent-sync-agent-card-more-mark" aria-hidden="true">＋</span>
+            <span>
+              <strong>其他 Agent</strong>
+              <small>{showOtherAgents ? '收起' : `${otherAgents.length} 个未检测到程序`}</small>
+            </span>
+          </button>
+        )}
       </div>
 
       {sharedAgent && (
@@ -867,7 +904,7 @@ export function AgentSyncPanel({ onDone }: { onDone: InstallDoneHandler }) {
 
       {deleteDetailRow && (
         <PreviewDialog
-          title={`删除 Agent 分发「${deleteDetailRow.item.name}」`}
+          title={`从 Agent 移除「${deleteDetailRow.item.name}」`}
           confirmLabel="确认删除"
           busyLabel="删除中…"
           destructive
@@ -875,7 +912,7 @@ export function AgentSyncPanel({ onDone }: { onDone: InstallDoneHandler }) {
           onCancel={() => setDeleteDetailRow(null)}
           onConfirm={() => void deleteDetailDistribution(deleteDetailRow)}
         >
-          <p>将从 <strong>{deleteDetailRow.agent.displayName}</strong> 移除这个 Skill 分发，并删除对应的本地目标。之后仍可从中心库重新安装。</p>
+          <p>将从 <strong>{deleteDetailRow.agent.displayName}</strong> 移除这个 Skill，并删除对应的本地目标。之后仍可从中心库重新安装。</p>
         </PreviewDialog>
       )}
 
@@ -1216,7 +1253,7 @@ function AgentSkillDetail({ row, importing, opening, deleting, onClose, onAdopt,
             </button>
             {canDelete && row && (
               <button className="sm2__btn sm2__btn--danger" disabled={importing || opening || deleting} onClick={() => onDelete(row)}>
-                {deleting ? '删除中…' : '删除分发'}
+                {deleting ? '删除中…' : '移除'}
               </button>
             )}
           </>
@@ -1908,8 +1945,8 @@ export function LocalPanel({ onDone }: { onDone: InstallDoneHandler }) {
             <span>
               <strong>软链导入，本地目录作为源</strong>
               <em>
-                中心库链接到这个目录。以后修改本地 Skill 会立即影响中心库；分发给 Agent
-                时也选择软连接，Agent 才会实时读到同一份源目录。
+                中心库链接到这个目录。以后修改本地 Skill 会立即影响中心库；让 Skill 对 Agent
+                生效时也选择软连接，Agent 才会实时读到同一份源目录。
               </em>
               <small>
                 常见使用场景：本地已有 Skill，并且需要持续修改、调试、立即生效时，选择这个方式更合适。
@@ -1922,7 +1959,7 @@ export function LocalPanel({ onDone }: { onDone: InstallDoneHandler }) {
         {sourceType === 'archive'
           ? '压缩包会解压后复制导入中心库，不支持软链导入。'
           : effectiveImportMode === 'link'
-            ? '请保留这个本地源目录的位置。移动或删除源目录后，中心库和已软链分发的 Agent 都会变成坏链接。'
+            ? '请保留这个本地源目录的位置。移动或删除源目录后，中心库和已用软链生效的 Agent 都会变成坏链接。'
             : '复制导入会保留一份中心库副本；后续要同步本地修改，需要重新导入或覆盖中心库。'}
       </div>
 
@@ -2294,7 +2331,7 @@ export function GitPanel({ initialUrl, onDone }: { initialUrl?: string; onDone: 
           <h3>已导入 {summary.imported} 个 Skill</h3>
           <p>
             导入到中心 Skill 库{summary.skipped > 0 ? `，跳过 ${summary.skipped} 个` : ''}。
-            可在「Skill 库」中分发给各个 Agent。
+            可在「Skill 库」中让 Skill 对各个 Agent 生效。
           </p>
           {summary.skills.length > 0 && (
             <div className="sm2__git-done-chips">

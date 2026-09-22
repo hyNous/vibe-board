@@ -4670,3 +4670,12 @@
   color: #C8402F;
   font-weight: 620;
 }
+
+.vb-skills-chip--more {
+  border-style: dashed;
+  color: var(--settings-text-secondary);
+}
+
+.vb-skills-chip--more.is--active {
+  color: #FFFFFF;
+}

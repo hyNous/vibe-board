@@ -118,22 +118,22 @@ describe('SkillOverviewPage', () => {
     resetStore()
   })
 
-  it('shows real distribution categories instead of promising generic or exclusive scopes', () => {
+  it('shows real effect categories instead of promising generic or exclusive scopes', () => {
     render(<SkillOverviewPage />)
 
     const allTab = screen.getByRole('tab', { name: /全部（中心库）/ })
     expect(allTab).toHaveAttribute('aria-selected', 'true')
-    expect(screen.getByRole('tab', { name: /已分发到 Codex/ })).toBeInTheDocument()
-    expect(screen.getByText(/没有「通用 \/ 专属」自动分配能力/)).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /生效于 Codex/ })).toBeInTheDocument()
+    expect(screen.getByText(/「通用 \/ 专属」自动分配/)).toBeInTheDocument()
     expect(screen.getByText(/不会自动覆盖未来新安装的 Agent/)).toBeInTheDocument()
-    expect(screen.getByText('未分发')).toBeInTheDocument()
+    expect(screen.getByText('尚未生效')).toBeInTheDocument()
     expect(screen.queryByText(/通用分类来自中心库/)).not.toBeInTheDocument()
   })
 
   it('filters an Agent category by its real installed targets', () => {
     render(<SkillOverviewPage />)
 
-    fireEvent.click(screen.getByRole('tab', { name: /已分发到 Codex/ }))
+    fireEvent.click(screen.getByRole('tab', { name: /生效于 Codex/ }))
 
     expect(screen.getByText('Release Checklist')).toBeInTheDocument()
     expect(screen.queryByText('Local Only')).not.toBeInTheDocument()
@@ -237,5 +237,53 @@ describe('SkillOverviewPage', () => {
 
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     expect(syncSpy).not.toHaveBeenCalled()
+  })
+
+  it('lists only program-detected Agents by default and reveals the rest from +', () => {
+    const threeStateAgents: AgentSummary[] = [
+      { ...agents[0], id: 'codex', displayName: 'Codex', installed: true, programInstalled: true },
+      { ...agents[1], id: 'kiro', displayName: 'Kiro', installed: true, programInstalled: false },
+      {
+        ...agents[1],
+        id: 'cursor',
+        displayName: 'Cursor',
+        installed: false,
+        programInstalled: false,
+      },
+    ]
+    useSkillStoreV2.setState({
+      agents: threeStateAgents,
+      filters: { query: '', source: '', status: '', type: '' },
+    })
+
+    render(<SkillOverviewPage />)
+
+    expect(screen.getByRole('tab', { name: /生效于 Codex/ })).toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: /生效于 Kiro/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: /生效于 Cursor/ })).not.toBeInTheDocument()
+
+    const more = screen.getByRole('button', { name: /^\+\s*2$/ })
+    expect(more).toHaveAttribute('aria-expanded', 'false')
+
+    fireEvent.click(more)
+
+    expect(screen.getByRole('tab', { name: /生效于 Kiro/ })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /生效于 Cursor/ })).toBeInTheDocument()
+  })
+
+  it('disables the update check and says so when no GitHub source is recorded', () => {
+    const localOnlyOverview: SkillManagerOverview = {
+      ...overview,
+      skills: [localSkill],
+    }
+    useSkillStoreV2.setState({
+      overview: localOnlyOverview,
+      skills: localOnlyOverview.skills,
+    })
+
+    render(<SkillOverviewPage />)
+
+    expect(screen.getByText(/0 个 GitHub 来源可检查/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '检查更新' })).toBeDisabled()
   })
 })

@@ -20,7 +20,7 @@ import { skillApiV2 } from '../services/skillApiV2'
 // result; it no longer selects between environments.
 export const LOCAL_RUNTIME_ENVIRONMENT_ID = 'local'
 
-export type SkillManagerTab = 'library' | 'install' | 'projects' | 'agents' | 'diagnostics' | 'settings'
+export type SkillManagerTab = 'library' | 'install' | 'projects' | 'agents' | 'settings'
 export type SkillInstallTab = 'official' | 'agent' | 'local' | 'git'
 export type SkillViewMode = 'cards' | 'list'
 
@@ -493,11 +493,54 @@ export const useSkillStoreV2 = create<SkillV2State & SkillV2Actions>((set, get) 
   setLastPreview: (p) => set({ lastPreview: p }),
 }))
 
+/** The three origins every Skill falls into exactly one of. */
+export type SkillSourceCategory = 'custom' | 'github' | 'agent'
+
+export const SKILL_SOURCE_CATEGORIES: SkillSourceCategory[] = ['custom', 'github', 'agent']
+
+export function isGitHubSkillSource(
+  skill: Pick<SkillSummary, 'sourceType' | 'sourceUri'>,
+): boolean {
+  const sourceType = skill.sourceType?.toLowerCase()
+  const sourceUri = skill.sourceUri ?? ''
+  return sourceType === 'github' || sourceUri.startsWith('github:') || sourceUri.includes('github.com/')
+}
+
+export function skillSourceCategory(
+  skill: Pick<SkillSummary, 'sourceType' | 'sourceUri'>,
+): SkillSourceCategory {
+  if (isGitHubSkillSource(skill)) return 'github'
+  if (skill.sourceType === 'agent_import') return 'agent'
+  return 'custom'
+}
+
+/** Agents whose own program was detected. When the backend has not reported a
+ *  program state yet, fall back to the legacy "installed" flag (config or
+ *  program) so missing data never hides a real installation. */
+export function agentProgramDetected(agent: {
+  programInstalled?: boolean
+  installed: boolean
+}): boolean {
+  return agent.programInstalled ?? agent.installed
+}
+
+export function splitAgentsByProgram<T extends { programInstalled?: boolean; installed: boolean }>(
+  agents: T[],
+): { detected: T[]; hidden: T[] } {
+  const detected: T[] = []
+  const hidden: T[] = []
+  for (const agent of agents) {
+    if (agentProgramDetected(agent)) detected.push(agent)
+    else hidden.push(agent)
+  }
+  return { detected, hidden }
+}
+
 export function filteredSkills(state: SkillV2State): SkillSummary[] {
   const { skills, filters } = state
   return filterSkillsByQuery(skills, filters.query).filter((s) => {
     if (filters.status && s.status !== filters.status) return false
-    if (filters.source && s.sourceType !== filters.source) return false
+    if (filters.source && skillSourceCategory(s) !== filters.source) return false
     if (filters.type && s.skillType !== filters.type) return false
     return true
   })

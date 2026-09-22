@@ -348,7 +348,7 @@ export function SkillDetailSlider({
           <>
             {!readOnly && onDistribute && (
               <button className="sm2__btn sm2__btn--primary" onClick={() => onDistribute(summary)}>
-                分发
+                生效于 Agent
               </button>
             )}
             <button className="sm2__btn sm2__btn--ghost" onClick={() => skillApiV2.openPath(summary.centerPath)}>
@@ -444,7 +444,7 @@ export function SkillDetailSlider({
     )}
     {deleteTarget && (
       <PreviewDialog
-        title="删除 Agent 分发"
+        title="从 Agent 移除"
         confirmLabel="确认删除"
         busyLabel="删除中…"
         destructive
@@ -454,7 +454,7 @@ export function SkillDetailSlider({
       >
         <div className="sm2__delete-target-preview">
           <p>
-            将从 <strong>{deleteAgent?.displayName || deleteTarget.agentId}</strong> 移除这个 Skill 分发，并删除对应的本地目标。
+            将从 <strong>{deleteAgent?.displayName || deleteTarget.agentId}</strong> 移除这个 Skill，并删除对应的本地目标。
           </p>
           <code>{deleteTarget.targetPath}</code>
         </div>
@@ -462,7 +462,7 @@ export function SkillDetailSlider({
     )}
     {batchDeleteTargetIds && (
       <PreviewDialog
-        title="确认批量删除 Agent 分发"
+        title="确认从多个 Agent 移除"
         confirmLabel="确认删除"
         busyLabel="删除中…"
         destructive
@@ -473,7 +473,7 @@ export function SkillDetailSlider({
       >
         <div className="sm2__delete-target-preview">
           <p>
-            将从 <strong>{batchDeleteTargets.length}</strong> 个 Agent 移除这个 Skill 分发，并删除对应的本地目标。
+            将从 <strong>{batchDeleteTargets.length}</strong> 个 Agent 移除这个 Skill，并删除对应的本地目标。
           </p>
           <div className="sm2__delete-target-list">
             {batchDeleteTargets.map((target) => {
@@ -577,7 +577,7 @@ function OverviewTab({
             <span>{detail.targets.length}</span>
           </div>
           {detail.targets.length === 0 ? (
-            <div className="sm2__aside-empty">尚未分发到 Agent</div>
+            <div className="sm2__aside-empty">尚未对任何 Agent 生效</div>
           ) : (
             <div className="sm2__install-mini-list">
               {detail.targets.map((target) => {
@@ -751,7 +751,7 @@ function AgentsTab({
 }) {
   const { t } = useTranslation()
   if (detail.targets.length === 0) {
-    return <div className="sm2__empty sm2__empty--compact">尚未分发到任何 Agent</div>
+    return <div className="sm2__empty sm2__empty--compact">尚未对任何 Agent 生效</div>
   }
   const allSelected = detail.targets.length > 0 && selectedTargetIds.size === detail.targets.length
   return (
@@ -773,15 +773,15 @@ function AgentsTab({
                 取消
               </button>
               <button className="sm2__btn sm2__btn--danger" disabled={selectedTargetIds.size === 0} onClick={onConfirmBatchDelete}>
-                删除 {selectedTargetIds.size} 个分发
+                移除 {selectedTargetIds.size} 个生效
               </button>
             </div>
           </>
         ) : (
           <>
-            <span>管理已分发到 Agent 的本地目标</span>
+            <span>管理已生效于 Agent 的本地目标</span>
             <button className="sm2__btn sm2__btn--danger-ghost" onClick={onEnterBatchDelete}>
-              批量删除分发
+              批量移除
             </button>
           </>
         )}
@@ -803,7 +803,7 @@ function AgentsTab({
                       <input
                         type="checkbox"
                         checked={selected}
-                        aria-label={`选择 ${agentName} 的 Skill 分发`}
+                        aria-label={`选择 ${agentName} 的 Skill 生效`}
                         onChange={() => onToggleBatchDeleteTarget(target.id)}
                       />
                     </label>
@@ -882,7 +882,7 @@ function AgentsTab({
                     {t('skills.actions.open', { defaultValue: 'Open' })}
                   </button>
                   <button className="sm2__btn sm2__btn--danger-ghost" disabled={batchDeleteMode} onClick={() => onDeleteTarget(target.id)}>
-                    删除分发
+                    移除
                   </button>
                 </div>
               </div>

@@ -84,7 +84,7 @@
     },
     "skillsOverview": {
       "title": "Skills",
-      "subtitle": "ユーザーレベルの Skill のみを管理し、実際の配布状況をそのまま表示します。",
+      "subtitle": "ユーザーレベルの Skill のみを管理し、各 Agent での実際の有効状況をそのまま表示します。",
       "scopeTitle": "ユーザーレベルの Skill のみ",
       "scope": "（センターライブラリ {{centerPath}} と各 Agent のユーザーディレクトリ）。プロジェクトレベルの .skills はスキャンしません。GitHub ソースの更新は先にプレビューを表示し、確認後にのみセンターライブラリを上書きします。",
       "searchPlaceholder": "Skill 名または説明を検索",
@@ -94,11 +94,11 @@
       "openAdvanced": "詳細管理",
       "categoriesLabel": "Skill カテゴリ",
       "categoryAll": "すべて（センターライブラリ）",
-      "categoryAgent": "{{name}} に配布済み",
-      "noteAll": "センターライブラリの Skill は既定で未分類です。すべての Agent に自動適用されることはありません。Vibe Board には「汎用 / 専用」の自動割り当て機能はなく、後からインストールした Agent を自動でカバーすることもありません。Agent アイコンが表示されていない Skill は未配布で、詳細管理から手動で配布する必要があります。",
-      "noteAgent": "以下の Skill は現在 {{name}} に配布されています（他の Agent にも配布されている場合があります）。これは実際の配布記録であり「専用」の固定ではありません。インストールや解除は詳細管理で手動で行います。",
-      "unassigned": "未配布",
-      "unassignedSummary": "現在 {{n}} 件の Skill がどの Agent にも配布されていません。",
+      "categoryAgent": "{{name}} で有効",
+      "noteAll": "センターライブラリの Skill は既定ではどの Agent でも有効になりません。すべての Agent に自動適用されることはなく、後からインストールした Agent を自動でカバーすることもありません。「汎用 / 専用」の自動割り当て機能もありません。Agent アイコンが表示されていない Skill はまだどこでも有効ではなく、詳細管理から手動で有効にする必要があります。",
+      "noteAgent": "以下の Skill は現在 {{name}} で有効です（他の Agent でも有効な場合があります）。これは実際の記録であり「専用」の固定ではありません。有効化や解除は詳細管理で手動で行います。",
+      "unassigned": "未有効",
+      "unassignedSummary": "現在 {{n}} 件の Skill がどの Agent でも有効になっていません。",
       "loading": "Skill ライブラリを読み込み中…",
       "empty": "このカテゴリにはまだ Skill がありません。詳細管理からローカル、Git、または Agent ディレクトリをインポートできます。",
       "updatesTitle": "更新チェック",
@@ -120,7 +120,8 @@
       "syncDialogRemoteHash": "リモート Hash",
       "syncDialogCheckedAt": "確認日時",
       "syncConfirm": "上書きして同期",
-      "syncCancel": "キャンセル"
+      "syncCancel": "キャンセル",
+      "moreAgentsHint": "実行ファイルが検出されなかった Agent はここにまとめられます"
     },
     "title": "設定",
     "usage": "使用量",
@@ -733,7 +734,7 @@
       "missing": "見つかりません"
     },
     "claim": {
-      "direct": "直接配布",
+      "direct": "直接有効",
       "pack": "パック",
       "packNamed": "パック: {{name}}"
     },
@@ -743,7 +744,7 @@
       "scanCompleteSharedReadOnly": "スキャン完了：この Agent は管理済み {{managed}}、未管理 {{unmanaged}}、組み込み読み取り専用 {{readOnly}}；.agents 共有ディレクトリは管理済み {{sharedManaged}}、未管理 {{sharedUnmanaged}}、読み取り専用 {{sharedReadOnly}}",
       "scanCompleteReadOnly": "スキャン完了：管理済み {{managed}}、未管理 {{unmanaged}}、組み込み読み取り専用 {{readOnly}}",
       "deleteRefreshFailed": "削除は完了しましたが、一覧を更新できませんでした：{{error}}。概要を更新するか、この Agent を再スキャンしてください。",
-      "sharedDirectoryNotice": "{{count}} 個の Skill は .agents 共有ディレクトリにあります。引き継ぎ後はセンターライブラリに移動し、共有ディレクトリから削除されます。以後はセンターライブラリまたはスキルパックから配布を管理してください。",
+      "sharedDirectoryNotice": "{{count}} 個の Skill は .agents 共有ディレクトリにあります。引き継ぎ後はセンターライブラリに移動し、共有ディレクトリから削除されます。以後はセンターライブラリからどの Agent で有効にするかを管理してください。",
       "pathSettings": {
         "tab": "パスと設定",
         "title": "ローカルリソースと設定",
@@ -855,7 +856,7 @@
         "confirm": "共有ディレクトリから削除",
         "busy": "削除中...",
         "managedDescription": "~/.agents/skills から管理済み Skill {{count}} 個を削除します。共有ディレクトリを読み込むすべての Agent で利用できなくなります。",
-        "managedPreserved": "センターライブラリの Skill は保持され、後で再配布できます。",
+        "managedPreserved": "センターライブラリの Skill は保持され、後で再び Agent で有効にできます。",
         "unmanagedDescription": "~/.agents/skills から未管理 Skill {{count}} 個を完全に削除します。共有ディレクトリを読み込むすべての Agent に影響します。",
         "unmanagedPermanent": "Skill はセンターライブラリにコピーされず、Vibe Board から復元できません。保持する場合は取り込みを使用してください。"
       },
@@ -877,7 +878,7 @@
     },
     "blocker": {
       "unmanagedExists": "対象パスには未管理の Skill「{{skillId}}」がすでに存在します。この対象を上書きするかスキップするか選択してください。",
-      "managedCopyBeforeRedistribute": "管理対象のコピー「{{skillId}}」にローカル変更があります。再配布前に中心ライブラリと Agent コピーのどちらを優先するか選択してください。",
+      "managedCopyBeforeRedistribute": "管理対象のコピー「{{skillId}}」にローカル変更があります。再び Agent で有効にする前に、中心ライブラリと Agent コピーのどちらを優先するか選択してください。",
       "managedCopyBeforeConvert": "管理対象のコピー「{{skillId}}」にローカル変更があります。インストール方式の変更前に中心ライブラリと Agent コピーのどちらを優先するか選択してください。",
       "notInCenterLibrary": "Skill「{{skillId}}」は中心ライブラリにありません。",
       "unknownAgentDirectory": "Agent「{{agentId}}」の Skills ディレクトリを特定できません。"
@@ -970,7 +971,12 @@
     "fileEmpty": "This file is empty",
     "fileLarge": "Large file ({{size}}) — source view only",
     "frontmatter": "Frontmatter",
-    "frontmatterAdditional": "{{count}} additional fields"
+    "frontmatterAdditional": "{{count}} additional fields",
+    "sourceCategory": {
+      "custom": "カスタム",
+      "github": "GitHub",
+      "agent": "Agent から同期"
+    }
   },
   "update": {
     "availableTitle": "アップデートがあります",

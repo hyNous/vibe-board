@@ -304,6 +304,17 @@ bridge 测试 9/9（含「仅开关打开的 Agent 触发拉起」「全新配�
 
 **Verification**：检查命令全绿；父级用本机真实 `.skill-lock.json`（25 条）只读核对来源显示。
 
+**状态（2026-09-22）：PASS WITH RISKS，已合入。**
+父级独立验证：前端 40 文件 410 项全过（M4 为 407：删 6 条只覆盖被删的 Agent 概览 / Hooks / 配置子页，加 9 条），
+lint / build / fmt / `cargo check --all-targets` 通过；`cargo test --lib` 519 通过 / 23 失败，失败集合 = 已知名单子集；`release:check` ok。
+读 diff 核对：`skill_lock.rs` 只读、缺失或损坏返回空索引、来源不落库（删 lock 即还原）；程序检测纯文件系统、不起进程、缓存 60 秒；
+诊断标签页删除后问题以 `SkillIssuesPanel` 嵌在 Skill 库页；Hook 安装入口仍在 `IslandSection` 与首次向导（M6 再迁）。
+本机只读核对：lock 25 条中 23 条为 GitHub，其中 22 条在 `~/.agents/skills` 有同名目录。
+
+**风险记录**：①「五语言键一致」只在 Skill 管理命名空间内成立；仓库整体既有不一致（tr 缺 169 键、zh 多 38 个旧键），留给 M6 清理。
+②skills-v2 多数页面文案仍是硬编码中文（既有债务）。③store 的 `loadDiagnosisIssues` 已无调用者，未删。
+④Agent 管理页仍保留自定义 Agent 增删 / 卸载，去留属 M6。⑤无界面目视，待维护者确认「＋」折叠与来源筛选。
+
 ### M6 — 设置页重组
 
 **Scope**：按范围文件第 4 节重建导航；拆分 `IslandSection.tsx`；Hook 界面从设置移除，改为灵动岛上的健康指示；「派发框架」页先承载 Agent 检测（只读）。

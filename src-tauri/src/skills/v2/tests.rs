@@ -167,6 +167,105 @@ fn sanitize_id_normalizes_segments() {
     assert_eq!(fsutil::sanitize_id("  --weird--  "), "weird");
 }
 
+// ── External .skill-lock.json origin ─────────────────────────────
+
+fn write_skill_lock(home: &Path, content: &str) {
+    let dir = home.join(".agents");
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(dir.join(".skill-lock.json"), content).unwrap();
+}
+
+#[test]
+fn skill_lock_github_entry_labels_the_skill_as_github_without_persisting() {
+    let (_home, svc, _lock) = fresh_service("lock-github");
+    add_center_test_skill(&svc, "review-checklist", "review-checklist");
+    let local = svc.get_skill_detail("review-checklist").unwrap();
+    assert_eq!(local.summary.source_type, "local_folder");
+    assert!(!local
+        .summary
+        .source_uri
+        .as_deref()
+        .is_some_and(|uri| uri.starts_with("github:")));
+
+    write_skill_lock(
+        &svc.home,
+        r#"{
+          "version": 3,
+          "skills": {
+            "review-checklist": {
+              "source": "github/awesome-copilot",
+              "sourceType": "github",
+              "sourceUrl": "https://github.com/github/awesome-copilot.git",
+              "skillPath": "skills/review-checklist/SKILL.md",
+              "installedAt": "2026-07-13T08:48:00Z",
+              "updatedAt": "2026-07-13T08:49:59Z"
+            },
+            "other-skill": {
+              "source": "local",
+              "sourceType": "local",
+              "sourceUrl": "",
+              "skillPath": "D:/skills/other-skill/SKILL.md"
+            }
+          }
+        }"#,
+    );
+
+    let skills = svc.list_center_skills().unwrap();
+    let summary = skills
+        .iter()
+        .find(|skill| skill.id == "review-checklist")
+        .unwrap();
+    assert_eq!(summary.source_type, "github");
+    assert_eq!(
+        summary.source_uri.as_deref(),
+        Some("github:github/awesome-copilot/skills/review-checklist")
+    );
+
+    let detail = svc.get_skill_detail("review-checklist").unwrap();
+    assert_eq!(detail.summary.source_type, "github");
+    let source = detail.source.unwrap();
+    assert_eq!(source.source_type, "github");
+    assert_eq!(
+        source.source_uri.as_deref(),
+        Some("github:github/awesome-copilot/skills/review-checklist")
+    );
+    assert_eq!(source.installed_via, "skill-lock");
+    assert_eq!(source.created_at, "2026-07-13T08:48:00Z");
+    assert_eq!(source.updated_at, "2026-07-13T08:49:59Z");
+
+    // Overview collects the same labelled summary for the library counts.
+    let overview = svc.overview().unwrap();
+    assert!(overview
+        .skills
+        .iter()
+        .any(|skill| skill.id == "review-checklist" && skill.source_type == "github"));
+
+    // The external file is read-only: removing it reverts the label.
+    fs::remove_file(svc.home.join(".agents").join(".skill-lock.json")).unwrap();
+    let reverted = svc.get_skill_detail("review-checklist").unwrap();
+    assert_eq!(reverted.summary.source_type, "local_folder");
+}
+
+#[test]
+fn skill_lock_missing_or_malformed_never_breaks_the_library() {
+    let (_home, svc, _lock) = fresh_service("lock-broken");
+    add_center_test_skill(&svc, "plain-skill", "plain-skill");
+
+    let overview = svc.overview().unwrap();
+    assert_eq!(overview.skills.len(), 1);
+    assert_eq!(overview.skills[0].source_type, "local_folder");
+
+    write_skill_lock(&svc.home, "{ not json at all");
+    let overview = svc.overview().unwrap();
+    assert_eq!(overview.skills.len(), 1);
+    assert_eq!(overview.skills[0].source_type, "local_folder");
+    let detail = svc.get_skill_detail("plain-skill").unwrap();
+    assert_eq!(detail.summary.source_type, "local_folder");
+
+    write_skill_lock(&svc.home, r#"{"version": 3, "skills": []}"#);
+    assert_eq!(svc.overview().unwrap().skills.len(), 1);
+}
+
 // ── Add to center + source conflict ──────────────────────────────
 
 #[test]
