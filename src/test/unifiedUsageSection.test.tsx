@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi, beforeAll } from 'vitest'
 import unifiedUsageSource from '../components/settings/sections/UnifiedUsageSection.tsx?raw'
 import usageProvidersPanelSource from '../components/settings/sections/UsageProvidersPanel.tsx?raw'
 import type { UsageDashboard, UsageHistory, UsageHistoryScanStatus, UsageSnapshot } from '../services/tauriApi'
@@ -87,6 +87,16 @@ async function renderUsage() {
   const { UnifiedUsageSection } = await import('../components/settings/sections/UnifiedUsageSection')
   return render(<UnifiedUsageSection />)
 }
+
+// Tests import these components lazily so the module mocks above apply. The
+// first import transforms a large module graph; under a busy parallel run
+// that alone can exceed the 5 s per-test timeout, and a timed-out import then
+// renders into the next test. Warm the module cache once, outside any test.
+beforeAll(async () => {
+  await Promise.all([
+    import('../components/settings/sections/UnifiedUsageSection'),
+  ])
+}, 60_000)
 
 describe('UnifiedUsageSection rendering', () => {
   beforeEach(() => {

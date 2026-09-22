@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, vi, beforeAll } from 'vitest'
 import { render, screen, fireEvent, cleanup, waitFor, act, within } from '@testing-library/react'
 import '@testing-library/jest-dom/vitest'
 import { AgentIconBadge } from '../components/skills-v2/AgentIconBadge'
@@ -118,6 +118,23 @@ function makeSidebarSession(agentType: AgentType, overrides: Partial<SessionStat
     ...overrides,
   }
 }
+
+// Tests import these components lazily so the module mocks above apply. The
+// first import transforms a large module graph; under a busy parallel run
+// that alone can exceed the 5 s per-test timeout, and a timed-out import then
+// renders into the next test. Warm the module cache once, outside any test.
+beforeAll(async () => {
+  await Promise.all([
+    import('../components/settings/SettingsSidebar'),
+    import('../components/skills-v2/AgentManagementPage'),
+    import('../components/skills-v2/DistributeDialog'),
+    import('../components/skills-v2/InstallView'),
+    import('../components/skills-v2/SettingsPageV2'),
+    import('../components/skills-v2/SkillDetailSlider'),
+    import('../components/skills-v2/SkillLibraryPage'),
+    import('../components/skills-v2/SkillManagerShell'),
+  ])
+}, 60_000)
 
 describe('AgentIconBadge', () => {
   beforeEach(cleanup)

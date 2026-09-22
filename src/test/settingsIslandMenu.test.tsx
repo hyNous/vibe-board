@@ -343,7 +343,8 @@ describe('settings island menu', () => {
     const autoHideRow = screen.getByText('settings.autoHideNoSessions').closest('.setting-row')
     fireEvent.click(autoHideRow!.querySelector('[role="switch"]')!)
 
-    await waitFor(() => expect(screen.getByText('Custom visibility')).toBeInTheDocument())
+    // The whole settings app re-renders here; allow for a busy parallel test run.
+    await waitFor(() => expect(screen.getByText('Custom visibility')).toBeInTheDocument(), { timeout: 3_000 })
   })
 
   it('shows the primary display label instead of a stale raw display id', async () => {

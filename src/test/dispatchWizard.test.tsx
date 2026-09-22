@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, cleanup, within } from '@testing-library/react'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi, beforeAll } from 'vitest'
 import type {
   DispatchApplyResult,
   DispatchDetection,
@@ -124,6 +124,16 @@ async function renderSection() {
   const { DispatchSection } = await import('../components/settings/sections/DispatchSection')
   return render(<DispatchSection />)
 }
+
+// Tests import these components lazily so the module mocks above apply. The
+// first import transforms a large module graph; under a busy parallel run
+// that alone can exceed the 5 s per-test timeout, and a timed-out import then
+// renders into the next test. Warm the module cache once, outside any test.
+beforeAll(async () => {
+  await Promise.all([
+    import('../components/settings/sections/DispatchSection'),
+  ])
+}, 60_000)
 
 describe('dispatch setup wizard', () => {
   beforeEach(() => {

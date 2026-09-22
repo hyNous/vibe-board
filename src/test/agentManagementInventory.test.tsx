@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi, beforeAll } from 'vitest'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { AgentManagementPage } from '../components/skills-v2/AgentManagementPage'
 import { agentApi, type AgentProgramInfo } from '../services/agentApi'
@@ -87,6 +87,16 @@ const overview: SkillManagerOverview = {
   },
   agents: [],
 }
+
+// Tests import these components lazily so the module mocks above apply. The
+// first import transforms a large module graph; under a busy parallel run
+// that alone can exceed the 5 s per-test timeout, and a timed-out import then
+// renders into the next test. Warm the module cache once, outside any test.
+beforeAll(async () => {
+  await Promise.all([
+    import('../components/settings/SettingsSidebar'),
+  ])
+}, 60_000)
 
 describe('Agent management inventory', () => {
   beforeEach(() => {
