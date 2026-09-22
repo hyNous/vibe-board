@@ -313,122 +313,6 @@
         50% { opacity: 0.45; transform: scale(0.82); }
       }
 
-      /* ── Board diagram ── */
-      .board {
-        display: grid;
-        gap: 9px;
-      }
-
-      .board__counters {
-        display: flex;
-        gap: 7px;
-      }
-
-      .board__counter {
-        padding: 3px 9px;
-        border-radius: 999px;
-        color: var(--text-soft);
-        background: rgba(255, 255, 255, 0.07);
-        font-size: 11px;
-        font-weight: 700;
-        letter-spacing: 0.04em;
-      }
-
-      .board__counter--act {
-        color: #b7f5c8;
-        background: rgba(52, 199, 89, 0.18);
-      }
-
-      .board__counter--wait {
-        color: #ffd9a1;
-        background: rgba(245, 166, 35, 0.18);
-      }
-
-      .board__row {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        padding: 10px 12px;
-        border: 1px solid var(--line);
-        border-radius: 11px;
-        background: rgba(255, 255, 255, 0.04);
-        opacity: 0;
-        animation: row-in 6s ease-in-out infinite;
-      }
-
-      .board__row:nth-child(3) { animation-delay: 0.35s; }
-      .board__row:nth-child(4) { animation-delay: 0.7s; }
-
-      .board__status {
-        width: 9px;
-        height: 9px;
-        border-radius: 999px;
-        flex: 0 0 auto;
-      }
-
-      .board__status--run { background: var(--ok); animation: dot-pulse 1.6s ease-in-out infinite; }
-      .board__status--wait { background: var(--warn); animation: dot-pulse 1.6s ease-in-out infinite; }
-      .board__status--done { background: #7b869b; }
-
-      .board__name {
-        min-width: 92px;
-        font-weight: 700;
-        font-size: 13px;
-      }
-
-      .board__title {
-        flex: 1;
-        overflow: hidden;
-        color: var(--text-soft);
-        font-size: 12.5px;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-
-      .board__state {
-        color: var(--text-soft);
-        font-size: 12px;
-      }
-
-      .board__health {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        margin-top: 4px;
-        color: #ffd9a1;
-        font-size: 12px;
-        opacity: 0;
-        animation: health-blink 6s ease-in-out infinite;
-      }
-
-      .board__health-icon {
-        width: 14px;
-        height: 14px;
-        fill: none;
-        stroke: currentColor;
-        stroke-width: 1.8;
-        stroke-linecap: round;
-        stroke-linejoin: round;
-        animation: dot-pulse 1.8s ease-in-out infinite;
-      }
-
-      .board__health-icon circle {
-        fill: currentColor;
-        stroke: none;
-      }
-
-      @keyframes row-in {
-        0%, 12% { opacity: 0; transform: translateY(6px); }
-        25%, 88% { opacity: 1; transform: translateY(0); }
-        100% { opacity: 0; }
-      }
-
-      @keyframes health-blink {
-        0%, 45% { opacity: 0; }
-        60%, 88% { opacity: 1; }
-        100% { opacity: 0; }
-      }
-
       /* ── Click diagram ── */
       .click {
         position: relative;
@@ -512,81 +396,62 @@
         100% { opacity: 0; }
       }
 
-      /* ── Agent flow diagram ── */
-      .flow {
+      /* ── Task board diagram ── */
+      .board {
+        display: grid;
+        gap: 9px;
+      }
+
+      .board__row {
         display: flex;
         align-items: center;
-        flex-wrap: wrap;
-        gap: 12px;
-      }
-
-      .flow__chip {
-        padding: 9px 13px;
+        gap: 10px;
+        padding: 10px 12px;
         border: 1px solid var(--line);
         border-radius: 11px;
-        background: rgba(255, 255, 255, 0.05);
-        font-size: 12.5px;
+        background: rgba(255, 255, 255, 0.04);
+        opacity: 0;
+        animation: row-in 6s ease-in-out infinite;
       }
 
-      .flow__chip--on {
-        border-color: rgba(91, 140, 255, 0.5);
-        background: var(--accent-soft);
+      .board__row:nth-child(2) { animation-delay: 0.35s; }
+      .board__row:nth-child(3) { animation-delay: 0.7s; }
+
+      .board__status {
+        width: 9px;
+        height: 9px;
+        border-radius: 999px;
+        flex: 0 0 auto;
       }
 
-      .flow__line {
-        position: relative;
+      .board__status--run { background: var(--ok); animation: dot-pulse 1.6s ease-in-out infinite; }
+      .board__status--wait { background: var(--warn); animation: dot-pulse 1.6s ease-in-out infinite; }
+      .board__status--done { background: #7b869b; }
+
+      .board__name {
+        min-width: 92px;
+        font-weight: 700;
+        font-size: 13px;
+      }
+
+      .board__title {
         flex: 1;
-        min-width: 60px;
-        height: 2px;
-        background: linear-gradient(90deg, rgba(91, 140, 255, 0.15), rgba(91, 140, 255, 0.85));
-        animation: line-flow 2.4s ease-in-out infinite;
-      }
-
-      .flow__line::after {
-        position: absolute;
-        right: -1px;
-        top: -4px;
-        border-top: 5px solid transparent;
-        border-bottom: 5px solid transparent;
-        border-left: 8px solid var(--accent);
-        content: "";
-      }
-
-      @keyframes line-flow {
-        0%, 100% { opacity: 0.45; }
-        50% { opacity: 1; }
-      }
-
-      .toggle {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
+        overflow: hidden;
         color: var(--text-soft);
         font-size: 12.5px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
 
-      .toggle__track {
-        display: inline-block;
-        width: 34px;
-        height: 19px;
-        padding: 2px;
-        border-radius: 999px;
-        background: rgba(255, 255, 255, 0.16);
+      .board__state {
+        color: var(--text-soft);
+        font-size: 12px;
       }
 
-      .toggle__knob {
-        display: block;
-        width: 15px;
-        height: 15px;
-        border-radius: 999px;
-        background: #8d97a9;
-        animation: toggle-nudge 4s ease-in-out infinite;
-      }
-
-      @keyframes toggle-nudge {
-        0%, 70% { transform: translateX(0); }
-        80%, 90% { transform: translateX(4px); }
-        100% { transform: translateX(0); }
+      @keyframes row-in {
+        0%, 12% { opacity: 0; transform: translateY(6px); }
+        25%, 88% { opacity: 1; transform: translateY(0); }
+        100% { opacity: 0; }
       }
 
       /* ── Skills diagram ── */
@@ -638,6 +503,68 @@
       .apply-row__skill { font-weight: 700; }
       .apply-row__arrow { color: var(--accent); }
       .apply-row__agent { color: var(--text-soft); }
+
+      /* ── Handoff tree diagram ── */
+      .tree {
+        display: grid;
+        gap: 10px;
+      }
+
+      .tree__root {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: fit-content;
+        padding: 9px 13px;
+        border: 1px solid rgba(91, 140, 255, 0.5);
+        border-radius: 11px;
+        background: var(--accent-soft);
+        font-size: 12.5px;
+        font-weight: 700;
+      }
+
+      .tree__workers {
+        display: grid;
+        gap: 8px;
+        margin-left: 9px;
+        padding-left: 20px;
+        border-left: 1px dashed rgba(91, 140, 255, 0.5);
+      }
+
+      .tree__worker {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--text-soft);
+        font-size: 12.5px;
+      }
+
+      .tree__worker::before {
+        color: var(--accent);
+        content: "→";
+      }
+
+      .tree__worker b {
+        color: var(--text);
+        font-weight: 650;
+      }
+
+      .tree__disconnect {
+        padding: 2px 8px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        font-size: 11px;
+      }
+
+      .tree__add {
+        width: fit-content;
+        padding: 4px 10px;
+        border: 1px dashed var(--line);
+        border-radius: 999px;
+        color: #bcd0ff;
+        font-size: 12px;
+        animation: dot-pulse 2.4s ease-in-out infinite;
+      }
 
       /* ── Usage diagram ── */
       .usage {
@@ -734,7 +661,6 @@
 
         .screen__island-row,
         .board__row,
-        .board__health,
         .click__notice {
           opacity: 1;
         }
@@ -744,28 +670,38 @@
   <body>
     <div class="page">
       <header class="hero">
-        <span class="hero__mark" aria-hidden="true">AI</span>
+        <span class="hero__mark" aria-hidden="true">
+          <svg viewBox="0 0 44 44" width="26" height="26" fill="none">
+            <rect x="8" y="9" width="28" height="11" rx="5.5" fill="#fff" fill-opacity="0.92" />
+            <circle cx="15" cy="14.5" r="2" fill="#3f6dff" />
+            <rect x="11" y="25" width="22" height="6" rx="3" fill="#fff" fill-opacity="0.72" />
+            <rect x="11" y="34" width="15" height="5" rx="2.5" fill="#fff" fill-opacity="0.45" />
+          </svg>
+        </span>
         <p class="hero__eyebrow" data-zh="使用教程" data-en="GUIDE">GUIDE</p>
-        <h1 data-zh="看懂 Vibe Board" data-en="Understand Vibe Board">Understand Vibe Board</h1>
-        <p class="hero__lead" data-zh="Vibe Board 是一个只看不操作的桌面看板：它把本机 Agent 的任务状态、剩余额度和本地用量成本放到一个悬浮的灵动岛上。本教程按四个主题讲清它会做什么、不会做什么。" data-en="Vibe Board is a desktop board that watches without operating: it surfaces your local Agents' task state, remaining quota, and local usage cost in a floating island. This tutorial explains, in four themes, what it does and what it never does.">Vibe Board is a desktop board that watches without operating: it surfaces your local Agents' task state, remaining quota, and local usage cost in a floating island. This tutorial explains, in four themes, what it does and what it never does.</p>
+        <h1 data-zh="跟着设置，一个板块一个板块看" data-en="Follow the settings, block by block">Follow the settings, block by block</h1>
+        <p class="hero__lead" data-zh="Vibe Board 是一个只看不操作的桌面看板：它把各个 Agent 的任务状态、剩余额度和本地用量放在一个悬浮的灵动岛上。这份教程按设置里的板块顺序，一个一个讲清每个功能是什么、怎么用。" data-en="Vibe Board is a desktop board that watches without operating: it surfaces your Agents' task state, remaining quota, and local usage in a floating island. This tutorial walks through the settings in order, block by block, explaining what each feature is and how to use it.">Vibe Board is a desktop board that watches without operating: it surfaces your Agents' task state, remaining quota, and local usage in a floating island. This tutorial walks through the settings in order, block by block, explaining what each feature is and how to use it.</p>
         <span class="hero__offline" data-zh="随安装包离线分发 · 不加载任何网络资源" data-en="Ships offline with the app · loads no network resources">Ships offline with the app · loads no network resources</span>
         <nav aria-label="Tutorial sections">
           <ul class="nav">
-            <li><a href="#island" data-zh="① 岛怎么用" data-en="① Using the island">① Using the island</a></li>
-            <li><a href="#board" data-zh="② 看板在显示什么" data-en="② What the board shows">② What the board shows</a></li>
-            <li><a href="#click" data-zh="③ 点任务会发生什么" data-en="③ What a task click does">③ What a task click does</a></li>
-            <li><a href="#agents" data-zh="④ Agent 接入" data-en="④ Connecting Agents">④ Connecting Agents</a></li>
-            <li><a href="#skills" data-zh="Skill 管理" data-en="Skill management">Skill management</a></li>
-            <li><a href="#usage" data-zh="使用额度" data-en="Usage &amp; quota">Usage &amp; quota</a></li>
-            <li><a href="#dispatch" data-zh="派发框架" data-en="Dispatch framework">Dispatch framework</a></li>
+            <li><a href="#island-intro" data-zh="① 灵动岛怎么用" data-en="① Using the island">① Using the island</a></li>
+            <li><a href="#tasks" data-zh="② 任务看板" data-en="② Task board">② Task board</a></li>
+            <li><a href="#usage" data-zh="③ 使用额度" data-en="③ Usage">③ Usage</a></li>
+            <li><a href="#skills" data-zh="④ Skill" data-en="④ Skill">④ Skill</a></li>
+            <li><a href="#dispatch" data-zh="⑤ 派活关系" data-en="⑤ Handoff">⑤ Handoff</a></li>
+            <li><a href="#island" data-zh="⑥ 外观" data-en="⑥ Appearance">⑥ Appearance</a></li>
+            <li><a href="#shortcuts" data-zh="⑦ 快捷键" data-en="⑦ Shortcuts">⑦ Shortcuts</a></li>
+            <li><a href="#general" data-zh="⑧ 通用" data-en="⑧ General">⑧ General</a></li>
+            <li><a href="#tutorial" data-zh="⑨ 重看教程与向导" data-en="⑨ Tutorial &amp; Wizard">⑨ Tutorial &amp; Wizard</a></li>
+            <li><a href="#about" data-zh="⑩ 关于" data-en="⑩ About">⑩ About</a></li>
           </ul>
         </nav>
       </header>
 
       <main>
-        <section id="island">
-          <h2><span class="step-index" aria-hidden="true">1</span><span data-zh="岛怎么用" data-en="Using the island">Using the island</span></h2>
-          <p class="section-lead" data-zh="灵动岛默认停在屏幕顶部，也可以拖到左边缘或右边缘。它有两种主要形态：收起时是一颗小胶囊，悬停或点一下就展开成面板。" data-en="The island sits at the top of the screen by default and can also be dragged to the left or right edge. It has two main shapes: a small pill when collapsed, a panel when you hover or click it.">The island sits at the top of the screen by default and can also be dragged to the left or right edge. It has two main shapes: a small pill when collapsed, a panel when you hover or click it.</p>
+        <section id="island-intro">
+          <h2><span class="step-index" aria-hidden="true">1</span><span data-zh="灵动岛怎么用" data-en="Using the island">Using the island</span></h2>
+          <p class="section-lead" data-zh="灵动岛默认停在屏幕顶部，是 Vibe Board 里唯一需要你直接操作的地方。它收起时是一颗小胶囊，鼠标移上去或点一下就展开，最常用的操作都在这里。" data-en="The island sits at the top of the screen by default and is the one place you operate directly. Collapsed it is a small pill; hover or click it and it expands. The most common actions all live here.">The island sits at the top of the screen by default and is the one place you operate directly. Collapsed it is a small pill; hover or click it and it expands. The most common actions all live here.</p>
 
           <div class="diagram">
             <div class="screen">
@@ -780,122 +716,121 @@
                 </div>
               </div>
             </div>
-            <p class="diagram__caption" data-zh="收起 → 悬停展开 → 移开自动收起。示意动画，实际形态由外观设置决定。" data-en="Collapsed → hover to expand → move away to collapse. An illustration; the real shape follows your appearance settings.">Collapsed → hover to expand → move away to collapse. An illustration; the real shape follows your appearance settings.</p>
+            <p class="diagram__caption" data-zh="收起 → 悬停展开 → 移开自动收起。示意动画；实际形态由「外观」里的设置决定。" data-en="Collapsed → hover to expand → move away to collapse. An illustration; the real look follows your Appearance settings.">Collapsed → hover to expand → move away to collapse. An illustration; the real look follows your Appearance settings.</p>
           </div>
 
           <ul class="facts">
-            <li data-zh="展开与收起：鼠标移入胶囊展开，移开后自动收起；按 Esc 逐级收回（展开 → 悬停 → 收起），在收起状态再按 Esc 会让它在 30 秒内安静下来，不再被普通通知唤醒。" data-en="Expand and collapse: hovering the pill expands it, moving away collapses it, and Esc steps back one level (expanded → hover → collapsed). Pressing Esc again while collapsed keeps it quiet for 30 seconds, so ordinary notifications no longer wake it.">Expand and collapse: hovering the pill expands it, moving away collapses it, and Esc steps back one level (expanded → hover → collapsed). Pressing Esc again while collapsed keeps it quiet for 30 seconds, so ordinary notifications no longer wake it.</li>
-            <li data-zh="全局快捷键：默认 Ctrl/Cmd+Shift+I 切换面板，Ctrl/Cmd+, 打开设置；都能在「设置 → 快捷键」里改成自己的组合，也可以给展开、收起、上一个/下一个会话单独绑定。" data-en="Global shortcuts: Ctrl/Cmd+Shift+I toggles the panel and Ctrl/Cmd+, opens Settings by default. Both can be rebound in Settings → Shortcuts, where expand, collapse, and previous/next session can get their own keys too.">Global shortcuts: Ctrl/Cmd+Shift+I toggles the panel and Ctrl/Cmd+, opens Settings by default. Both can be rebound in Settings → Shortcuts, where expand, collapse, and previous/next session can get their own keys too.</li>
-            <li data-zh="挂靠位置：默认居中停在屏幕顶部；「允许水平拖动」默认开启，把胶囊拖到屏幕左缘或右缘就会停靠成竖向胶囊。位置、水平偏移、垂直偏移都能在「设置 → 外观」里调整。" data-en="Docking: it sits centered at the top of the screen by default; horizontal dragging is on by default, so dragging the pill to the left or right edge docks it there as a vertical pill. Position, horizontal offset, and vertical offset are all adjustable in Settings → Appearance.">Docking: it sits centered at the top of the screen by default; horizontal dragging is on by default, so dragging the pill to the left or right edge docks it there as a vertical pill. Position, horizontal offset, and vertical offset are all adjustable in Settings → Appearance.</li>
-            <li data-zh="多显示器：默认跟随鼠标所在的显示器；也可以在「设置 → 外观」里固定到某一块屏幕。" data-en="Multiple monitors: it follows the monitor under your cursor by default; Settings → Appearance can pin it to one screen instead.">Multiple monitors: it follows the monitor under your cursor by default; Settings → Appearance can pin it to one screen instead.</li>
+            <li data-zh="展开与收起：鼠标移入胶囊就展开，移开自动收起；按 Esc 逐级收回（展开 → 悬停 → 收起），在收起状态再按一次 Esc，它会安静 30 秒，不被普通通知唤醒。" data-en="Expand and collapse: hover the pill to expand, move away to collapse. Esc steps back one level (expanded → hover → collapsed). Press Esc once more while collapsed and it stays quiet for 30 seconds, ignoring ordinary notifications.">Expand and collapse: hover the pill to expand, move away to collapse. Esc steps back one level (expanded → hover → collapsed). Press Esc once more while collapsed and it stays quiet for 30 seconds, ignoring ordinary notifications.</li>
+            <li data-zh="点任务：点一条任务，会把承载这个会话的窗口调到前台；纯命令行的会话没有可唤回的窗口，会提示你到它的终端里查看进度。" data-en="Clicking a task: it brings the window hosting that session to the front. A command-line-only session has no window, so the island tells you to check its terminal.">Clicking a task: it brings the window hosting that session to the front. A command-line-only session has no window, so the island tells you to check its terminal.</li>
+            <li data-zh="常用快捷键：Ctrl/Cmd+Shift+I 显示或隐藏灵动岛，Ctrl/Cmd+, 打开设置，Ctrl/Cmd+J 跳到当前任务的终端窗口。" data-en="Common shortcuts: Ctrl/Cmd+Shift+I shows or hides the island, Ctrl/Cmd+, opens Settings, and Ctrl/Cmd+J jumps to the active task's terminal window.">Common shortcuts: Ctrl/Cmd+Shift+I shows or hides the island, Ctrl/Cmd+, opens Settings, and Ctrl/Cmd+J jumps to the active task's terminal window.</li>
+            <li data-zh="通知检查：右上角平时不显示；只有事件通知检查发现问题时才会出现警示图标，点开可以看到每一项结果，并用「重新连接」让 Agent 重新把状态送到看板。" data-en="Notification check: normally nothing shows in the top-right corner. Only when the event-notification check finds a problem does a warning icon appear; open it to see each result and use “Reconnect” so Agents report status to the board again.">Notification check: normally nothing shows in the top-right corner. Only when the event-notification check finds a problem does a warning icon appear; open it to see each result and use “Reconnect” so Agents report status to the board again.</li>
+            <li data-zh="停靠位置：默认居中停在屏幕顶部；「允许移动灵动岛」默认开启，把胶囊拖到屏幕左缘或右缘会停靠成竖向胶囊；多显示器默认跟随鼠标所在的屏幕。这些都在「外观」里调整。" data-en="Docking: it sits centered at the top by default. “Allow moving the island” is on by default; pulling the pill to the left or right edge docks it there as a vertical pill. With multiple monitors it follows the screen under your cursor. All of this lives in Appearance.">Docking: it sits centered at the top by default. “Allow moving the island” is on by default; pulling the pill to the left or right edge docks it there as a vertical pill. With multiple monitors it follows the screen under your cursor. All of this lives in Appearance.</li>
           </ul>
-        </section>
-
-        <section id="board">
-          <h2><span class="step-index" aria-hidden="true">2</span><span data-zh="看板在显示什么" data-en="What the board shows">What the board shows</span></h2>
-          <p class="section-lead" data-zh="展开后的面板列出当前会话，按优先级从高到低排序：出错和等待输入的会话排在最上面，然后是工作中的会话，最后是任务完成或已中断的会话。" data-en="The expanded panel lists current sessions, sorted by priority: errors and waiting sessions first, then working ones, then completed or interrupted sessions.">The expanded panel lists current sessions, sorted by priority: errors and waiting sessions first, then working ones, then completed or interrupted sessions.</p>
-
-          <div class="diagram">
-            <div class="board">
-              <div class="board__counters">
-                <span class="board__counter">ALL 3</span>
-                <span class="board__counter board__counter--act">ACT 1</span>
-                <span class="board__counter board__counter--wait">WAIT 1</span>
-              </div>
-              <div class="board__row">
-                <span class="board__status board__status--wait" aria-hidden="true"></span>
-                <span class="board__name">Claude Code</span>
-                <span class="board__title" data-zh="重构设置页导航" data-en="Rebuild the settings navigation">Rebuild the settings navigation</span>
-                <span class="board__state" data-zh="等待输入..." data-en="Waiting for input...">Waiting for input...</span>
-              </div>
-              <div class="board__row">
-                <span class="board__status board__status--run" aria-hidden="true"></span>
-                <span class="board__name">Codex</span>
-                <span class="board__title" data-zh="修复登录流程" data-en="Fix the login flow">Fix the login flow</span>
-                <span class="board__state" data-zh="工作中..." data-en="Working...">Working...</span>
-              </div>
-              <div class="board__row">
-                <span class="board__status board__status--done" aria-hidden="true"></span>
-                <span class="board__name">Gemini CLI</span>
-                <span class="board__title" data-zh="补充单元测试" data-en="Add unit tests">Add unit tests</span>
-                <span class="board__state" data-zh="任务完成" data-en="Task complete">Task complete</span>
-              </div>
-              <div class="board__health">
-                <svg class="board__health-icon" viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M12 4 2.5 20h19L12 4Z" />
-                  <path d="M12 10v4" />
-                  <circle cx="12" cy="17" r="1" />
-                </svg>
-                <span data-zh="2 项 Hook 自检未通过" data-en="2 hook self-checks failing">2 hook self-checks failing</span>
-              </div>
-            </div>
-            <p class="diagram__caption" data-zh="每张任务卡：状态点、Agent 名称、会话标题、状态文字。示意动画。" data-en="Each task card: status dot, Agent name, session title, status text. An illustration.">Each task card: status dot, Agent name, session title, status text. An illustration.</p>
-          </div>
-
-          <ul class="facts">
-            <li data-zh="会话状态：工作中、等待输入、已阻塞、额度受限、发生错误、任务完成、已中断。看板只反映 Agent 自己报告的状态，不会替它判断。" data-en="Session states: working, waiting for input, blocked, rate limited, error, task complete, interrupted. The board only mirrors what the Agent reports; it never judges on its own.">Session states: working, waiting for input, blocked, rate limited, error, task complete, interrupted. The board only mirrors what the Agent reports; it never judges on its own.</li>
-            <li data-zh="顶部计数：ALL / ACT / WAIT 分别是会话总数、执行中、等待输入的数量；打开额度显示时，这一行会换成剩余额度条。" data-en="Top counters: ALL / ACT / WAIT count total, running, and waiting sessions. When quota display is on, this row shows the remaining-quota bar instead.">Top counters: ALL / ACT / WAIT count total, running, and waiting sessions. When quota display is on, this row shows the remaining-quota bar instead.</li>
-            <li data-zh="Hook 健康指示：只在自检发现问题时才出现在右上角（三角图标 + 未通过数量），全部通过时不显示。点开可以看到每一项自检结果，并用「一键修复」重新安装 Hook。" data-en="Hook health indicator: it appears in the top-right only when the self-check finds a problem (triangle icon plus the failing count), and stays hidden when everything passes. Open it to see each check result and reinstall hooks with one click.">Hook health indicator: it appears in the top-right only when the self-check finds a problem (triangle icon plus the failing count), and stays hidden when everything passes. Open it to see each check result and reinstall hooks with one click.</li>
-            <li data-zh="底部是品牌和标语；检测到新版本时，面板里会出现更新提示。" data-en="The bottom carries the brand and slogan; when a new version is detected, an update notice appears in the panel.">The bottom carries the brand and slogan; when a new version is detected, an update notice appears in the panel.</li>
-          </ul>
-        </section>
-
-        <section id="click">
-          <h2><span class="step-index" aria-hidden="true">3</span><span data-zh="点任务会发生什么" data-en="What a task click does">What a task click does</span></h2>
-          <p class="section-lead" data-zh="点任务卡只有一个作用：把你带回这个会话真正所在的地方。看板不会替你回复、批准或执行任何操作。" data-en="Clicking a task card does exactly one thing: it takes you back to where that session actually lives. The board never replies, approves, or executes anything for you.">Clicking a task card does exactly one thing: it takes you back to where that session actually lives. The board never replies, approves, or executes anything for you.</p>
 
           <div class="diagram">
             <div class="click">
               <div class="click__card">
                 <b>Codex</b><br />
-                <span data-zh="修复登录流程 · 工作中..." data-en="Fix the login flow · Working...">Fix the login flow · Working...</span>
+                <span data-zh="修复登录流程 · 正在执行" data-en="Fix the login flow · Working">Fix the login flow · Working</span>
               </div>
               <span class="click__cursor" aria-hidden="true">➤</span>
               <span class="click__arrow" aria-hidden="true">→</span>
               <div class="click__window" aria-hidden="true">
                 <div class="click__window-bar"></div>
               </div>
-              <div class="click__notice" data-zh="请手动打开 CLI 查看执行进度" data-en="Open the CLI manually to view progress">Open the CLI manually to view progress</div>
+              <div class="click__notice" data-zh="这个任务没有可唤回的窗口，请到它的终端里查看进度。" data-en="This task has no window to bring forward - check its terminal for progress.">This task has no window to bring forward - check its terminal for progress.</div>
             </div>
-            <p class="diagram__caption" data-zh="桌面版 Agent 会被唤回前台；纯命令行会话没有可唤起的窗口，岛上只给出提示。" data-en="Desktop Agents are brought back to the front; CLI-only sessions have no window to raise, so the island just shows a hint.">Desktop Agents are brought back to the front; CLI-only sessions have no window to raise, so the island just shows a hint.</p>
+            <p class="diagram__caption" data-zh="点任务：桌面版 Agent 的窗口会被调到前台；纯命令行会话没有窗口可唤起，岛上会给出提示。" data-en="Clicking a task: desktop Agents come to the front; command-line-only sessions have no window, so the island points you to the terminal.">Clicking a task: desktop Agents come to the front; command-line-only sessions have no window, so the island points you to the terminal.</p>
           </div>
 
-          <ul class="facts">
-            <li data-zh="桌面版 Agent（例如 Codex 桌面版，或带有桌面窗口的会话）：点击任务会把承载这个会话的 App 窗口唤到前台。" data-en="Desktop Agents (for example Codex Desktop, or a session with a desktop window): clicking the task brings the app window hosting that session to the front.">Desktop Agents (for example Codex Desktop, or a session with a desktop window): clicking the task brings the app window hosting that session to the front.</li>
-            <li data-zh="纯命令行会话：没有可唤起的窗口，看板会提示「请手动打开 CLI 查看执行进度」。" data-en="CLI-only sessions: there is no window to raise, so the board says “Open the CLI manually to view progress”.">CLI-only sessions: there is no window to raise, so the board says “Open the CLI manually to view progress”.</li>
-            <li data-zh="在灵动岛上按 Ctrl/Cmd+J 可以直接跳到当前活动会话的终端窗口。" data-en="Pressing Ctrl/Cmd+J while the island is focused jumps straight to the active session's terminal window.">Pressing Ctrl/Cmd+J while the island is focused jumps straight to the active session's terminal window.</li>
-            <li data-zh="看板只观察：没有批准、回答、与 Agent 对话的入口。" data-en="The board only watches: there is no way to approve, answer, or chat with an Agent from it.">The board only watches: there is no way to approve, answer, or chat with an Agent from it.</li>
-          </ul>
+          <div class="callout" data-zh="想马上试一下：把鼠标移到屏幕顶部的胶囊上，就能看到看板的样子。" data-en="Try it right now: move the mouse over the pill at the top of the screen and the board appears.">Try it right now: move the mouse over the pill at the top of the screen and the board appears.</div>
         </section>
 
-        <section id="agents">
-          <h2><span class="step-index" aria-hidden="true">4</span><span data-zh="Agent 接入" data-en="Connecting Agents">Connecting Agents</span></h2>
-          <p class="section-lead" data-zh="第一次打开时会出现设置向导：它检测本机已安装的 Agent，让你选择要接入哪些，然后为它们安装本地 Hook。" data-en="The setup wizard appears the first time you open the app: it detects the Agents installed on this machine, lets you pick which ones to connect, then installs local hooks for them.">The setup wizard appears the first time you open the app: it detects the Agents installed on this machine, lets you pick which ones to connect, then installs local hooks for them.</p>
+        <section id="tasks" data-settings-section="tasks">
+          <h2><span class="step-index" aria-hidden="true">2</span><span data-zh="任务看板" data-en="Task board">Task board</span></h2>
+          <p class="section-lead" data-zh="「任务看板」在设置里，按 Agent 列出正在进行的任务。它只反映 Agent 自己报告的状态，不会替它做判断。" data-en="The Task board in Settings lists the tasks that are running, per Agent. It only mirrors what each Agent reports; it never judges on its own.">The Task board in Settings lists the tasks that are running, per Agent. It only mirrors what each Agent reports; it never judges on its own.</p>
 
           <div class="diagram">
-            <div class="flow">
-              <span class="flow__chip flow__chip--on">Claude Code</span>
-              <span class="flow__chip flow__chip--on">Codex</span>
-              <span class="flow__chip">Gemini CLI</span>
-              <span class="flow__line" aria-hidden="true"></span>
-              <span class="flow__chip flow__chip--on" data-zh="灵动岛" data-en="Island">Island</span>
+            <div class="board">
+              <div class="board__row">
+                <span class="board__status board__status--run" aria-hidden="true"></span>
+                <span class="board__name">Codex</span>
+                <span class="board__title" data-zh="修复登录流程" data-en="Fix the login flow">Fix the login flow</span>
+                <span class="board__state" data-zh="正在执行" data-en="Working">Working</span>
+              </div>
+              <div class="board__row">
+                <span class="board__status board__status--wait" aria-hidden="true"></span>
+                <span class="board__name">Claude Code</span>
+                <span class="board__title" data-zh="重构设置页导航" data-en="Rebuild the settings navigation">Rebuild the settings navigation</span>
+                <span class="board__state" data-zh="等待你输入" data-en="Waiting for you">Waiting for you</span>
+              </div>
+              <div class="board__row">
+                <span class="board__status board__status--done" aria-hidden="true"></span>
+                <span class="board__name">Gemini CLI</span>
+                <span class="board__title" data-zh="补充单元测试" data-en="Add unit tests">Add unit tests</span>
+                <span class="board__state" data-zh="整理上下文" data-en="Compacting context">Compacting context</span>
+              </div>
             </div>
-            <p class="diagram__caption" data-zh="Hook 只把事件转发到看板；看板不回话，Agent 也不会等它。" data-en="Hooks only forward events to the board; the board never replies, and the Agent never waits for it.">Hooks only forward events to the board; the board never replies, and the Agent never waits for it.</p>
+            <p class="diagram__caption" data-zh="每行是一条正在进行的任务：状态点、Agent 名称、任务标题、当前状态。示意动画。" data-en="Each row is a running task: status dot, Agent name, task title, current state. An illustration.">Each row is a running task: status dot, Agent name, task title, current state. An illustration.</p>
           </div>
 
           <ul class="facts">
-            <li data-zh="只有检测到可执行 CLI 的 Agent 才能接入；只找到配置目录的会提示先安装 CLI。" data-en="Only Agents with a runnable CLI can be connected; ones with just a config directory are shown with a prompt to install the CLI first.">Only Agents with a runnable CLI can be connected; ones with just a config directory are shown with a prompt to install the CLI first.</li>
-            <li data-zh="每个 Agent 旁边有「会话开始时拉起看板」开关，默认关闭。打开后，该 Agent 开始会话时会尝试唤起看板；桌面版 Agent 可能不触发「会话开始」事件，开关可能不生效。" data-en="Each Agent has a “Start Vibe Board on session start” switch that is off by default. When on, the board tries to come up as that Agent starts a session; desktop Agents may not emit session-start events, so the switch may have no effect for them.">Each Agent has a “Start Vibe Board on session start” switch that is off by default. When on, the board tries to come up as that Agent starts a session; desktop Agents may not emit session-start events, so the switch may have no effect for them.</li>
-            <li data-zh="向导只修改你确认的 Agent 配置：不上传凭据、提示词或项目文件，也不安装或升级 Agent 本身。" data-en="The wizard only changes the Agent configurations you confirm: it uploads no credentials, prompts, or project files, and it neither installs nor upgrades Agents.">The wizard only changes the Agent configurations you confirm: it uploads no credentials, prompts, or project files, and it neither installs nor upgrades Agents.</li>
-            <li data-zh="之后想重来：在「设置 → 系统 → 重看教程与向导」重新打开向导；Hook 出问题时用灵动岛上的健康指示一键重装。" data-en="To redo it later: reopen the wizard from Settings → System → Tutorial &amp; Wizard, and reinstall hooks with one click from the island's health indicator when something fails.">To redo it later: reopen the wizard from Settings → System → Tutorial &amp; Wizard, and reinstall hooks with one click from the island's health indicator when something fails.</li>
+            <li data-zh="每行是什么：Agent 名称、任务标题、当前状态和已经跑了多久；会话标识、已用 token 和子任务数收在「详情」里。" data-en="Each row shows the Agent name, task title, current state, and how long it has been running. Session ID, tokens used, and subtask count sit behind Details.">Each row shows the Agent name, task title, current state, and how long it has been running. Session ID, tokens used, and subtask count sit behind Details.</li>
+            <li data-zh="状态有三种：正在执行、等待你输入、整理上下文；一个会话里的子任务不会重复计数。" data-en="There are three states: working, waiting for you, and compacting context. Subtasks inside a session are not counted twice.">There are three states: working, waiting for you, and compacting context. Subtasks inside a session are not counted twice.</li>
+            <li data-zh="怎么看：右上角「刷新」立即重新读取；现在没有任务时会显示「现在没有正在进行的任务」，Agent 一有动静这里就会出现。" data-en="How to use it: Refresh in the top-right reads again immediately. When nothing is running it says nothing is running, and a row appears as soon as an Agent starts working.">How to use it: Refresh in the top-right reads again immediately. When nothing is running it says nothing is running, and a row appears as soon as an Agent starts working.</li>
+            <li data-zh="想看完整列表：灵动岛上的任务卡和这里是同一份状态；在灵动岛上点任务就能把窗口调到前台。" data-en="For the full picture: the task cards on the island show the same state; click a task there to bring its window to the front.">For the full picture: the task cards on the island show the same state; click a task there to bring its window to the front.</li>
           </ul>
-
-          <div class="callout" data-zh="还没装 Agent？先安装对应 CLI，完全退出并重新打开 Vibe Board，再回到向导里重新检测。" data-en="No Agent installed yet? Install the CLI, fully quit and reopen Vibe Board, then run detection again in the wizard.">No Agent installed yet? Install the CLI, fully quit and reopen Vibe Board, then run detection again in the wizard.</div>
         </section>
 
-        <section id="skills">
-          <h2><span class="step-index" aria-hidden="true">5</span><span data-zh="Skill 管理" data-en="Skill management">Skill management</span></h2>
-          <p class="section-lead" data-zh="「管理 → Skill」显示用户级 Skill，以及每个 Skill「生效于」哪些 Agent。中心库里的 Skill 默认不对任何 Agent 生效，要手动安装到 Agent 才会生效。" data-en="Manage → Skill shows user-level Skills and which Agents each one applies to. A Skill in the center library applies to no Agent by default; it takes effect only after you install it into an Agent.">Manage → Skill shows user-level Skills and which Agents each one applies to. A Skill in the center library applies to no Agent by default; it takes effect only after you install it into an Agent.</p>
+        <section id="usage" data-settings-section="usage">
+          <h2><span class="step-index" aria-hidden="true">3</span><span data-zh="使用额度" data-en="Usage">Usage</span></h2>
+          <p class="section-lead" data-zh="「使用额度」看看每个工具还能用多少、最近用掉了多少。这里只做统计，不改动任何东西。" data-en="Usage shows how much each tool has left and how much it used recently. It only counts; it changes nothing.">Usage shows how much each tool has left and how much it used recently. It only counts; it changes nothing.</p>
+
+          <div class="diagram">
+            <div class="usage">
+              <div class="usage__head">
+                <span class="usage__badge usage__badge--now" data-zh="现在" data-en="Now">Now</span>
+                <span class="usage__badge" data-zh="剩余额度" data-en="Remaining">Remaining</span>
+                <span class="usage__badge" data-zh="恢复时间" data-en="Resets">Resets</span>
+                <span class="usage__badge" data-zh="更新时间" data-en="Updated">Updated</span>
+              </div>
+              <div class="usage__table">
+                <span class="is-head" data-zh="工具" data-en="Tool">Tool</span>
+                <span class="is-head" data-zh="今天 / 本周 / 本月" data-en="Today / week / month">Today / week / month</span>
+                <span class="is-head" data-zh="Token" data-en="Tokens">Tokens</span>
+                <span class="is-head" data-zh="估算成本" data-en="Estimated cost">Estimated cost</span>
+                <span>Codex</span>
+                <span data-zh="今天" data-en="Today">Today</span>
+                <span>128.4k</span>
+                <span data-zh="估算 $1.92" data-en="Estimated $1.92">Estimated $1.92</span>
+                <span>Claude Code</span>
+                <span data-zh="本周" data-en="This week">This week</span>
+                <span>42.0k</span>
+                <span class="unknown-chip" data-zh="—（没有公开价格，只统计 token）" data-en="— (no public price, tokens only)">— (no public price, tokens only)</span>
+              </div>
+              <div class="usage__bars" aria-hidden="true">
+                <div class="usage__bar" style="height: 78%"></div>
+                <div class="usage__bar" style="height: 46%"></div>
+                <div class="usage__bar" style="height: 92%"></div>
+              </div>
+            </div>
+            <p class="diagram__caption" data-zh="数值为示意；拿不到的额度、token 或价格一律显示「未知」，而不是 0。" data-en="Numbers are illustrative; quota, tokens, or prices that cannot be read show Unknown instead of 0.">Numbers are illustrative; quota, tokens, or prices that cannot be read show Unknown instead of 0.</p>
+          </div>
+
+          <ul class="facts">
+            <li data-zh="「现在还能用多少」：每个工具的剩余额度、恢复时间、更新时间和状态；拿不到的值显示「未知」。" data-en="“How much is left”: remaining quota, reset time, last update, and state for each tool. Unreadable values show Unknown.">“How much is left”: remaining quota, reset time, last update, and state for each tool. Unreadable values show Unknown.</li>
+            <li data-zh="「用量与花费」：按今天 / 本周 / 本月统计用掉的 token、输入输出和请求数，还能按模型展开；打开这一页时会在后台统计本地会话记录。" data-en="“Usage &amp; cost”: tokens used today, this week, and this month, with input, output, and request counts, expandable per model. Opening the page scans local session logs in the background.">“Usage &amp; cost”: tokens used today, this week, and this month, with input, output, and request counts, expandable per model. Opening the page scans local session logs in the background.</li>
+            <li data-zh="金额是估算：按本地会话记录和内置价格表折算，仅供参考；没有公开价格的模型只统计 token，不显示金额。" data-en="Amounts are estimates: they come from local session records and a built-in price table, for reference only. Models without a public price show token usage only, with no amount.">Amounts are estimates: they come from local session records and a built-in price table, for reference only. Models without a public price show token usage only, with no amount.</li>
+            <li data-zh="联网查询默认关闭：每个工具都要你逐个允许，点「允许查询」后才会开启；开启前会说明向哪个地址发出请求、或运行哪个本地程序、用哪份登录信息（只看文件位置，不读内容），随时可以关掉。" data-en="Online checks are off by default: allow them one tool at a time with “Allow query”. Before enabling, Vibe Board explains which address it will call, or which local program it runs, and which login information it uses (file location only, never the value). You can turn it off at any time.">Online checks are off by default: allow them one tool at a time with “Allow query”. Before enabling, Vibe Board explains which address it will call, or which local program it runs, and which login information it uses (file location only, never the value). You can turn it off at any time.</li>
+            <li data-zh="「在灵动岛显示额度」只控制灵动岛顶部要不要显示剩余额度，和联网查询是两件事；本地会话记录不需要授权，照常统计。" data-en="“Show quota on the island” only controls the quota bar at the top of the island; it is separate from online checks. Local session records need no authorization and keep being counted.">“Show quota on the island” only controls the quota bar at the top of the island; it is separate from online checks. Local session records need no authorization and keep being counted.</li>
+          </ul>
+
+          <div class="callout callout--warn" data-zh="拿不到的数据保持「未知」，Vibe Board 不会用 0 或猜测的数字填补。" data-en="Anything unreadable stays Unknown; Vibe Board never fills the gap with 0 or a guess.">Anything unreadable stays Unknown; Vibe Board never fills the gap with 0 or a guess.</div>
+        </section>
+
+        <section id="skills" data-settings-section="skills">
+          <h2><span class="step-index" aria-hidden="true">4</span><span data-zh="Skill" data-en="Skill">Skill</span></h2>
+          <p class="section-lead" data-zh="「Skill」存放你收集的 Skill：看看每个 Skill 正在被哪些 Agent 使用，也可以让它生效、更新或删除。" data-en="Skill holds the Skills you collect: see which Agents are using each one, and turn it on, update it, or delete it.">Skill holds the Skills you collect: see which Agents are using each one, and turn it on, update it, or delete it.</p>
 
           <div class="diagram">
             <div class="sources">
@@ -915,84 +850,104 @@
                 <span class="apply-row__agent">Codex</span>
               </div>
             </div>
-            <p class="diagram__caption" data-zh="来源分三类；「生效于」是真实的安装关系，不是专属绑定。" data-en="Three source categories; “applies to” is a real install relationship, not an exclusive binding.">Three source categories; “applies to” is a real install relationship, not an exclusive binding.</p>
+            <p class="diagram__caption" data-zh="来源分三类；「生效于」是真实的安装关系，不是专属绑定。" data-en="Three source categories; “active in” reflects real installs, not an exclusive binding.">Three source categories; “active in” reflects real installs, not an exclusive binding.</p>
           </div>
 
           <ul class="facts">
-            <li data-zh="按来源分类：自定义（本地文件夹、压缩包、手动加入中心库）、GitHub（记录在来源锁文件里的远端仓库）、从 Agent 同步（从某个 Agent 的 Skill 目录接管）。" data-en="Grouped by source: Custom (local folders, archives, manual center imports), GitHub (remote repositories recorded in the source lock file), and Synced from Agent (adopted from an Agent's Skill directory).">Grouped by source: Custom (local folders, archives, manual center imports), GitHub (remote repositories recorded in the source lock file), and Synced from Agent (adopted from an Agent's Skill directory).</li>
-            <li data-zh="GitHub 来源可以检查更新：先展示远端与中心库的差异预览，确认后才覆盖中心库；本地来源不支持远端更新检查。" data-en="GitHub sources can check for updates: the difference between remote and center library is previewed first, and only a confirmation overwrites the center copy. Local sources have no remote update check.">GitHub sources can check for updates: the difference between remote and center library is previewed first, and only a confirmation overwrites the center copy. Local sources have no remote update check.</li>
-            <li data-zh="只统计用户级 Skill，不扫描项目里的 .skills 目录；坏链接等问题会以提示形式出现在 Skill 库页面上。" data-en="Only user-level Skills are counted; project-level .skills directories are not scanned. Problems such as broken links show up as notices on the Skill library page.">Only user-level Skills are counted; project-level .skills directories are not scanned. Problems such as broken links show up as notices on the Skill library page.</li>
+            <li data-zh="Skill 是什么：一段写给 Agent 的说明；让某个 Agent 用上之后，它遇到相关任务就会照着做。" data-en="What a Skill is: a set of instructions for an Agent. Once an Agent has it, the Agent follows it for related tasks.">What a Skill is: a set of instructions for an Agent. Once an Agent has it, the Agent follows it for related tasks.</li>
+            <li data-zh="来源分三类：自定义（从文件夹、压缩包导入）、GitHub（记录在来源文件里的远端仓库，可以检查更新）、从 Agent 同步（从某个 Agent 的目录收进 Skill 库）。" data-en="Three sources: Custom (imported from a folder or archive), GitHub (a remote repository recorded in the source file, so updates can be checked), and Synced from Agent (adopted from an Agent's directory).">Three sources: Custom (imported from a folder or archive), GitHub (a remote repository recorded in the source file, so updates can be checked), and Synced from Agent (adopted from an Agent's directory).</li>
+            <li data-zh="怎么让 Agent 用上：中心库里的 Skill 默认不对任何 Agent 生效；选中 Skill 再选要让哪些 Agent 用上即可。卡片上的「生效于」是真实的安装关系。" data-en="How to put a Skill to work: center-library Skills are inactive by default. Select one and choose which Agents should use it. “Active in” on a card is a real install record.">How to put a Skill to work: center-library Skills are inactive by default. Select one and choose which Agents should use it. “Active in” on a card is a real install record.</li>
+            <li data-zh="出问题怎么办：坏链接等问题会以提示形式出现在 Skill 库页面上，照着提示整理即可。" data-en="When something is off: problems such as broken links show up as notices on the Skill library page; follow them to tidy things up.">When something is off: problems such as broken links show up as notices on the Skill library page; follow them to tidy things up.</li>
           </ul>
         </section>
 
-        <section id="usage">
-          <h2><span class="step-index" aria-hidden="true">6</span><span data-zh="使用额度" data-en="Usage &amp; quota">Usage &amp; quota</span></h2>
-          <p class="section-lead" data-zh="「运行 → 使用额度」分两块：「现在」看剩余额度，「用量与成本」看本地日志结算出的 token 与估算成本。" data-en="Run → Usage has two blocks: “Now” for remaining quota, and “Usage &amp; Cost” for tokens and estimated cost settled from local logs.">Run → Usage has two blocks: “Now” for remaining quota, and “Usage &amp; Cost” for tokens and estimated cost settled from local logs.</p>
+        <section id="dispatch" data-settings-section="dispatch">
+          <h2><span class="step-index" aria-hidden="true">5</span><span data-zh="派活关系" data-en="Handoff">Handoff</span></h2>
+          <p class="section-lead" data-zh="「派活关系」画出一棵树：谁可以把任务派给谁。装好之后派活由主 Agent 直接完成，不经过 Vibe Board。" data-en="Handoff draws a tree: who can hand tasks to whom. Once it is set up, your main Agent hands off directly and Vibe Board is not in the loop.">Handoff draws a tree: who can hand tasks to whom. Once it is set up, your main Agent hands off directly and Vibe Board is not in the loop.</p>
 
           <div class="diagram">
-            <div class="usage">
-              <div class="usage__head">
-                <span class="usage__badge usage__badge--now" data-zh="现在" data-en="Now">Now</span>
-                <span class="usage__badge" data-zh="剩余额度" data-en="Remaining">Remaining</span>
-                <span class="usage__badge" data-zh="重置时间" data-en="Resets">Resets</span>
-                <span class="usage__badge" data-zh="来源" data-en="Source">Source</span>
-                <span class="usage__badge" data-zh="新鲜度" data-en="Freshness">Freshness</span>
-              </div>
-              <div class="usage__table">
-                <span class="is-head" data-zh="Provider" data-en="Provider">Provider</span>
-                <span class="is-head" data-zh="今天 / 本周 / 本月" data-en="Today / Week / Month">Today / Week / Month</span>
-                <span class="is-head" data-zh="Token" data-en="Tokens">Tokens</span>
-                <span class="is-head" data-zh="估算成本" data-en="Estimated cost">Estimated cost</span>
-                <span>Codex</span>
-                <span data-zh="今天" data-en="Today">Today</span>
-                <span>128.4k</span>
-                <span data-zh="估算 $1.92" data-en="Estimated $1.92">Estimated $1.92</span>
-                <span>Claude Code</span>
-                <span data-zh="本周" data-en="This week">This week</span>
-                <span>42.0k</span>
-                <span class="unknown-chip" data-zh="—（无公开价格，只统计 token）" data-en="— (no public price, tokens only)">— (no public price, tokens only)</span>
-              </div>
-              <div class="usage__bars" aria-hidden="true">
-                <div class="usage__bar" style="height: 78%"></div>
-                <div class="usage__bar" style="height: 46%"></div>
-                <div class="usage__bar" style="height: 92%"></div>
+            <div class="tree">
+              <div class="tree__root">Claude Code</div>
+              <div class="tree__workers">
+                <div class="tree__worker"><b>OpenCode</b><span class="tree__disconnect" data-zh="断开" data-en="Disconnect">Disconnect</span></div>
+                <div class="tree__worker"><b>Antigravity</b><span class="tree__disconnect" data-zh="断开" data-en="Disconnect">Disconnect</span></div>
+                <div class="tree__add" data-zh="＋ 添加工人" data-en="＋ Add worker">＋ Add worker</div>
               </div>
             </div>
-            <p class="diagram__caption" data-zh="数值为示意；拿不到的额度、token 或价格一律显示未知，而不是 0。" data-en="Numbers are illustrative; quota, tokens, or prices that cannot be read show Unknown instead of 0.">Numbers are illustrative; quota, tokens, or prices that cannot be read show Unknown instead of 0.</p>
+            <p class="diagram__caption" data-zh="示意：每个主 Agent 下面的连线，都是它现在能派活的工人。" data-en="An illustration: every line under a main Agent is a worker it can hand tasks to.">An illustration: every line under a main Agent is a worker it can hand tasks to.</p>
           </div>
 
           <ul class="facts">
-            <li data-zh="「现在」：每个 Provider 的剩余额度、重置时间、来源与新鲜度，状态可能是已连接、需要授权、已停用、失败或未接入。" data-en="“Now”: each provider's remaining quota, reset time, source, and freshness, with a status of connected, needs authorization, disabled, failed, or not integrated.">“Now”: each provider's remaining quota, reset time, source, and freshness, with a status of connected, needs authorization, disabled, failed, or not integrated.</li>
-            <li data-zh="「用量与成本」：今天 / 本周 / 本月三个口径，按 Provider 和模型列出输入、输出、缓存读取、缓存写入、请求数；打开页面时会在后台扫描本地会话日志。" data-en="“Usage &amp; Cost”: today / this week / this month, listing input, output, cache read, cache write, and request counts per provider and model; opening the page scans local session logs in the background.">“Usage &amp; Cost”: today / this week / this month, listing input, output, cache read, cache write, and request counts per provider and model; opening the page scans local session logs in the background.</li>
-            <li data-zh="成本一律是 Estimated（估算）等价成本，仅供参考：由内置价格表按官网公开价折算，价格表带生效日期；没有公开价格的模型只统计 token，不显示金额。日汇总会持久化，即使原始日志被 Agent 清理，历史仍可查询。" data-en="Costs are always Estimated equivalent costs, for reference only, derived from the built-in table of published vendor prices, which carries an effective date; models without a public price show token usage only, with no amount. Daily totals are persisted, so history stays queryable even after the Agent cleans up raw logs.">Costs are always Estimated equivalent costs, for reference only, derived from the built-in table of published vendor prices, which carries an effective date; models without a public price show token usage only, with no amount. Daily totals are persisted, so history stays queryable even after the Agent cleans up raw logs.</li>
-            <li data-zh="用量查询分两层：总开关「在灵动岛显示额度」只控制灵动岛顶部是否显示额度；联网查询默认全部关闭，需要你在页面上逐个 Provider 授权，开启前会说明将向哪个地址发出请求、或运行哪个本地程序、使用哪份本地凭据（只显示文件位置，不显示内容），确认后才生效，可随时撤销；「打开官方登录」只是打开终端做各家官方登录，与联网授权是两回事。本地会话日志与本地文件不需要授权，照常统计。拿不到的值保持未知。" data-en="Usage has two layers. The “Show quota on the island” master switch only controls the island header. Online queries are all off by default: authorize each provider on the page, where Vibe Board first explains which address it will call, or which local program it will run, and which local credential file it reads (file location only, never the value). The query starts only after you confirm, and you can revoke it at any time. “Open official login” only opens a terminal for the provider's own login and is separate from online authorization. Local session logs and local files need no authorization and keep working. Anything unreadable stays Unknown.">Usage has two layers. The “Show quota on the island” master switch only controls the island header. Online queries are all off by default: authorize each provider on the page, where Vibe Board first explains which address it will call, or which local program it will run, and which local credential file it reads (file location only, never the value). The query starts only after you confirm, and you can revoke it at any time. “Open official login” only opens a terminal for the provider's own login and is separate from online authorization. Local session logs and local files need no authorization and keep working. Anything unreadable stays Unknown.</li>
+            <li data-zh="树怎么读：上面是主 Agent，每个 Agent 下面挂着它能派活的工人；一条线就是一次真实安装，没有连线时会提示这个 Agent 还没有可以派活的工人。" data-en="How to read the tree: the top level lists main Agents, and under each one are the workers it can hand tasks to. A line is a real install; with no line, the page says that Agent has no worker yet.">How to read the tree: the top level lists main Agents, and under each one are the workers it can hand tasks to. A line is a real install; with no line, the page says that Agent has no worker yet.</li>
+            <li data-zh="怎么建立：在某个 Agent 下点「＋ 添加工人」，选一个工人，确认「让 X 可以把任务派给 Y」后写入所需文件；重复添加不会产生重复内容。" data-en="How to connect: under an Agent click “＋ Add worker”, pick a worker, and confirm “Let X hand tasks to Y” to write the needed files. Adding again stays idempotent.">How to connect: under an Agent click “＋ Add worker”, pick a worker, and confirm “Let X hand tasks to Y” to write the needed files. Adding again stays idempotent.</li>
+            <li data-zh="怎么取消：点「断开」，确认后移除这个工人的内容；你自己改过的文件会保留，并说明原因。" data-en="How to undo: click “Disconnect” and confirm to remove that worker's content. Files you edited yourself are kept, with the reason shown.">How to undo: click “Disconnect” and confirm to remove that worker's content. Files you edited yourself are kept, with the reason shown.</li>
+            <li data-zh="派活规则要自己写：这里只写入派活需要的文件，不写入你的全局指令文件，也不代写规则；何时派、派给谁，请写进 Agent 的全局指令文件，页面底部有示例可以复制。" data-en="The rules are yours to write: this page only writes the files handoff needs. It never writes your global instruction files and never writes the rules for you. Put when and to whom to hand off into your Agent's global instructions; a copyable example is at the bottom of the page.">The rules are yours to write: this page only writes the files handoff needs. It never writes your global instruction files and never writes the rules for you. Put when and to whom to hand off into your Agent's global instructions; a copyable example is at the bottom of the page.</li>
+            <li data-zh="其他工具：列表之外的工人在 Agent 里运行 external-agent-setup 生成；本机没有 Node.js 时页面会提示，并且不能添加。" data-en="Other tools: for workers outside the list, run external-agent-setup inside your Agent. If Node.js is missing, the page says so and adding is disabled.">Other tools: for workers outside the list, run external-agent-setup inside your Agent. If Node.js is missing, the page says so and adding is disabled.</li>
           </ul>
         </section>
 
-        <section id="dispatch">
-          <h2><span class="step-index" aria-hidden="true">7</span><span data-zh="派发框架（简）" data-en="Dispatch framework (brief)">Dispatch framework (brief)</span></h2>
-          <p class="section-lead" data-zh="「管理 → 派发框架」提供一个搭建向导：检测 → 预览 → 确认安装，把四个派发 Skill 装进 Claude Code 与 Codex 的用户级 Skill 目录。" data-en="Manage → Dispatch framework offers a setup wizard: detect → preview → confirm, installing four dispatch Skills into the user-level Skill directories of Claude Code and Codex.">Manage → Dispatch framework offers a setup wizard: detect → preview → confirm, installing four dispatch Skills into the user-level Skill directories of Claude Code and Codex.</p>
-
-          <div class="diagram">
-            <div class="sources">
-              <span class="source"><span class="source__tag">external-agent-core</span></span>
-              <span class="source"><span class="source__tag">external-agent-setup</span></span>
-              <span class="source"><span class="source__tag">opencode-agent</span></span>
-              <span class="source"><span class="source__tag">antigravity-agent</span></span>
-            </div>
-            <p class="diagram__caption" data-zh="向导只安装 Skill；安装前会列出将写入的文件，确认后才写。" data-en="The wizard only installs Skills; it lists the files to be written before anything is written.">The wizard only installs Skills; it lists the files to be written before anything is written.</p>
-          </div>
+        <section id="island" data-settings-section="island">
+          <h2><span class="step-index" aria-hidden="true">6</span><span data-zh="外观" data-en="Appearance">Appearance</span></h2>
+          <p class="section-lead" data-zh="「外观」决定灵动岛长什么样、停在哪里、什么时候出现。改完立即生效。" data-en="Appearance decides how the island looks, where it sits, and when it shows. Changes apply right away.">Appearance decides how the island looks, where it sits, and when it shows. Changes apply right away.</p>
 
           <ul class="facts">
-            <li data-zh="不代写派发规则：向导不会写入你的全局指令文件（如 CLAUDE.md、AGENTS.md），何时派、派给谁要自己写。" data-en="Dispatch rules stay yours: the wizard never writes your global instruction files (such as CLAUDE.md or AGENTS.md), and when or to whom to dispatch is yours to decide.">Dispatch rules stay yours: the wizard never writes your global instruction files (such as CLAUDE.md or AGENTS.md), and when or to whom to dispatch is yours to decide.</li>
-            <li data-zh="其它 CLI 工具：向导不提供配置表单，请在你的 Agent 中运行 external-agent-setup 生成具名 Skill。" data-en="Other CLI tools: the wizard offers no configuration form; run external-agent-setup inside your Agent to generate a named Skill.">Other CLI tools: the wizard offers no configuration form; run external-agent-setup inside your Agent to generate a named Skill.</li>
-            <li data-zh="派发本身不经过 Vibe Board：装好 Skill 后由主 Agent 直接派发，看板只负责观察。" data-en="Dispatching never goes through Vibe Board: once the Skills are installed, your main Agent dispatches directly, and the board just watches.">Dispatching never goes through Vibe Board: once the Skills are installed, your main Agent dispatches directly, and the board just watches.</li>
+            <li data-zh="外观效果：在「纯黑」和「磨砂玻璃」两种效果之间选一种；空闲时只保留图标，工作时只显示正在执行的 Agent 名称。" data-en="Look: choose between “Midnight black” and “Frosted glass”. When idle only the icon stays; while working only the Agent name shows.">Look: choose between “Midnight black” and “Frosted glass”. When idle only the icon stays; while working only the Agent name shows.</li>
+            <li data-zh="位置：默认居中停在屏幕顶部；「允许移动灵动岛」默认开启，直接拖拽就能移动，拖到屏幕左缘或右缘会停靠成竖向胶囊。" data-en="Position: centered at the top by default. “Allow moving the island” is on by default; drag it to move it, and drag it to the left or right edge to dock it as a vertical pill.">Position: centered at the top by default. “Allow moving the island” is on by default; drag it to move it, and drag it to the left or right edge to dock it as a vertical pill.</li>
+            <li data-zh="显示器：默认跟随鼠标所在的屏幕，也可以在「显示器」里固定到某一块。" data-en="Monitor: it follows the screen under your cursor by default, or you can pin it to one screen.">Monitor: it follows the screen under your cursor by default, or you can pin it to one screen.</li>
+            <li data-zh="尺寸与行为：展开面板宽度、字号、刷新频率、无会话时隐藏等都在这里调；「关闭窗口时」可以选择最小化到托盘或直接退出。" data-en="Size and behavior: expanded panel width, font size, refresh rate, hiding when there are no sessions, and more. “When closing the window” chooses between the tray and quitting.">Size and behavior: expanded panel width, font size, refresh rate, hiding when there are no sessions, and more. “When closing the window” chooses between the tray and quitting.</li>
+            <li data-zh="改乱了：用「恢复灵动岛默认设置」回到初始外观。" data-en="If it gets messy: “Restore island defaults” brings back the original look.">If it gets messy: “Restore island defaults” brings back the original look.</li>
+          </ul>
+        </section>
+
+        <section id="shortcuts" data-settings-section="shortcuts">
+          <h2><span class="step-index" aria-hidden="true">7</span><span data-zh="快捷键" data-en="Shortcuts">Shortcuts</span></h2>
+          <p class="section-lead" data-zh="「快捷键」给常用操作配上键盘组合，不用鼠标也能操作灵动岛。" data-en="Shortcuts gives common actions a key combination, so you can use the island without the mouse.">Shortcuts gives common actions a key combination, so you can use the island without the mouse.</p>
+
+          <ul class="facts">
+            <li data-zh="全局快捷键（在任何窗口都生效）：默认 Ctrl/Cmd+Shift+I 显示或隐藏灵动岛，Ctrl/Cmd+, 打开设置。" data-en="Global shortcuts (work anywhere): Ctrl/Cmd+Shift+I shows or hides the island, and Ctrl/Cmd+, opens Settings by default.">Global shortcuts (work anywhere): Ctrl/Cmd+Shift+I shows or hides the island, and Ctrl/Cmd+, opens Settings by default.</li>
+            <li data-zh="面板内快捷键：Esc 逐级收起面板；Ctrl/Cmd+J 跳到当前任务的终端窗口；展开、收起、上一个 / 下一个会话也能单独绑定。" data-en="Shortcuts inside the panel: Esc collapses the panel step by step, and Ctrl/Cmd+J jumps to the active task's terminal window. Expand, collapse, and previous / next session can each get their own key.">Shortcuts inside the panel: Esc collapses the panel step by step, and Ctrl/Cmd+J jumps to the active task's terminal window. Expand, collapse, and previous / next session can each get their own key.</li>
+            <li data-zh="怎么改：点输入框，按下想用的组合键即可；如果组合键已经被占用，会提示是哪个操作用了它。" data-en="How to change one: click the field and press the combination you want. If it is taken, Vibe Board says which action uses it.">How to change one: click the field and press the combination you want. If it is taken, Vibe Board says which action uses it.</li>
+            <li data-zh="想停用：点「清除」可以取消某个组合键；没有设置的组合键显示「未设置」。" data-en="To turn one off: Clear removes a combination. Combinations you leave empty read “Not set”.">To turn one off: Clear removes a combination. Combinations you leave empty read “Not set”.</li>
+          </ul>
+        </section>
+
+        <section id="general" data-settings-section="general">
+          <h2><span class="step-index" aria-hidden="true">8</span><span data-zh="通用" data-en="General">General</span></h2>
+          <p class="section-lead" data-zh="「通用」放最常用的几项：界面语言、开机启动、要接入的 Agent，以及退出程序。" data-en="General holds the everyday switches: interface language, starting with your computer, which Agents are connected, and quitting.">General holds the everyday switches: interface language, starting with your computer, which Agents are connected, and quitting.</p>
+
+          <ul class="facts">
+            <li data-zh="语言：在中文和 English 之间切换，立即生效。" data-en="Language: switch between Chinese and English; it applies right away.">Language: switch between Chinese and English; it applies right away.</li>
+            <li data-zh="登录电脑时自动打开：默认关闭；打开后，登录电脑就会启动 Vibe Board。" data-en="Open at login: off by default. Turn it on and Vibe Board starts when you log in.">Open at login: off by default. Turn it on and Vibe Board starts when you log in.</li>
+            <li data-zh="接入的 Agent：点「选择要接入的 Agent」重新走一遍向导；这里也会显示有多少个 Agent 会在会话开始时自动打开看板，没接入时显示「还没有接入任何 Agent」。" data-en="Connected Agents: click “Choose Agents” to walk through the wizard again. This row also shows how many Agents open the board when a session starts; with none connected it says no Agent is connected yet.">Connected Agents: click “Choose Agents” to walk through the wizard again. This row also shows how many Agents open the board when a session starts; with none connected it says no Agent is connected yet.</li>
+            <li data-zh="退出：需要完全关掉 Vibe Board 时，点「退出」。" data-en="Quit: use “Quit” when you want to shut the app down completely.">Quit: use “Quit” when you want to shut the app down completely.</li>
+          </ul>
+        </section>
+
+        <section id="tutorial" data-settings-section="tutorial">
+          <h2><span class="step-index" aria-hidden="true">9</span><span data-zh="重看教程与向导" data-en="Tutorial &amp; Wizard">Tutorial &amp; Wizard</span></h2>
+          <p class="section-lead" data-zh="忘了怎么用，或者要换接入的 Agent，都从这里开始。" data-en="Forgot how something works, or want to connect different Agents? Start here.">Forgot how something works, or want to connect different Agents? Start here.</p>
+
+          <ul class="facts">
+            <li data-zh="看完整教程：重新打开这份教程，就是你现在看的这一页。" data-en="Open the full tutorial: reopens this very page.">Open the full tutorial: reopens this very page.</li>
+            <li data-zh="重新选择要接入的 Agent：再走一遍首次向导，重新选 Agent，并让它们把任务状态同步到看板。" data-en="Choose the Agents to connect again: walks through the first-run wizard, picks Agents, and lets them report task status to the board.">Choose the Agents to connect again: walks through the first-run wizard, picks Agents, and lets them report task status to the board.</li>
+          </ul>
+        </section>
+
+        <section id="about" data-settings-section="about">
+          <h2><span class="step-index" aria-hidden="true">10</span><span data-zh="关于" data-en="About">About</span></h2>
+          <p class="section-lead" data-zh="「关于」显示版本、更新和反馈入口，也能生成用于排查问题的诊断包。" data-en="About shows the version, updates, and feedback links, and builds a diagnostics bundle for troubleshooting.">About shows the version, updates, and feedback links, and builds a diagnostics bundle for troubleshooting.</p>
+
+          <ul class="facts">
+            <li data-zh="检查更新：可以手动点「检查更新」，也可以打开「自动检查更新」和「自动安装更新」；新版本就绪后会提示重启。" data-en="Updates: check manually, or turn on “Check for updates automatically” and “Install updates automatically”. When a new version is ready, Vibe Board asks you to restart.">Updates: check manually, or turn on “Check for updates automatically” and “Install updates automatically”. When a new version is ready, Vibe Board asks you to restart.</li>
+            <li data-zh="反馈：发布版本和报告 Bug 会打开对应的 GitHub 页面。" data-en="Feedback: Releases and Report a bug open the matching GitHub pages.">Feedback: Releases and Report a bug open the matching GitHub pages.</li>
+            <li data-zh="导出诊断包：生成一份压缩包，敏感信息会先脱敏，反馈问题时可以附上。" data-en="Export diagnostics: builds an archive with sensitive information redacted first, ready to attach to a report.">Export diagnostics: builds an archive with sensitive information redacted first, ready to attach to a report.</li>
+            <li data-zh="版本号：默认只显示名称，点「版本详情」可以看到具体版本。" data-en="Version: only the name shows by default; open “Version details” to see the exact version.">Version: only the name shows by default; open “Version details” to see the exact version.</li>
           </ul>
         </section>
       </main>
 
       <footer>
-        <p data-zh="本页是 Vibe Board 自带教程的第一版，随应用离线分发；界面语言切换后重新打开本页即可看到对应语言。" data-en="This is the first version of the tutorial bundled with Vibe Board; it ships offline with the app. Reopen this page after switching the app language to see the other language.">This is the first version of the tutorial bundled with Vibe Board; it ships offline with the app. Reopen this page after switching the app language to see the other language.</p>
+        <p data-zh="本教程随应用离线分发，不加载任何网络资源；界面语言切换后重新打开本页即可看到对应语言。随时可以在「系统 → 重看教程与向导」再打开它。" data-en="This tutorial ships offline with the app and loads no network resources. Reopen it after switching the app language to read the other language. You can always come back from System → Tutorial &amp; Wizard.">This tutorial ships offline with the app and loads no network resources. Reopen it after switching the app language to read the other language. You can always come back from System → Tutorial &amp; Wizard.</p>
       </footer>
     </div>
 

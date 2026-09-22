@@ -533,7 +533,7 @@
     },
     "tasksPage": {
       "title": "Task board",
-      "desc": "See what each Agent is doing. Click a task to bring its window to the front.",
+      "desc": "Shows what each Agent is working on. To bring a task’s window forward, click its card on the island.",
       "liveTitle": "Tasks in progress",
       "liveDesc": "Each Agent session is listed separately; subtasks inside a session are not counted twice.",
       "liveConnection": "Live connection",

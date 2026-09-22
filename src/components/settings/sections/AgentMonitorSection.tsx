@@ -121,7 +121,7 @@ export function AgentMonitorSection() {
       <header className="agent-monitor__header">
         <div>
           <h2>{t('settings.tasksPage.title', { defaultValue: '任务看板' })}</h2>
-          <p>{t('settings.tasksPage.desc', { defaultValue: '这里显示各个 Agent 正在做什么。点一条任务，可以把它所在的窗口调到前台。' })}</p>
+          <p>{t('settings.tasksPage.desc', { defaultValue: '这里显示各个 Agent 正在做什么。要唤回某个任务的窗口，点灵动岛上的任务卡。' })}</p>
         </div>
         <div className="agent-monitor__header-actions">
           <button

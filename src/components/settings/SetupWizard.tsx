@@ -26,8 +26,8 @@ function progressIndex(step: WizardStep): number {
   return WIZARD_PROGRESS_STEPS.indexOf(step)
 }
 
-/** Small animated figures for the four tutorial themes shown inside the wizard. */
-function TopicFigure({ kind }: { kind: 'island' | 'board' | 'click' | 'agents' }) {
+/** Small animated figures for the six tutorial cards shown inside the wizard. */
+function TopicFigure({ kind }: { kind: 'island' | 'run' | 'manage' | 'appearance' | 'shortcuts' | 'system' }) {
   if (kind === 'island') {
     return (
       <svg className="setup-wizard__topic-svg" viewBox="0 0 48 48" aria-hidden="true">
@@ -38,7 +38,7 @@ function TopicFigure({ kind }: { kind: 'island' | 'board' | 'click' | 'agents' }
       </svg>
     )
   }
-  if (kind === 'board') {
+  if (kind === 'run') {
     return (
       <svg className="setup-wizard__topic-svg" viewBox="0 0 48 48" aria-hidden="true">
         <rect className="wz-board-row" x="8" y="9" width="32" height="9" rx="4.5" />
@@ -53,24 +53,45 @@ function TopicFigure({ kind }: { kind: 'island' | 'board' | 'click' | 'agents' }
       </svg>
     )
   }
-  if (kind === 'click') {
+  if (kind === 'manage') {
     return (
       <svg className="setup-wizard__topic-svg" viewBox="0 0 48 48" aria-hidden="true">
-        <rect className="wz-click-card" x="6" y="16" width="17" height="14" rx="4" />
-        <path className="wz-click-arrow" d="M26 23 H38" />
-        <path className="wz-click-arrow-head" d="M36 19 L41 23 L36 27" />
-        <rect className="wz-click-window" x="28" y="8" width="16" height="30" rx="4" />
-        <path className="wz-click-window-bar" d="M28 14 H44" />
+        <circle className="wz-agents-agent" cx="11" cy="15" r="5" />
+        <circle className="wz-agents-agent wz-agents-agent--late" cx="11" cy="33" r="5" />
+        <circle className="wz-agents-island" cx="37" cy="24" r="6.5" />
+        <path className="wz-agents-line" d="M16 15 C27 15 27 24 31 24" />
+        <path className="wz-agents-line wz-agents-line--late" d="M16 33 C27 33 27 24 31 24" />
+      </svg>
+    )
+  }
+  if (kind === 'appearance') {
+    return (
+      <svg className="setup-wizard__topic-svg" viewBox="0 0 48 48" aria-hidden="true">
+        <rect className="wz-appearance-top" x="8" y="9" width="30" height="11" rx="5.5" />
+        <circle className="wz-appearance-dot" cx="15" cy="14.5" r="2" />
+        <rect className="wz-appearance-side" x="35" y="25" width="9" height="16" rx="4.5" />
+        <rect className="wz-board-line" x="10" y="31" width="18" height="4" rx="2" />
+        <rect className="wz-board-line" x="10" y="38" width="12" height="4" rx="2" />
+      </svg>
+    )
+  }
+  if (kind === 'shortcuts') {
+    return (
+      <svg className="setup-wizard__topic-svg" viewBox="0 0 48 48" aria-hidden="true">
+        <rect className="wz-key-cap" x="7" y="13" width="34" height="23" rx="6" />
+        <rect className="wz-key-bar" x="13" y="20" width="22" height="4" rx="2" />
+        <rect className="wz-key-bar wz-key-bar--late" x="13" y="28" width="13" height="4" rx="2" />
       </svg>
     )
   }
   return (
     <svg className="setup-wizard__topic-svg" viewBox="0 0 48 48" aria-hidden="true">
-      <circle className="wz-agents-agent" cx="11" cy="15" r="5" />
-      <circle className="wz-agents-agent wz-agents-agent--late" cx="11" cy="33" r="5" />
-      <circle className="wz-agents-island" cx="37" cy="24" r="6.5" />
-      <path className="wz-agents-line" d="M16 15 C27 15 27 24 31 24" />
-      <path className="wz-agents-line wz-agents-line--late" d="M16 33 C27 33 27 24 31 24" />
+      <rect className="wz-system-track" x="9" y="13" width="30" height="3" rx="1.5" />
+      <circle className="wz-system-knob" cx="17" cy="14.5" r="3.4" />
+      <rect className="wz-system-track" x="9" y="23" width="30" height="3" rx="1.5" />
+      <circle className="wz-system-knob wz-system-knob--late" cx="32" cy="24.5" r="3.4" />
+      <rect className="wz-system-track" x="9" y="33" width="30" height="3" rx="1.5" />
+      <circle className="wz-system-knob" cx="24" cy="34.5" r="3.4" />
     </svg>
   )
 }
@@ -354,40 +375,54 @@ export function SetupWizard({ onClose }: SetupWizardProps) {
         {step === 'tutorial' && (
           <div className="setup-wizard__content">
             <p className="setup-wizard__eyebrow">01 / 03</p>
-            <h1>{text('先花一分钟看懂看板', 'Take a minute to read the board')}</h1>
+            <h1>{text('先花一分钟看懂每个板块', 'Meet each block in a minute')}</h1>
             <p className="setup-wizard__lead">
               {text(
-                '四张卡片，讲的都是看板真实会做的事。完整教程还包含 Skill 与使用额度两节。',
-                'Four cards, all things the board really does. The full tutorial also covers Skills and usage.',
+                '六张卡片，按设置里的板块顺序，讲清每个功能是什么、怎么用。完整教程可以从设置里随时打开。',
+                'Six cards in the same order as the settings, explaining what each feature is and how to use it. The full tutorial opens from Settings any time.',
               )}
             </p>
             <div className="setup-wizard__topics">
               <article className="setup-wizard__topic">
                 <TopicFigure kind="island" />
                 <div>
-                  <strong>{text('岛怎么用', 'Using the island')}</strong>
-                  <p>{text('默认停在屏幕顶部：鼠标移上去或点一下就会展开，移开自动收起，按 Esc 逐级收回。快捷键和停靠位置都能在设置里改。', 'It sits at the top of the screen: hover or click to expand, move away to collapse, Esc steps back. Shortcuts and docking are configurable.')}</p>
+                  <strong>{text('灵动岛', 'The island')}</strong>
+                  <p>{text('收起时是一颗小胶囊，鼠标移上去就展开；点任务把窗口调到前台，按 Esc 逐级收回。', 'A small pill when collapsed; hover to expand, click a task to bring its window forward, Esc to step back.')}</p>
                 </div>
               </article>
               <article className="setup-wizard__topic">
-                <TopicFigure kind="board" />
+                <TopicFigure kind="run" />
                 <div>
-                  <strong>{text('看板在显示什么', 'What the board shows')}</strong>
-                  <p>{text('每张任务卡显示 Agent 名称、会话标题和当前状态；只有连接检查发现问题时，右上角才会出现警示图标。', 'Each card shows the Agent name, session title, and current state. A warning icon appears only when the connection check finds a problem.')}</p>
+                  <strong>{text('运行', 'Run')}</strong>
+                  <p>{text('「任务看板」列出正在进行的任务，「使用额度」看每个工具还能用多少、最近用掉了多少。', 'The Task board lists running tasks, and Usage shows what each tool has left and how much it used recently.')}</p>
                 </div>
               </article>
               <article className="setup-wizard__topic">
-                <TopicFigure kind="click" />
+                <TopicFigure kind="manage" />
                 <div>
-                  <strong>{text('点任务会发生什么', 'What a task click does')}</strong>
-                  <p>{text('桌面版 Agent 的窗口会被调到前台；纯命令行的会话没有窗口可唤回，会提示你去终端查看。看板不会替你回复或批准。', 'Desktop Agent windows are brought to the front; CLI-only sessions have no window to raise, so it asks you to check the terminal. The board never replies or approves for you.')}</p>
+                  <strong>{text('管理', 'Manage')}</strong>
+                  <p>{text('「Skill」让一段说明被 Agent 用上；「派活关系」让一个 Agent 能把任务派给另一个。', 'Skill puts instructions to work in an Agent; Handoff lets one Agent hand tasks to another.')}</p>
                 </div>
               </article>
               <article className="setup-wizard__topic">
-                <TopicFigure kind="agents" />
+                <TopicFigure kind="appearance" />
                 <div>
-                  <strong>{text('Agent 接入', 'Connecting Agents')}</strong>
-                  <p>{text('下一步会检测这台电脑上的 Agent，并让它们把任务状态同步过来；「会话开始时打开看板」默认关闭，桌面版 Agent 可能不会触发。', 'The next step detects the Agents on this computer and lets them report their task status. The “open the board on session start” switch is off by default, and desktop Agents may not trigger it.')}</p>
+                  <strong>{text('外观', 'Appearance')}</strong>
+                  <p>{text('选纯黑或磨砂玻璃，调整停靠位置和大小；改完立即生效。', 'Pick Midnight black or Frosted glass and adjust docking and size; changes apply right away.')}</p>
+                </div>
+              </article>
+              <article className="setup-wizard__topic">
+                <TopicFigure kind="shortcuts" />
+                <div>
+                  <strong>{text('快捷键', 'Shortcuts')}</strong>
+                  <p>{text('默认 Ctrl/Cmd+Shift+I 显示或隐藏灵动岛，Ctrl/Cmd+, 打开设置；都能改成自己的组合。', 'By default Ctrl/Cmd+Shift+I shows or hides the island and Ctrl/Cmd+, opens Settings; both are rebindable.')}</p>
+                </div>
+              </article>
+              <article className="setup-wizard__topic">
+                <TopicFigure kind="system" />
+                <div>
+                  <strong>{text('系统', 'System')}</strong>
+                  <p>{text('「通用」切换语言和登录时自动打开，「重看教程与向导」随时回来，「关于」检查更新。', 'General switches language and open-at-login, Tutorial & Wizard brings the tour back, and About checks for updates.')}</p>
                 </div>
               </article>
             </div>

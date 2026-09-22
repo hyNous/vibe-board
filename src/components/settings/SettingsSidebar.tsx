@@ -7,20 +7,7 @@ import type { SkillManagerTab } from '../../stores/skillStoreV2'
 import { AgentIconBadge } from '../skills-v2/AgentIconBadge'
 import { getCurrentAppVersion } from '../../services/tauriApi'
 import { buildAgentUsageScores, readStoredAgentOrder, sortAgentSummaries, writeStoredAgentOrder } from '../../utils/agentOrdering'
-
-interface SidebarItem {
-  id: string
-  labelKey: string
-  labelDefault: string
-  icon: string
-  hidden?: boolean
-}
-
-interface SidebarGroup {
-  labelKey?: string
-  labelDefault?: string
-  items: SidebarItem[]
-}
+import { sidebarGroups, type SidebarItem } from './sidebarGroups'
 
 const SHARED_SKILLS_AGENT_ID = 'agents'
 
@@ -28,51 +15,6 @@ interface AgentDropTarget {
   agentId: string
   edge: 'before' | 'after'
 }
-
-// 左侧导航按职责分组：运行（任务看板、使用额度）／管理（Skill、派发框架）／
-// 外观／快捷键／系统（通用、重看教程与向导、关于）。文案走 i18n；
-// 窄窗口只收窄侧栏宽度，不隐藏标签文字。
-const sidebarGroups: SidebarGroup[] = [
-  {
-    labelKey: 'settings.nav.groups.run',
-    labelDefault: '运行',
-    items: [
-      { id: 'tasks', labelKey: 'settings.nav.tasks', labelDefault: '任务看板', icon: '✓' },
-      { id: 'usage', labelKey: 'settings.nav.usage', labelDefault: '使用额度', icon: '▥' },
-    ],
-  },
-  {
-    labelKey: 'settings.nav.groups.manage',
-    labelDefault: '管理',
-    items: [
-      { id: 'skills', labelKey: 'settings.nav.skills', labelDefault: 'Skill', icon: '🧩' },
-      { id: 'dispatch', labelKey: 'settings.nav.dispatch', labelDefault: '派活关系', icon: '🤖' },
-    ],
-  },
-  {
-    labelKey: 'settings.nav.groups.appearance',
-    labelDefault: '外观',
-    items: [
-      { id: 'island', labelKey: 'settings.nav.island', labelDefault: '外观', icon: '🏝' },
-    ],
-  },
-  {
-    labelKey: 'settings.nav.groups.shortcuts',
-    labelDefault: '快捷键',
-    items: [
-      { id: 'shortcuts', labelKey: 'settings.nav.shortcuts', labelDefault: '快捷键', icon: '⌨' },
-    ],
-  },
-  {
-    labelKey: 'settings.nav.groups.system',
-    labelDefault: '系统',
-    items: [
-      { id: 'general', labelKey: 'settings.nav.general', labelDefault: '通用', icon: '⚙' },
-      { id: 'tutorial', labelKey: 'settings.nav.tutorial', labelDefault: '重看教程与向导', icon: '🎓' },
-      { id: 'about', labelKey: 'settings.nav.about', labelDefault: '关于', icon: 'ℹ' },
-    ],
-  },
-]
 
 interface SettingsSidebarProps {
   activeSection: string

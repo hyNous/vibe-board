@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import tutorial from '../../public/tutorial/index.html?raw'
+import { sidebarGroups } from '../components/settings/sidebarGroups'
+
+function parseTutorial() {
+  return new DOMParser().parseFromString(tutorial, 'text/html')
+}
 
 describe('bundled offline tutorial', () => {
   it('references no network resources, external scripts, fonts, or CDNs', () => {
@@ -19,46 +24,78 @@ describe('bundled offline tutorial', () => {
     expect(tutorial).toMatch(/animation:\s*[a-z-]+/i)
   })
 
-  it('covers the four first-run themes plus the full-only sections', () => {
-    const markers = [
-      'id="island"',
-      'id="board"',
-      'id="click"',
-      'id="agents"',
-      'id="skills"',
-      'id="usage"',
-      'id="dispatch"',
-      '岛怎么用',
-      '看板在显示什么',
-      '点任务会发生什么',
-      'Agent 接入',
-      'Skill 管理',
-      '使用额度',
-    ]
-    for (const marker of markers) {
-      expect(tutorial, marker).toContain(marker)
+  it('opens with the island, then follows the settings sidebar order block by block', () => {
+    const sidebarEntries = sidebarGroups.flatMap((group) => group.items.filter((item) => !item.hidden))
+    const doc = parseTutorial()
+
+    const sections = Array.from(doc.querySelectorAll('main > section[data-settings-section]'))
+    expect(sections.map((section) => section.getAttribute('data-settings-section')))
+      .toEqual(sidebarEntries.map((item) => item.id))
+    expect(sections.map((section) => section.id)).toEqual(sidebarEntries.map((item) => item.id))
+
+    // Each tutorial section is titled with the exact sidebar label.
+    sidebarEntries.forEach((item, index) => {
+      const heading = sections[index].querySelector('h2 [data-zh]')
+      expect(heading?.getAttribute('data-zh'), item.id).toBe(item.labelDefault)
+    })
+
+    // The island intro comes first, and the on-page contents mirror the order.
+    const allSections = Array.from(doc.querySelectorAll('main > section'))
+    expect(allSections[0].id).toBe('island-intro')
+    expect(allSections[0].querySelector('h2 [data-zh]')?.getAttribute('data-zh')).toBe('灵动岛怎么用')
+
+    const navTargets = Array.from(doc.querySelectorAll('header nav .nav a')).map((anchor) => anchor.getAttribute('href'))
+    expect(navTargets).toEqual(['#island-intro', ...sidebarEntries.map((item) => `#${item.id}`)])
+  })
+
+  it('gives every section a lead sentence and at least one usage fact', () => {
+    const doc = parseTutorial()
+    const allSections = Array.from(doc.querySelectorAll('main > section'))
+    expect(allSections.length).toBeGreaterThanOrEqual(10)
+    for (const section of allSections) {
+      const lead = section.querySelector('.section-lead')?.textContent?.trim() ?? ''
+      expect(lead.length, section.id).toBeGreaterThan(10)
+    }
+    for (const section of doc.querySelectorAll('main > section[data-settings-section]')) {
+      expect(section.querySelectorAll('.facts li').length, section.id).toBeGreaterThanOrEqual(2)
+    }
+
+    // The opening section covers the most common island operations.
+    const introZh = Array.from(doc.querySelectorAll('#island-intro [data-zh]'))
+      .map((node) => node.getAttribute('data-zh'))
+      .join(' ')
+    for (const topic of ['展开', '收起', '点任务', 'Esc', 'Ctrl/Cmd+J']) {
+      expect(introZh).toContain(topic)
     }
   })
 
   it('states the real behaviours and omits removed features', () => {
     const realBehaviours = [
-      '请手动打开 CLI 查看执行进度',
-      '会话开始时拉起看板',
-      'Hook 健康指示',
+      '这个任务没有可唤回的窗口，请到它的终端里查看进度。',
+      '重新连接',
       'Ctrl/Cmd+J',
       '生效于',
       '自定义',
       '从 Agent 同步',
-      '用量与成本',
+      '用量与花费',
+      '今天 / 本周 / 本月',
       '估算',
+      '没有公开价格的模型只统计 token，不显示金额',
+      '在灵动岛显示额度',
+      '允许查询',
+      '＋ 添加工人',
+      '断开',
+      '全局指令文件',
       'external-agent-setup',
+      '恢复灵动岛默认设置',
+      '选择要接入的 Agent',
     ]
     for (const phrase of realBehaviours) {
       expect(tutorial, phrase).toContain(phrase)
     }
 
     // Removed in M2–M6 and must never be promised by the tutorial.
-    expect(tutorial).not.toMatch(/MCP|Plugin|技能包|宿主/)
+    expect(tutorial).not.toMatch(/MCP|Plugin|技能包|宿主|角色主题|审批|回答|与 ?Agent 对话/)
   })
 
   it('carries both Chinese and English text for every translated element', () => {
@@ -76,7 +113,7 @@ describe('bundled offline tutorial', () => {
 
     // The inline fallback text is English, so the page still reads correctly
     // before the language script runs.
-    const parsed = new DOMParser().parseFromString(tutorial, 'text/html')
+    const parsed = parseTutorial()
     const translatedNodes = parsed.querySelectorAll('[data-zh][data-en]')
     expect(translatedNodes.length).toBe(translatedTags.length)
     for (const node of translatedNodes) {

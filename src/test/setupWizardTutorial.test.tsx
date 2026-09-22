@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { SettingsApp } from '../components/settings'
 import { SetupWizard } from '../components/settings/SetupWizard'
+import { sidebarGroups } from '../components/settings/sidebarGroups'
 import { useConfigStore } from '../stores/configStore'
 
 const tauriMocks = vi.hoisted(() => ({
@@ -62,7 +63,7 @@ describe('first-run wizard tutorial step', () => {
     })
   })
 
-  it('shows the four tutorial themes for a fresh configuration', async () => {
+  it('shows the simplified tutorial in settings order for a fresh configuration', async () => {
     tauriMocks.isTauri.mockReturnValue(true)
     tauriMocks.getConfig.mockResolvedValue({ setupWizardCompleted: false, autoLaunchAgents: [] })
     render(<SettingsApp onClose={vi.fn()} />)
@@ -70,10 +71,15 @@ describe('first-run wizard tutorial step', () => {
     expect(await screen.findByText('让 Vibe Board 跟着你的 Agent 一起工作')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /继续/ }))
 
-    expect(screen.getByText('岛怎么用')).toBeInTheDocument()
-    expect(screen.getByText('看板在显示什么')).toBeInTheDocument()
-    expect(screen.getByText('点任务会发生什么')).toBeInTheDocument()
-    expect(screen.getByText('Agent 接入')).toBeInTheDocument()
+    // One card for the island, then one card per settings block, in sidebar order.
+    const topics = Array.from(document.querySelectorAll('.setup-wizard__topic'))
+    expect(topics.map((topic) => topic.querySelector('strong')?.textContent)).toEqual([
+      '灵动岛',
+      ...sidebarGroups.map((group) => group.labelDefault),
+    ])
+    for (const topic of topics) {
+      expect(topic.querySelector('p')?.textContent?.trim().length ?? 0).toBeGreaterThan(0)
+    }
   })
 
   it.each([

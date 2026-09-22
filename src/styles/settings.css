@@ -483,31 +483,48 @@
   fill: rgba(29, 39, 57, 0.30);
 }
 
-.wz-click-card {
-  fill: rgba(10, 132, 255, 0.22);
-  stroke: rgba(10, 132, 255, 0.5);
+.wz-appearance-top {
+  fill: #1d2739;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: setup-wizard-island-morph 3.6s ease-in-out infinite;
+}
+
+.wz-appearance-dot {
+  fill: #34c759;
+  animation: setup-wizard-topic-pulse 1.6s ease-in-out infinite;
+}
+
+.wz-appearance-side {
+  fill: rgba(29, 39, 57, 0.55);
+}
+
+.wz-key-cap {
+  fill: rgba(29, 39, 57, 0.10);
+  stroke: rgba(40, 51, 77, 0.28);
   stroke-width: 1.4;
 }
 
-.wz-click-arrow,
-.wz-click-arrow-head {
-  fill: none;
-  stroke: var(--settings-accent);
-  stroke-width: 1.8;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  animation: setup-wizard-topic-nudge 3s ease-in-out infinite;
+.wz-key-bar {
+  fill: rgba(10, 132, 255, 0.45);
+  animation: setup-wizard-topic-pulse 2.4s ease-in-out infinite;
 }
 
-.wz-click-window {
-  fill: rgba(29, 39, 57, 0.06);
-  stroke: rgba(40, 51, 77, 0.22);
-  stroke-width: 1.4;
+.wz-key-bar--late {
+  animation-delay: 0.5s;
 }
 
-.wz-click-window-bar {
-  stroke: rgba(40, 51, 77, 0.22);
-  stroke-width: 1.4;
+.wz-system-track {
+  fill: rgba(40, 51, 77, 0.22);
+}
+
+.wz-system-knob {
+  fill: var(--settings-accent);
+  animation: setup-wizard-topic-nudge 3.4s ease-in-out infinite;
+}
+
+.wz-system-knob--late {
+  animation-delay: 0.6s;
 }
 
 .wz-agents-agent {
