@@ -1414,7 +1414,7 @@ function AgentSkillDetailBody({ agent, item }: { agent: AgentSkillInventoryAgent
                 <CompactInfoRow label="来源" value={agent.skillsDir || agent.displayName} mono={Boolean(agent.skillsDir)} />
                 <CompactInfoRow label="本地目录" value={item.path} mono />
                 <CompactInfoRow label="Skill ID" value={item.skillId} />
-                {item.hash && <CompactInfoRow label="Hash" value={item.hash} mono short />}
+                {item.hash && <CompactInfoRow label="版本标识" value={item.hash} mono short />}
               </div>
             </section>
           </aside>
@@ -1473,7 +1473,7 @@ function AgentSkillDetailBody({ agent, item }: { agent: AgentSkillInventoryAgent
             )}
             {item.hash && (
               <div className="sm2__skill-source-card sm2__skill-source-card--wide">
-                <span>Hash</span>
+                <span>版本标识</span>
                 <code title={item.hash}>{item.hash}</code>
               </div>
             )}

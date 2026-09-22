@@ -348,7 +348,7 @@ export function AgentManagementPage() {
         try {
           await agentApi.uninstallHook(agent.id)
         } catch (error) {
-          failures.push(`Hook：${skillErrorMessage(t, error)}`)
+          failures.push(`事件通知：${skillErrorMessage(t, error)}`)
         }
       }
 
@@ -433,7 +433,7 @@ export function AgentManagementPage() {
       }
       setCustomDialogOpen(false)
       setNotice(config.category === 'claude-compatible'
-        ? 'Claude Code 实例已添加，Hook 已安装'
+        ? 'Claude Code 实例已添加，事件通知已接上'
         : '自定义 Agent 已添加')
     } catch (e) {
       state.setError(String(e))
@@ -698,7 +698,7 @@ export function AgentManagementPage() {
               <div className="sm2-agent-uninstall__danger-count"><strong>{uninstallUnmanagedItems.length}</strong><span>未管理 Skills</span></div>
             )}
             {uninstallProgram?.hooksInstalled && (
-              <div><strong>Hook</strong><span>移除 Vibe Board Hook</span></div>
+              <div><strong>事件通知</strong><span>断开 Vibe Board 的事件通知</span></div>
             )}
             {!uninstallProgramInstalled && (
               <div><strong>程序</strong><span>未安装，仅清理残留</span></div>
@@ -727,7 +727,7 @@ export function AgentManagementPage() {
           onCancel={() => setDeleteAgentTarget(null)}
           onConfirm={() => deleteCustomAgent(deleteAgentTarget)}
         >
-          <p>会移除 Vibe Board 注册并清理该实例的 Vibe Board Hook，不会删除配置目录、会话记录或 Skills 文件。</p>
+          <p>会移除 Vibe Board 的注册，并断开这个实例的事件通知；不会删除配置目录、会话记录或 Skill 文件。</p>
         </PreviewDialog>
       )}
     </div>
@@ -806,7 +806,7 @@ function CustomAgentDialog({
         <div className="skills-dialog__header">
           <div>
             <div className="skills-dialog__title" id="custom-agent-dialog-title">{t('settings.addEngineBranch')}</div>
-            <p className="custom-agent-dialog__subtitle">让企业封装版 Claude Code 使用自己的配置目录，同时复用 Vibe Board 的 Hook、会话和 Skills 管理。</p>
+            <p className="custom-agent-dialog__subtitle">让企业封装版 Claude Code 使用自己的配置目录，同时继续使用 Vibe Board 的事件通知、会话和 Skill 管理。</p>
           </div>
         </div>
         <div className="skills-dialog__body">
@@ -816,7 +816,7 @@ function CustomAgentDialog({
               <strong>沿用 Claude Code 能力</strong>
               <span>保存后自动写入该目录的 settings.json，并监听独立的 projects 与 Skills 目录。</span>
             </div>
-            <em>自动安装 Hook</em>
+            <em>自动接上事件通知</em>
           </div>
           <div className="install-form-row">
             <label className="install-form-label" htmlFor="custom-agent-name">显示名称</label>
@@ -2092,8 +2092,8 @@ function AgentSkillInstallDialog({
   if (preview) {
     return (
       <PreviewDialog
-        title="确认安装 Skill"
-        confirmLabel={preview.blockers.length > 0 ? '按选择执行' : '执行生效'}
+        title="确认让 Skill 生效"
+        confirmLabel={preview.blockers.length > 0 ? '按选择执行' : '开始生效'}
         cancelLabel="返回选择"
         busy={busy}
         disabled={unresolvedBlockers > 0}
@@ -2111,7 +2111,7 @@ function AgentSkillInstallDialog({
             {preview.changes.map((change) => (
               <div key={`${change.skillId}-${change.agentId}`} className="sm2-agent-install__preview-row">
                 <span className="sm2__tag sm2__tag--ok">
-                  {change.action === 'create' ? '新增' : change.action === 'reinstall' ? '重装' : change.action === 'convert' ? '转换' : change.action}
+                  {change.action === 'create' ? '新加' : change.action === 'reinstall' ? '重新安装' : change.action === 'convert' ? '换方式' : change.action}
                 </span>
                 <div>
                   <strong>{selectedSkills.find((skill) => skill.id === change.skillId)?.name ?? change.skillId}</strong>
@@ -2124,7 +2124,7 @@ function AgentSkillInstallDialog({
               const decision = blockerDecisions[key]
               return (
                 <div key={key} className="sm2-agent-install__preview-row sm2-agent-install__preview-row--blocked">
-                  <span className="sm2__tag sm2__tag--conflict">阻止</span>
+                  <span className="sm2__tag sm2__tag--conflict">有冲突</span>
                   <div>
                     <strong>{selectedSkills.find((skill) => skill.id === blocker.skillId)?.name ?? blocker.skillId}</strong>
                     <span>{distributionBlockerReason(t, blocker)}</span>
@@ -2136,7 +2136,7 @@ function AgentSkillInstallDialog({
                           className={`sm2__btn${decision === 'overwrite' ? ' sm2__btn--active' : ''}`}
                           onClick={() => setBlockerDecisions((current) => ({ ...current, [key]: 'overwrite' }))}
                         >
-                          覆盖安装
+                          覆盖这一份
                         </button>
                       )}
                       <button
@@ -2144,7 +2144,7 @@ function AgentSkillInstallDialog({
                         className={`sm2__btn${decision === 'skip' ? ' sm2__btn--active' : ''}`}
                         onClick={() => setBlockerDecisions((current) => ({ ...current, [key]: 'skip' }))}
                       >
-                        忽略此目标
+                        跳过这个 Agent
                       </button>
                     </div>
                   </div>
@@ -2210,7 +2210,7 @@ function AgentSkillInstallDialog({
           </div>
         </div>
         <div className="sm2-agent-install__filters">
-          <span>安装方式</span>
+          <span>怎么让 Agent 用上</span>
           <div className="sm2__view-toggle sm2__view-toggle--soft">
             <button className={mode === 'link' ? 'active' : ''} onClick={() => setMode('link')}>{skillModeLabel(t, 'link')}</button>
             <button className={mode === 'copy' ? 'active' : ''} onClick={() => setMode('copy')}>{skillModeLabel(t, 'copy')}</button>

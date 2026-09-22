@@ -9,6 +9,7 @@ import { SettingSection } from '../SettingSection'
 import { SettingGroup } from '../SettingGroup'
 import { SettingRow } from '../SettingRow'
 import { Toggle } from '../Toggle'
+import { SettingDetails } from '../SettingDetails'
 import { GlassButton } from '../../shared'
 
 interface AboutSectionProps {
@@ -129,12 +130,22 @@ export function AboutSection({
   })()
 
   return (
-    <SettingSection title={t('settings.aboutTitle')}>
+    <SettingSection
+      title={t('settings.aboutTitle')}
+      description={t('settings.aboutDesc', { defaultValue: '关于 Vibe Board 本身：更新、反馈渠道和排查问题用的诊断包。' })}
+    >
       <div className="about-header">
         <img className="about-header__icon" src="/vibe-board-logo.png" alt="" aria-hidden="true" />
         <div className="about-header__name">Vibe Board</div>
         <div className="about-header__slogan">{t('notch.slogan')}</div>
-        <div className="about-header__version">Version {appVersion}</div>
+        <div className="about-header__version">
+          <SettingDetails testId="about-version-details" label={t('settings.versionDetails', { defaultValue: '版本详情' })}>
+            <div className="setting-details__row">
+              <span>{t('settings.appVersion', { defaultValue: 'Vibe Board 版本' })}</span>
+              <code>{appVersion}</code>
+            </div>
+          </SettingDetails>
+        </div>
       </div>
 
       <SettingGroup>
@@ -197,7 +208,7 @@ export function AboutSection({
       </SettingGroup>
 
       <SettingGroup>
-        <SettingRow label={t('settings.exportDiagnostics')} description={t('settings.exportDiagnosticsDesc')}>
+        <SettingRow label={t('settings.exportDiagnostics', { defaultValue: '导出诊断包' })} description={t('settings.exportDiagnosticsDesc', { defaultValue: '生成一份用于排查问题的压缩包，敏感信息会先脱敏。' })}>
           <GlassButton
             variant="secondary"
             onClick={handleExportDiagnostics}

@@ -1,6 +1,7 @@
 /* Vibe Board — Notch Panel (Layered Dynamic Island) */
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useMemo, type CSSProperties, type PointerEvent } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
+import { useTranslation } from 'react-i18next'
 import { useSessionStore, selectSessionList, selectPanelState, selectRateLimits, selectUsageSnapshots, selectAgentStatuses, selectActiveOverlay } from '../../stores/sessionStore'
 import { useConfigStore } from '../../stores/configStore'
 import { useUpdateStore } from '../../stores/updateStore'
@@ -103,13 +104,14 @@ type IslandLayoutPreview = {
 
 function LayoutPreviewBody({ mode }: { mode: IslandLayoutPreview['mode'] }) {
   const contentFontSize = useConfigStore((s) => s.contentFontSize)
+  const { t } = useTranslation()
 
   if (mode === 'completion') {
     return (
       <div className="layout-preview layout-preview--completion" style={{ '--preview-content-font-size': contentFontSize } as CSSProperties}>
-        <div className="layout-preview__eyebrow">Task Complete</div>
-        <div className="layout-preview__title">Codex finished running tests</div>
-        <div className="layout-preview__meta">Vibe Board · npm run test:run · now</div>
+        <div className="layout-preview__eyebrow">{t('notch.previewTaskComplete', { defaultValue: '任务完成' })}</div>
+        <div className="layout-preview__title">{t('notch.previewTaskTitle', { defaultValue: '示例：Codex 跑完了测试' })}</div>
+        <div className="layout-preview__meta">{t('notch.previewTaskMeta', { defaultValue: 'Vibe Board · 刚刚' })}</div>
       </div>
     )
   }
@@ -121,8 +123,8 @@ function LayoutPreviewBody({ mode }: { mode: IslandLayoutPreview['mode'] }) {
           <div className="layout-preview__row" key={index}>
             <span className="layout-preview__dot" />
             <div className="layout-preview__copy">
-              <strong>Preview session {index + 1}</strong>
-              <span>Adjusting island dimensions updates this panel.</span>
+              <strong>{t('notch.previewSession', { defaultValue: '示例会话 {{index}}', index: index + 1 })}</strong>
+              <span>{t('notch.previewHint', { defaultValue: '拖动滑杆，这里会实时变化。' })}</span>
             </div>
             <code>{index + 2}m</code>
           </div>

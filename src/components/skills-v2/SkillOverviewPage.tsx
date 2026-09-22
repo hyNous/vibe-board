@@ -4,6 +4,7 @@ import { filterSkillsByQuery, isGitHubSkillSource, splitAgentsByProgram, useSkil
 import { skillApiV2 } from '../../services/skillApiV2'
 import type { GitHubSkillUpdatePreview, SkillSummary } from '../../services/skillApiV2'
 import { AgentIconBadge } from './AgentIconBadge'
+import { SettingDetails } from '../settings/SettingDetails'
 import { DistributeDialog } from './DistributeDialog'
 import { PreviewDialog } from './PreviewDialog'
 import { SkillDetailSlider } from './SkillDetailSlider'
@@ -25,6 +26,11 @@ interface UpdateCheckResult {
 
 function shortHash(hash: string): string {
   return hash.length > 12 ? hash.slice(0, 12) : hash
+}
+
+function formatCheckedAt(value: string): string {
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString()
 }
 
 export function SkillOverviewPage({ onOpenAdvanced }: { onOpenAdvanced?: () => void }) {
@@ -148,19 +154,26 @@ export function SkillOverviewPage({ onOpenAdvanced }: { onOpenAdvanced?: () => v
   return (
     <div className="vb-skills-page">
       <header className="island-effect-picker__head">
-        <h3>{t('settings.skillsOverview.title', { defaultValue: 'Skills' })}</h3>
-        <p>{t('settings.skillsOverview.subtitle', { defaultValue: '只管理用户级 Skills，并按真实数据展示对各个 Agent 的生效情况。' })}</p>
+        <h3>{t('settings.skillsOverview.title', { defaultValue: 'Skill 库' })}</h3>
+        <p>{t('settings.skillsOverview.subtitle', { defaultValue: '看看每个 Skill 正在被哪些 Agent 使用；想改的时候，点开卡片就能让它生效或取消。' })}</p>
       </header>
 
       <section className="vb-skills-scope">
         <span aria-hidden="true">ⓘ</span>
-        <p>
-          <strong>{t('settings.skillsOverview.scopeTitle', { defaultValue: '仅用户级 Skills' })}</strong>
-          {t('settings.skillsOverview.scope', {
-            centerPath: state.settings?.centerPath ?? '~/.agents/skills',
-            defaultValue: '（中心库 {{centerPath}} 与各 Agent 用户目录），不扫描项目级 .skills。GitHub 来源的更新会先展示预览，确认后才覆盖中心库。',
-          })}
-        </p>
+        <div>
+          <p>
+            <strong>{t('settings.skillsOverview.scopeTitle', { defaultValue: '只显示你自己安装的 Skill' })}</strong>
+            {t('settings.skillsOverview.scope', {
+              defaultValue: '项目文件夹里自带的 Skill 不在这里显示。来自 GitHub 的更新会先给你看改动，确认后才会替换。',
+            })}
+          </p>
+          <SettingDetails testId="skills-overview-scope-details" label={t('settings.details', { defaultValue: '详情' })}>
+            <div className="setting-details__row">
+              <span>{t('settings.skillsOverview.centerPath', { defaultValue: 'Skill 库位置' })}</span>
+              <code>{state.settings?.centerPath ?? '~/.agents/skills'}</code>
+            </div>
+          </SettingDetails>
+        </div>
       </section>
 
       <div className="vb-skills-toolbar">
@@ -179,7 +192,7 @@ export function SkillOverviewPage({ onOpenAdvanced }: { onOpenAdvanced?: () => v
             {t('settings.skillsOverview.count', {
               total: skills.length,
               github: githubSkillCount,
-              defaultValue: '共 {{total}} 个用户级 Skill · {{github}} 个 GitHub 来源可检查',
+              defaultValue: '共 {{total}} 个 Skill · {{github}} 个可检查更新',
             })}
           </span>
           <button
@@ -332,11 +345,16 @@ export function SkillOverviewPage({ onOpenAdvanced }: { onOpenAdvanced?: () => v
                     className={`vb-skills-updates__status${result.status === 'update' ? ' vb-skills-updates__status--update' : ''}${result.status === 'error' ? ' vb-skills-updates__status--error' : ''}`}
                   >
                     {result.status === 'update'
-                      ? t('settings.skillsOverview.statusUpdate', { defaultValue: '发现远端更新' })
+                      ? t('settings.skillsOverview.statusUpdate', { defaultValue: '有更新可以安装' })
                       : result.status === 'current'
                         ? (result.message ?? t('settings.skillsOverview.statusCurrent', { defaultValue: '已是最新' }))
-                        : t('settings.skillsOverview.statusCheckFailed', { message: result.message ?? '', defaultValue: '检查失败：{{message}}' })}
+                        : t('settings.skillsOverview.statusCheckFailed', { defaultValue: '检查失败，稍后可以再试' })}
                   </span>
+                  {result.status === 'error' && result.message && (
+                    <SettingDetails testId={`skill-update-error-${result.skillId}`} label={t('settings.details', { defaultValue: '详情' })}>
+                      <p>{result.message}</p>
+                    </SettingDetails>
+                  )}
                   {result.status === 'update' && (
                     <button
                       type="button"
@@ -405,16 +423,16 @@ export function SkillOverviewPage({ onOpenAdvanced }: { onOpenAdvanced?: () => v
               {syncTarget.preview && (
                 <>
                   <div>
-                    <dt>{t('settings.skillsOverview.syncDialogLocalHash', { defaultValue: '中心库当前 Hash' })}</dt>
+                    <dt>{t('settings.skillsOverview.syncDialogLocalHash', { defaultValue: '当前版本标识' })}</dt>
                     <dd><code>{shortHash(syncTarget.preview.localHash)}</code></dd>
                   </div>
                   <div>
-                    <dt>{t('settings.skillsOverview.syncDialogRemoteHash', { defaultValue: '远端 Hash' })}</dt>
+                    <dt>{t('settings.skillsOverview.syncDialogRemoteHash', { defaultValue: '远端版本标识' })}</dt>
                     <dd><code>{shortHash(syncTarget.preview.remoteHash)}</code></dd>
                   </div>
                   <div>
                     <dt>{t('settings.skillsOverview.syncDialogCheckedAt', { defaultValue: '检查时间' })}</dt>
-                    <dd>{syncTarget.preview.checkedAt}</dd>
+                    <dd>{formatCheckedAt(syncTarget.preview.checkedAt)}</dd>
                   </div>
                 </>
               )}

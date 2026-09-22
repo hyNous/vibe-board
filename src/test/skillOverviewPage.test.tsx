@@ -148,7 +148,7 @@ describe('SkillOverviewPage', () => {
     expect(screen.getByText('Release Checklist')).toBeInTheDocument()
     expect(screen.getByText('Local Only')).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: /全部（中心库）/ })).toHaveTextContent('2')
-    expect(screen.getByText(/共 2 个用户级 Skill · 1 个 GitHub 来源可检查/)).toBeInTheDocument()
+    expect(screen.getByText(/共 2 个 Skill · 1 个可检查更新/)).toBeInTheDocument()
     expect(useSkillStoreV2.getState().filters).toEqual({ query: '', source: 'github', status: 'conflict', type: 'pack' })
   })
 
@@ -201,7 +201,7 @@ describe('SkillOverviewPage', () => {
     render(<SkillOverviewPage />)
 
     fireEvent.click(screen.getByRole('button', { name: '检查更新' }))
-    expect(await screen.findByText('发现远端更新')).toBeInTheDocument()
+    expect(await screen.findByText('有更新可以安装')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: '同步到中心库' }))
 
@@ -229,7 +229,7 @@ describe('SkillOverviewPage', () => {
     render(<SkillOverviewPage />)
 
     fireEvent.click(screen.getByRole('button', { name: '检查更新' }))
-    expect(await screen.findByText('发现远端更新')).toBeInTheDocument()
+    expect(await screen.findByText('有更新可以安装')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '同步到中心库' }))
 
     expect(await screen.findByRole('dialog')).toBeInTheDocument()
@@ -271,6 +271,16 @@ describe('SkillOverviewPage', () => {
     expect(screen.getByRole('tab', { name: /生效于 Cursor/ })).toBeInTheDocument()
   })
 
+  it('keeps the Skill library path out of the default view and shows it in the details', () => {
+    render(<SkillOverviewPage />)
+
+    expect(screen.queryByText('/home/user/.agents/skills')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByTestId('skills-overview-scope-details'))
+
+    expect(screen.getByTestId('skills-overview-scope-details-body')).toHaveTextContent('/home/user/.agents/skills')
+  })
+
   it('disables the update check and says so when no GitHub source is recorded', () => {
     const localOnlyOverview: SkillManagerOverview = {
       ...overview,
@@ -283,7 +293,7 @@ describe('SkillOverviewPage', () => {
 
     render(<SkillOverviewPage />)
 
-    expect(screen.getByText(/0 个 GitHub 来源可检查/)).toBeInTheDocument()
+    expect(screen.getByText(/0 个可检查更新/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '检查更新' })).toBeDisabled()
   })
 })

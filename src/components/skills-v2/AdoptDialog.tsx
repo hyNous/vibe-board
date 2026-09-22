@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { skillApiV2 } from '../../services/skillApiV2'
 import type { AdoptPreview } from '../../services/skillApiV2'
 import { PreviewDialog } from './PreviewDialog'
+import { SettingDetails } from '../settings/SettingDetails'
 import { skillErrorMessage } from './skillLabels'
 
 export function AdoptDialog({
@@ -80,12 +81,16 @@ export function AdoptDialog({
             <strong>{preview.inferredSkillId || '未命名 Skill'}</strong>
           </div>
           <div>
-            <span>中心库同名</span>
-            <strong>{preview.centerHasSameId ? '已存在' : '无冲突'}</strong>
+            <span>Skill 库里有同名</span>
+            <strong>{preview.centerHasSameId ? '有，需要你选一份' : '没有，可以直接收进来'}</strong>
           </div>
           <div className="sm2-adopt__summary-path">
-            <span>Agent 路径</span>
-            <code>{preview.skillPath}</code>
+            <SettingDetails testId="adopt-skill-path-details" label="详情">
+              <div className="setting-details__row">
+                <span>文件位置</span>
+                <code>{preview.skillPath}</code>
+              </div>
+            </SettingDetails>
           </div>
         </div>
 

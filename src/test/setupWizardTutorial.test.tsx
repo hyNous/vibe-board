@@ -67,7 +67,7 @@ describe('first-run wizard tutorial step', () => {
     tauriMocks.getConfig.mockResolvedValue({ setupWizardCompleted: false, autoLaunchAgents: [] })
     render(<SettingsApp onClose={vi.fn()} />)
 
-    expect(await screen.findByText('让 Vibe Board 跟着你的 Agent 工作')).toBeInTheDocument()
+    expect(await screen.findByText('让 Vibe Board 跟着你的 Agent 一起工作')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /继续/ }))
 
     expect(screen.getByText('岛怎么用')).toBeInTheDocument()
@@ -85,12 +85,12 @@ describe('first-run wizard tutorial step', () => {
     const onClose = vi.fn()
     render(<SettingsApp onClose={onClose} />)
 
-    await screen.findByText('让 Vibe Board 跟着你的 Agent 工作')
+    await screen.findByText('让 Vibe Board 跟着你的 Agent 一起工作')
     fireEvent.click(screen.getByRole('button', { name }))
 
     await waitFor(() => expect(useConfigStore.getState().setupWizardCompleted).toBe(true))
     expect(await screen.findByRole('button', { name: '外观' })).toBeInTheDocument()
-    expect(screen.queryByText('让 Vibe Board 跟着你的 Agent 工作')).not.toBeInTheDocument()
+    expect(screen.queryByText('让 Vibe Board 跟着你的 Agent 一起工作')).not.toBeInTheDocument()
     expect(onClose).not.toHaveBeenCalled()
   })
 

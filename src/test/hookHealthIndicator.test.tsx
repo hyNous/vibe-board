@@ -71,17 +71,17 @@ describe('HookHealthIndicator', () => {
 
     render(<HookHealthIndicator />)
 
-    const trigger = await screen.findByRole('button', { name: '1 项 Hook 自检未通过' })
+    const trigger = await screen.findByRole('button', { name: '1 项通知检查未通过' })
     expect(trigger).toBeInTheDocument()
 
     fireEvent.click(trigger)
 
-    expect(await screen.findByRole('dialog', { name: 'Hook 自检' })).toBeInTheDocument()
+    expect(await screen.findByRole('dialog', { name: '事件通知检查' })).toBeInTheDocument()
     expect(screen.getAllByTestId(/hook-health-check-/)).toHaveLength(6)
-    expect(screen.getByText('Installed hooks')).toBeInTheDocument()
-    expect(screen.getByText('Bridge binary')).toBeInTheDocument()
-    expect(screen.getByText('Hook server TCP')).toBeInTheDocument()
-    expect(screen.getByText('Bridge invocation trace')).toBeInTheDocument()
+    expect(screen.getByText('Agent 的事件通知')).toBeInTheDocument()
+    expect(screen.getByText('通知组件文件')).toBeInTheDocument()
+    expect(screen.getByText('通知接收服务')).toBeInTheDocument()
+    expect(screen.getByText('最近收到的通知')).toBeInTheDocument()
   })
 
   it('reinstalls hooks from the expanded panel', async () => {
@@ -91,16 +91,40 @@ describe('HookHealthIndicator', () => {
 
     render(<HookHealthIndicator />)
 
-    fireEvent.click(await screen.findByRole('button', { name: '1 项 Hook 自检未通过' }))
-    fireEvent.click(await screen.findByText('一键修复（重新安装）'))
+    fireEvent.click(await screen.findByRole('button', { name: '1 项通知检查未通过' }))
+    fireEvent.click(await screen.findByText('重新连接'))
 
     await waitFor(() => expect(healthMocks.reinstallAllHooks).toHaveBeenCalledTimes(1))
-    expect(await screen.findByText('已重新安装 Hook，请重启对应 CLI 会话。')).toBeInTheDocument()
+    expect(await screen.findByText('已重新连接，请重启对应的 Agent 会话。')).toBeInTheDocument()
     expect(screen.getAllByTestId(/hook-health-check-/)).toHaveLength(6)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    fireEvent.click(screen.getByRole('button', { name: '关闭' }))
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Hook 自检' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '事件通知检查' })).not.toBeInTheDocument()
+  })
+
+
+  it('keeps paths and versions out of the default panel and shows them in the raw details', async () => {
+    healthMocks.runHookDoctor.mockResolvedValue(report(sixChecks))
+
+    const { container } = render(<HookHealthIndicator />)
+
+    // The closed indicator never shows internal paths or version text.
+    await waitFor(() => expect(healthMocks.runHookDoctor).toHaveBeenCalled())
+    expect(container.textContent).not.toContain('/Applications/Vibe Board/bridge')
+    expect(container.textContent).not.toContain('127.0.0.1:17890')
+
+    fireEvent.click(await screen.findByRole('button', { name: '1 项通知检查未通过' }))
+    const panel = await screen.findByRole('dialog', { name: '事件通知检查' })
+    // The friendly panel still hides the raw paths.
+    expect(panel.textContent).not.toContain('/Applications/Vibe Board/bridge')
+    expect(panel.textContent).not.toContain('127.0.0.1:17890')
+
+    fireEvent.click(screen.getByTestId('hook-health-raw-details'))
+    const raw = screen.getByTestId('hook-health-raw-details-body')
+    expect(raw).toHaveTextContent('/Applications/Vibe Board/bridge')
+    expect(raw).toHaveTextContent('127.0.0.1:17890')
+    expect(raw).toHaveTextContent('Installed hooks')
   })
 
   it('is wired into the island status row', async () => {

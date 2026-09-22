@@ -13,6 +13,7 @@ import {
 import type { UsageSnapshot } from '../../../services/tauriApi'
 import { SettingGroup } from '../SettingGroup'
 import { SettingRow } from '../SettingRow'
+import { SettingDetails } from '../SettingDetails'
 import { Toggle } from '../Toggle'
 import { GlassButton } from '../../shared'
 
@@ -102,7 +103,7 @@ export function UsageProvidersPanel() {
   const applyNetworkAuthorization = async (provider: string, authorized: boolean) => {
     setError(null); setNotice(null)
     if (!isTauri()) {
-      setNotice(t('settings.desktopOnlyHooks', { defaultValue: 'Hook management is available in the desktop app.' }))
+      setNotice(t('settings.desktopOnlyUsage', { defaultValue: '联网查询只在桌面应用里可用。' }))
       return
     }
     setUsageAction(provider)
@@ -111,7 +112,7 @@ export function UsageProvidersPanel() {
       setPendingAuthorization(null)
       setNotice(authorized
         ? t('settings.usageNetworkEnabledNotice', { defaultValue: '已允许联网查询，正在刷新额度。' })
-        : t('settings.usageNetworkDisabledNotice', { defaultValue: '已撤销联网查询授权，该 Provider 不再发起请求。' }))
+        : t('settings.usageNetworkDisabledNotice', { defaultValue: '已停止联网查询，不会再向这个工具发出请求。' }))
       await fetchUsageProviders({ live: authorized, showLoading: true })
     } catch (e) {
       setError(readableError(e))
@@ -123,13 +124,13 @@ export function UsageProvidersPanel() {
   const authorizeProvider = async (provider: string) => {
     setError(null); setNotice(null)
     if (!isTauri()) {
-      setNotice(t('settings.desktopOnlyHooks', { defaultValue: 'Hook management is available in the desktop app.' }))
+      setNotice(t('settings.desktopOnlyUsage', { defaultValue: '联网查询只在桌面应用里可用。' }))
       return
     }
     setUsageAction(provider)
     try {
       await authorizeUsageProvider(provider)
-      setNotice(t('settings.usageAuthStarted', { defaultValue: '已打开终端授权，完成登录后点检测刷新状态。' }))
+      setNotice(t('settings.usageAuthStarted', { defaultValue: '已打开登录窗口；登录完成后点「刷新」查看额度。' }))
     } catch (e) {
       setError(readableError(e))
     } finally {
@@ -142,26 +143,26 @@ export function UsageProvidersPanel() {
     .sort((a, b) => (a.settingsOrder ?? 0) - (b.settingsOrder ?? 0))
 
   const usageStatusLabel = (provider: UsageSnapshot) => {
-    if (!provider.enabled) return t('settings.disabled', { defaultValue: 'Disabled' })
-    if (provider.state === 'ok') return t('settings.connected', { defaultValue: 'Connected' })
+    if (!provider.enabled) return t('settings.usagePage.stateOff', { defaultValue: '已关闭查询' })
+    if (provider.state === 'ok') return t('settings.usagePage.stateOk', { defaultValue: '已获取' })
     if (provider.networkSupported && !provider.networkAuthorized) {
-      return t('settings.usageNetworkNeedsAuthorization', { defaultValue: '未授权联网查询' })
+      return t('settings.usagePage.stateNotAuthorized', { defaultValue: '未开启联网查询' })
     }
-    if (provider.authStatus === 'authorized') return t('settings.waitingData', { defaultValue: 'Waiting for data' })
-    if (provider.authStatus === 'missing') return t('settings.needsAuth', { defaultValue: 'Needs authorization' })
-    if (provider.implementationStatus === 'available') return t('settings.usageReaderAvailable', { defaultValue: '可接入' })
-    if (provider.implementationStatus === 'unsupported') return t('settings.usageReaderPending', { defaultValue: '待接入' })
-    return t('settings.needsAuth', { defaultValue: 'Needs authorization' })
+    if (provider.authStatus === 'authorized') return t('settings.usagePage.stateWaiting', { defaultValue: '正在查询' })
+    if (provider.authStatus === 'missing') return t('settings.usagePage.stateNeedsLogin', { defaultValue: '需要先登录' })
+    if (provider.implementationStatus === 'available') return t('settings.usagePage.stateAvailable', { defaultValue: '可以查询' })
+    if (provider.implementationStatus === 'unsupported') return t('settings.usagePage.stateUnsupported', { defaultValue: '暂不支持查询' })
+    return t('settings.usagePage.stateNeedsLogin', { defaultValue: '需要先登录' })
   }
 
   const networkRequestSummary = (provider: UsageSnapshot) => {
     const target = provider.networkTarget ?? ''
     const template = provider.networkKind === 'cli'
       ? t('settings.usageNetworkConfirmCli', {
-        defaultValue: '运行本地程序 {{target}}，由它自己向 Provider 查询额度。',
+        defaultValue: '让本机上的 {{target}} 自己去查一次额度。',
       })
       : t('settings.usageNetworkConfirmHttp', {
-        defaultValue: '向 {{target}} 发出用量查询请求。',
+        defaultValue: '向 {{target}} 发出一次只读的额度查询。',
       })
     return template.replace('{{target}}', target)
   }
@@ -175,16 +176,16 @@ export function UsageProvidersPanel() {
     <SettingGroup
       actions={(
         <button className="settings-mini-button" disabled={usageLoading} onClick={() => fetchUsageProviders({ live: true, showLoading: true })} type="button">
-          {usageLoading ? t('settings.detecting', { defaultValue: '检测中...' }) : t('settings.refresh', { defaultValue: '刷新' })}
+          {usageLoading ? t('settings.detecting', { defaultValue: '正在检查…' }) : t('settings.recheck', { defaultValue: '重新检查' })}
         </button>
       )}
-      label={t('settings.accountQuota', { defaultValue: '账号配额' })}
+      label={t('settings.accountQuota', { defaultValue: '各工具的额度查询' })}
     >
       {error && <div className="hook-error-card">{error}</div>}
       {notice && <div className="hook-notice-card">{notice}</div>}
       <SettingRow
         label={t('settings.usageQueryEnabled', { defaultValue: '在灵动岛显示额度' })}
-        description={t('settings.usageQueryEnabledDesc', { defaultValue: '只控制灵动岛顶部是否显示额度；联网查询需要在下方逐个 Provider 授权，默认全部关闭。' })}
+        description={t('settings.usageQueryEnabledDesc', { defaultValue: '打开后，灵动岛顶部会显示剩余额度。下面每个工具的联网查询默认关闭，需要你逐个允许。' })}
       >
         <Toggle checked={config.usageQueryEnabled} onChange={setUsageQueryEnabled} />
       </SettingRow>
@@ -208,35 +209,29 @@ export function UsageProvidersPanel() {
                   </em>
                 )}
               </div>
-              <div className="usage-provider-row__detail" title={provider.authPath || provider.detail}>
-                {provider.source ? `${provider.source} · ${provider.detail}` : provider.detail}
-              </div>
-              {provider.authPath && (
-                <div className="usage-provider-row__path">{provider.authPath}</div>
-              )}
               {provider.networkSupported ? (
                 <div className="usage-provider-row__network" data-testid={`usage-network-${provider.provider}`}>
                   <span className="usage-provider-row__network-state">
                     {provider.networkAuthorized
-                      ? t('settings.usageNetworkAuthorized', { defaultValue: '已允许联网查询' })
-                      : t('settings.usageNetworkNotAuthorized', { defaultValue: '未允许联网查询（默认关闭）' })}
+                      ? t('settings.usageNetworkAuthorized', { defaultValue: '已开启联网查询' })
+                      : t('settings.usageNetworkNotAuthorized', { defaultValue: '未开启联网查询（默认关闭）' })}
                   </span>
                   {confirming && (
                     <div className="usage-provider-row__confirm" data-testid={`usage-network-confirm-${provider.provider}`}>
                       <p className="usage-provider-row__confirm-intro">
-                        {t('settings.usageNetworkConfirmIntro', { defaultValue: '开启后 Vibe Board 会：' })}
+                        {t('settings.usageNetworkConfirmIntro', { defaultValue: '开启后，Vibe Board 会：' })}
                       </p>
                       <dl className="usage-provider-row__confirm-list">
-                        <dt>{t('settings.usageNetworkRequest', { defaultValue: '发出的请求' })}</dt>
+                        <dt>{t('settings.usageNetworkRequest', { defaultValue: '会做什么' })}</dt>
                         <dd>{networkRequestSummary(provider)}</dd>
-                        <dt>{t('settings.usageNetworkCredential', { defaultValue: '使用的本地凭据' })}</dt>
+                        <dt>{t('settings.usageNetworkCredential', { defaultValue: '会用到的登录信息' })}</dt>
                         <dd className="usage-provider-row__path">
                           {provider.networkCredential
-                            ?? t('settings.usageNetworkCredentialManaged', { defaultValue: '由该本地程序自己管理，Vibe Board 不读取' })}
+                            ?? t('settings.usageNetworkCredentialManaged', { defaultValue: '由这个工具自己保管，Vibe Board 不读取' })}
                         </dd>
                       </dl>
                       <p className="usage-provider-row__confirm-note">
-                        {t('settings.usageNetworkConfirmNote', { defaultValue: '只读取凭据用于本次请求，不显示也不记录凭据内容；可随时撤销。' })}
+                        {t('settings.usageNetworkConfirmNote', { defaultValue: '登录信息只用于这一次查询，不显示也不记录；你随时可以关掉。' })}
                       </p>
                       <div className="usage-provider-row__confirm-actions">
                         <GlassButton
@@ -245,8 +240,8 @@ export function UsageProvidersPanel() {
                           disabled={busy}
                         >
                           {busy
-                            ? t('settings.detecting', { defaultValue: '检测中...' })
-                            : t('settings.usageNetworkConfirmEnable', { defaultValue: '确认开启' })}
+                            ? t('settings.detecting', { defaultValue: '正在检查…' })
+                            : t('settings.usageNetworkConfirmEnable', { defaultValue: '允许查询' })}
                         </GlassButton>
                         <GlassButton variant="ghost" onClick={() => setPendingAuthorization(null)} disabled={busy}>
                           {t('settings.usageNetworkCancel', { defaultValue: '取消' })}
@@ -257,20 +252,42 @@ export function UsageProvidersPanel() {
                 </div>
               ) : provider.networkUnsupportedReason === 'unverified' ? (
                 <div className="usage-provider-row__path" data-testid={`usage-network-unsupported-${provider.provider}`}>
-                  {t('settings.usageNetworkUnsupported', { defaultValue: '暂不支持联网查询' })}
+                  {t('settings.usageNetworkUnsupported', { defaultValue: '这个工具暂不支持联网查询' })}
                 </div>
               ) : null}
+              <SettingDetails testId={`usage-provider-source-${provider.provider}`}>
+                <div className="setting-details__row">
+                  <span>{t('settings.usagePage.source', { defaultValue: '数据来源' })}</span>
+                  <code>{provider.source ?? t('settings.usagePage.unknown', { defaultValue: '未知' })}</code>
+                </div>
+                {provider.detail && (
+                  <div className="setting-details__row">
+                    <span>{t('settings.usagePage.rawDetail', { defaultValue: '原始说明' })}</span>
+                    <code>{provider.detail}</code>
+                  </div>
+                )}
+                {provider.authPath && (
+                  <div className="setting-details__row">
+                    <span>{t('settings.usageNetworkCredential', { defaultValue: '会用到的登录信息' })}</span>
+                    <code>{provider.authPath}</code>
+                  </div>
+                )}
+              </SettingDetails>
             </div>
             <div className="usage-provider-row__actions">
               {provider.authPath && (
                 <GlassButton variant="ghost" onClick={() => openSystemPath(provider.authPath!)}>
-                  {t('settings.openCredential', { defaultValue: '打开凭据' })}
+                  {t('settings.openCredential', { defaultValue: '打开登录信息文件' })}
                 </GlassButton>
               )}
               {provider.networkSupported && (
                 <Toggle
                   checked={provider.networkAuthorized}
                   disabled={busy}
+                  ariaLabel={t('settings.usageNetworkToggle', {
+                    name: provider.label,
+                    defaultValue: '允许查询 {{name}} 的剩余额度',
+                  })}
                   onChange={(next) => {
                     setError(null); setNotice(null)
                     if (next) {
@@ -289,8 +306,8 @@ export function UsageProvidersPanel() {
                   disabled={busy}
                 >
                   {busy
-                    ? t('settings.authorizing', { defaultValue: '授权中...' })
-                    : t('settings.authorizeUsage', { defaultValue: '打开官方登录' })}
+                    ? t('settings.authorizing', { defaultValue: '正在打开登录…' })
+                    : t('settings.authorizeUsage', { name: provider.label, defaultValue: '登录 {{name}} 账号' })}
                 </GlassButton>
               )}
             </div>

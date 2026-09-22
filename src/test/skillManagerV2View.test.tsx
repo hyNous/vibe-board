@@ -215,11 +215,11 @@ describe('Skill library view mode (no Agent matrix)', () => {
     const { SkillManagerShell } = await import('../components/skills-v2/SkillManagerShell')
     render(<SkillManagerShell />)
 
-    fireEvent.click(screen.getByRole('button', { name: '未管理 1' }))
+    fireEvent.click(screen.getByRole('button', { name: '还没纳入管理 1' }))
 
     expect(useSkillStoreV2.getState().activeTab).toBe('install')
     expect(useSkillStoreV2.getState().activeInstallTab).toBe('agent')
-    expect(screen.getByRole('button', { name: /Agent 同步/ })).toHaveClass('sm2__install-page-tab--active')
+    expect(screen.getByRole('button', { name: /从 Agent 导入/ })).toHaveClass('sm2__install-page-tab--active')
     expect(await screen.findByText('待处理收纳箱')).toBeInTheDocument()
   })
 
@@ -245,13 +245,13 @@ describe('Skill library view mode (no Agent matrix)', () => {
     const { SkillLibraryPage } = await import('../components/skills-v2/SkillLibraryPage')
     render(<SkillLibraryPage />)
 
-    expect(screen.getByText('Diff')).toBeInTheDocument()
-    expect(screen.getByText('1 个副本有变更')).toBeInTheDocument()
+    expect(screen.getByText('已改动')).toBeInTheDocument()
+    expect(screen.getByText('1 个副本和 Skill 库不一致')).toBeInTheDocument()
     expect(document.body.querySelector('.sm2__copy-diff-strip')).toBeNull()
 
     fireEvent.click(screen.getByText('列表'))
-    expect(screen.getByText(/Local folder · 副本分叉/)).toBeInTheDocument()
-    expect(screen.getByText('1 个副本有变更')).toBeInTheDocument()
+    expect(screen.getByText(/Local folder · 两边不一致/)).toBeInTheDocument()
+    expect(screen.getByText('1 个副本和 Skill 库不一致')).toBeInTheDocument()
   })
 
   it('switches to list view and keeps content', async () => {
@@ -347,10 +347,10 @@ describe('Skill library view mode (no Agent matrix)', () => {
     fireEvent.click(screen.getByRole('button', { name: '批量管理' }))
     fireEvent.click(screen.getByLabelText('选择 Release Checklist'))
     fireEvent.click(screen.getByLabelText('选择 Database Debugging'))
-    fireEvent.click(screen.getByRole('button', { name: /^让 2 个 Skill 生效$/ }))
+    fireEvent.click(screen.getByRole('button', { name: /^让选中的 2 个生效$/ }))
 
     fireEvent.click(screen.getByText('Codex'))
-    fireEvent.click(screen.getByRole('button', { name: '预览影响' }))
+    fireEvent.click(screen.getByRole('button', { name: '看看会改什么' }))
 
     await waitFor(() => {
       expect(previewDistribute).toHaveBeenCalledWith(['release-checklist', 'db-debug'], ['codex'], 'link')
@@ -2655,9 +2655,9 @@ describe('Skill detail slider + agent page render without crashing', () => {
     const { AgentManagementPage } = await import('../components/skills-v2/AgentManagementPage')
     render(<AgentManagementPage />)
 
-    expect(screen.queryByRole('button', { name: /添加 Claude Code 实例/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /添加自定义 Agent/ })).not.toBeInTheDocument()
     act(() => useSkillStoreV2.getState().requestCustomAgentDialog())
-    const dialog = await screen.findByRole('dialog', { name: /添加 Claude Code 实例/ })
+    const dialog = await screen.findByRole('dialog', { name: /添加自定义 Agent/ })
     expect(dialog.closest('.sm2-custom-agent-overlay')).toBeInTheDocument()
     expect(dialog.querySelector('#custom-agent-engine')).toBeNull()
     expect(screen.getByPlaceholderText('例如研发团队 Claude Code')).toBeInTheDocument()
@@ -2675,7 +2675,7 @@ describe('Skill detail slider + agent page render without crashing', () => {
       settingsFile: '~/.codefuse/engine/cc/settings.json',
     }))
     expect(loadOverview).toHaveBeenCalledWith(true)
-    expect(screen.queryByRole('dialog', { name: /添加 Claude Code 实例/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: /添加自定义 Agent/ })).not.toBeInTheDocument()
   })
 
   it('deletes a custom agent from the agent detail header', async () => {
@@ -2755,8 +2755,8 @@ describe('Skill detail slider + agent page render without crashing', () => {
 
     expect(screen.queryByText('.agents')).not.toBeInTheDocument()
     expect(screen.getByText('Claude Code')).toBeInTheDocument()
-    expect(screen.getByText('已检测到程序').parentElement).toHaveTextContent('1')
-    const addAgentButton = screen.getByRole('button', { name: /添加 Claude Code 实例/ })
+    expect(screen.getByText('已安装的 Agent').parentElement).toHaveTextContent('1')
+    const addAgentButton = screen.getByRole('button', { name: /添加自定义 Agent/ })
     expect(addAgentButton.parentElement?.lastElementChild).toBe(addAgentButton)
     fireEvent.click(addAgentButton)
     expect(useSkillStoreV2.getState().customAgentDialogRequest).toBe(1)
@@ -2847,7 +2847,7 @@ describe('Skill detail slider + agent page render without crashing', () => {
     expect(row).toHaveClass('sm2__object-row--path', 'sm2__object-row--clickable')
     expect(row).toHaveAttribute('role', 'button')
     expect(row).toHaveAttribute('tabindex', '0')
-    expect(row).toHaveTextContent('软连接 · 正常 · 直接生效')
+    expect(row).toHaveTextContent('共享一份 · 正常 · 直接生效')
   })
 
   it.each([
@@ -2934,7 +2934,7 @@ describe('Skill detail slider + agent page render without crashing', () => {
     expect(inheritedCard?.querySelector('.sm2__agent-skill-icon')).not.toBeNull()
     expect(inheritedCard?.querySelector('.sm2__agent-skill-card-titleline')).not.toBeNull()
     expect(inheritedCard?.querySelector('code')).toHaveTextContent('/Users/me/.agents/skills/shared-review')
-    expect(within(inheritedCard!).getByText('软连接', { selector: '.sm2__source-pill' })).toBeInTheDocument()
+    expect(within(inheritedCard!).getByText('共享一份', { selector: '.sm2__source-pill' })).toBeInTheDocument()
     expect(within(inheritedCard!).getByText('正常')).toBeInTheDocument()
     expect(within(inheritedCard!).getByRole('button', { name: '删除 shared-review' })).toBeInTheDocument()
     expect(within(inheritedCard!).queryByRole('checkbox')).not.toBeInTheDocument()
@@ -2956,7 +2956,7 @@ describe('Skill detail slider + agent page render without crashing', () => {
     expect(managedInheritedRow).toHaveClass('sm2__object-row--path', 'sm2__object-row--clickable')
     expect(managedInheritedRow).toHaveAttribute('role', 'button')
     expect(managedInheritedRow).toHaveAttribute('tabindex', '0')
-    expect(managedInheritedRow).toHaveTextContent('软连接 · 正常 · 直接生效')
+    expect(managedInheritedRow).toHaveTextContent('共享一份 · 正常 · 直接生效')
     expect(within(managedInheritedRow!).getByRole('button', { name: '删除 shared-review' })).toBeInTheDocument()
     fireEvent.click(screen.getByText('卡片'))
 
@@ -3829,7 +3829,7 @@ describe('Skill detail slider + agent page render without crashing', () => {
     await waitFor(() => {
       expect(previewDistribute).toHaveBeenCalledWith(['frontend-design'], ['claude-code'], 'link')
     })
-    fireEvent.click(await screen.findByRole('button', { name: '执行生效' }))
+    fireEvent.click(await screen.findByRole('button', { name: '开始生效' }))
     await waitFor(() => expect(executeDistribute).toHaveBeenCalledWith(preview))
     expect(loadAgentDetail).toHaveBeenCalledWith('claude-code', true)
     expect(loadOverview).toHaveBeenCalledWith(true)
@@ -4473,7 +4473,7 @@ describe('Skill detail slider + agent page render without crashing', () => {
     render(<AgentManagementPage />)
     fireEvent.click(screen.getByText('Skills (2)'))
 
-    expect(screen.getByText('软连接')).toBeInTheDocument()
+    expect(screen.getByText('共享一份')).toBeInTheDocument()
     expect(screen.getAllByText('直接生效').length).toBeGreaterThan(0)
     expect(screen.getByText('正常')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '未管理 1' }))
@@ -4516,12 +4516,12 @@ describe('Skill detail slider + agent page render without crashing', () => {
     )
 
     expect(screen.getByText('推荐')).toBeInTheDocument()
-    expect(screen.getByText('修改同步生效')).toBeInTheDocument()
+    expect(screen.getByText('改动一处，所有 Agent 同步生效')).toBeInTheDocument()
     expect(screen.queryByText('中心库更新后自动生效')).not.toBeInTheDocument()
     fireEvent.click(screen.getByText('Claude Code'))
-    fireEvent.click(screen.getByText('预览影响'))
+    fireEvent.click(screen.getByText('看看会改什么'))
 
-    expect(await screen.findAllByText('软连接')).toHaveLength(2)
+    expect(await screen.findAllByText('共享一份')).toHaveLength(2)
     expect(screen.queryByText('link')).not.toBeInTheDocument()
   })
 
@@ -4567,7 +4567,7 @@ describe('Skill detail slider + agent page render without crashing', () => {
     expect(screen.queryByText('Gemini CLI')).not.toBeInTheDocument()
     expect(screen.getByText('0/2')).toBeInTheDocument()
     expect(screen.getByText('2 个可选')).toBeInTheDocument()
-    expect(screen.getByText('已安装 · 将重新软连接')).toBeInTheDocument()
+    expect(screen.getByText('已经能用 · 将重新安装一次')).toBeInTheDocument()
     expect(Array.from(document.body.querySelectorAll('.sm2-distribute__agent strong')).map((node) => node.textContent)).toEqual([
       'Codex',
       'Claude Code',
@@ -4577,7 +4577,7 @@ describe('Skill detail slider + agent page render without crashing', () => {
     expect(codexRow?.querySelector('input')).not.toBeDisabled()
 
     fireEvent.click(screen.getByText('Codex'))
-    fireEvent.click(screen.getByText('预览影响'))
+    fireEvent.click(screen.getByText('看看会改什么'))
 
     await waitFor(() => {
       expect(previewDistribute).toHaveBeenCalledWith(['release-checklist'], ['codex'], 'link')
@@ -4620,9 +4620,9 @@ describe('Skill detail slider + agent page render without crashing', () => {
     )
 
     fireEvent.click(screen.getByText('Codex'))
-    fireEvent.click(screen.getByText('预览影响'))
+    fireEvent.click(screen.getByText('看看会改什么'))
 
-    expect(await screen.findByText('已通过软连接管理，将转换为复制。')).toBeInTheDocument()
+    expect(await screen.findByText('原来是通过共享一份生效，将改为各存一份。')).toBeInTheDocument()
     expect(screen.queryByText('Already managed as link — will convert to copy.')).not.toBeInTheDocument()
   })
 
@@ -4668,8 +4668,8 @@ describe('Skill detail slider + agent page render without crashing', () => {
     )
 
     fireEvent.click(screen.getByText('Codex'))
-    fireEvent.click(screen.getByText('预览影响'))
-    fireEvent.click(await screen.findByRole('button', { name: '执行生效' }))
+    fireEvent.click(screen.getByText('看看会改什么'))
+    fireEvent.click(await screen.findByRole('button', { name: '开始生效' }))
 
     await waitFor(() => expect(execute).toHaveBeenCalledTimes(1))
     const busyButton = screen.getByRole('button', { name: '处理中…' })
@@ -4724,7 +4724,7 @@ describe('Skill detail slider + agent page render without crashing', () => {
       />,
     )
 
-    expect(screen.getByText('已安装 · 副本已修改 · 将重新复制')).toBeInTheDocument()
+    expect(screen.getByText('已经能用 · 副本被改过 · 将改为「各存一份」')).toBeInTheDocument()
     expect(screen.getByText('1 个可选')).toBeInTheDocument()
     expect(screen.getByText('Codex').closest('label')?.querySelector('input')).not.toBeDisabled()
   })
@@ -4779,7 +4779,7 @@ describe('Skill detail slider + agent page render without crashing', () => {
     expect(codexRow?.querySelector('input')).not.toBeDisabled()
 
     fireEvent.click(screen.getByText('Codex'))
-    fireEvent.click(screen.getByText('预览影响'))
+    fireEvent.click(screen.getByText('看看会改什么'))
 
     await waitFor(() => {
       expect(previewDistribute).toHaveBeenCalledWith(['release-checklist', 'db-debug'], ['codex'], 'link')
@@ -4822,17 +4822,20 @@ describe('Skill detail slider + agent page render without crashing', () => {
     )
 
     fireEvent.click(screen.getByText('Claude Code'))
-    fireEvent.click(screen.getByText('预览影响'))
+    fireEvent.click(screen.getByText('看看会改什么'))
 
-    expect(await screen.findByText('目标路径已存在未管理的 Skill「find-skills」。请选择覆盖安装或忽略此目标。')).toBeInTheDocument()
+    expect(await screen.findByText('这个位置已经有一个同名的 Skill「find-skills」，还没有纳入管理。请选择覆盖它，或跳过这个位置。')).toBeInTheDocument()
     expect(screen.queryByText(/An unmanaged/)).not.toBeInTheDocument()
-    expect(screen.getAllByText('软连接').length).toBeGreaterThan(1)
-    expect(screen.getByText(/真实路径/)).toBeInTheDocument()
+    expect(screen.getAllByText('共享一份').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('软连接').length).toBeGreaterThan(0)
+    expect(screen.queryByText(/实际位置/)).not.toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('distribute-blocker-details-find-skills-claude-code'))
+    expect(screen.getByText(/实际位置/)).toBeInTheDocument()
     expect(screen.getByText('/Users/mac/.skills-manager/skills/find-skills')).toBeInTheDocument()
-    fireEvent.click(screen.getByText('打开文件夹'))
+    fireEvent.click(screen.getByText('打开所在文件夹'))
     expect(openPath).toHaveBeenCalledWith('/c/skills/find-skills')
 
-    fireEvent.click(screen.getByText('覆盖安装'))
+    fireEvent.click(screen.getByText('覆盖这一份'))
     fireEvent.click(screen.getByText('按选择执行'))
     expect(await screen.findByText("目标路径 '/Users/mac/.codex/skills/find-skills' 必须直接位于 /Users/mac/.codex/skills 下。")).toBeInTheDocument()
     expect(screen.queryByText(/must be a direct child/)).not.toBeInTheDocument()
@@ -4854,7 +4857,7 @@ describe('Skill detail slider + agent page render without crashing', () => {
     render(<SkillDetailSlider skillId="release-checklist" open={true} onClose={() => {}} />)
 
     fireEvent.click(await screen.findByText('Agent (1)'))
-    expect(await screen.findByText(/软连接 · 正常/)).toBeInTheDocument()
+    expect(await screen.findByText(/共享一份 · 正常/)).toBeInTheDocument()
     expect(screen.getByText('直接生效')).toBeInTheDocument()
     expect(screen.getByText(/打开将跳转到真实路径/)).toBeInTheDocument()
     expect(screen.getByText('/center/skills/release-checklist')).toBeInTheDocument()
@@ -5326,10 +5329,11 @@ describe('Skill manager settings page', () => {
     const { SettingsPageV2 } = await import('../components/skills-v2/SettingsPageV2')
 
     render(<SettingsPageV2 />)
-    fireEvent.click(screen.getByText('在 Finder 中显示 SQLite'))
+    fireEvent.click(screen.getByTestId('skill-settings-storage-details'))
+    fireEvent.click(screen.getByText('在文件管理器里显示记录文件'))
 
     await waitFor(() => expect(revealPath).toHaveBeenCalledWith('/Users/mac/.agentbro/skill-manager/skill-manager.db'))
-    expect(screen.getByText('已在 Finder 中定位 SQLite')).toBeInTheDocument()
+    expect(screen.getByText('已在文件管理器里定位到这个文件。')).toBeInTheDocument()
   })
 
   it('does not expose a center library path editor', async () => {
@@ -5433,14 +5437,14 @@ describe('Skill issues inside the library', () => {
     const { SkillLibraryPage } = await import('../components/skills-v2/SkillLibraryPage')
     render(<SkillLibraryPage />)
 
-    expect(await screen.findByText(/Skill 状态需要整理/)).toBeInTheDocument()
-    expect(screen.getAllByText(/可以安全修复/).length).toBeGreaterThan(0)
-    expect(screen.getByText('未接管的 Skill')).toBeInTheDocument()
+    expect(await screen.findByText(/有 3 处需要整理/)).toBeInTheDocument()
+    expect(screen.getAllByText(/可以自动修好/).length).toBeGreaterThan(0)
+    expect(screen.getByText('还没纳入管理的 Skill')).toBeInTheDocument()
     expect(screen.getByText(/本地已有同名 Skill/)).toBeInTheDocument()
     expect(screen.queryByText(/same_name_as_center_skill/)).not.toBeInTheDocument()
     expect(screen.getByText(/不会删除 Skill 内容/)).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: '修复安全项' }))
+    fireEvent.click(screen.getByRole('button', { name: '自动修复' }))
 
     expect(await screen.findByText('已处理 1 项安全问题，还剩 2 项需要查看。')).toBeInTheDocument()
     expect(runDiagnosis).toHaveBeenCalledTimes(1)

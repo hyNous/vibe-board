@@ -1,15 +1,14 @@
 import { useEffect, useState } from 'react'
-import { useTranslation } from 'react-i18next'
 import { useSkillStoreV2 } from '../../stores/skillStoreV2'
 import { skillApiV2 } from '../../services/skillApiV2'
-import { skillModeLabel } from './skillLabels'
+import { SettingDetails } from '../settings/SettingDetails'
 
 export function SettingsPageV2() {
-  const { t } = useTranslation()
   const state = useSkillStoreV2()
   const settings = state.settings
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
+  const [noticeDetails, setNoticeDetails] = useState<string | null>(null)
 
   useEffect(() => {
     if (!settings) state.loadOverview()
@@ -17,12 +16,13 @@ export function SettingsPageV2() {
   }, [])
 
   if (!settings) {
-    return <div className="sm2__empty">加载设置中…</div>
+    return <div className="sm2__empty">正在加载设置…</div>
   }
 
   const update = async (patch: Parameters<typeof state.updateSettings>[0]) => {
     setBusy(true)
     setNotice(null)
+    setNoticeDetails(null)
     try {
       await state.updateSettings(patch)
     } finally {
@@ -33,9 +33,11 @@ export function SettingsPageV2() {
   const exportSnapshot = async () => {
     setBusy(true)
     setNotice(null)
+    setNoticeDetails(null)
     try {
       const path = await skillApiV2.exportSnapshot()
-      setNotice(path ? `JSON 快照已刷新：${path}` : 'JSON 快照已刷新')
+      setNotice('记录已刷新。')
+      if (path) setNoticeDetails(path)
     } catch (e) {
       state.setError(String(e))
     } finally {
@@ -46,9 +48,10 @@ export function SettingsPageV2() {
   const revealSqlite = async () => {
     setBusy(true)
     setNotice(null)
+    setNoticeDetails(null)
     try {
       await skillApiV2.revealPath(settings.sqlitePath)
-      setNotice('已在 Finder 中定位 SQLite')
+      setNotice('已在文件管理器里定位到这个文件。')
     } catch (e) {
       state.setError(String(e))
     } finally {
@@ -58,46 +61,54 @@ export function SettingsPageV2() {
 
   return (
     <div className="sm2">
-      <div className="sm2__header">
-        <h2 className="sm2__title">设置</h2>
+      <div className="sm2__header sm2__header--stacked">
+        <div>
+          <h2 className="sm2__title">Skill 设置</h2>
+          <p className="sm2__header-subtitle">这些设置决定新加的 Skill 默认怎么让 Agent 用上，以及打开这一页时要不要自动检查。</p>
+        </div>
       </div>
       <div className="sm2__main">
         {state.error && <div className="sm2__error">{state.error}</div>}
         {notice && <div className="sm2__notice sm2__notice--ok">{notice}</div>}
+        {noticeDetails && (
+          <SettingDetails testId="skill-settings-notice-details" label="详情">
+            <code>{noticeDetails}</code>
+          </SettingDetails>
+        )}
 
         <div className="sm2__issue">
-          <h4 className="sm2__settings-label">默认生效方式</h4>
+          <h4 className="sm2__settings-label">新 Skill 默认怎么让 Agent 用上</h4>
           <select
             className="sm2__select"
             value={settings.defaultDistributeMode}
             onChange={(e) => update({ defaultDistributeMode: e.target.value as 'link' | 'copy' })}
           >
-            <option value="link">{skillModeLabel(t, 'link')}</option>
-            <option value="copy">{skillModeLabel(t, 'copy')}</option>
+            <option value="link">共享同一份（改一处，所有 Agent 都跟着变）</option>
+            <option value="copy">各存一份（每个 Agent 一份独立副本）</option>
           </select>
         </div>
 
         <div className="sm2__issue">
-          <h4 className="sm2__settings-label">link 失败策略</h4>
+          <h4 className="sm2__settings-label">共享不成功时</h4>
           <select
             className="sm2__select"
             value={settings.linkFailPolicy}
             onChange={(e) => update({ linkFailPolicy: e.target.value as 'ask' | 'copy' })}
           >
-            <option value="ask">询问（默认阻止）</option>
-            <option value="copy">自动改用 {skillModeLabel(t, 'copy')}</option>
+            <option value="ask">停下来问我</option>
+            <option value="copy">自动改用「各存一份」</option>
           </select>
         </div>
 
         <div className="sm2__issue">
-          <h4 className="sm2__settings-label">扫描行为</h4>
+          <h4 className="sm2__settings-label">启动与显示</h4>
           <label className="sm2__checkbox-row">
             <input
               type="checkbox"
               checked={settings.startupScan}
               onChange={(e) => update({ startupScan: e.target.checked })}
             />
-            启动时扫描中心库与 Agent
+            打开 Vibe Board 时自动检查 Skill 库和各 Agent
           </label>
           <label className="sm2__checkbox-row">
             <input
@@ -105,23 +116,29 @@ export function SettingsPageV2() {
               checked={settings.showUnmanaged}
               onChange={(e) => update({ showUnmanaged: e.target.checked })}
             />
-            显示未管理 Skills
+            显示还没纳入管理的 Skill
           </label>
         </div>
 
         <div className="sm2__issue">
-          <h4 className="sm2__settings-label">SQLite / JSON 快照</h4>
-          <div className="sm2__detail-meta">
-            <div>SQLite：{settings.sqlitePath}</div>
-            <div>快照：{settings.centerPath}/vibeboard-skills.snapshot.json</div>
-          </div>
-          <div className="sm2__btn-row">
-            <button className="sm2__btn" onClick={exportSnapshot} disabled={busy}>导出/刷新 JSON 快照</button>
-            <button className="sm2__btn" onClick={revealSqlite} disabled={busy}>在 Finder 中显示 SQLite</button>
-          </div>
+          <h4 className="sm2__settings-label">排查用的数据文件</h4>
           <p className="sm2__settings-help">
-            SQLite 是主存储；JSON 仅作为备份、快照与人工排查用途。
+            Skill 的记录保存在本机。只有排查问题时才需要动这里的文件。
           </p>
+          <SettingDetails testId="skill-settings-storage-details" label="详情（排查用）">
+            <div className="setting-details__row">
+              <span>记录文件</span>
+              <code>{settings.sqlitePath}</code>
+            </div>
+            <div className="setting-details__row">
+              <span>备份快照</span>
+              <code>{settings.centerPath}/vibeboard-skills.snapshot.json</code>
+            </div>
+            <div className="sm2__btn-row">
+              <button className="sm2__btn" onClick={exportSnapshot} disabled={busy}>刷新备份快照</button>
+              <button className="sm2__btn" onClick={revealSqlite} disabled={busy}>在文件管理器里显示记录文件</button>
+            </div>
+          </SettingDetails>
         </div>
       </div>
     </div>

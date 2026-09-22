@@ -609,7 +609,7 @@ function OverviewTab({
             {linkedCenter && detail.centerResolvedPath && (
               <CompactInfo label="真实源目录" value={detail.centerResolvedPath} mono />
             )}
-            {detail.currentHash && <CompactInfo label="Hash" value={detail.currentHash} mono short />}
+            {detail.currentHash && <CompactInfo label="版本标识" value={detail.currentHash} mono short />}
           </div>
         </section>
 
@@ -1325,7 +1325,7 @@ function SourceTab({ detail, onUpdated }: { detail: SkillDetail; onUpdated?: () 
     { label: '导入路径', value: detail.source?.importedFromPath },
     { label: '中心目录', value: detail.centerPath },
     { label: '来源 URI', value: sourceUri },
-    { label: 'Hash', value: detail.currentHash },
+    { label: '版本标识', value: detail.currentHash },
   ].filter(hasSourceValue)
   return (
     <section className="sm2__skill-source">

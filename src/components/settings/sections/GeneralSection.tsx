@@ -11,6 +11,7 @@ import { quitApp, setLanguage, setLaunchAtLogin } from '../../../services/tauriA
 import { reopenSetupWizard } from '../../../utils/setupWizard'
 import type { AppLanguage } from '../../../i18n/language'
 import { GlassButton } from '../../shared'
+import { SettingDetails } from '../SettingDetails'
 
 export function GeneralSection() {
   const { t, i18n } = useTranslation()
@@ -76,21 +77,29 @@ export function GeneralSection() {
           }} />
         </SettingRow>
         <SettingRow
-          label={t('settings.agentConnection', { defaultValue: 'Agent connection' })}
-          description={t('settings.agentConnectionDesc', { defaultValue: 'Choose which local Agents connect to Vibe Board and which ones may start it on session start.' })}
+          label={t('settings.agentConnection', { defaultValue: '接入的 Agent' })}
+          description={t('settings.agentConnectionDesc', { defaultValue: '选择哪些 Agent 会把任务状态同步到看板。' })}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
             <span style={{ color: 'var(--settings-text-secondary)', fontSize: 12 }}>
               {autoLaunchAgents.length > 0
-                ? `${autoLaunchAgents.length} ${t('settings.autoLaunchAgents', { defaultValue: 'Agent(s) start Vibe Board on session start' })}`
-                : t('settings.notConfigured', { defaultValue: 'Not configured' })}
+                ? t('settings.autoLaunchAgents', {
+                  defaultValue: '{{count}} 个 Agent 会在会话开始时自动打开看板',
+                  count: autoLaunchAgents.length,
+                })
+                : t('settings.notConfigured', { defaultValue: '还没有接入任何 Agent' })}
             </span>
             <GlassButton variant="secondary" onClick={handleReopenSetupWizard} disabled={reconfiguring}>
-              {reconfiguring ? t('settings.opening', { defaultValue: 'Opening…' }) : t('settings.configure', { defaultValue: 'Configure' })}
+              {reconfiguring ? t('settings.opening', { defaultValue: '正在打开…' }) : t('settings.configure', { defaultValue: '选择要接入的 Agent' })}
             </GlassButton>
           </div>
         </SettingRow>
-        {setupError && <div className="hook-error-card" role="alert">{setupError}</div>}
+        {setupError && (
+          <div className="hook-error-card" role="alert">
+            <div>{t('settings.wizardOpenFailed', { defaultValue: '向导没能打开，请稍后再试。' })}</div>
+            <SettingDetails testId="general-setup-error">{setupError}</SettingDetails>
+          </div>
+        )}
         <SettingRow label={t('settings.quitApp')}>
           <GlassButton variant="danger" onClick={() => quitApp()}>
             {t('tray.quit')}

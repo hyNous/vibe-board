@@ -138,9 +138,50 @@ describe('UnifiedUsageSection rendering', () => {
     const row = await within(now).findByRole('row', { name: /Codex/ })
     expect(within(row).getByText('5h 60%')).toBeInTheDocument()
     expect(within(row).getAllByText(/^5h /).length).toBeGreaterThanOrEqual(2)
+    expect(within(row).queryByText('codex-jsonl')).not.toBeInTheDocument()
+    fireEvent.click(within(row).getByTestId('usage-provider-details-codex'))
     expect(within(row).getByText('codex-jsonl')).toBeInTheDocument()
-    expect(within(row).getByText('Just now')).toBeInTheDocument()
-    expect(within(row).getByText('Connected')).toBeInTheDocument()
+    expect(within(row).getByText('刚刚')).toBeInTheDocument()
+    expect(within(row).getByText('已获取')).toBeInTheDocument()
+  })
+
+  it('keeps raw sources, counts, and version-style text out of the default view', async () => {
+    getUsageDashboard.mockResolvedValue({
+      providers: [snapshotProvider({
+        history: {
+          available: true,
+          source: 'Codex local session logs',
+          detail: 'Aggregated from 1 local session log(s)',
+          sessionsScanned: 12,
+          tokenEvents: 40,
+          pricingEffectiveDate: '2025-10-15',
+          periods: [],
+        },
+      })],
+      computedAt: Date.now(),
+      pricingEffectiveDate: null,
+    })
+
+    await renderUsage()
+
+    const now = await screen.findByTestId('usage-now')
+    const cost = screen.getByTestId('usage-cost')
+    await within(now).findByRole('row', { name: /Codex/ })
+    await within(cost).findByRole('row', { name: /Codex/ })
+    // Default view: no source code, no file/event counts.
+    expect(now.textContent).not.toContain('codex-jsonl')
+    expect(cost.textContent).not.toContain('Codex local session logs')
+    expect(cost.textContent).not.toContain('已扫描')
+    expect(cost.textContent).not.toContain('条用量记录')
+
+    fireEvent.click(within(now).getByTestId('usage-provider-details-codex'))
+    expect(within(now).getByTestId('usage-provider-details-codex-body')).toHaveTextContent('codex-jsonl')
+
+    fireEvent.click(within(cost).getByTestId('usage-history-details-codex'))
+    const details = within(cost).getByTestId('usage-history-details-codex-body')
+    expect(details).toHaveTextContent('Codex local session logs')
+    expect(details).toHaveTextContent('已扫描 12 个会话文件')
+    expect(details).toHaveTextContent('40 条用量记录')
   })
 
   it('switches the Usage & Cost period and shows tokens, requests, and estimated cost', async () => {
@@ -196,18 +237,20 @@ describe('UnifiedUsageSection rendering', () => {
     // The provider row and its per-model row both carry the period totals.
     expect(within(cost).getAllByText('1.3K').length).toBeGreaterThanOrEqual(2)
     expect(within(cost).getAllByText(/\$1\.23/).length).toBeGreaterThanOrEqual(2)
-    expect(within(cost).getAllByText('estimated').length).toBeGreaterThanOrEqual(2)
+    expect(within(cost).getAllByText('估算').length).toBeGreaterThanOrEqual(2)
+    expect(within(cost).queryByText(/Codex local session logs/)).not.toBeInTheDocument()
+    fireEvent.click(within(cost).getByTestId('usage-history-details-codex'))
     expect(within(cost).getByText(/Codex local session logs/)).toBeInTheDocument()
-    expect(within(cost).getByText(/Price table effective 2025-10-15/)).toBeInTheDocument()
+    expect(within(cost).getByText(/价格表生效日期 2025-10-15/)).toBeInTheDocument()
     // Per-model breakdown for the priced model.
     const modelRow = within(cost).getByTestId('usage-model-gpt-5-codex')
     expect(within(modelRow).getByText('gpt-5-codex')).toBeInTheDocument()
 
-    fireEvent.click(within(cost).getByRole('tab', { name: 'This Week' }))
+    fireEvent.click(within(cost).getByRole('tab', { name: '本周' }))
     expect(within(cost).getByText('2.6K')).toBeInTheDocument()
     expect(within(cost).getByText(/\$2\.46/)).toBeInTheDocument()
 
-    fireEvent.click(within(cost).getByRole('tab', { name: 'This Month' }))
+    fireEvent.click(within(cost).getByRole('tab', { name: '本月' }))
     expect(within(cost).getByText('3.9K')).toBeInTheDocument()
   })
 
@@ -229,16 +272,16 @@ describe('UnifiedUsageSection rendering', () => {
     const now = await screen.findByTestId('usage-now')
     const cost = screen.getByTestId('usage-cost')
     const nowRow = await within(now).findByRole('row', { name: /Codex/ })
-    expect(within(nowRow).getAllByText('Unknown').length).toBeGreaterThanOrEqual(4)
-    expect(within(nowRow).getByText('Waiting for data')).toBeInTheDocument()
+    expect(within(nowRow).getAllByText('未知').length).toBeGreaterThanOrEqual(3)
+    expect(within(nowRow).getByText('正在查询')).toBeInTheDocument()
 
     const costRow = await within(cost).findByRole('row', { name: /Codex/ })
     // Token columns and requests are Unknown; with no price the cost cell stays empty.
-    expect(within(costRow).getAllByText('Unknown').length).toBeGreaterThanOrEqual(6)
-    expect(within(costRow).getByLabelText('No public price; token usage only')).toHaveTextContent('—')
+    expect(within(costRow).getAllByText('未知').length).toBeGreaterThanOrEqual(6)
+    expect(within(costRow).getByLabelText('没有公开价格，只统计 token')).toHaveTextContent('—')
     expect(within(costRow).queryByText('0')).not.toBeInTheDocument()
     // The price-table effective date is visible even before any usage exists.
-    expect(within(cost).getByText(/Price table effective 2025-10-15/)).toBeInTheDocument()
+    expect(within(cost).getByText(/价格表生效日期 2025-10-15/)).toBeInTheDocument()
   })
 
   it('shows only token usage for models without a public price, never a zero amount', async () => {
@@ -280,13 +323,13 @@ describe('UnifiedUsageSection rendering', () => {
     await renderUsage()
 
     const cost = await screen.findByTestId('usage-cost')
-    await within(cost).findByText(/Token usage only \(no public price\): gpt-5\.2-codex-unreleased/)
+    await within(cost).findByText(/只统计 token（没有公开价格）: gpt-5\.2-codex-unreleased/)
     // The period total is a lower bound because one model has no price entry.
     expect(within(cost).getByText(/≥ \$2\.25/)).toBeInTheDocument()
     const unknownModel = within(cost).getByTestId('usage-model-gpt-5.2-codex-unreleased')
     // Tokens are shown; the cost cell is empty rather than Unknown or $0.00.
     expect(within(unknownModel).getByText('500')).toBeInTheDocument()
-    expect(within(unknownModel).getByLabelText('No public price; token usage only')).toHaveTextContent('—')
+    expect(within(unknownModel).getByLabelText('没有公开价格，只统计 token')).toHaveTextContent('—')
     expect(within(unknownModel).queryByText('Unknown')).not.toBeInTheDocument()
     expect(within(unknownModel).queryByText(/\$0\.00/)).not.toBeInTheDocument()
   })
@@ -311,8 +354,8 @@ describe('UnifiedUsageSection rendering', () => {
 
     const now = await screen.findByTestId('usage-now')
     const row = await within(now).findByRole('row', { name: /Codex/ })
-    expect(within(row).getByText('未授权联网查询')).toBeInTheDocument()
-    expect(within(row).queryByText('Waiting for data')).not.toBeInTheDocument()
+    expect(within(row).getByText('未开启联网查询')).toBeInTheDocument()
+    expect(within(row).queryByText('正在查询')).not.toBeInTheDocument()
   })
 
   it('shows the background scan progress while usage history is being collected', async () => {
@@ -331,8 +374,8 @@ describe('UnifiedUsageSection rendering', () => {
     await renderUsage()
 
     const progress = await screen.findByTestId('usage-scan-progress')
-    expect(progress).toHaveTextContent('Collecting usage history')
-    expect(progress).toHaveTextContent('4/12')
+    expect(progress).toHaveTextContent('正在统计用量')
+    expect(progress).not.toHaveTextContent('4/12')
     expect(startUsageHistoryScan).toHaveBeenCalled()
   })
 

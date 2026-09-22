@@ -37,8 +37,8 @@ describe('skill error labels', () => {
   })
 
   it.each([
-    ['zh', '目标路径已存在未管理的 Skill「lark-approval」。请选择覆盖安装或忽略此目标。'],
-    ['en', 'An unmanaged Skill “lark-approval” already exists at the target path. Choose overwrite or skip for this target.'],
+    ['zh', '这个位置已经有一个同名的 Skill「lark-approval」，还没有纳入管理。请选择覆盖它，或跳过这个位置。'],
+    ['en', 'A Skill named “lark-approval” already exists here and is not managed yet. Choose to overwrite it or skip this target.'],
   ])('localizes unmanaged distribution blockers in %s', async (language, expected) => {
     await i18n.changeLanguage(language)
     expect(distributionBlockerReason(i18n.t, unmanagedDistributionBlocker)).toBe(expected)

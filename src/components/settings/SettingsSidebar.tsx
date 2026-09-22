@@ -46,7 +46,7 @@ const sidebarGroups: SidebarGroup[] = [
     labelDefault: '管理',
     items: [
       { id: 'skills', labelKey: 'settings.nav.skills', labelDefault: 'Skill', icon: '🧩' },
-      { id: 'dispatch', labelKey: 'settings.nav.dispatch', labelDefault: '派发框架', icon: '🤖' },
+      { id: 'dispatch', labelKey: 'settings.nav.dispatch', labelDefault: '派活关系', icon: '🤖' },
     ],
   },
   {
@@ -250,10 +250,10 @@ export function SettingsSidebar({
 
   if (activeSection === 'skill-manager-v2') {
     const skillTabs: Array<{ id: SkillManagerTab; label: string; icon: string; iconBg: string }> = [
-      { id: 'library', label: 'Skill 库', icon: '🧩', iconBg: '#34C759' },
-      { id: 'install', label: '安装 Skill', icon: '⬇', iconBg: '#FF9500' },
-      { id: 'agents', label: 'Agent 管理', icon: '🤖', iconBg: '#007AFF' },
-      { id: 'settings', label: '设置', icon: '⚙', iconBg: '#8E8E93' },
+      { id: 'library', label: t('settings.skillTabs.library', { defaultValue: 'Skill 库' }), icon: '🧩', iconBg: '#34C759' },
+      { id: 'install', label: t('settings.skillTabs.install', { defaultValue: '添加 Skill' }), icon: '⬇', iconBg: '#FF9500' },
+      { id: 'agents', label: t('settings.skillTabs.agents', { defaultValue: '按 Agent 查看' }), icon: '🤖', iconBg: '#007AFF' },
+      { id: 'settings', label: t('settings.skillTabs.settings', { defaultValue: 'Skill 设置' }), icon: '⚙', iconBg: '#8E8E93' },
     ]
 
     return (
@@ -281,22 +281,22 @@ export function SettingsSidebar({
           {skillActiveTab === 'agents' && (
             <div className="sm2-sidebar__subgroup">
               <div className="sm2-sidebar__subgroup-label">
-                <span>已检测到程序</span>
+                <span>{t('settings.skillAgents.installed', { defaultValue: '已安装的 Agent' })}</span>
                 <em>{installedSkillAgents.length}</em>
               </div>
               {visibleSkillAgents.length === 0 ? (
-                <div className="sm2-sidebar__subgroup-empty">暂无</div>
+                <div className="sm2-sidebar__subgroup-empty">{t('settings.skillAgents.none', { defaultValue: '暂无' })}</div>
               ) : (
                 <>
                   {installedSkillAgents.length === 0 ? (
-                    <div className="sm2-sidebar__subgroup-empty">暂无已安装 Agent</div>
+                    <div className="sm2-sidebar__subgroup-empty">{t('settings.skillAgents.noneInstalled', { defaultValue: '还没有检测到已安装的 Agent' })}</div>
                   ) : (
                     installedSkillAgents.map((a) => (
                       <div
                         key={a.id}
                         className={`sm2-sidebar__subitem-row${installedSkillAgents.length > 1 ? ' sm2-sidebar__subitem-row--draggable' : ''}${draggedAgentId === a.id ? ' sm2-sidebar__subitem-row--dragging' : ''}${agentDropTarget?.agentId === a.id ? ` sm2-sidebar__subitem-row--drop-${agentDropTarget.edge}` : ''}`}
                         data-agent-id={a.id}
-                        title={`拖拽调整 ${a.displayName} 顺序`}
+                        title={t('settings.skillAgents.dragHint', { name: a.displayName, defaultValue: '拖拽调整 {{name}} 的顺序' })}
                         onMouseDown={(event) => startAgentMouseDrag(event, a.id)}
                       >
                         <button
@@ -326,7 +326,7 @@ export function SettingsSidebar({
                         <span className={`sm2-sidebar__fold-chevron${showOtherSkillAgents ? ' sm2-sidebar__fold-chevron--open' : ''}`}>
                           ＋
                         </span>
-                        <span>其他 Agent（未检测到程序）</span>
+                        <span>{t('settings.skillAgents.others', { defaultValue: '其他 Agent（没找到程序）' })}</span>
                         <em>{otherSkillAgents.length}</em>
                       </button>
                       {showOtherSkillAgents && otherSkillAgents.map((a) => (
@@ -419,7 +419,12 @@ export function SettingsSidebar({
         ))}
       </div>
       <div className="settings-sidebar__foot">
-        <span className="settings-sidebar__version">{appVersion ? `Vibe Board v${appVersion}` : 'Vibe Board'}</span>
+        <span
+          className="settings-sidebar__version"
+          title={appVersion ? `Vibe Board v${appVersion}` : 'Vibe Board'}
+        >
+          Vibe Board
+        </span>
         <span className="settings-sidebar__note">{t('settings.nav.autoSave', { defaultValue: '设置更改会自动保存' })}</span>
       </div>
     </nav>

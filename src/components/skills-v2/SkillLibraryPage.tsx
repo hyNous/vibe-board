@@ -8,13 +8,14 @@ import { DistributeDialog } from './DistributeDialog'
 import { SkillDetailSlider } from './SkillDetailSlider'
 import { SkillIssuesPanel } from './SkillIssuesPanel'
 import { PreviewDialog } from './PreviewDialog'
-import { skillSourceCategoryLabel, skillSourceTypeLabel } from './skillLabels'
+import { skillModeLabel, skillSourceCategoryLabel, skillSourceTypeLabel } from './skillLabels'
+import { SettingDetails } from '../settings/SettingDetails'
 
 const STATUS_LABEL: Record<string, string> = {
   ok: '正常',
-  conflict: '冲突',
-  copyDiverged: '副本分叉',
-  unmanaged: '未管理',
+  conflict: '有冲突',
+  copyDiverged: '两边不一致',
+  unmanaged: '还没纳入管理',
   updateAvailable: '可更新',
 }
 
@@ -50,8 +51,8 @@ export function SkillLibraryPage() {
   const statusOptions = useMemo<FilterSelectOption[]>(() => [
     { value: '', label: '全部状态' },
     { value: 'ok', label: '正常' },
-    { value: 'conflict', label: '冲突' },
-    { value: 'copyDiverged', label: '副本分叉' },
+    { value: 'conflict', label: '有冲突' },
+    { value: 'copyDiverged', label: '两边不一致' },
   ], [])
   const sourceOptions = useMemo<FilterSelectOption[]>(() => [
     { value: '', label: '全部来源' },
@@ -169,25 +170,25 @@ export function SkillLibraryPage() {
       <div className="sm2__header sm2__header--stacked">
         <div>
           <h2 className="sm2__title">Skill 库</h2>
-          <p className="sm2__header-subtitle">统一管理中心库 Skills，查看对哪些 Agent 生效，并处理生效关系、更新和删除。</p>
+          <p className="sm2__header-subtitle">这里存放你的 Skill：看看每个 Skill 正在被哪些 Agent 使用，也可以让它生效、更新或删除。</p>
         </div>
         <div className="sm2__tabs">
-          <button className="sm2__btn sm2__btn--primary" onClick={() => state.setTab('install')}>安装 Skill</button>
+          <button className="sm2__btn sm2__btn--primary" onClick={() => state.setTab('install')}>添加 Skill</button>
           <button className={`sm2__btn${batchMode ? ' sm2__btn--active' : ''}`} onClick={toggleBatchMode}>
             {batchMode ? '完成选择' : '批量管理'}
           </button>
           <button className="sm2__btn" onClick={refresh} disabled={state.loading || startupScanInFlight}>
-            {state.loading ? '刷新中…' : startupScanInFlight ? '后台同步中…' : '刷新'}
+            {state.loading ? '正在刷新…' : startupScanInFlight ? '正在后台同步…' : '刷新'}
           </button>
         </div>
       </div>
 
       {overview && (
         <div className="sm2__metrics sm2__library-metrics">
-          <Metric value={overview.metrics.centerSkillCount} label="中心库 Skill" />
-          <Metric value={overview.metrics.targetCount} label="Agent 安装" />
-          <Metric value={overview.metrics.unmanagedCount} label="未管理" onClick={openAgentSync} />
-          <Metric value={overview.metrics.issueCount} label="诊断问题" onClick={openIssues} />
+          <Metric value={overview.metrics.centerSkillCount} label="Skill 总数" />
+          <Metric value={overview.metrics.targetCount} label="已让 Agent 生效" />
+          <Metric value={overview.metrics.unmanagedCount} label="还没纳入管理" onClick={openAgentSync} />
+          <Metric value={overview.metrics.issueCount} label="需要整理" onClick={openIssues} />
         </div>
       )}
 
@@ -230,7 +231,7 @@ export function SkillLibraryPage() {
         <div className="sm2__batch-distribute-bar">
           <div className="sm2__batch-distribute-copy">
             <strong>已选择 {selectedSkillIds.size} 个 Skill</strong>
-            <span>批量让同一组 Agent 生效，或从中心库删除多个 Skill</span>
+            <span>一次让多个 Skill 对同一组 Agent 生效，或从 Skill 库删除它们。</span>
           </div>
           <div className="sm2__batch-distribute-actions">
             <button className="sm2__btn sm2__btn--ghost" onClick={selectVisibleSkills} disabled={skills.length === 0}>
@@ -240,7 +241,7 @@ export function SkillLibraryPage() {
               清空
             </button>
             <button className="sm2__btn sm2__btn--primary" onClick={openBatchDistribute} disabled={selectedSkillIds.size === 0}>
-              让 {selectedSkillIds.size} 个 Skill 生效
+              让选中的 {selectedSkillIds.size} 个生效
             </button>
             <button className="sm2__btn sm2__btn--danger" onClick={openBatchDelete} disabled={selectedSkillIds.size === 0 || busy}>
               删除 {selectedSkillIds.size} 个 Skill
@@ -253,13 +254,17 @@ export function SkillLibraryPage() {
 
       <div className="sm2__main sm2__main--full">
         {state.loading && !overview ? (
-          <div className="sm2__empty">加载 Skill 库…</div>
+          <div className="sm2__empty">正在加载 Skill 库…</div>
         ) : startupScanInFlight && skills.length === 0 ? (
           <div className="sm2__empty">正在后台同步 Skill 数据…</div>
         ) : skills.length === 0 ? (
           <div className="sm2__empty">
-            中心库为空。点击「添加到中心库」导入第一个 Skill，或把 Skill 文件夹放入
-            <code style={{ margin: '0 4px' }}>{state.settings?.centerPath}</code> 后刷新。
+            <div>Skill 库还是空的。点「添加 Skill」，从文件夹、Git 或 Agent 目录导入第一个 Skill。</div>
+            {state.settings?.centerPath && (
+              <SettingDetails testId="skill-library-empty-details" label="详情">
+                <p>Skill 库位置：<code>{state.settings.centerPath}</code></p>
+              </SettingDetails>
+            )}
           </div>
         ) : state.viewMode === 'cards' ? (
           <div className="sm2__grid">
@@ -532,10 +537,11 @@ function Metric({ value, label, onClick }: { value: number; label: string; onCli
 }
 
 function AgentBadges({ skill }: { skill: SkillSummary }) {
+  const { t } = useTranslation()
   return (
     <div className="sm2__agents">
       {skill.installedAgents.map((a) => (
-        <AgentIconBadge key={a.agentId} iconKey={a.iconKey} mode={a.mode} title={`${a.displayName} · ${a.mode} · ${a.status}`} />
+        <AgentIconBadge key={a.agentId} iconKey={a.iconKey} mode={a.mode} title={`${a.displayName} · ${skillModeLabel(t, a.mode)}`} />
       ))}
     </div>
   )
@@ -553,9 +559,9 @@ function isCopyDiffStatus(status: string): boolean {
 function CopyDiffMarker({ count }: { count: number }) {
   if (count === 0) return null
   return (
-    <span className="sm2__copy-diff-marker" title={`${count} 个复制安装与中心库不同`}>
-      <b>Diff</b>
-      <span>{count} 个副本有变更</span>
+    <span className="sm2__copy-diff-marker" title={`${count} 个 Agent 里的副本和 Skill 库不一致`}>
+      <b>已改动</b>
+      <span>{count} 个副本和 Skill 库不一致</span>
     </span>
   )
 }
@@ -602,16 +608,16 @@ function SkillCard({
           </div>
         )}
       </div>
-      <p className="sm2__card-desc">{skill.description || '（无描述）'}</p>
+      <p className="sm2__card-desc">{skill.description || '暂无描述'}</p>
       <div className="sm2__card-tags">
         <span className={`sm2__tag sm2__tag--${skill.status}`}>{STATUS_LABEL[skill.status] || skill.status}</span>
-        <span className="sm2__tag">{skill.skillType}</span>
+        <span className="sm2__tag">{skill.skillType === 'skill' ? '技能' : skill.skillType}</span>
       </div>
       <div className="sm2__card-foot">
         {skill.installedAgents.length > 0 && (
           <div className="sm2__agents">
             {skill.installedAgents.map((a) => (
-              <AgentIconBadge key={a.agentId} iconKey={a.iconKey} mode={a.mode} title={`${a.displayName} · ${a.mode}`} />
+              <AgentIconBadge key={a.agentId} iconKey={a.iconKey} mode={a.mode} title={`${a.displayName} · ${skillModeLabel(t, a.mode)}`} />
             ))}
           </div>
         )}

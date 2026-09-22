@@ -332,9 +332,9 @@ export function DispatchSection() {
 
   return (
     <SettingSection
-      title={t('settings.dispatch.title', { defaultValue: '派发关系树' })}
+      title={t('settings.dispatch.title', { defaultValue: '让 Agent 互相派活' })}
       description={t('settings.dispatch.desc', {
-        defaultValue: '让一个 Agent 把任务派给另一个 Agent。点「＋ 添加工人」建立关系，点「断开」解除关系。',
+        defaultValue: '让一个 Agent 把任务派给另一个 Agent。点「＋ 添加工人」建立关系，点「断开」解除关系；装好之后派活由主 Agent 直接完成，不经过 Vibe Board。',
       })}
     >
       {loading && (
@@ -363,7 +363,7 @@ export function DispatchSection() {
         </div>
       )}
 
-      <SettingGroup label={t('settings.dispatch.treeTitle', { defaultValue: '派发关系' })}>
+      <SettingGroup label={t('settings.dispatch.treeTitle', { defaultValue: '谁可以把任务派给谁' })}>
         {tree && tree.agents.length === 0 && (
           <div className="hook-empty" data-testid="dispatch-empty-agents">
             {t('settings.dispatch.emptyAgents', { defaultValue: '没有检测到已安装的 Agent。' })}

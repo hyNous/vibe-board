@@ -1,4 +1,5 @@
 /* RateLimitBar — Compact API rate limit display */
+import { useTranslation } from 'react-i18next'
 import type { RateLimitInfo } from '../../types/agent'
 import { rateLimitWindowGroups, rateLimitWindowLabel, rateLimitWindows } from '../../utils/rateLimitDisplay'
 import './RateLimitBar.css'
@@ -14,6 +15,7 @@ function usageClass(pct: number): string {
 }
 
 export function RateLimitBar({ rateLimits }: RateLimitBarProps) {
+  const { t } = useTranslation()
   if (!rateLimits) return null
 
   const windows = rateLimitWindows(rateLimits).slice(0, 2)
@@ -21,11 +23,14 @@ export function RateLimitBar({ rateLimits }: RateLimitBarProps) {
   const stacked = rateLimits.provider?.toLowerCase() === 'antigravity' && groups.length > 1
   const titleWindows = stacked ? groups.flatMap((group) => group.windows) : windows
 
-  const source = rateLimits.providerLabel || rateLimits.provider || 'Usage'
-  const sourceDetail = [rateLimits.source, rateLimits.updatedAt ? new Date(rateLimits.updatedAt).toLocaleTimeString() : null]
-    .filter(Boolean)
-    .join(' · ')
-  const title = `${source}: ${titleWindows.map((window) => `${window.title}: ${Math.round(window.usedPercent)}% used${window.remainingLabel ? ` (${window.remainingLabel} left)` : ''}`).join(' | ')}${sourceDetail ? ` · ${sourceDetail}` : ''}`
+  const source = rateLimits.providerLabel || rateLimits.provider || t('settings.usage', { defaultValue: '使用额度' })
+  const title = `${source}: ${titleWindows.map((window) => {
+    const used = t('notch.rateLimitUsed', { defaultValue: '已用 {{percent}}%', percent: Math.round(window.usedPercent) })
+    const remaining = window.remainingLabel
+      ? `，${t('notch.rateLimitRemaining', { defaultValue: '剩余 {{value}}', value: window.remainingLabel })}`
+      : ''
+    return `${window.title} ${used}${remaining}`
+  }).join('；')}`
 
   const renderSegment = (window: typeof titleWindows[number], index: number, groupTitle?: string) => (
     <span key={`${groupTitle || 'window'}:${window.id}`} className={`rate-limit__segment ${usageClass(window.usedPercent)}`}>

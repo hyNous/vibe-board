@@ -62,6 +62,7 @@ vi.mock('react-i18next', () => ({
       const value = translations[key] ?? options?.defaultValue ?? key
       return value
         .replace('{{message}}', options?.message ?? '')
+        .replace('{{name}}', (options as { name?: string })?.name ?? '')
         .replace('{{count}}', String(options?.count ?? ''))
     },
     i18n: { language: 'en' },
@@ -151,7 +152,7 @@ describe('settings island menu', () => {
 
     expect(groups).toEqual([
       { label: '运行', items: ['任务看板', '使用额度'] },
-      { label: '管理', items: ['Skill', '派发框架'] },
+      { label: '管理', items: ['Skill', '派活关系'] },
       { label: '外观', items: ['外观'] },
       { label: '快捷键', items: ['快捷键'] },
       { label: '系统', items: ['通用', '重看教程与向导', '关于'] },
@@ -305,9 +306,9 @@ describe('settings island menu', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Skill' }))
 
-    expect(await screen.findByRole('heading', { name: 'Skills' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Skill 库' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: /全部（中心库）/ })).toBeInTheDocument()
-    expect(screen.getByText(/仅用户级 Skills/)).toBeInTheDocument()
+    expect(screen.getByText(/只显示你自己安装的 Skill/)).toBeInTheDocument()
     expect(screen.getByText(/「通用 \/ 专属」自动分配/)).toBeInTheDocument()
     expect(screen.queryByText(/通用分类来自中心库/)).not.toBeInTheDocument()
   })
@@ -497,7 +498,9 @@ describe('settings island menu', () => {
 
     expect(tauriMocks.registerGlobalShortcut).toHaveBeenCalledWith('CommandOrControl+Shift+J')
     await waitFor(() => expect(useConfigStore.getState().globalShortcut).toBe('CommandOrControl+Shift+I'))
-    expect(screen.getByRole('alert')).toHaveTextContent('already registered')
+    expect(screen.getByRole('alert')).toHaveTextContent('这个组合键没能生效')
+    fireEvent.click(screen.getByTestId('shortcut-error-details'))
+    expect(screen.getByTestId('shortcut-error-details-body')).toHaveTextContent('already registered')
   })
 
   it('shows the usage provider settings on the usage page', async () => {
@@ -506,14 +509,14 @@ describe('settings island menu', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '使用额度' }))
 
-    expect(await screen.findByText('账号配额')).toBeInTheDocument()
+    expect(await screen.findByText('各工具的额度查询')).toBeInTheDocument()
     expect(screen.getByText('在灵动岛显示额度')).toBeInTheDocument()
     const providerRow = await screen.findByTestId('usage-provider-codex')
     expect(providerRow).toHaveTextContent('Codex')
-    expect(providerRow).toHaveTextContent('未授权联网查询')
+    expect(providerRow).toHaveTextContent('未开启联网查询')
 
     tauriMocks.isTauri.mockReturnValue(true)
-    fireEvent.click(screen.getByText('打开官方登录'))
+    fireEvent.click(screen.getByText('登录 Codex 账号'))
     await waitFor(() => expect(tauriMocks.authorizeUsageProvider).toHaveBeenCalledWith('codex'))
   })
 
@@ -525,7 +528,7 @@ describe('settings island menu', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '使用额度' }))
     const providerRow = await screen.findByTestId('usage-provider-codex')
-    expect(providerRow).toHaveTextContent('未允许联网查询（默认关闭）')
+    expect(providerRow).toHaveTextContent('未开启联网查询（默认关闭）')
 
     fireEvent.click(within(providerRow).getByRole('switch'))
 
@@ -535,7 +538,7 @@ describe('settings island menu', () => {
     expect(confirm).toHaveTextContent('codex app-server (JSON-RPC account/rateLimits/read)')
     expect(confirm).toHaveTextContent('/home/user/.codex/auth.json')
 
-    fireEvent.click(within(confirm).getByText('确认开启'))
+    fireEvent.click(within(confirm).getByText('允许查询'))
     await waitFor(() => expect(tauriMocks.setUsageNetworkAuthorization).toHaveBeenCalledWith('codex', true))
   })
 
@@ -564,7 +567,7 @@ describe('settings island menu', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '使用额度' }))
     const codexRow = await screen.findByTestId('usage-provider-codex')
-    expect(codexRow).toHaveTextContent('已允许联网查询')
+    expect(codexRow).toHaveTextContent('已开启联网查询')
 
     fireEvent.click(within(codexRow).getByRole('switch'))
 
@@ -573,7 +576,7 @@ describe('settings island menu', () => {
     expect(within(codexRow).queryByTestId('usage-network-confirm-codex')).not.toBeInTheDocument()
 
     const claudeRow = await screen.findByTestId('usage-provider-claude-code')
-    expect(claudeRow).toHaveTextContent('暂不支持联网查询')
+    expect(claudeRow).toHaveTextContent('这个工具暂不支持联网查询')
     expect(within(claudeRow).queryByRole('switch')).not.toBeInTheDocument()
   })
 
@@ -588,7 +591,7 @@ describe('settings island menu', () => {
     tauriMocks.listUsageProviders.mockImplementationOnce(
       () => new Promise<UsageSnapshot[]>((resolve) => { resolveProviders = resolve }),
     )
-    fireEvent.click(screen.getByRole('button', { name: '刷新' }))
+    fireEvent.click(screen.getByRole('button', { name: '重新检查' }))
 
     expect(await within(providerRow).findByTestId('usage-provider-querying-codex'))
       .toHaveTextContent('正在查询…')
@@ -601,10 +604,23 @@ describe('settings island menu', () => {
   it('renders the dispatch relationship page inside the settings window', async () => {
     render(<SettingsApp onClose={vi.fn()} />)
 
-    fireEvent.click(screen.getByRole('button', { name: '派发框架' }))
+    fireEvent.click(screen.getByRole('button', { name: '派活关系' }))
 
-    expect(await screen.findByText('派发关系树')).toBeInTheDocument()
+    expect(await screen.findByText('让 Agent 互相派活')).toBeInTheDocument()
     expect(await screen.findByTestId('dispatch-empty-agents')).toBeInTheDocument()
+  })
+
+  it('keeps the app version out of the About default view and shows it in the details', async () => {
+    render(<SettingsApp onClose={vi.fn()} />)
+
+    fireEvent.click(screen.getByRole('button', { name: '关于' }))
+
+    const versionDetails = await screen.findByTestId('about-version-details')
+    expect(screen.queryByText(/^Version /)).not.toBeInTheDocument()
+    expect(screen.queryByText(/^v?\d+\.\d+\.\d+$/)).not.toBeInTheDocument()
+
+    fireEvent.click(versionDetails)
+    expect(screen.getByTestId('about-version-details-body')).toHaveTextContent('Vibe Board 版本')
   })
 
   it('reopens the first-run wizard from the tutorial entry', async () => {
@@ -612,7 +628,7 @@ describe('settings island menu', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '重看教程与向导' }))
 
-    expect(await screen.findByText('重新打开首次向导')).toBeInTheDocument()
+    expect(await screen.findByText('重新选择要接入的 Agent')).toBeInTheDocument()
     fireEvent.click(screen.getByText('打开向导'))
 
     await waitFor(() => expect(tauriMocks.updateConfig).toHaveBeenCalledWith(
@@ -626,7 +642,7 @@ describe('settings island menu', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '重看教程与向导' }))
 
-    expect(await screen.findByText('打开完整教程')).toBeInTheDocument()
+    expect(await screen.findByText('看完整教程')).toBeInTheDocument()
     fireEvent.click(screen.getByText('打开教程'))
 
     await waitFor(() => expect(tauriMocks.openTutorialWindow).toHaveBeenCalledTimes(1))

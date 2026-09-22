@@ -107,7 +107,7 @@ export function AgentPresenceStrip({
                 ? t('notch.agentOnline', { defaultValue: '在线' })
                 : t('notch.agentOffline', { defaultValue: '离线' })}
             </span>
-            {quotaLines.length > 0 && <span className="agent-presence-strip__meta agent-presence-strip__meta--quota" title={rateLimits?.source}>{quotaLines.map((quota) => <span className="agent-presence-strip__quota-line" key={quota}>{t('notch.agentQuota', { defaultValue: '额度剩余 {{value}}', value: quota })}</span>)}</span>}
+            {quotaLines.length > 0 && <span className="agent-presence-strip__meta agent-presence-strip__meta--quota">{quotaLines.map((quota) => <span className="agent-presence-strip__quota-line" key={quota}>{t('notch.agentQuota', { defaultValue: '额度剩余 {{value}}', value: quota })}</span>)}</span>}
             {resetLines.length > 0 && <span className="agent-presence-strip__meta">{resetLines.map((resetValue) => <span className="agent-presence-strip__quota-line" key={resetValue}>{t('notch.agentReset', { defaultValue: '重置 {{value}}', value: resetValue })}</span>)}</span>}
             {quotaLines.length === 0 && resetLines.length === 0 && tokens > 0 && <span className="agent-presence-strip__meta">{t('notch.agentTokens', { defaultValue: 'Token {{value}}', value: tokens.toLocaleString() })}</span>}
             {!hasRecord && <span className="agent-presence-strip__meta">{t('notch.agentNoRecord', { defaultValue: '暂无记录' })}</span>}

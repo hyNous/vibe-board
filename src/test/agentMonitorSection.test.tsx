@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AgentMonitorSection } from '../components/settings/sections/AgentMonitorSection'
 import type { MonitorSessionSummary } from '../services/monitorApi'
@@ -61,7 +61,18 @@ describe('AgentMonitorSection', () => {
     expect(screen.getByTestId('live-task-session-1')).toBeInTheDocument()
     expect(screen.getByTestId('live-task-session-antigravity')).toBeInTheDocument()
     expect(screen.getByText('Live Antigravity task')).toBeInTheDocument()
-    expect(screen.getByText('每个 Agent 的独立 session 都会显示；嵌套 subagent 计入所属会话的子任务数，不重复计数。')).toBeInTheDocument()
+    expect(screen.getByText('每个 Agent 的会话单独显示；一个会话里的子任务不会重复计数。')).toBeInTheDocument()
+  })
+
+  it('keeps session ids and token counts out of the default view', async () => {
+    render(<AgentMonitorSection />)
+
+    await waitFor(() => expect(screen.getByTestId('live-task-list')).toBeInTheDocument())
+    expect(screen.queryByText('session-1')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByTestId('live-task-details-session-1'))
+
+    expect(screen.getByTestId('live-task-details-session-1-body')).toHaveTextContent('session-1')
   })
 
   it('does not render the removed task trace block', async () => {

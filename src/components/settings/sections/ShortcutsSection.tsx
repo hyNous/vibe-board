@@ -6,6 +6,7 @@ import { registerGlobalShortcut } from '../../../services/tauriApi'
 import { SettingSection } from '../SettingSection'
 import { SettingGroup } from '../SettingGroup'
 import { SettingRow } from '../SettingRow'
+import { SettingDetails } from '../SettingDetails'
 import { GlassInput } from '../../shared'
 
 const PRIMARY_SHORTCUT_ACTIONS = new Set(['toggle-panel', 'collapse-panel', 'open-settings'])
@@ -103,11 +104,7 @@ export function ShortcutsSection() {
   const setShortcutDraft = (value: string) => setShortcutDraftState({ key: latestShortcutDraft, value })
 
   const formatShortcutError = (error: unknown) => {
-    const message = error instanceof Error ? error.message : String(error)
-    return t('settings.shortcutApplyFailed', {
-      defaultValue: 'Shortcut could not be applied: {{message}}',
-      message,
-    })
+    return error instanceof Error ? error.message : String(error)
   }
 
   const commitIslandShortcut = () => {
@@ -132,11 +129,14 @@ export function ShortcutsSection() {
   }
 
   return (
-    <SettingSection title={t('settings.shortcutsTitle', { defaultValue: '快捷键' })} description={t('settings.shortcutsDesc', { defaultValue: '全局快捷键与窗口内快捷键。' })}>
-      <SettingGroup label={t('settings.globalShortcuts', { defaultValue: 'Global Shortcuts' })}>
+    <SettingSection
+      title={t('settings.shortcutsTitle', { defaultValue: '快捷键' })}
+      description={t('settings.shortcutsDesc', { defaultValue: '给常用操作配上键盘组合键，不用鼠标也能操作灵动岛。' })}
+    >
+      <SettingGroup label={t('settings.globalShortcuts', { defaultValue: '全局快捷键（在任何窗口都生效）' })}>
         <SettingRow
-          label={t('settings.globalShortcut', { defaultValue: 'Toggle island visibility' })}
-          description={t('settings.globalShortcutDesc', { defaultValue: 'Keyboard shortcut to toggle island visibility' })}
+          label={t('settings.globalShortcut', { defaultValue: '显示或隐藏灵动岛' })}
+          description={t('settings.globalShortcutDesc', { defaultValue: '在任意窗口按下这个组合键，就能让灵动岛出现或收起。' })}
         >
           <div className="shortcut-global-control">
             <GlassInput
@@ -149,9 +149,14 @@ export function ShortcutsSection() {
             />
           </div>
         </SettingRow>
-        {shortcutError && <div className="shortcut-status shortcut-status--error" role="alert">{shortcutError}</div>}
+        {shortcutError && (
+          <div className="shortcut-status shortcut-status--error" role="alert">
+            <div>{t('settings.shortcutApplyFailed', { defaultValue: '这个组合键没能生效，可能已被系统或其它软件占用。' })}</div>
+            <SettingDetails testId="shortcut-error-details">{shortcutError}</SettingDetails>
+          </div>
+        )}
       </SettingGroup>
-      <SettingGroup label={t('settings.inWindowShortcuts', { defaultValue: 'In-Window Shortcuts' })}>
+      <SettingGroup label={t('settings.inWindowShortcuts', { defaultValue: '面板内快捷键' })}>
         <div className="shortcuts-table">
           {primaryShortcuts.map((s) => (
             <ShortcutRow

@@ -1,0 +1,61 @@
+.setting-details {
+  margin-top: 6px;
+}
+
+.setting-details__toggle {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--settings-status-active, #008c8d);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.setting-details__chevron {
+  display: inline-block;
+  width: 12px;
+}
+
+.setting-details__body {
+  margin-top: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--settings-card-border);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--settings-text-secondary);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.setting-details__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 2px 0;
+  font-size: 11px;
+}
+
+.setting-details__row > span {
+  flex: 0 0 auto;
+  color: var(--settings-text-tertiary);
+}
+
+.setting-details__row code,
+.setting-details__body code {
+  overflow: hidden;
+  color: var(--settings-text-secondary);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.setting-details__body p {
+  margin: 0 0 4px;
+}
+
+.setting-details__body p:last-child {
+  margin-bottom: 0;
+}

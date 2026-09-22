@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useSkillStoreV2 } from '../../stores/skillStoreV2'
 import { skillApiV2 } from '../../services/skillApiV2'
+import { SettingDetails } from '../settings/SettingDetails'
 import type { DiagnosisIssue } from '../../services/skillApiV2'
 
 // Skill issues used to live on their own "诊断与修复" tab. They now surface as
@@ -9,10 +10,10 @@ import type { DiagnosisIssue } from '../../services/skillApiV2'
 type IssueGroupId = 'unmanaged' | 'sync' | 'confirm' | 'library'
 
 const ISSUE_GROUPS: Array<{ id: IssueGroupId; title: string }> = [
-  { id: 'sync', title: '同步与快照' },
+  { id: 'sync', title: '安装记录' },
   { id: 'confirm', title: '需要你决定' },
-  { id: 'unmanaged', title: '未接管的 Skill' },
-  { id: 'library', title: '中心库整理' },
+  { id: 'unmanaged', title: '还没纳入管理的 Skill' },
+  { id: 'library', title: 'Skill 库整理' },
 ]
 
 export function SkillIssuesPanel() {
@@ -66,11 +67,11 @@ export function SkillIssuesPanel() {
     <section className={`sm2__issues${state.issues.length > 0 ? ' sm2__issues--warn' : ''}`} aria-label="Skill 问题提示">
       <div className="sm2__issues-head">
         <div>
-          <h3>{state.issues.length === 0 ? 'Skill 状态正常' : `Skill 状态需要整理 · ${state.issues.length} 项`}</h3>
+          <h3>{state.issues.length === 0 ? 'Skill 状态正常' : `有 ${state.issues.length} 处需要整理`}</h3>
           <p>
             {state.issues.length === 0
-              ? '中心库与 Agent 目录当前一致。若刚手动安装过 Skill，可以重新检查。'
-              : `其中 ${stats.auto} 项可以安全修复，安全检查只会清理失效记录、断开的链接或刷新快照，不会删除 Skill 内容。`}
+              ? 'Skill 库和各个 Agent 目录目前是一致的。刚手动装过 Skill 的话，可以再检查一次。'
+              : `其中 ${stats.auto} 处可以自动修好；自动修复只会清理失效记录和断开的链接，不会删除 Skill 内容。`}
           </p>
         </div>
         <div className="sm2__issues-actions">
@@ -78,7 +79,7 @@ export function SkillIssuesPanel() {
             重新检查
           </button>
           <button className="sm2__btn sm2__btn--primary" onClick={() => void safeFix()} disabled={busyNow || stats.auto === 0}>
-            修复安全项
+            自动修复
           </button>
         </div>
       </div>
@@ -110,11 +111,17 @@ export function SkillIssuesPanel() {
 }
 
 function IssueRow({ issue, busy, onFix }: { issue: DiagnosisIssue; busy: boolean; onFix: (issue: DiagnosisIssue) => void }) {
+  const rawDetail = stripInternalReason(issue.detail)
   return (
     <article className={`sm2__issues-row sm2__issues-row--${issue.fixKind}`}>
       <div className="sm2__issues-row-body">
         <strong>{friendlyTitle(issue)}</strong>
         <span>{friendlyDetail(issue)}</span>
+        {rawDetail && (
+          <SettingDetails testId={`skill-issue-details-${issue.id}`} label="详情">
+            <p>{rawDetail}</p>
+          </SettingDetails>
+        )}
       </div>
       {issue.fixKind === 'info' ? (
         <span className="sm2__issues-hint">{infoActionHint(issue)}</span>
@@ -159,27 +166,27 @@ function groupForIssue(issue: DiagnosisIssue): IssueGroupId {
 function friendlyTitle(issue: DiagnosisIssue): string {
   switch (issue.issueType) {
     case 'agent_unmanaged':
-      return `发现未接管 Skill${agentNameFromTitle(issue.title) ? ` · ${agentNameFromTitle(issue.title)}` : ''}`
+      return `发现还没纳入管理的 Skill${agentNameFromTitle(issue.title) ? ` · ${agentNameFromTitle(issue.title)}` : ''}`
     case 'snapshot_stale':
-      return 'JSON 快照需要刷新'
+      return '需要刷新一份记录'
     case 'broken_link':
       return '发现断开的 Skill 链接'
     case 'target_missing':
       return '发现失效的安装记录'
     case 'agents_managed_duplicate':
-      return '.agents 里有已管理的重复 Skill'
+      return '共享目录里有重复的 Skill'
     case 'orphan_claim':
-      return '发现失效的 Skill 包占用记录'
+      return '有一条旧的占用记录失效了'
     case 'copy_diverged':
-      return '中心库和 Agent 副本都发生了修改'
+      return '两边都改过，需要你选一份'
     case 'copy_outdated':
-      return 'Agent 副本落后于中心库'
+      return 'Agent 里的副本比 Skill 库旧'
     case 'copy_modified':
-      return 'Agent 副本有本地修改'
+      return 'Agent 里的副本被改过'
     case 'center_unmanaged':
-      return '中心库里有未登记的 Skill'
+      return 'Skill 库里有一个还没登记的 Skill'
     case 'pack_member_missing':
-      return 'Skill 包引用了缺失的成员'
+      return '有个旧的技能包缺少内容'
     default:
       return issue.title || '需要查看的问题'
   }
@@ -187,39 +194,38 @@ function friendlyTitle(issue: DiagnosisIssue): string {
 
 function friendlyDetail(issue: DiagnosisIssue): string {
   if (issue.issueType === 'agent_unmanaged') {
-    const path = pathFromDetail(issue.detail)
     const reason = reasonFromDetail(issue.detail)
-    return `${path ? `${path}。` : ''}${unmanagedReasonText(reason)}`
+    return unmanagedReasonText(reason)
   }
   if (issue.issueType === 'snapshot_stale') {
-    return '中心库已经变化，JSON 快照还停留在旧版本。刷新后，外部工具和人工排查会看到最新状态。'
+    return 'Skill 库已经变化，但一份给排查用的记录还是旧的。刷新后就能看到最新状态。'
   }
   if (issue.issueType === 'broken_link') {
-    return `${quotedPath(issue.detail)} 指向的 Skill 已不存在，可以清理这条断开的链接。`
+    return '这条链接指向的 Skill 已不存在，可以清理这条断开的链接。'
   }
   if (issue.issueType === 'target_missing') {
-    return `${quotedPath(issue.detail)} 已不在磁盘上，可以移除这条过期记录。`
+    return '这条安装记录对应的文件已经不在了，可以移除这条过期记录。'
   }
   if (issue.issueType === 'agents_managed_duplicate') {
-    return `${quotedPath(issue.detail)} 已由中心库管理。建议删除 .agents/skills 里的这份重复目标，避免多个 Agent 隐式加载旧副本。`
+    return '这个 Skill 已经由 Skill 库统一管理，共享目录里的这份是重复的。删掉它，可以避免多个 Agent 读到旧副本。'
   }
   if (issue.issueType === 'orphan_claim') {
-    return '某个 Skill 包还占用着已不存在的安装目标，可以安全移除这条占用记录。'
+    return '有一条旧的占用记录指向已经不存在的安装位置，可以安全移除。'
   }
   if (issue.issueType === 'copy_diverged') {
-    return '中心库和 Agent 里的副本都改过，需要你决定以哪一份为准。'
+    return 'Skill 库和 Agent 里的副本都改过，需要你决定以哪一份为准。'
   }
   if (issue.issueType === 'copy_outdated') {
-    return `${quotedPath(issue.detail)} 可以从中心库更新，但会改写 Agent 目录里的副本。`
+    return 'Agent 里的副本可以从 Skill 库更新，但会覆盖那份副本。'
   }
   if (issue.issueType === 'copy_modified') {
-    return `${quotedPath(issue.detail)} 和中心库快照不同，需要确认是否把这份本地修改推回中心库。`
+    return 'Agent 里的副本和 Skill 库不一致，需要确认是否把这份本地修改推回 Skill 库。'
   }
   if (issue.issueType === 'center_unmanaged') {
-    return '这个目录看起来是 Skill，但还没有进入 Vibe Board 的中心库索引。'
+    return '这个目录看起来是一个 Skill，但还没有登记到 Skill 库里。'
   }
   if (issue.issueType === 'pack_member_missing') {
-    return '某个 Skill 包引用了中心库里不存在的 Skill，安装这个包时可能缺少内容。'
+    return '有个旧的技能包引用了 Skill 库里不存在的 Skill，安装它时可能缺少内容。'
   }
   return stripInternalReason(issue.detail)
 }
@@ -229,28 +235,28 @@ function unmanagedReasonText(reason: string): string {
     case 'same_name_as_center_skill':
       return '本地已有同名 Skill，Vibe Board 暂时不会接管，避免覆盖你的内容。'
     case 'not_in_center_library':
-      return '这个 Skill 不在中心库里。你可以在 Agent 管理页把它导入中心库，之后再让它对 Agent 生效。'
+      return '这个 Skill 还没有登记到 Skill 库里。你可以在「按 Agent 查看」页把它收进 Skill 库，之后再让它对 Agent 生效。'
     case 'path_conflict':
-      return '这个路径和现有管理记录冲突，需要先确认保留哪一份。'
+      return '这个位置和现有记录冲突，需要先确认保留哪一份。'
     default:
-      return 'Vibe Board 还没有接管这个 Skill。需要统一管理时，可以去 Agent 管理页接管。'
+      return 'Vibe Board 还没有接管这个 Skill。需要统一管理时，可以去「按 Agent 查看」页接管。'
   }
 }
 
 function friendlyActionLabel(issue: DiagnosisIssue): string {
   switch (issue.issueType) {
     case 'snapshot_stale':
-      return '刷新快照'
+      return '刷新记录'
     case 'broken_link':
       return '清理断开链接'
     case 'target_missing':
       return '移除失效记录'
     case 'agents_managed_duplicate':
-      return '删除 .agents 重复项'
+      return '删除重复项'
     case 'orphan_claim':
-      return '移除占用记录'
+      return '移除旧记录'
     case 'copy_modified':
-      return '推回中心库'
+      return '推回 Skill 库'
     case 'copy_outdated':
       return '更新副本'
     case 'copy_diverged':
@@ -261,8 +267,8 @@ function friendlyActionLabel(issue: DiagnosisIssue): string {
 }
 
 function infoActionHint(issue: DiagnosisIssue): string {
-  if (issue.issueType === 'agent_unmanaged') return '去 Agent 管理页接管'
-  if (issue.issueType === 'center_unmanaged') return '导入中心库后即可管理'
+  if (issue.issueType === 'agent_unmanaged') return '去「按 Agent 查看」页接管'
+  if (issue.issueType === 'center_unmanaged') return '收进 Skill 库后即可管理'
   return '查看后按需处理'
 }
 
@@ -271,20 +277,10 @@ function agentNameFromTitle(title: string): string {
   return title.startsWith(prefix) ? title.slice(prefix.length).trim() : ''
 }
 
-function pathFromDetail(detail: string): string {
-  const [path] = detail.split(' — reason:')
-  return path?.trim() ?? ''
-}
-
 function reasonFromDetail(detail: string): string {
   const marker = 'reason:'
   const index = detail.indexOf(marker)
   return index >= 0 ? detail.slice(index + marker.length).trim() : ''
-}
-
-function quotedPath(detail: string): string {
-  const match = detail.match(/'([^']+)'/)
-  return match?.[1] ?? '目标路径'
 }
 
 function stripInternalReason(detail: string): string {

@@ -6,6 +6,7 @@ import { splitAgentsByProgram } from '../../stores/skillStoreV2'
 import type { ConflictBlocker, DistributionPreview, AgentSummary, SkillSummary } from '../../services/skillApiV2'
 import { PreviewDialog } from './PreviewDialog'
 import { AgentIconBadge } from './AgentIconBadge'
+import { SettingDetails } from '../settings/SettingDetails'
 import { distributionBlockerReason, skillModeLabel } from './skillLabels'
 
 type BlockerDecision = 'overwrite' | 'agent_over_center' | 'skip'
@@ -75,12 +76,12 @@ function isManagedCopyBlocker(blocker: ConflictBlocker) {
 function installedCopyStatusLabel(status?: string) {
   switch (status) {
     case 'copy_modified':
-      return '副本已修改'
+      return '副本被改过'
     case 'copy_diverged':
     case 'copyDiverged':
-      return '副本已分叉'
+      return '副本和 Skill 库不一致'
     case 'copy_outdated':
-      return '副本可更新'
+      return '副本可以更新'
     default:
       return null
   }
@@ -152,7 +153,7 @@ export function DistributeDialog({
 
   const runPreview = async () => {
     if (selected.size === 0) {
-      setError('请至少选择一个 Agent')
+      setError('请先选择至少一个 Agent')
       return
     }
     setBusy(true)
@@ -198,8 +199,8 @@ export function DistributeDialog({
   if (!preview) {
     return (
       <PreviewDialog
-        title={isBatch ? `让 ${selectedSkills.length} 个 Skill 生效于 Agent` : `让「${selectedSkills[0]?.name ?? ''}」生效于 Agent`}
-        confirmLabel="预览影响"
+        title={isBatch ? `让这 ${selectedSkills.length} 个 Skill 对 Agent 生效` : `让「${selectedSkills[0]?.name ?? ''}」对 Agent 生效`}
+        confirmLabel="看看会改什么"
         modalClassName="sm2__modal--distribute"
         busy={busy}
         disabled={selected.size === 0}
@@ -215,7 +216,7 @@ export function DistributeDialog({
             </div>
             <div className="sm2-distribute__summary-copy">
               <strong>{isBatch ? `${selectedSkills.length} 个 Skill` : selectedSkills[0]?.name}</strong>
-              <span>{isBatch ? '批量让中心库 Skill 在这些 Agent 上生效' : '让中心库 Skill 在这个 Agent 上生效'}</span>
+              <span>{isBatch ? '一次让这些 Skill 对选中的 Agent 生效' : '让这个 Skill 对选中的 Agent 生效'}</span>
             </div>
             <div className="sm2-distribute__count">
               {selected.size}/{selectableAgents.length}
@@ -224,8 +225,8 @@ export function DistributeDialog({
 
           <section className="sm2-distribute__section">
             <div className="sm2-distribute__section-head">
-              <span>生效方式</span>
-              <em>{mode === 'link' ? '随中心库更新' : '生成独立副本'}</em>
+              <span>怎么让 Agent 用上</span>
+              <em>{mode === 'link' ? '改一处，所有 Agent 都跟着变' : '每个 Agent 一份独立副本'}</em>
             </div>
             <div className="sm2-distribute__mode-grid">
               <label className={`sm2-distribute__mode${mode === 'link' ? ' sm2-distribute__mode--active' : ''}`}>
@@ -241,7 +242,7 @@ export function DistributeDialog({
                   {skillModeLabel(t, 'link')}
                   <span className="sm2-distribute__mode-badge">推荐</span>
                 </span>
-                <span className="sm2-distribute__mode-note">修改同步生效</span>
+                <span className="sm2-distribute__mode-note">改动一处，所有 Agent 同步生效</span>
               </label>
               <label className={`sm2-distribute__mode${mode === 'copy' ? ' sm2-distribute__mode--active' : ''}`}>
                 <input
@@ -253,14 +254,14 @@ export function DistributeDialog({
                 />
                 <span className="sm2-distribute__mode-key">{skillModeLabel(t, 'copy')}</span>
                 <span className="sm2-distribute__mode-title">{skillModeLabel(t, 'copy')}</span>
-                <span className="sm2-distribute__mode-note">适合需要单独修改的 Agent</span>
+                <span className="sm2-distribute__mode-note">适合需要单独改内容的 Agent</span>
               </label>
             </div>
           </section>
 
           <section className="sm2-distribute__section">
             <div className="sm2-distribute__section-head">
-              <span>目标 Agent</span>
+              <span>让哪些 Agent 用上</span>
               <em>{selectableAgents.length} 个可选</em>
             </div>
             {otherAgents.length > 0 && (
@@ -270,7 +271,7 @@ export function DistributeDialog({
                 aria-expanded={showOtherAgents}
                 onClick={() => setShowOtherAgents((open) => !open)}
               >
-                {showOtherAgents ? '收起未检测到程序的 Agent' : `＋ 其他 Agent（未检测到程序，${otherAgents.length}）`}
+                {showOtherAgents ? '收起其他 Agent' : `＋ 其他 Agent（没找到程序，${otherAgents.length}）`}
               </button>
             )}
             <div className="sm2-distribute__agent-list">
@@ -286,14 +287,14 @@ export function DistributeDialog({
                     : isBatch
                       ? installedRefs.length >= selectedSkills.length
                         ? statusText
-                          ? `已全部安装 · ${statusText} · 将重新${skillModeLabel(t, mode)}`
-                          : `已全部安装 · 将重新${skillModeLabel(t, mode)}`
-                        : `${installedRefs.length}/${selectedSkills.length} 已安装 · 将补齐或覆盖`
+                          ? `已经能用 · ${statusText} · 将改为「${skillModeLabel(t, mode)}」`
+                          : `已经能用 · 将改为「${skillModeLabel(t, mode)}」`
+                        : `${installedRefs.length}/${selectedSkills.length} 已经能用 · 将补齐或覆盖`
                       : statusText
-                        ? `已安装 · ${statusText} · 将重新${skillModeLabel(t, mode)}`
+                        ? `已经能用 · ${statusText} · 将改为「${skillModeLabel(t, mode)}」`
                         : installedRefs[0].mode === mode
-                          ? `已安装 · 将重新${skillModeLabel(t, mode)}`
-                          : `已安装 · 可转换为${skillModeLabel(t, mode)}`
+                          ? `已经能用 · 将重新安装一次`
+                          : `已经能用 · 可以改成「${skillModeLabel(t, mode)}」`
                   return (
                     <label
                       key={a.id}
@@ -327,8 +328,8 @@ export function DistributeDialog({
 
   return (
     <PreviewDialog
-      title="确认生效"
-      confirmLabel={preview.blockers.length > 0 ? '按选择执行' : '执行生效'}
+      title="确认让 Skill 生效"
+      confirmLabel={preview.blockers.length > 0 ? '按选择执行' : '开始生效'}
       modalClassName="sm2__modal--distribute"
       busy={busy}
       disabled={unresolvedBlockers > 0}
@@ -346,8 +347,8 @@ export function DistributeDialog({
             <strong>将影响 {preview.changes.length + preview.blockers.length} 个目标</strong>
             <span>
               {preview.blockers.length > 0
-                ? unresolvedBlockers > 0 ? `还有 ${unresolvedBlockers} 个阻止项需要选择处理方式` : '阻止项已选择处理方式，可以继续'
-                : '检查无阻止项，可以执行生效'}
+                ? unresolvedBlockers > 0 ? `还有 ${unresolvedBlockers} 处冲突需要你先选一种处理方式` : '冲突都已选好处理方式，可以继续'
+                : '没有发现冲突，可以直接生效'}
             </span>
           </div>
         </div>
@@ -357,12 +358,17 @@ export function DistributeDialog({
             <div key={i} className="sm2-distribute__change">
               <div className="sm2-distribute__change-main">
                 <span className="sm2-distribute__change-action">
-                  {c.action === 'create' ? '新增' : c.action === 'reuse' ? '复用' : c.action === 'convert' ? '转换' : c.action === 'reinstall' ? '重装' : c.action}
+                  {c.action === 'create' ? '新加' : c.action === 'reuse' ? '沿用' : c.action === 'convert' ? '换方式' : c.action === 'reinstall' ? '重新安装' : c.action}
                 </span>
                 <strong>{skillNameById.get(c.skillId) ?? c.skillId} → {agentNameById.get(c.agentId) ?? c.agentId}</strong>
                 {c.action === 'create' && <span className="sm2__tag sm2__tag--ok">{skillModeLabel(t, c.actualMode)}</span>}
               </div>
-              <code>{c.targetPath}</code>
+              <SettingDetails testId={`distribute-change-details-${i}`} label="详情">
+                <div className="setting-details__row">
+                  <span>写入位置</span>
+                  <code>{c.targetPath}</code>
+                </div>
+              </SettingDetails>
               {c.action !== 'create' && c.reason && (
                 <span className="sm2-distribute__change-reason">{distributionChangeReason(t, c.reason)}</span>
               )}
@@ -376,35 +382,47 @@ export function DistributeDialog({
             return (
             <div key={key} className="sm2-distribute__change sm2-distribute__change--blocked">
               <div className="sm2-distribute__change-main">
-                <span className="sm2-distribute__change-action">阻止</span>
+                <span className="sm2-distribute__change-action">有冲突</span>
                 <strong>{skillNameById.get(b.skillId) ?? b.skillId} → {agentNameById.get(b.agentId) ?? b.agentId}</strong>
                 {decision && (
                   <span className="sm2__tag sm2__tag--unmanaged">
-                    {decision === 'overwrite' ? managedCopyBlocker ? '中心库为准' : '将覆盖' : decision === 'agent_over_center' ? 'Agent 为准' : '将忽略'}
+                    {decision === 'overwrite' ? managedCopyBlocker ? '以 Skill 库为准' : '将覆盖' : decision === 'agent_over_center' ? '以 Agent 里的为准' : '将跳过'}
                   </span>
                 )}
               </div>
               <span className="sm2-distribute__change-reason">{distributionBlockerReason(t, b)}</span>
               {b.existingPath && (
                 <div className="sm2-distribute__path-row">
-                  <code>{b.existingPath}</code>
                   {pathKind && <span className="sm2__tag sm2__tag--unmanaged">{pathKind}</span>}
                   <button type="button" className="sm2__btn sm2__btn--ghost" onClick={() => skillApiV2.openPath(b.existingPath!)}>
-                    {t('skills.actions.openFolder', { defaultValue: 'Open Folder' })}
+                    {t('skills.actions.openFolder', { defaultValue: '打开所在文件夹' })}
                   </button>
                 </div>
               )}
-              {b.resolvedExistingPath && (
-                <div className="sm2__muted">{t('skills.labels.realPath', { defaultValue: 'Real path' })}：<code>{b.resolvedExistingPath}</code></div>
+              {(b.existingPath || b.resolvedExistingPath) && (
+                <SettingDetails testId={`distribute-blocker-details-${b.skillId}-${b.agentId}`} label="详情">
+                  {b.existingPath && (
+                    <div className="setting-details__row">
+                      <span>冲突位置</span>
+                      <code>{b.existingPath}</code>
+                    </div>
+                  )}
+                  {b.resolvedExistingPath && (
+                    <div className="setting-details__row">
+                      <span>{t('skills.labels.realPath', { defaultValue: '实际位置' })}</span>
+                      <code>{b.resolvedExistingPath}</code>
+                    </div>
+                  )}
+                </SettingDetails>
               )}
-              <div className="sm2-distribute__decision-row" role="radiogroup" aria-label={`${agentNameById.get(b.agentId) ?? b.agentId} 阻止项处理方式`}>
+              <div className="sm2-distribute__decision-row" role="radiogroup" aria-label={`${agentNameById.get(b.agentId) ?? b.agentId} 冲突处理方式`}>
                 {b.existingPath && (
                   <button
                     type="button"
                     className={`sm2-distribute__decision${decision === 'overwrite' ? ' sm2-distribute__decision--active' : ''}`}
                     onClick={() => setBlockerDecisions((prev) => ({ ...prev, [key]: 'overwrite' }))}
                   >
-                    {managedCopyBlocker ? '以中心库为准' : '覆盖安装'}
+                    {managedCopyBlocker ? '以 Skill 库为准' : '覆盖这一份'}
                   </button>
                 )}
                 {managedCopyBlocker && (
@@ -413,7 +431,7 @@ export function DistributeDialog({
                     className={`sm2-distribute__decision${decision === 'agent_over_center' ? ' sm2-distribute__decision--active' : ''}`}
                     onClick={() => setBlockerDecisions((prev) => ({ ...prev, [key]: 'agent_over_center' }))}
                   >
-                    以 Agent 为准
+                    以 Agent 里的为准
                   </button>
                 )}
                 <button
@@ -421,7 +439,7 @@ export function DistributeDialog({
                   className={`sm2-distribute__decision${decision === 'skip' ? ' sm2-distribute__decision--active' : ''}`}
                   onClick={() => setBlockerDecisions((prev) => ({ ...prev, [key]: 'skip' }))}
                 >
-                  忽略此目标
+                  跳过这个 Agent
                 </button>
               </div>
             </div>
@@ -450,7 +468,7 @@ export function DistributeDialog({
 
         {preview.blockers.length > 0 && (
           <p className="sm2-distribute__blocked-note">
-            未管理目标可覆盖后重新安装；已修改副本请先选择以中心库或 Agent 为准；忽略只跳过该目标。
+            有冲突时，你需要先决定以哪一份为准；跳过只影响这一个 Agent，其它 Agent 照常生效。
           </p>
         )}
         {error && <div className="sm2__error" style={{ margin: 0 }}>{error}</div>}

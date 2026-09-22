@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
+import '../i18n'
 import { CollapsedBar } from '../components/notch/CollapsedBar'
 import { RateLimitBar } from '../components/notch/RateLimitBar'
 import { useConfigStore } from '../stores/configStore'
@@ -46,7 +47,7 @@ describe('CollapsedBar idle tips', () => {
   it('shows tips in the expanded header when idle', () => {
     render(<CollapsedBar sessions={[]} panelState="expanded" onCollapse={() => {}} />)
 
-    expect(screen.getByText('Tips:')).toBeInTheDocument()
+    expect(screen.getByText('Tips')).toBeInTheDocument()
   })
 
   it('hides tips when the setting is disabled', () => {
@@ -54,7 +55,7 @@ describe('CollapsedBar idle tips', () => {
 
     render(<CollapsedBar sessions={[session()]} panelState="expanded" onCollapse={() => {}} />)
 
-    expect(screen.queryByText('Tips:')).not.toBeInTheDocument()
+    expect(screen.queryByText('Tips')).not.toBeInTheDocument()
   })
 
   it('shows only the Vibe Board icon and omits tips/empty text in closed collapsed and micro states when idle', () => {
@@ -62,7 +63,7 @@ describe('CollapsedBar idle tips', () => {
       <CollapsedBar sessions={[]} panelState="collapsed" onCollapse={() => {}} focusFilteredEmpty />,
     )
     expect(collapsedContainer.querySelector('.collapsed-bar__idle-logo')).toBeInTheDocument()
-    expect(screen.queryByText('Tips:')).not.toBeInTheDocument()
+    expect(screen.queryByText('Tips')).not.toBeInTheDocument()
     expect(screen.queryByText('notch.noSessionInFocus')).not.toBeInTheDocument()
     expect(collapsedContainer.querySelector('.collapsed-bar__count')).toBeNull()
     expect(collapsedContainer.querySelector('.collapsed-bar__icon-btn')).toBeNull()

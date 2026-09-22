@@ -6,9 +6,9 @@ import { AgentSyncPanel, LocalPanel, GitPanel } from './InstallView'
 import { DistributeDialog } from './DistributeDialog'
 
 const TABS: Array<{ id: SkillInstallTab; icon: string; label: string }> = [
-  { id: 'agent', icon: '◌', label: 'Agent 同步' },
-  { id: 'local', icon: '📁', label: '本地导入' },
-  { id: 'git', icon: '⑂', label: 'Git 安装' },
+  { id: 'agent', icon: '◌', label: '从 Agent 导入' },
+  { id: 'local', icon: '📁', label: '从文件夹导入' },
+  { id: 'git', icon: '⑂', label: '从 Git 安装' },
 ]
 
 export function InstallPage() {
@@ -33,7 +33,10 @@ export function InstallPage() {
   return (
     <div className="sm2 sm2__install-page">
       <div className="sm2__install-page-head">
-        <h2 className="sm2__install-page-title">安装 Skills</h2>
+        <div>
+          <h2 className="sm2__install-page-title">添加 Skill</h2>
+          <p className="sm2__header-subtitle">从 Agent 目录、文件夹或 Git 仓库把 Skill 收进 Skill 库，再决定让哪些 Agent 用上。</p>
+        </div>
         <nav className="sm2__install-page-nav">
           {TABS.map((t) => (
             <button

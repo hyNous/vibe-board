@@ -568,6 +568,24 @@
   grid-column: 2 / 4;
 }
 
+.agent-monitor__live-task-details {
+  margin-top: 2px;
+}
+
+.agent-monitor__live-task-details .setting-details__toggle {
+  font-size: 10px;
+}
+
+.agent-monitor__live-task-details .setting-details__body {
+  margin-top: 4px;
+}
+
+.agent-monitor__live-task-details .setting-details__body code {
+  display: block;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
 .agent-monitor__tag {
   flex-shrink: 0;
   padding: 3px 7px;

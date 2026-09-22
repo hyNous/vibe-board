@@ -15,6 +15,7 @@ import {
 import type { BackendConfig, DetectedTool, HookStatus } from '../../services/tauriApi'
 import { GlassButton } from '../shared'
 import { PlatformIcon } from '../platform/PlatformIcon'
+import { SettingDetails } from './SettingDetails'
 
 type WizardStep = 'welcome' | 'tutorial' | 'agents' | 'options' | 'applying' | 'done'
 
@@ -110,6 +111,7 @@ export function SetupWizard({ onClose }: SetupWizardProps) {
   const [launchAtLogin, setLaunchAtLogin] = useState(config.launchAtLogin)
   const [error, setError] = useState<string | null>(null)
   const [warnings, setWarnings] = useState<string[]>([])
+  const [warningDetails, setWarningDetails] = useState<string[]>([])
   const [completedConfig, setCompletedConfig] = useState<BackendConfig | null>(null)
   const [openingTutorial, setOpeningTutorial] = useState(false)
 
@@ -202,10 +204,12 @@ export function SetupWizard({ onClose }: SetupWizardProps) {
     setStep('applying')
     setError(null)
     setWarnings([])
+    setWarningDetails([])
     setCompletedConfig(null)
     try {
       const backend = await getConfig()
       const setupWarnings: string[] = []
+      const setupWarningDetails: string[] = []
       let effectiveLaunchAtLogin = launchAtLogin
       if (launchAtLogin !== backend.launchAtLogin) {
         try {
@@ -213,9 +217,10 @@ export function SetupWizard({ onClose }: SetupWizardProps) {
         } catch (reason) {
           effectiveLaunchAtLogin = backend.launchAtLogin
           setupWarnings.push(text(
-            `Windows 登录启动设置失败：${readableError(reason)}`,
-            `Could not update Windows startup: ${readableError(reason)}`,
+            '开机启动没能设置成功，可以稍后在设置里再打开。',
+            'Startup at login could not be set. You can turn it on later in Settings.',
           ))
+          setupWarningDetails.push(`Could not update startup at login: ${readableError(reason)}`)
         }
       }
       const nextConfig = {
@@ -242,9 +247,10 @@ export function SetupWizard({ onClose }: SetupWizardProps) {
             await uninstallAgentHook(agent)
           } catch (reason) {
             setupWarnings.push(text(
-              `旧 Agent ${agent} 的 Hook 清理失败：${readableError(reason)}`,
-              `Could not remove the old ${agent} hook: ${readableError(reason)}`,
+              `旧 Agent ${agent} 的连接没能清理干净。`,
+              `Could not fully remove the old connection for ${agent}.`,
             ))
+            setupWarningDetails.push(`Could not remove the old ${agent} hook: ${readableError(reason)}`)
           }
         }
         for (const agent of selectedAgents) {
@@ -252,9 +258,10 @@ export function SetupWizard({ onClose }: SetupWizardProps) {
             await installAgentHook(agent)
           } catch (reason) {
             setupWarnings.push(text(
-              `${agent} 的 Hook 暂未安装：${readableError(reason)}`,
-              `The ${agent} hook was not installed: ${readableError(reason)}`,
+              `${agent} 暂时没能接入，可以稍后在设置里重试。`,
+              `${agent} could not be connected yet; try again later in Settings.`,
             ))
+            setupWarningDetails.push(`The ${agent} hook was not installed: ${readableError(reason)}`)
           }
         }
         try {
@@ -264,19 +271,21 @@ export function SetupWizard({ onClose }: SetupWizardProps) {
           })
           if (notInstalled.length > 0) {
             setupWarnings.push(text(
-              `以下 Agent 的 Hook 需要稍后处理：${notInstalled.join('、')}`,
-              `Hooks still need attention for: ${notInstalled.join(', ')}`,
+              `这些 Agent 还需要再处理一次：${notInstalled.join('、')}`,
+              `These Agents still need attention: ${notInstalled.join(', ')}`,
             ))
           }
         } catch (reason) {
           setupWarnings.push(text(
-            `Hook 状态暂时无法读取：${readableError(reason)}`,
-            `Hook status could not be checked yet: ${readableError(reason)}`,
+            '暂时无法确认接入结果，请重启 Vibe Board 后再看一次。',
+            'Could not verify the connection yet. Restart Vibe Board and check again.',
           ))
+          setupWarningDetails.push(`Hook status could not be checked yet: ${readableError(reason)}`)
         }
       }
 
       setWarnings(setupWarnings)
+      setWarningDetails(setupWarningDetails)
       setCompletedConfig({ ...nextConfig, setupWizardCompleted: true })
       config.updateConfig('autoLaunchAgents', nextConfig.autoLaunchAgents)
       config.updateConfig('launchAtLogin', effectiveLaunchAtLogin)
@@ -300,7 +309,7 @@ export function SetupWizard({ onClose }: SetupWizardProps) {
 
   const statusLabel = (status: DetectedTool['status']) => {
     if (status === 'Active') return text('运行中', 'Running')
-    if (status === 'Installed') return text('发现配置，但缺少 CLI', 'Config found, CLI missing')
+    if (status === 'Installed') return text('有配置，但没有命令行程序', 'Config found, command-line program missing')
     if (status === 'Available') return text('可用', 'Available')
     return text('未找到', 'Not found')
   }
@@ -323,17 +332,17 @@ export function SetupWizard({ onClose }: SetupWizardProps) {
           <div className="setup-wizard__content">
             <div className="setup-wizard__hero-icon">✦</div>
             <p className="setup-wizard__eyebrow">{text('首次设置', 'FIRST-TIME SETUP')}</p>
-            <h1 id="setup-wizard-title">{text('让 Vibe Board 跟着你的 Agent 工作', 'Connect Vibe Board to your Agents')}</h1>
+            <h1 id="setup-wizard-title">{text('让 Vibe Board 跟着你的 Agent 一起工作', 'Connect Vibe Board to your Agents')}</h1>
             <p className="setup-wizard__lead">
               {text(
-                '向导会读取本机已安装的 Agent，帮助你选择要接入的 Agent 并安装本地 Hook，让任务状态能自动同步到桌面。',
-                'This wizard finds Agents installed on this computer, lets you choose which ones to connect, then installs local hooks so task state can reach the desktop automatically.',
+                '向导会找出这台电脑上已安装的 Agent。你选好要接入哪些，它们就会把任务状态同步到桌面看板。',
+                'This wizard finds the Agents installed on this computer. Pick the ones to connect, and they will report their task status to the board.',
               )}
             </p>
             <div className="setup-wizard__trust-list">
               <div><strong>✓</strong>{text('只修改你确认的 Agent 配置', 'Only Agent configurations you approve are changed')}</div>
-              <div><strong>✓</strong>{text('不上传凭据、提示词或项目文件', 'Credentials, prompts, and project files stay local')}</div>
-              <div><strong>✓</strong>{text('随时可在设置中重新配置或卸载 Hook', 'You can reconfigure or remove hooks from Settings')}</div>
+              <div><strong>✓</strong>{text('你的登录信息、提示词和项目文件都不会被上传', 'Credentials, prompts, and project files stay on this computer')}</div>
+              <div><strong>✓</strong>{text('随时可以在设置里改接入哪些 Agent', 'You can change which Agents are connected at any time in Settings')}</div>
             </div>
             <div className="setup-wizard__actions">
               <GlassButton variant="ghost" onClick={finishWithoutSetup}>{text('稍后设置', 'Set up later')}</GlassButton>
@@ -348,8 +357,8 @@ export function SetupWizard({ onClose }: SetupWizardProps) {
             <h1>{text('先花一分钟看懂看板', 'Take a minute to read the board')}</h1>
             <p className="setup-wizard__lead">
               {text(
-                '四个主题，都是看板真实会做的事。完整教程还包含 Skill 管理与使用额度两节。',
-                'Four themes, all things the board really does. The full tutorial also covers Skill management and usage.',
+                '四张卡片，讲的都是看板真实会做的事。完整教程还包含 Skill 与使用额度两节。',
+                'Four cards, all things the board really does. The full tutorial also covers Skills and usage.',
               )}
             </p>
             <div className="setup-wizard__topics">
@@ -357,32 +366,37 @@ export function SetupWizard({ onClose }: SetupWizardProps) {
                 <TopicFigure kind="island" />
                 <div>
                   <strong>{text('岛怎么用', 'Using the island')}</strong>
-                  <p>{text('默认停在屏幕顶部：悬停或点击展开，移开自动收起，Esc 逐级收回；快捷键与挂靠位置都能在设置里改。', 'It sits at the top of the screen: hover or click to expand, move away to collapse, Esc steps back. Shortcuts and docking are configurable.')}</p>
+                  <p>{text('默认停在屏幕顶部：鼠标移上去或点一下就会展开，移开自动收起，按 Esc 逐级收回。快捷键和停靠位置都能在设置里改。', 'It sits at the top of the screen: hover or click to expand, move away to collapse, Esc steps back. Shortcuts and docking are configurable.')}</p>
                 </div>
               </article>
               <article className="setup-wizard__topic">
                 <TopicFigure kind="board" />
                 <div>
                   <strong>{text('看板在显示什么', 'What the board shows')}</strong>
-                  <p>{text('当前会话按优先级排序，每张任务卡有状态点、Agent 名称、会话标题和状态；Hook 自检有问题时右上角才出现健康指示。', 'Current sessions sorted by priority; each card shows a status dot, Agent name, session title, and state. The hook health indicator appears only when a self-check fails.')}</p>
+                  <p>{text('每张任务卡显示 Agent 名称、会话标题和当前状态；只有连接检查发现问题时，右上角才会出现警示图标。', 'Each card shows the Agent name, session title, and current state. A warning icon appears only when the connection check finds a problem.')}</p>
                 </div>
               </article>
               <article className="setup-wizard__topic">
                 <TopicFigure kind="click" />
                 <div>
                   <strong>{text('点任务会发生什么', 'What a task click does')}</strong>
-                  <p>{text('桌面版 Agent 会被唤回前台；纯命令行会话没有可唤起的窗口，只提示手动打开 CLI。看板不会替你回复或批准。', 'Desktop Agents are brought back to the front; CLI-only sessions have no window to raise, so it just asks you to open the CLI. The board never replies or approves for you.')}</p>
+                  <p>{text('桌面版 Agent 的窗口会被调到前台；纯命令行的会话没有窗口可唤回，会提示你去终端查看。看板不会替你回复或批准。', 'Desktop Agent windows are brought to the front; CLI-only sessions have no window to raise, so it asks you to check the terminal. The board never replies or approves for you.')}</p>
                 </div>
               </article>
               <article className="setup-wizard__topic">
                 <TopicFigure kind="agents" />
                 <div>
                   <strong>{text('Agent 接入', 'Connecting Agents')}</strong>
-                  <p>{text('下一步会检测本机 Agent 并安装本地 Hook；「会话开始时拉起看板」开关默认关闭，桌面版 Agent 可能不触发。', 'The next step detects local Agents and installs their hooks. The “start the board on session start” switch is off by default, and desktop Agents may not trigger it.')}</p>
+                  <p>{text('下一步会检测这台电脑上的 Agent，并让它们把任务状态同步过来；「会话开始时打开看板」默认关闭，桌面版 Agent 可能不会触发。', 'The next step detects the Agents on this computer and lets them report their task status. The “open the board on session start” switch is off by default, and desktop Agents may not trigger it.')}</p>
                 </div>
               </article>
             </div>
-            {error && <div className="setup-wizard__error" role="alert">{error}</div>}
+            {error && (
+              <div className="setup-wizard__error" role="alert">
+                <div>{text('这一步没能完成，请稍后重试。', 'This step could not be completed. Please try again.')}</div>
+                <SettingDetails testId="wizard-step-error-details">{error}</SettingDetails>
+              </div>
+            )}
             <div className="setup-wizard__actions">
               <GlassButton variant="ghost" onClick={() => setStep('welcome')}>{text('返回', 'Back')}</GlassButton>
               <div className="setup-wizard__actions-right">
@@ -400,7 +414,7 @@ export function SetupWizard({ onClose }: SetupWizardProps) {
             <p className="setup-wizard__eyebrow">02 / 03</p>
             <h1>{text('选择要接入的 Agent', 'Choose the Agents to connect')}</h1>
             <p className="setup-wizard__lead">
-              {text('勾选要接入的 Agent，Vibe Board 会为它们安装本地 Hook。每个 Agent 可以单独决定是否在会话开始时拉起看板。', 'Pick the Agents to connect; Vibe Board installs their local hooks. Each Agent can separately start Vibe Board when its session begins.')}
+              {text('勾选要接入的 Agent，它们就会把任务状态同步到看板。每个 Agent 还可以单独设置：会话开始时是否自动打开看板。', 'Pick the Agents to connect, and they will report their task status to the board. Each Agent can also start Vibe Board when its session begins.')}
             </p>
             {loadingTools ? (
               <div className="setup-wizard__loading">{text('正在读取本机 Agent…', 'Scanning local Agents…')}</div>
@@ -408,8 +422,8 @@ export function SetupWizard({ onClose }: SetupWizardProps) {
               <>
                 {missingCliTools.length > 0 && (
                   <div className="setup-wizard__warning" role="status">
-                    <strong>{text('发现配置目录，但没有找到可执行 CLI', 'Configuration found, but the CLI is missing')}</strong>
-                    <p>{text('这些 Agent 暂时不能安装 Hook。请先安装对应 CLI，完全退出并重新打开 Vibe Board，再回到这里重新检测。', 'These Agents cannot receive hooks yet. Install the CLI, fully quit and reopen Vibe Board, then run detection again.')}</p>
+                    <strong>{text('找到了配置，但没有找到对应的命令行程序', 'Configuration found, but the command-line program is missing')}</strong>
+                    <p>{text('这些 Agent 暂时不能接入。请先安装对应的命令行程序，完全退出并重新打开 Vibe Board，再回到这里重新检测。', 'These Agents cannot connect yet. Install the command-line program, fully quit and reopen Vibe Board, then run detection again.')}</p>
                     <ul>
                       {missingCliTools.map((tool) => (
                         <li key={tool.name}>
@@ -418,7 +432,7 @@ export function SetupWizard({ onClose }: SetupWizardProps) {
                             ? text('安装 Antigravity CLI；Windows 可运行 irm https://antigravity.google/cli/install.ps1 | iex，启动命令是 agy', 'Install the Antigravity CLI; on Windows run irm https://antigravity.google/cli/install.ps1 | iex, then launch it with agy')
                             : tool.name === 'gemini'
                               ? text('运行 npm install -g @google/gemini-cli', 'Run npm install -g @google/gemini-cli')
-                              : text('请安装对应的 CLI', 'Install the corresponding CLI')}
+                              : text('请安装对应的命令行程序', 'Install the corresponding command-line program')}
                         </li>
                       ))}
                     </ul>
@@ -438,7 +452,7 @@ export function SetupWizard({ onClose }: SetupWizardProps) {
                         </label>
                         <label className={`setup-wizard__agent-launch ${selected ? '' : 'is-disabled'}`}>
                           <input type="checkbox" checked={launch} disabled={!selected} onChange={() => toggleLaunch(tool.name)} />
-                          <span>{text('会话开始时拉起看板', 'Start Vibe Board on session start')}</span>
+                          <span>{text('会话开始时自动打开看板', 'Open the board when a session starts')}</span>
                         </label>
                       </div>
                     )
@@ -446,11 +460,11 @@ export function SetupWizard({ onClose }: SetupWizardProps) {
                 </div>
                 {availableTools.length === 0 && (
                   <div className="setup-wizard__empty">
-                    {text('没有发现可接入的 Agent。你可以稍后安装 Agent，再从设置重新运行向导。', 'No connectable Agent was found. Install one later and rerun this wizard from Settings.')}
+                    {text('没有发现可接入的 Agent。之后装好了，可以在设置里重新运行向导。', 'No connectable Agent was found. Install one later and rerun this wizard from Settings.')}
                   </div>
                 )}
                 <p className="setup-wizard__note">
-                  {text('注意：桌面版 Agent 可能不触发「会话开始」事件，为它们打开此开关可能不生效。', 'Note: desktop Agents may not emit session-start events, so this switch may have no effect for them.')}
+                  {text('注意：桌面版 Agent 可能不会发出「会话开始」信号，为它们打开这个开关可能没有效果。', 'Note: desktop Agents may not emit session-start events, so this switch may have no effect for them.')}
                 </p>
               </>
             )}
@@ -464,20 +478,25 @@ export function SetupWizard({ onClose }: SetupWizardProps) {
         {step === 'options' && (
           <div className="setup-wizard__content">
             <p className="setup-wizard__eyebrow">03 / 03</p>
-            <h1>{text('确认自动化方式', 'Confirm automation')}</h1>
+            <h1>{text('确认后开始接入', 'Confirm and connect')}</h1>
             <p className="setup-wizard__lead">
-              {text('确认后，Vibe Board 会安装选中的 Hook，并立即重新读取状态验证配置。', 'After you confirm, Vibe Board installs the selected hooks and immediately rereads their status to verify the setup.')}
+              {text('点「开始接入」后，选中的 Agent 就会开始把任务状态同步到看板，Vibe Board 会立刻检查是否成功。', 'After you confirm, the selected Agents start reporting task status to the board, and Vibe Board checks right away whether it worked.')}
             </p>
             <div className="setup-wizard__options">
               <label className="setup-wizard__option">
                 <input type="checkbox" checked={launchAtLogin} onChange={(event) => setLaunchAtLogin(event.target.checked)} />
-                <span><strong>{text('登录 Windows 时启动 Vibe Board', 'Start Vibe Board at Windows login')}</strong><small>{text('适合希望组件常驻托盘、等待会话的情况。', 'Useful when you want the component ready in the tray before a session starts.')}</small></span>
+                <span><strong>{text('登录电脑时自动打开 Vibe Board', 'Open Vibe Board when you log in')}</strong><small>{text('适合希望它一直在后台待命、随时接收任务状态的情况。', 'Useful when you want it ready in the background to receive task status at any time.')}</small></span>
               </label>
             </div>
-            {error && <div className="setup-wizard__error" role="alert">{error}</div>}
+            {error && (
+              <div className="setup-wizard__error" role="alert">
+                <div>{text('设置没能保存成功，请稍后重试。', 'Your setup could not be saved. Please try again.')}</div>
+                <SettingDetails testId="wizard-save-error-details">{error}</SettingDetails>
+              </div>
+            )}
             <div className="setup-wizard__actions">
               <GlassButton variant="ghost" onClick={() => setStep('agents')}>{text('返回', 'Back')}</GlassButton>
-              <GlassButton variant="primary" onClick={applySetup}>{text('批准并完成设置', 'Approve & finish')} <span aria-hidden="true">✓</span></GlassButton>
+              <GlassButton variant="primary" onClick={applySetup}>{text('开始接入', 'Connect')} <span aria-hidden="true">✓</span></GlassButton>
             </div>
           </div>
         )}
@@ -485,8 +504,8 @@ export function SetupWizard({ onClose }: SetupWizardProps) {
         {step === 'applying' && (
           <div className="setup-wizard__content setup-wizard__content--centered">
             <div className="setup-wizard__spinner" aria-hidden="true" />
-            <h1>{text('正在完成配置…', 'Applying setup…')}</h1>
-            <p className="setup-wizard__lead">{text('正在安装 Hook 并保存设置，请稍候。', 'Installing hooks and saving your setup.')}</p>
+            <h1>{text('正在接入…', 'Connecting…')}</h1>
+            <p className="setup-wizard__lead">{text('正在保存设置并让 Agent 开始同步，请稍候。', 'Saving your setup and connecting the Agents.')}</p>
           </div>
         )}
 
@@ -495,12 +514,22 @@ export function SetupWizard({ onClose }: SetupWizardProps) {
             <div className="setup-wizard__success">✓</div>
             <p className="setup-wizard__eyebrow">READY</p>
             <h1>{text('配置完成', 'You are ready')}</h1>
-            <p className="setup-wizard__lead">{text('接入的 Agent 会把任务状态同步到看板。你仍可以在设置 → 通用中重新配置要接入的 Agent。', 'Connected Agents now report task state to the board. You can change them later in Settings → General.')}</p>
-            {error && <div className="setup-wizard__error" role="alert">{error}</div>}
+            <p className="setup-wizard__lead">{text('接入的 Agent 现在会把任务状态同步到看板。以后想改，可以在「设置 → 通用 → 选择要接入的 Agent」里调整。', 'Connected Agents now report their task status to the board. To change them later, open Settings → General → Choose Agents.')}</p>
+            {error && (
+              <div className="setup-wizard__error" role="alert">
+                <div>{text('设置没能保存成功，请稍后重试。', 'Your setup could not be saved. Please try again.')}</div>
+                <SettingDetails testId="wizard-error-details">{error}</SettingDetails>
+              </div>
+            )}
             {warnings.length > 0 && (
               <div className="setup-wizard__warning" role="status">
-                <strong>{text('部分连接需要稍后处理', 'Some connections need attention')}</strong>
+                <strong>{text('有几项需要稍后处理', 'A few things need attention')}</strong>
                 <ul>{warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>
+                {warningDetails.length > 0 && (
+                  <SettingDetails testId="wizard-warning-details">
+                    <ul>{warningDetails.map((detail) => <li key={detail}>{detail}</li>)}</ul>
+                  </SettingDetails>
+                )}
               </div>
             )}
             <div className="setup-wizard__actions setup-wizard__actions--centered">
