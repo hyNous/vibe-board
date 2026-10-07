@@ -204,15 +204,11 @@ fn first_non_empty_body_line(content: &str) -> Option<String> {
 
 fn expand_user_path(path: &str) -> PathBuf {
     if let Some(rest) = path.strip_prefix("~/") {
-        if let Some(home) = dirs::home_dir() {
-            return home.join(rest);
-        }
+        return crate::data_dir::home_dir().join(rest);
     }
     #[cfg(target_os = "windows")]
     if let Some(rest) = path.strip_prefix("~\\") {
-        if let Some(home) = dirs::home_dir() {
-            return home.join(rest);
-        }
+        return crate::data_dir::home_dir().join(rest);
     }
     Path::new(path).to_path_buf()
 }

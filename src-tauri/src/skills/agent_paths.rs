@@ -6,8 +6,12 @@ pub struct SkillPaths {
     pub settings_file: Option<PathBuf>,
 }
 
+/// Resolve home through `data_dir::home_dir` so `VIBEBOARD_HOME` / `HOME`
+/// overrides apply. `dirs::home_dir()` ignores the environment on Windows,
+/// which let tests that isolate `HOME` write into the real user profile
+/// (`~/.agents/skills`, `~/.claude/skills`, `~/.vibeboard/metadata.json`).
 fn home() -> PathBuf {
-    dirs::home_dir().unwrap_or_else(std::env::temp_dir)
+    crate::data_dir::home_dir()
 }
 
 pub fn kimi_code_home() -> PathBuf {
@@ -16,7 +20,7 @@ pub fn kimi_code_home() -> PathBuf {
 }
 
 pub fn kimi_code_home_for(home: &Path) -> PathBuf {
-    if dirs::home_dir().as_deref() == Some(home) {
+    if home == crate::data_dir::home_dir().as_path() {
         if let Some(value) = std::env::var_os("KIMI_CODE_HOME").filter(|value| !value.is_empty()) {
             return expand_home_with_base(home, &value.to_string_lossy());
         }
@@ -383,15 +387,11 @@ fn custom_agent_path(entry: &serde_json::Value, keys: &[&str]) -> Option<PathBuf
 
 fn expand_home(path: &str) -> PathBuf {
     if let Some(rest) = path.strip_prefix("~/") {
-        if let Some(home) = dirs::home_dir() {
-            return home.join(rest);
-        }
+        return home().join(rest);
     }
     #[cfg(target_os = "windows")]
     if let Some(rest) = path.strip_prefix("~\\") {
-        if let Some(home) = dirs::home_dir() {
-            return home.join(rest);
-        }
+        return home().join(rest);
     }
     PathBuf::from(path)
 }
