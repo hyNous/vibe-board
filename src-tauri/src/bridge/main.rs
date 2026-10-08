@@ -121,6 +121,49 @@ fn get_tty() -> Option<String> {
     None
 }
 
+/// Short-lived launchers an Agent uses to run a hook command. On Windows,
+/// Claude Code runs every hook through Git Bash, so the bridge's direct parent
+/// is a `bash.exe` that exits as soon as the hook returns. Reporting that pid
+/// made the board drop live Claude Code sessions within a second ("PID is no
+/// longer alive"), so the walk skips these and reports the Agent itself.
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+const HOOK_LAUNCHER_PROCESSES: &[&str] = &[
+    "bash.exe",
+    "sh.exe",
+    "dash.exe",
+    "zsh.exe",
+    "cmd.exe",
+    "powershell.exe",
+    "pwsh.exe",
+    "conhost.exe",
+    "env.exe",
+    "timeout.exe",
+];
+
+/// Walk up from `pid` and return the first ancestor that is not a hook
+/// launcher. Falls back to the direct parent when the chain is unknown.
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+fn agent_ancestor_pid(pid: u32, processes: &std::collections::HashMap<u32, (u32, String)>) -> u32 {
+    let Some((direct_parent, _)) = processes.get(&pid) else {
+        return 0;
+    };
+    let mut candidate = *direct_parent;
+    for _ in 0..8 {
+        let Some((parent, name)) = processes.get(&candidate) else {
+            break;
+        };
+        let lowered = name.to_ascii_lowercase();
+        if !HOOK_LAUNCHER_PROCESSES.contains(&lowered.as_str()) {
+            return candidate;
+        }
+        if *parent == 0 || *parent == candidate {
+            break;
+        }
+        candidate = *parent;
+    }
+    *direct_parent
+}
+
 fn parent_process_id() -> u32 {
     #[cfg(unix)]
     {
@@ -134,23 +177,25 @@ fn parent_process_id() -> u32 {
             TH32CS_SNAPPROCESS,
         };
 
+        let mut processes = std::collections::HashMap::new();
         unsafe {
             let snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
             if snapshot == INVALID_HANDLE_VALUE {
                 return 0;
             }
 
-            let current_pid = std::process::id();
             let mut entry = PROCESSENTRY32W::default();
             entry.dwSize = std::mem::size_of::<PROCESSENTRY32W>() as u32;
-            let mut parent_pid = 0;
 
             if Process32FirstW(snapshot, &mut entry) != 0 {
                 loop {
-                    if entry.th32ProcessID == current_pid {
-                        parent_pid = entry.th32ParentProcessID;
-                        break;
-                    }
+                    let name_len = entry
+                        .szExeFile
+                        .iter()
+                        .position(|&ch| ch == 0)
+                        .unwrap_or(entry.szExeFile.len());
+                    let name = String::from_utf16_lossy(&entry.szExeFile[..name_len]);
+                    processes.insert(entry.th32ProcessID, (entry.th32ParentProcessID, name));
                     if Process32NextW(snapshot, &mut entry) == 0 {
                         break;
                     }
@@ -158,8 +203,8 @@ fn parent_process_id() -> u32 {
             }
 
             let _ = CloseHandle(snapshot);
-            parent_pid
         }
+        agent_ancestor_pid(std::process::id(), &processes)
     }
     #[cfg(all(not(unix), not(target_os = "windows")))]
     {
@@ -1138,6 +1183,50 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn process_table(rows: &[(u32, u32, &str)]) -> std::collections::HashMap<u32, (u32, String)> {
+        rows.iter()
+            .map(|(pid, parent, name)| (*pid, (*parent, (*name).to_string())))
+            .collect()
+    }
+
+    #[test]
+    fn hook_pid_skips_the_bash_that_claude_code_runs_hooks_through() {
+        // claude.exe (10) -> bash.exe (20) -> vibe-board-bridge.exe (30)
+        let table = process_table(&[
+            (1, 0, "explorer.exe"),
+            (10, 1, "claude.exe"),
+            (20, 10, "bash.exe"),
+            (30, 20, "vibe-board-bridge.exe"),
+        ]);
+        assert_eq!(agent_ancestor_pid(30, &table), 10);
+    }
+
+    #[test]
+    fn hook_pid_skips_nested_launchers() {
+        // node.exe (10) -> cmd.exe (20) -> bash.exe (21) -> bridge (30)
+        let table = process_table(&[
+            (10, 1, "node.exe"),
+            (20, 10, "cmd.exe"),
+            (21, 20, "BASH.EXE"),
+            (30, 21, "vibe-board-bridge.exe"),
+        ]);
+        assert_eq!(agent_ancestor_pid(30, &table), 10);
+    }
+
+    #[test]
+    fn hook_pid_keeps_a_direct_agent_parent() {
+        let table = process_table(&[(10, 1, "codex.exe"), (30, 10, "vibe-board-bridge.exe")]);
+        assert_eq!(agent_ancestor_pid(30, &table), 10);
+    }
+
+    #[test]
+    fn hook_pid_falls_back_to_the_direct_parent_when_the_chain_is_unknown() {
+        // The launcher's own parent is missing from the snapshot.
+        let table = process_table(&[(20, 999, "bash.exe"), (30, 20, "vibe-board-bridge.exe")]);
+        assert_eq!(agent_ancestor_pid(30, &table), 20);
+        assert_eq!(agent_ancestor_pid(42, &table), 0);
+    }
 
     #[test]
     fn normalizes_current_kimi_permission_events() {
