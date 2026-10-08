@@ -23,7 +23,6 @@ use crate::hooks::session_store::{
 };
 use crate::platform::display_controller::DisplayController;
 use crate::sound::SoundEngine;
-use crate::telemetry::TelemetryService;
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::io::{BufRead, BufReader as StdBufReader, Write};
@@ -58,7 +57,6 @@ pub struct AppState {
     pub display_controller: Arc<DisplayController>,
     pub diagnostic_buffer: Arc<DiagnosticRingBuffer>,
     pub task_db: Arc<crate::control_tower::ControlTowerDatabase>,
-    pub telemetry: Arc<TelemetryService>,
     #[allow(dead_code)]
     pub tray_icon: tauri::tray::TrayIcon,
 }
@@ -3236,11 +3234,7 @@ pub async fn update_config(
         .auto_launch_agents
         .retain(|agent| seen_launch_agents.insert(agent.clone()));
     config.codex_app_server_sync_configured = true;
-    let previous = state.config_store.get();
     state.config_store.update(config.clone())?;
-    if previous.analytics_enabled != config.analytics_enabled {
-        state.telemetry.handle_consent_changed(&config).await;
-    }
     Ok(())
 }
 
@@ -3260,19 +3254,6 @@ pub async fn set_language(
     if let Err(error) = crate::refresh_tray_menu(&app) {
         log::warn!("Failed to refresh tray menu language: {error}");
     }
-    Ok(())
-}
-
-#[tauri::command]
-pub async fn set_analytics_enabled(
-    state: State<'_, AppState>,
-    enabled: bool,
-) -> Result<(), String> {
-    let mut config = state.config_store.get();
-    config.analytics_enabled = enabled;
-    config.analytics_consent_prompt_completed = true;
-    state.config_store.update(config.clone())?;
-    state.telemetry.handle_consent_changed(&config).await;
     Ok(())
 }
 
@@ -3584,8 +3565,6 @@ pub async fn install_hooks(state: State<'_, AppState>, agent: String) -> Result<
             e
         );
     }
-    let config = state.config_store.get();
-    state.telemetry.record_hook_install(&config, &agent).await;
     Ok(())
 }
 
@@ -3601,8 +3580,6 @@ pub async fn remove_hooks(state: State<'_, AppState>, agent: String) -> Result<(
     if let Err(e) = state.config_store.mark_agent_disabled(&agent) {
         log::warn!("Failed to clear enabled-agent intent for {}: {}", agent, e);
     }
-    let config = state.config_store.get();
-    state.telemetry.record_hook_uninstall(&config, &agent).await;
     Ok(())
 }
 

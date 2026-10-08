@@ -143,8 +143,6 @@ interface ConfigState {
   tipsEnabled: boolean
   pixelCursorEnabled: boolean
   confettiEnabled: boolean
-  analyticsEnabled: boolean
-  analyticsConsentPromptCompleted: boolean
 
   // General extras
   followFocus: boolean
@@ -328,6 +326,8 @@ const REMOVED_CONFIG_KEYS = [
   'permissionShortcutDefaultsMigrated',
   'autoApproveTools',
   'jumpBeforeSend',
+  'analyticsEnabled',
+  'analyticsConsentPromptCompleted',
 ] as const
 
 const REMOVED_SHORTCUT_ACTIONS = new Set(['approve-action', 'reject-action'])
@@ -496,8 +496,6 @@ export const useConfigStore = create<ConfigStore>()(
   tipsEnabled: true,
   pixelCursorEnabled: true,
   confettiEnabled: true,
-  analyticsEnabled: true,
-  analyticsConsentPromptCompleted: false,
 
   // General extras
   followFocus: false,
@@ -541,7 +539,9 @@ export const useConfigStore = create<ConfigStore>()(
   idleInteractionRoutingMinutes: 5,
 
   // Updates
-  autoCheckUpdate: true,
+  // The automatic update switches are hidden (no update source is configured),
+  // so nothing checks in the background unless the user explicitly opts in.
+  autoCheckUpdate: false,
   autoInstallUpdate: false,
 
   // Notification Mode
@@ -709,6 +709,12 @@ export const useConfigStore = create<ConfigStore>()(
           ...currentState,
           ...persisted,
         } as ConfigStore
+
+        // The automatic update switches are hidden while no update source is
+        // configured; a value saved by an older build must not keep a check
+        // running that the user can no longer see or turn off.
+        merged.autoCheckUpdate = false
+        merged.autoInstallUpdate = false
 
         merged.shortcuts = (Array.isArray(merged.shortcuts) ? merged.shortcuts : currentState.shortcuts)
           .filter((shortcut) => !REMOVED_SHORTCUT_ACTIONS.has(shortcut.action))

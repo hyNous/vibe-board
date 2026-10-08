@@ -4,11 +4,9 @@ import { open } from '@tauri-apps/plugin-shell'
 import { save } from '@tauri-apps/plugin-dialog'
 import { exportDiagnostics, getCurrentAppVersion } from '../../../services/tauriApi'
 import type { UpdateStatus } from '../../../hooks/useUpdater'
-import { useConfigStore } from '../../../stores/configStore'
 import { SettingSection } from '../SettingSection'
 import { SettingGroup } from '../SettingGroup'
 import { SettingRow } from '../SettingRow'
-import { Toggle } from '../Toggle'
 import { SettingDetails } from '../SettingDetails'
 import { GlassButton } from '../../shared'
 
@@ -56,10 +54,6 @@ export function AboutSection({
   const { t } = useTranslation()
   const [diagStatus, setDiagStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [appVersion, setAppVersion] = useState<string>('...')
-
-  const autoCheckUpdate = useConfigStore((s) => s.autoCheckUpdate)
-  const autoInstallUpdate = useConfigStore((s) => s.autoInstallUpdate)
-  const updateConfig = useConfigStore((s) => s.updateConfig)
 
   useEffect(() => {
     let cancelled = false
@@ -157,18 +151,6 @@ export function AboutSection({
           >
             {updateStatus === 'checking' || updateStatus === 'downloading' ? '...' : t('settings.checkNow')}
           </GlassButton>
-        </SettingRow>
-        <SettingRow
-          label={t('settings.autoCheckUpdate')}
-          description={t('settings.autoCheckUpdateDesc')}
-        >
-          <Toggle checked={autoCheckUpdate} onChange={(v) => updateConfig('autoCheckUpdate', v)} />
-        </SettingRow>
-        <SettingRow
-          label={t('settings.autoInstallUpdate')}
-          description={t('settings.autoInstallUpdateDesc')}
-        >
-          <Toggle checked={autoInstallUpdate} onChange={(v) => updateConfig('autoInstallUpdate', v)} />
         </SettingRow>
       </SettingGroup>
 

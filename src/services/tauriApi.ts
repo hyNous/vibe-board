@@ -316,8 +316,6 @@ export interface BackendConfig {
   tipsEnabled: boolean
   pixelCursorEnabled: boolean
   confettiEnabled: boolean
-  analyticsEnabled: boolean
-  analyticsConsentPromptCompleted: boolean
   followFocus: boolean
   quietHoursEnabled: boolean
   quietHoursStart: string
@@ -494,8 +492,6 @@ export async function getConfig(): Promise<BackendConfig> {
       tipsEnabled: true,
       pixelCursorEnabled: true,
       confettiEnabled: true,
-      analyticsEnabled: true,
-      analyticsConsentPromptCompleted: false,
       followFocus: false,
       quietHoursEnabled: false,
       quietHoursStart: '22:00',
@@ -522,14 +518,6 @@ export async function updateConfig(config: BackendConfig): Promise<void> {
 export async function setLanguage(language: AppLanguage): Promise<void> {
   if (!isTauri()) return
   return invoke('set_language', { language })
-}
-
-export async function setAnalyticsEnabled(enabled: boolean): Promise<void> {
-  if (!isTauri()) {
-    console.log(`[mock] setAnalyticsEnabled(${enabled})`)
-    return
-  }
-  return invoke('set_analytics_enabled', { enabled })
 }
 
 export async function setLaunchAtLogin(enabled: boolean): Promise<void> {

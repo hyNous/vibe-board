@@ -28,7 +28,6 @@ const BACKEND_MANAGED_CONFIG_KEYS = new Set<keyof ReturnType<typeof useConfigSto
   'probeSessionFilter',
   'excludedHookCwdSubstrings', 'sessionSilenceRules',
   'tipsEnabled', 'pixelCursorEnabled', 'confettiEnabled',
-  'analyticsEnabled', 'analyticsConsentPromptCompleted',
   'followFocus', 'quietHours', 'idleTimeoutMinutes',
   'idleInteractionRoutingEnabled', 'idleInteractionRoutingMinutes',
   'setupWizardCompleted', 'autoLaunchAgents',

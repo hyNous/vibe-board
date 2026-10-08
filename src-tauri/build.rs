@@ -1,14 +1,4 @@
 fn main() {
-    for name in [
-        "VIBEBOARD_TELEMETRY_SLS_HOST",
-        "VIBEBOARD_TELEMETRY_SLS_PROJECT",
-        "VIBEBOARD_TELEMETRY_SLS_LOGSTORE",
-        "AGENT_ISLAND_TELEMETRY_SLS_HOST",
-        "AGENT_ISLAND_TELEMETRY_SLS_PROJECT",
-        "AGENT_ISLAND_TELEMETRY_SLS_LOGSTORE",
-    ] {
-        println!("cargo:rerun-if-env-changed={name}");
-    }
     ensure_bridge_resource_placeholder();
     ensure_common_controls_v6_for_tests();
     tauri_build::build()

@@ -297,8 +297,6 @@ function applyBackendConfig(config: BackendConfig) {
     tipsEnabled: config.tipsEnabled,
     pixelCursorEnabled: config.pixelCursorEnabled,
     confettiEnabled: config.confettiEnabled,
-    analyticsEnabled: config.analyticsEnabled ?? true,
-    analyticsConsentPromptCompleted: config.analyticsConsentPromptCompleted ?? true,
     followFocus: config.followFocus,
     quietHours: {
       enabled: config.quietHoursEnabled,

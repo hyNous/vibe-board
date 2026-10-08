@@ -17,7 +17,6 @@ const tauriMocks = vi.hoisted(() => ({
   setSoundEventRule: vi.fn(() => Promise.resolve()),
   registerGlobalShortcut: vi.fn(() => Promise.resolve()),
   setIslandSurfaceOptions: vi.fn(() => Promise.resolve()),
-  setAnalyticsEnabled: vi.fn(() => Promise.resolve()),
   listUsageProviders: vi.fn(() => Promise.resolve([] as UsageSnapshot[])),
   authorizeUsageProvider: vi.fn(() => Promise.resolve()),
   setUsageNetworkAuthorization: vi.fn(() => Promise.resolve([] as string[])),
@@ -40,7 +39,6 @@ vi.mock('../services/tauriApi', async (importOriginal) => {
     setSoundEventRule: tauriMocks.setSoundEventRule,
     registerGlobalShortcut: tauriMocks.registerGlobalShortcut,
     setIslandSurfaceOptions: tauriMocks.setIslandSurfaceOptions,
-    setAnalyticsEnabled: tauriMocks.setAnalyticsEnabled,
     listUsageProviders: tauriMocks.listUsageProviders,
     authorizeUsageProvider: tauriMocks.authorizeUsageProvider,
     setUsageNetworkAuthorization: tauriMocks.setUsageNetworkAuthorization,
@@ -127,7 +125,6 @@ describe('settings island menu', () => {
     tauriMocks.listDisplays.mockResolvedValue([])
     tauriMocks.registerGlobalShortcut.mockResolvedValue(undefined)
     tauriMocks.setIslandSurfaceOptions.mockResolvedValue(undefined)
-    tauriMocks.setAnalyticsEnabled.mockResolvedValue(undefined)
     tauriMocks.listUsageProviders.mockResolvedValue([])
     tauriMocks.updateConfig.mockResolvedValue(undefined)
     tauriMocks.isTauri.mockReturnValue(false)
@@ -135,8 +132,6 @@ describe('settings island menu', () => {
       displayMonitor: 'auto',
       followFocus: false,
       tipsEnabled: true,
-      analyticsEnabled: false,
-      analyticsConsentPromptCompleted: true,
       setupWizardCompleted: true,
       globalShortcut: 'CommandOrControl+Shift+I',
     })
@@ -172,18 +167,11 @@ describe('settings island menu', () => {
     await waitFor(() => expect(screen.getByText('settings.language')).toBeInTheDocument())
   })
 
-  it('does not expose first-run analytics consent or Pet choices', () => {
-    useConfigStore.setState({
-      analyticsEnabled: false,
-      analyticsConsentPromptCompleted: false,
-    })
+  it('does not expose the removed first-run consent UI or Pet choices', () => {
     render(<SettingsApp onClose={vi.fn()} />)
 
     expect(screen.queryByRole('radio', { name: /settings.surfacePet/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'settings.welcomeContinue' })).not.toBeInTheDocument()
-    expect(useConfigStore.getState().analyticsConsentPromptCompleted).toBe(false)
-    expect(useConfigStore.getState().analyticsEnabled).toBe(false)
-    expect(tauriMocks.setAnalyticsEnabled).not.toHaveBeenCalled()
   })
 
   it('uses the appearance page tabs instead of top tabs', async () => {

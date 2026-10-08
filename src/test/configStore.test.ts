@@ -27,6 +27,52 @@ describe('configStore island defaults', () => {
     expect(state.islandAnimationScale).toBe(1)
   })
 
+  it('does not define the removed analytics settings', () => {
+    const state = useConfigStore.getState() as unknown as Record<string, unknown>
+
+    for (const key of ['analyticsEnabled', 'analyticsConsentPromptCompleted']) {
+      expect(key in state, key).toBe(false)
+    }
+  })
+
+  it('strips removed analytics fields from a persisted legacy config', async () => {
+    localStorage.setItem('vibeboard-config', JSON.stringify({
+      state: {
+        analyticsEnabled: true,
+        analyticsConsentPromptCompleted: true,
+        language: 'zh',
+      },
+      version: 0,
+    }))
+
+    await useConfigStore.persist.rehydrate()
+
+    const state = useConfigStore.getState() as unknown as Record<string, unknown>
+    expect(state.language).toBe('zh')
+    expect('analyticsEnabled' in state).toBe(false)
+    expect('analyticsConsentPromptCompleted' in state).toBe(false)
+
+    useConfigStore.getState().updateConfig('language', 'en')
+    const persisted = localStorage.getItem('vibeboard-config') ?? ''
+    expect(persisted).not.toContain('analyticsEnabled')
+    expect(persisted).not.toContain('analyticsConsentPromptCompleted')
+  })
+
+  it('turns the hidden automatic update switches off, even when an older build saved them on', async () => {
+    expect(useConfigStore.getState().autoCheckUpdate).toBe(false)
+    localStorage.setItem('vibeboard-config', JSON.stringify({
+      state: { autoCheckUpdate: true, autoInstallUpdate: true, language: 'zh' },
+      version: 0,
+    }))
+
+    await useConfigStore.persist.rehydrate()
+
+    const state = useConfigStore.getState()
+    expect(state.language).toBe('zh')
+    expect(state.autoCheckUpdate).toBe(false)
+    expect(state.autoInstallUpdate).toBe(false)
+  })
+
   it('does not define the removed approval and jump-before-send settings', () => {
     const state = useConfigStore.getState() as unknown as Record<string, unknown>
 

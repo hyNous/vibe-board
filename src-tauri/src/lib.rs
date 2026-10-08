@@ -11,7 +11,6 @@ pub mod menu_bar;
 pub mod platform;
 pub mod skills;
 pub mod sound;
-pub mod telemetry;
 pub mod terminal;
 pub mod usage;
 pub mod webhook;
@@ -35,7 +34,6 @@ use hooks::server::HookServer;
 use hooks::session_store::SessionStore;
 use platform::display::{find_target_monitor, list_displays_inner, DisplayInfo};
 use sound::{SoundEvent, SoundPack, SoundPackImportResult};
-use telemetry::TelemetryService;
 
 #[derive(Debug, Clone)]
 struct NotchDragState {
@@ -550,10 +548,6 @@ async fn install_agent_hook(
             Some(&dir_str),
         )
         .map_err(|e| e.to_string())?;
-        state
-            .telemetry
-            .record_hook_install(&cfg, &entry.profile_id)
-            .await;
         return Ok(());
     }
     let adapter = state
@@ -580,11 +574,6 @@ async fn install_agent_hook(
             e
         );
     }
-    let config = state.config_store.get();
-    state
-        .telemetry
-        .record_hook_install(&config, &tool_name)
-        .await;
     Ok(())
 }
 
@@ -659,11 +648,6 @@ async fn install_custom_agent_hook(
     let mut cfg = state.config_store.get();
     cfg.custom_hook_installs.push(entry);
     state.config_store.update(cfg).map_err(|e| e.to_string())?;
-    let config = state.config_store.get();
-    state
-        .telemetry
-        .record_hook_install(&config, &profile_id)
-        .await;
 
     // Provide a helpful hint about what was validated
     let hint = if target_path.exists() || config_file_name.is_empty() {
@@ -703,11 +687,6 @@ async fn uninstall_agent_hook(
         }
         cfg.custom_hook_installs.remove(idx);
         state.config_store.update(cfg).map_err(|e| e.to_string())?;
-        let config = state.config_store.get();
-        state
-            .telemetry
-            .record_hook_uninstall(&config, &entry.profile_id)
-            .await;
         return Ok(());
     }
     let adapter = state
@@ -723,11 +702,6 @@ async fn uninstall_agent_hook(
             e
         );
     }
-    let config = state.config_store.get();
-    state
-        .telemetry
-        .record_hook_uninstall(&config, &tool_name)
-        .await;
     Ok(())
 }
 
@@ -1000,12 +974,6 @@ async fn reinstall_all_hooks(
         let result = adapter.install_hooks().map_err(|e| e.to_string());
         if let Err(e) = result {
             errors.push(format!("{}: {}", adapter.name(), e));
-        } else {
-            let config = state.config_store.get();
-            state
-                .telemetry
-                .record_hook_install(&config, adapter.name())
-                .await;
         }
     }
     let cfg = state.config_store.get();
@@ -1022,12 +990,6 @@ async fn reinstall_all_hooks(
             .map_err(|e| e.to_string());
             if let Err(e) = result {
                 errors.push(format!("{}: {}", entry.display_name, e));
-            } else {
-                let config = state.config_store.get();
-                state
-                    .telemetry
-                    .record_hook_install(&config, &entry.profile_id)
-                    .await;
             }
         }
     }
@@ -1051,11 +1013,6 @@ async fn uninstall_all_hooks(
                     e
                 );
             }
-            let config = state.config_store.get();
-            state
-                .telemetry
-                .record_hook_uninstall(&config, adapter.name())
-                .await;
         }
     }
     // Keep user-defined custom hook registrations (display name + install directory)
@@ -1073,11 +1030,6 @@ async fn uninstall_all_hooks(
                 agents::profiles::uninstall_at(&profile, &target).map_err(|e| e.to_string());
             if let Err(e) = result {
                 errors.push(format!("{}: {}", entry.display_name, e));
-            } else {
-                state
-                    .telemetry
-                    .record_hook_uninstall(&cfg, &entry.profile_id)
-                    .await;
             }
         }
     }
@@ -1689,15 +1641,7 @@ async fn unregister_global_shortcut(app: tauri::AppHandle) -> Result<(), String>
 // ── Quit Command ────────────────────────────────────────────────
 
 #[tauri::command]
-async fn quit_app(
-    app: tauri::AppHandle,
-    state: tauri::State<'_, commands::AppState>,
-) -> Result<(), String> {
-    let config = state.config_store.get();
-    state
-        .telemetry
-        .upload_pending_daily_usage_snapshots(&config)
-        .await;
+async fn quit_app(app: tauri::AppHandle) -> Result<(), String> {
     app.exit(0);
     Ok(())
 }
@@ -4781,8 +4725,6 @@ pub fn run() {
             // Initialize diagnostic ring buffer
             let diagnostic_buffer = Arc::new(hooks::diagnostics::DiagnosticRingBuffer::new());
 
-            let telemetry = Arc::new(TelemetryService::new());
-
             // Local usage history (M8b): persisted daily aggregates from the
             // Agent session logs. The first full scan is started by the Usage
             // page and runs on a background thread.
@@ -4799,16 +4741,8 @@ pub fn run() {
                 display_controller,
                 diagnostic_buffer,
                 task_db,
-                telemetry,
                 tray_icon,
             };
-            {
-                let telemetry = app_state.telemetry.clone();
-                let config = app_state.config_store.get();
-                tauri::async_runtime::spawn(async move {
-                    telemetry.record_app_launch(&config).await;
-                });
-            }
             let buddy_device_config = app_state.config_store.get().buddy_device;
             commands::buddy::start_buddy_device_server(
                 buddy_device_config,
@@ -4855,7 +4789,6 @@ pub fn run() {
             commands::get_config,
             commands::update_config,
             commands::set_language,
-            commands::set_analytics_enabled,
             commands::set_launch_at_login,
             commands::set_island_feature_flags,
             commands::install_hooks,

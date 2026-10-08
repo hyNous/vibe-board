@@ -114,10 +114,6 @@
     "usage": "Usage",
     "general": "General",
     "skillManager": "Agent Skills",
-    "welcomeEyebrow": "Quick setup",
-    "welcomeContinue": "Start Vibe Board",
-    "welcomeSaving": "Saving...",
-    "welcomeError": "Could not save setup: {{message}}",
     "island": {
       "effects": {
         "title": "Island appearance effect",

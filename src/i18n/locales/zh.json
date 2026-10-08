@@ -114,10 +114,6 @@
     "usage": "使用额度",
     "general": "通用",
     "skillManager": "Agent管理",
-    "welcomeEyebrow": "快速设置",
-    "welcomeContinue": "开始使用 Vibe Board",
-    "welcomeSaving": "保存中...",
-    "welcomeError": "设置保存失败：{{message}}",
     "island": {
       "effects": {
         "title": "灵动岛外观效果",

@@ -77,10 +77,6 @@ function requireEnv(name) {
   if (!process.env[name]?.trim()) errors.push(`${name} is required for stable releases`)
 }
 
-function countPresentEnv(names) {
-  return names.filter((name) => process.env[name]?.trim()).length
-}
-
 function gitOutput(args) {
   try {
     return execFileSync('git', args, {
@@ -228,31 +224,6 @@ if (strictRelease) {
     requireEnv('APPLE_ID')
     requireEnv('APPLE_PASSWORD')
     requireEnv('APPLE_TEAM_ID')
-
-    const telemetryEnvGroups = [
-      [
-        'VIBEBOARD_TELEMETRY_SLS_HOST',
-        'VIBEBOARD_TELEMETRY_SLS_PROJECT',
-        'VIBEBOARD_TELEMETRY_SLS_LOGSTORE',
-      ],
-      [
-        'AGENT_ISLAND_TELEMETRY_SLS_HOST',
-        'AGENT_ISLAND_TELEMETRY_SLS_PROJECT',
-        'AGENT_ISLAND_TELEMETRY_SLS_LOGSTORE',
-      ],
-    ]
-    const telemetryEnvCount = telemetryEnvGroups
-      .map((names) => countPresentEnv(names))
-      .reduce((total, count) => total + count, 0)
-    for (const names of telemetryEnvGroups) {
-      const count = countPresentEnv(names)
-      if (count > 0 && count < names.length) {
-        errors.push(`${names.join(', ')} must all be set together`)
-      }
-    }
-    if (telemetryEnvCount === 0) {
-      warnings.push('Vibe Board anonymous telemetry SLS target is not set; release builds will not upload anonymous usage stats.')
-    }
   } else {
     warnings.push('unsigned prerelease mode enabled; Apple signing and notarization are skipped.')
   }

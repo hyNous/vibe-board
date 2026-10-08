@@ -193,12 +193,6 @@ pub struct AppConfig {
     /// Show confetti on task completion
     #[serde(default = "default_true")]
     pub confetti_enabled: bool,
-    /// Optional anonymous product analytics.
-    #[serde(default = "default_true")]
-    pub analytics_enabled: bool,
-    /// Whether the user has seen or acted on the analytics consent prompt.
-    #[serde(default = "default_true")]
-    pub analytics_consent_prompt_completed: bool,
     /// Filter sessions by focused terminal window
     #[serde(default)]
     pub follow_focus: bool,
@@ -340,8 +334,6 @@ impl Default for AppConfig {
             tips_enabled: true,
             pixel_cursor_enabled: true,
             confetti_enabled: true,
-            analytics_enabled: true,
-            analytics_consent_prompt_completed: false,
             follow_focus: false,
             global_shortcut: "CommandOrControl+Shift+I".to_string(),
             enabled_agents: Vec::new(),
@@ -587,8 +579,6 @@ mod tests {
         assert_eq!(config.session_refresh_interval_seconds, 3);
         assert_eq!(config.window_close_behavior, "tray");
         assert!(config.boot_sound_default_migrated);
-        assert!(config.analytics_enabled);
-        assert!(!config.analytics_consent_prompt_completed);
         assert!(!config.setup_wizard_completed);
         assert!(!config.launch_at_login);
         assert!(config.auto_launch_agents.is_empty());
@@ -851,16 +841,45 @@ mod tests {
     }
 
     #[test]
-    fn keeps_legacy_analytics_defaults_when_fields_are_missing() {
-        let mut value = serde_json::to_value(AppConfig::default()).expect("serialize config");
-        let object = value.as_object_mut().expect("config object");
-        object.remove("analyticsEnabled");
-        object.remove("analyticsConsentPromptCompleted");
+    fn ignores_removed_analytics_fields_without_writing_them_back() {
+        let base = std::env::temp_dir().join(format!(
+            "vibeboard-config-legacy-analytics-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("system time")
+                .as_nanos()
+        ));
+        let path = base.join("vibeboard").join("config.json");
+        std::fs::create_dir_all(path.parent().expect("config parent")).expect("config dir");
+        let mut legacy = serde_json::to_value(AppConfig::default()).expect("serialize config");
+        let object = legacy.as_object_mut().expect("config object");
+        object.insert("analyticsEnabled".to_string(), serde_json::json!(true));
+        object.insert(
+            "analyticsConsentPromptCompleted".to_string(),
+            serde_json::json!(true),
+        );
+        std::fs::write(
+            &path,
+            serde_json::to_string_pretty(&legacy).expect("serialize legacy config"),
+        )
+        .expect("write legacy config");
 
-        let config: AppConfig = serde_json::from_value(value).expect("deserialize legacy config");
+        let loaded = super::ConfigStore::load_from_disk(&path).expect("load legacy config");
+        let store = super::ConfigStore {
+            config: std::sync::Arc::new(std::sync::RwLock::new(loaded)),
+            config_path: path.clone(),
+            app_handle: None,
+        };
+        store.update(store.get()).expect("save config");
 
-        assert!(config.analytics_enabled);
-        assert!(config.analytics_consent_prompt_completed);
+        let written = std::fs::read_to_string(&path).expect("read saved config");
+        assert!(!written.contains("analyticsEnabled"), "{written}");
+        assert!(
+            !written.contains("analyticsConsentPromptCompleted"),
+            "{written}"
+        );
+        let _ = std::fs::remove_dir_all(&base);
     }
 
     #[test]

@@ -55,7 +55,7 @@ The installer is an unsigned Windows x64 build, so SmartScreen may ask for confi
 
 Hooks and local app-server events are the real-time path. A fallback poll runs every three seconds by default (adjustable from 1 to 30 seconds), and Codex also falls back to local rollout logs.
 
-Coding agents do not expose one stable, universal task-lifecycle interface, so synchronization is best-effort and cannot guarantee that every running task is captured. Process scanning only confirms that an agent is online and is not used to create tasks. Vibe Board does not put session content through a hosted relay: conversation bodies, tool details, and raw hook input never reach the board.
+Coding agents do not expose one stable, universal task-lifecycle interface, so synchronization is best-effort and cannot guarantee that every running task is captured. Process scanning only confirms that an agent is online and is not used to create tasks. Vibe Board does not put session content through a hosted relay and collects no usage statistics: conversation bodies, tool details, and raw hook input never reach the board.
 
 ## Build from source
 
