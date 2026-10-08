@@ -3,11 +3,14 @@ import type { MouseEvent, RefObject, UIEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 import { skillApiV2 } from '../../services/skillApiV2'
-import type { CopyTargetDiffPreview, GitHubSkillSyncResult, GitHubSkillUpdatePreview, SkillDetail, SkillSummary, FileTreeNode } from '../../services/skillApiV2'
+import type { CopyTargetDiffPreview, SkillDetail, SkillSummary, FileTreeNode, SkillUpdateCheckEntry } from '../../services/skillApiV2'
+import { useSkillStoreV2 } from '../../stores/skillStoreV2'
 import { SlideOver } from './SlideOver'
 import { AgentIconBadge } from './AgentIconBadge'
 import { skillModeLabel, skillSourceTypeLabel, targetClaimLabel } from './skillLabels'
 import { PreviewDialog } from './PreviewDialog'
+import { changeSummaryText, skillUpdateErrorText } from './skillUpdateText'
+import { SettingDetails } from '../settings/SettingDetails'
 import { isMarkdownPath } from './filePreview'
 import { extractSkillDescription as extractFrontmatterDescription, stripSkillFrontmatter as stripFrontmatter } from './frontmatter'
 import { MarkdownContent } from './MarkdownContent'
@@ -1260,55 +1263,62 @@ function SkillFrontmatterIntro({ description, compact = false }: { description?:
 
 function SourceTab({ detail, onUpdated }: { detail: SkillDetail; onUpdated?: () => Promise<void> }) {
   const { t } = useTranslation()
+  const state = useSkillStoreV2()
   const sourceType = detail.source?.sourceType || detail.sourceType
   const sourceUri = detail.source?.sourceUri || detail.sourceUri
   const linkedCenter = isLinkedCenterSkill(detail)
-  const [updatePreview, setUpdatePreview] = useState<GitHubSkillUpdatePreview | null>(null)
+  const [updateEntry, setUpdateEntry] = useState<SkillUpdateCheckEntry | null>(null)
   const [checking, setChecking] = useState(false)
-  const [syncing, setSyncing] = useState(false)
+  const [updating, setUpdating] = useState(false)
   const [updateError, setUpdateError] = useState<string | null>(null)
-  const [syncResult, setSyncResult] = useState<GitHubSkillSyncResult | null>(null)
+  const [confirming, setConfirming] = useState(false)
   const isGitHubSource = sourceType?.toLowerCase() === 'github'
     || sourceUri?.startsWith('github:')
     || sourceUri?.includes('github.com/')
+  const autoEnabled = state.updateStatus?.autoUpdateSkillIds
+    .some((id) => id.toLowerCase() === detail.id.toLowerCase()) ?? false
   useEffect(() => {
-    setUpdatePreview(null)
+    setUpdateEntry(null)
     setChecking(false)
-    setSyncing(false)
+    setUpdating(false)
     setUpdateError(null)
-    setSyncResult(null)
+    setConfirming(false)
+    if (!state.updateStatus) void state.loadUpdateStatus()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [detail.id, sourceUri])
   const checkForUpdate = async () => {
     setChecking(true)
     setUpdateError(null)
-    setSyncResult(null)
     try {
-      setUpdatePreview(await skillApiV2.checkGitHubSkillUpdate(detail.id))
+      setUpdateEntry(await skillApiV2.checkSkillUpdate(detail.id))
     } catch (e) {
       setUpdateError(String(e))
-      setUpdatePreview(null)
+      setUpdateEntry(null)
     } finally {
       setChecking(false)
     }
   }
-  const syncFromGitHub = async () => {
-    if (!updatePreview?.updateAvailable) return
-    setSyncing(true)
+  const applyUpdate = async () => {
+    setUpdating(true)
     setUpdateError(null)
     try {
-      const result = await skillApiV2.syncGitHubSkill(detail.id)
-      setSyncResult(result)
-      setUpdatePreview((current) => current ? {
+      const result = await state.updateSkill(detail.id, true)
+      if (result.errorKind) {
+        setUpdateError(skillUpdateErrorText(t, result.errorKind))
+        return
+      }
+      setUpdateEntry((current) => current ? {
         ...current,
-        localHash: result.currentHash,
-        remoteHash: result.currentHash,
         updateAvailable: false,
+        locallyModified: false,
+        changes: null,
       } : current)
+      setConfirming(false)
       await onUpdated?.()
     } catch (e) {
       setUpdateError(String(e))
     } finally {
-      setSyncing(false)
+      setUpdating(false)
     }
   }
   const summaryCards = [
@@ -1352,26 +1362,102 @@ function SourceTab({ detail, onUpdated }: { detail: SkillDetail; onUpdated?: () 
       {isGitHubSource && sourceUri && (
         <div className="sm2__skill-source-sync">
           <div>
-            <strong>GitHub 来源同步</strong>
-            <span>检查远端内容；有变化时同步回中心库。</span>
+            <strong>{t('skills.updates.sourceTitle', { defaultValue: '开源来源更新' })}</strong>
+            <span>
+              {t('skills.updates.sourceHint', {
+                defaultValue: '检查 GitHub 上的新版本；更新会替换本地文件，各 Agent 的链接不变。',
+              })}
+            </span>
           </div>
           <div className="sm2__skill-source-sync-actions">
-            <button type="button" className="sm2__btn" disabled={checking || syncing} onClick={() => void checkForUpdate()}>
-              {checking ? '检查中…' : '检查更新'}
+            <button type="button" className="sm2__btn" disabled={checking || updating} onClick={() => void checkForUpdate()}>
+              {checking
+                ? t('skills.updates.checking', { defaultValue: '正在检查…' })
+                : t('skills.updates.checkOne', { defaultValue: '检查更新' })}
             </button>
-            {updatePreview?.updateAvailable && (
-              <button type="button" className="sm2__btn sm2__btn--primary" disabled={checking || syncing} onClick={() => void syncFromGitHub()}>
-                {syncing ? '同步中…' : '同步到中心库'}
+            {updateEntry?.updateAvailable && (
+              <button
+                type="button"
+                className="sm2__btn sm2__btn--primary"
+                disabled={checking || updating}
+                onClick={() => {
+                  setUpdateError(null)
+                  setConfirming(true)
+                }}
+              >
+                {t('skills.updates.update', { defaultValue: '更新' })}
               </button>
             )}
           </div>
-          {updatePreview && (
-            <small className={updatePreview.updateAvailable ? 'sm2__skill-source-sync-status sm2__skill-source-sync-status--update' : 'sm2__skill-source-sync-status'}>
-              {updatePreview.updateAvailable ? '发现远端更新' : '已是最新'} · 检查于 {formatSourceTimestamp(updatePreview.checkedAt)}
+          {updateEntry && (
+            <small className={updateEntry.updateAvailable ? 'sm2__skill-source-sync-status sm2__skill-source-sync-status--update' : 'sm2__skill-source-sync-status'}>
+              {updateEntry.errorKind
+                ? skillUpdateErrorText(t, updateEntry.errorKind)
+                : updateEntry.updateAvailable
+                  ? t('skills.updates.foundUpdate', { defaultValue: '有新版本可以更新' })
+                  : t('skills.updates.upToDate', { defaultValue: '已是最新' })}
             </small>
           )}
-          {syncResult?.updated && <small className="sm2__skill-source-sync-status">已同步到中心库 · {formatSourceTimestamp(syncResult.syncedAt)}</small>}
+          {updateEntry?.locallyModified && (
+            <small className="sm2__skill-source-sync-error">
+              {t('skills.updates.modifiedNote', { defaultValue: '你改过这个 Skill，更新会覆盖你的修改。' })}
+            </small>
+          )}
+          {updateEntry?.errorDetail && (
+            <SettingDetails testId={`skill-update-error-${detail.id}`} label={t('settings.details', { defaultValue: '详情' })}>
+              <p>{updateEntry.errorDetail}</p>
+            </SettingDetails>
+          )}
+          {isGitHubSource && (
+            <label className="sm2__checkbox-row sm2__skill-source-sync-auto">
+              <input
+                type="checkbox"
+                checked={autoEnabled}
+                disabled={updating}
+                onChange={(event) => void state.setSkillAutoUpdate(detail.id, event.target.checked)}
+              />
+              {t('skills.updates.autoUpdate', { defaultValue: '自动更新' })}
+              <span className="sm2__settings-help">
+                {t('skills.updates.autoUpdateHint', { defaultValue: '只有打开「定期检查更新」后才生效' })}
+              </span>
+            </label>
+          )}
           {updateError && <small className="sm2__skill-source-sync-error">{updateError}</small>}
+
+          {confirming && updateEntry && (
+            <PreviewDialog
+              title={t('skills.updates.confirmTitle', {
+                name: detail.name,
+                defaultValue: '更新「{{name}}」？',
+              })}
+              confirmLabel={t('skills.updates.confirmUpdate', { defaultValue: '更新' })}
+              cancelLabel={t('skills.cancel', { defaultValue: '取消' })}
+              busyLabel={t('skills.updates.updating', { defaultValue: '正在更新…' })}
+              destructive={updateEntry.locallyModified}
+              busy={updating}
+              onConfirm={() => void applyUpdate()}
+              onCancel={() => {
+                if (updating) return
+                setConfirming(false)
+                setUpdateError(null)
+              }}
+            >
+              <div className="vb-skills-sync-preview">
+                <p>
+                  {t('skills.updates.confirmBody', {
+                    defaultValue: '会用 GitHub 上的新版本替换本地文件；各 Agent 的链接不变。',
+                  })}
+                </p>
+                {updateEntry.locallyModified && (
+                  <p className="vb-skills-sync-preview__warning" role="alert">
+                    {t('skills.updates.modifiedNote', { defaultValue: '你改过这个 Skill，更新会覆盖你的修改。' })}
+                  </p>
+                )}
+                {updateEntry.changes && <p>{changeSummaryText(t, updateEntry.changes)}</p>}
+                {updateError && <p className="vb-skills-sync-preview__error" role="alert">{updateError}</p>}
+              </div>
+            </PreviewDialog>
+          )}
         </div>
       )}
     </section>

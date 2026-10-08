@@ -321,6 +321,49 @@ pub(crate) fn resolve_external_skill_source_with_token(
     resolve_install_source_with_token(source, github_token)
 }
 
+/// Clone a GitHub repository once without selecting a subdirectory, so a batch
+/// update check can read several Skills from the same download. Returns the
+/// checkout root plus the temp directory that owns it.
+pub(crate) fn checkout_github_repo(
+    owner: &str,
+    repo: &str,
+    git_ref: Option<&str>,
+) -> Result<(PathBuf, Option<PathBuf>), String> {
+    let repo_url = format!("https://github.com/{owner}/{repo}.git");
+    clone_repo(&repo_url, git_ref, None, None)
+}
+
+/// Exact Git tree SHA of `relative_path` at the checkout's HEAD. This is the
+/// same value the GitHub Trees API reports, and therefore the value `npx
+/// skills` records as `skillFolderHash`. `None` when the checkout or path is
+/// unavailable; callers fall back to hashing the working copy.
+pub(crate) fn git_tree_hash_at(repo_dir: &Path, relative_path: &str) -> Option<String> {
+    let spec = {
+        let rel = relative_path.trim().trim_matches('/').replace('\\', "/");
+        if rel.is_empty() {
+            "HEAD^{tree}".to_string()
+        } else {
+            format!("HEAD:{rel}")
+        }
+    };
+    let output = Command::new(crate::agents::executable::command_path("git"))
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .arg("-C")
+        .arg(repo_dir)
+        .args(["rev-parse", "--verify", "--quiet", &spec])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let hash = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if hash.len() == 40 && hash.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        Some(hash.to_ascii_lowercase())
+    } else {
+        None
+    }
+}
+
 fn download_markdown_skill(source: &str) -> Result<(PathBuf, Option<PathBuf>), String> {
     let root = temp_install_dir()?;
     let skill_dir = root.join(skill_dir_name_from_url(source));

@@ -7,6 +7,7 @@ import { AgentIconBadge } from './AgentIconBadge'
 import { DistributeDialog } from './DistributeDialog'
 import { SkillDetailSlider } from './SkillDetailSlider'
 import { SkillIssuesPanel } from './SkillIssuesPanel'
+import { SkillUpdatePanel } from './SkillUpdatePanel'
 import { PreviewDialog } from './PreviewDialog'
 import { skillModeLabel, skillSourceCategoryLabel, skillSourceTypeLabel } from './skillLabels'
 import { SettingDetails } from '../settings/SettingDetails'
@@ -191,6 +192,8 @@ export function SkillLibraryPage() {
           <Metric value={overview.metrics.issueCount} label="需要整理" onClick={openIssues} />
         </div>
       )}
+
+      <SkillUpdatePanel />
 
       <div id="skill-issues">
         <SkillIssuesPanel />

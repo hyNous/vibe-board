@@ -3,7 +3,10 @@
 #![cfg(test)]
 
 use crate::skills::v2::models::*;
-use crate::skills::v2::service::{AdoptBatchItem, ClaimOrigin, Service, UpsertPackInput};
+use crate::skills::v2::service::{
+    classify_update_error, set_skill_update_repo_stub, skill_update_repo_stub_hits, AdoptBatchItem,
+    ClaimOrigin, Service, UpsertPackInput,
+};
 use crate::skills::v2::{db, fsutil};
 use rusqlite::params;
 use std::fs;
@@ -20,6 +23,7 @@ fn lock_home() -> std::sync::MutexGuard<'static, ()> {
 struct TempHome {
     path: PathBuf,
     prev: Option<String>,
+    prev_override: Option<String>,
 }
 
 impl TempHome {
@@ -31,8 +35,16 @@ impl TempHome {
         let path = std::env::temp_dir().join(format!("agentbro-v2-{label}-{suffix}"));
         fs::create_dir_all(&path).unwrap();
         let prev = std::env::var("HOME").ok();
+        let prev_override = std::env::var("VIBEBOARD_HOME").ok();
         std::env::set_var("HOME", &path);
-        Self { path, prev }
+        // `data_dir::home_dir` reads VIBEBOARD_HOME first; set both so this test
+        // can never observe the real user profile.
+        std::env::set_var("VIBEBOARD_HOME", &path);
+        Self {
+            path,
+            prev,
+            prev_override,
+        }
     }
 }
 
@@ -43,6 +55,7 @@ impl Drop for TempHome {
         // the next test's set_var (which holds the lock). Each test sets HOME at
         // TempHome::new under the shared lock; leaving it is harmless.
         let _ = &self.prev;
+        let _ = &self.prev_override;
         let _ = fs::remove_dir_all(&self.path);
     }
 }
@@ -755,6 +768,7 @@ fn windows_link_distribution_falls_back_to_copy_even_with_ask_policy() {
         startup_scan: None,
         show_unmanaged: None,
         auto_sync_skill_packs: None,
+        periodic_skill_update_check: None,
     })
     .unwrap();
     let src = write_skill(
@@ -1895,6 +1909,7 @@ fn updating_applied_pack_can_defer_and_manually_sync() {
         startup_scan: None,
         show_unmanaged: None,
         auto_sync_skill_packs: Some(false),
+        periodic_skill_update_check: None,
     })
     .unwrap();
     let first = write_skill(&svc.home.join("s"), "one", "skill-one", Some("v1"));
@@ -5748,6 +5763,7 @@ fn settings_round_trip() {
             startup_scan: Some(false),
             show_unmanaged: None,
             auto_sync_skill_packs: None,
+            periodic_skill_update_check: None,
         })
         .unwrap();
     assert_eq!(updated.default_distribute_mode, "copy");
@@ -5764,6 +5780,7 @@ fn settings_round_trip() {
             startup_scan: None,
             show_unmanaged: None,
             auto_sync_skill_packs: None,
+            periodic_skill_update_check: None,
         })
         .unwrap();
     assert_eq!(
@@ -5894,4 +5911,405 @@ fn add_center_skill_from_zip() {
         .unwrap();
     assert_eq!(r.skill_ids, vec!["zip-skill".to_string()]);
     assert!(svc.center_path().unwrap().join("zip-skill").is_dir());
+}
+
+// ── Open-source update checks (M13) ──────────────────────────────
+
+fn update_skill_md(skill_id: &str) -> String {
+    format!("---\nname: {skill_id}\ndescription: update fixture\n---\n# {skill_id}\n")
+}
+
+fn seed_center_skill(center: &Path, skill_id: &str, marker: &str) -> PathBuf {
+    let dir = center.join(skill_id);
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(dir.join("SKILL.md"), update_skill_md(skill_id)).unwrap();
+    fs::write(dir.join("reference.md"), marker).unwrap();
+    dir
+}
+
+fn write_stub_skill(repo: &Path, skill_id: &str, marker: &str) {
+    let dir = repo.join("skills").join(skill_id);
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(dir.join("SKILL.md"), update_skill_md(skill_id)).unwrap();
+    fs::write(dir.join("reference.md"), marker).unwrap();
+}
+
+/// Two entries from the same GitHub repository, in the exact layout `npx
+/// skills` writes.
+fn write_update_skill_lock(home: &Path, entries: &[(&str, &str)]) {
+    let mut skills = serde_json::Map::new();
+    for (skill_id, folder_hash) in entries {
+        skills.insert(
+            (*skill_id).to_string(),
+            serde_json::json!({
+                "source": "owner/repo",
+                "sourceType": "github",
+                "sourceUrl": "https://github.com/owner/repo.git",
+                "skillPath": format!("skills/{skill_id}/SKILL.md"),
+                "skillFolderHash": folder_hash,
+                "installedAt": "2026-01-01T00:00:00Z",
+                "updatedAt": "2026-01-01T00:00:00Z"
+            }),
+        );
+    }
+    let file = serde_json::json!({
+        "version": 3,
+        "skills": skills,
+        "dismissed": { "findSkillsPrompt": true }
+    });
+    write_skill_lock(home, &serde_json::to_string_pretty(&file).unwrap());
+}
+
+fn enable_periodic_updates(svc: &Service) {
+    svc.update_settings(SettingsUpdate {
+        center_path: None,
+        sqlite_path: None,
+        default_distribute_mode: None,
+        link_fail_policy: None,
+        startup_scan: None,
+        show_unmanaged: None,
+        auto_sync_skill_packs: None,
+        periodic_skill_update_check: Some(true),
+    })
+    .unwrap();
+}
+
+fn lock_entry_json(home: &Path, skill_id: &str) -> serde_json::Value {
+    let content = fs::read_to_string(home.join(".agents").join(".skill-lock.json")).unwrap();
+    let file: serde_json::Value = serde_json::from_str(&content).unwrap();
+    file["skills"][skill_id].clone()
+}
+
+#[test]
+fn update_check_downloads_each_repository_once_and_lists_file_changes() {
+    let (_home, svc, _lock) = fresh_service("update-batch");
+    let center = svc.center_path().unwrap();
+    let alpha = seed_center_skill(&center, "alpha", "v1");
+    let beta = seed_center_skill(&center, "beta", "v1");
+    svc.scan_center_into_db().unwrap();
+    write_update_skill_lock(
+        &svc.home,
+        &[
+            ("alpha", &fsutil::git_tree_hash(&alpha)),
+            ("beta", &fsutil::git_tree_hash(&beta)),
+        ],
+    );
+
+    let stub = svc.home.join("stub-repo");
+    write_stub_skill(&stub, "alpha", "v2");
+    write_stub_skill(&stub, "beta", "v2");
+    set_skill_update_repo_stub(Some(stub));
+    let report = svc.check_all_skill_updates().unwrap();
+    let hits = skill_update_repo_stub_hits();
+    set_skill_update_repo_stub(None);
+
+    assert_eq!(
+        hits, 1,
+        "both Skills live in one repository and must share one checkout"
+    );
+    assert_eq!(report.checked_count, 2);
+    assert_eq!(report.update_count, 2);
+    assert_eq!(report.failed_count, 0);
+    let entry = report
+        .entries
+        .iter()
+        .find(|entry| entry.skill_id == "alpha")
+        .unwrap();
+    assert!(entry.update_available);
+    assert!(!entry.locally_modified);
+    assert!(entry.baseline_known);
+    let changes = entry.changes.as_ref().unwrap();
+    assert_eq!(changes.modified, 1);
+    assert_eq!(changes.added, 0);
+    assert_eq!(changes.removed, 0);
+    assert_eq!(changes.files[0].path, "reference.md");
+    assert_eq!(changes.files[0].change_type, "modified");
+    // A plain check never writes Skill files.
+    assert_eq!(
+        fs::read_to_string(alpha.join("reference.md")).unwrap(),
+        "v1"
+    );
+    assert_eq!(fs::read_to_string(beta.join("reference.md")).unwrap(), "v1");
+}
+
+#[test]
+fn periodic_check_auto_updates_unmodified_skill_and_keeps_lock_record_consistent() {
+    let (_home, svc, _lock) = fresh_service("update-auto");
+    let center = svc.center_path().unwrap();
+    let alpha = seed_center_skill(&center, "alpha", "v1");
+    svc.scan_center_into_db().unwrap();
+    write_update_skill_lock(
+        &svc.home,
+        &[
+            ("alpha", &fsutil::git_tree_hash(&alpha)),
+            ("beta", "unchanged-hash"),
+        ],
+    );
+    enable_periodic_updates(&svc);
+    svc.set_skill_auto_update("alpha", true).unwrap();
+
+    let stub = svc.home.join("stub-repo");
+    write_stub_skill(&stub, "alpha", "v2");
+    set_skill_update_repo_stub(Some(stub.clone()));
+    let result = svc.run_periodic_skill_update_check().unwrap();
+    set_skill_update_repo_stub(None);
+
+    assert!(result.ran);
+    let report = result.report.unwrap();
+    let entry = report
+        .entries
+        .iter()
+        .find(|entry| entry.skill_id == "alpha")
+        .unwrap();
+    assert!(entry.auto_updated);
+    assert!(!entry.update_available);
+    assert_eq!(
+        fs::read_to_string(alpha.join("reference.md")).unwrap(),
+        "v2"
+    );
+
+    // The lock record matches the files now on disk and only that record moved.
+    let alpha_lock = lock_entry_json(&svc.home, "alpha");
+    assert_eq!(
+        alpha_lock["skillFolderHash"].as_str(),
+        Some(fsutil::git_tree_hash(&alpha).as_str())
+    );
+    assert_ne!(alpha_lock["updatedAt"], "2026-01-01T00:00:00Z");
+    let beta_lock = lock_entry_json(&svc.home, "beta");
+    assert_eq!(beta_lock["skillFolderHash"], "unchanged-hash");
+    assert_eq!(beta_lock["updatedAt"], "2026-01-01T00:00:00Z");
+    assert!(svc
+        .home
+        .join(".agents")
+        .join(".skill-lock.json.vibeboard-bak")
+        .is_file());
+
+    // A second startup within 24 hours must not touch the network at all.
+    set_skill_update_repo_stub(Some(stub));
+    let second = svc.run_periodic_skill_update_check().unwrap();
+    let second_hits = skill_update_repo_stub_hits();
+    set_skill_update_repo_stub(None);
+    assert!(!second.ran);
+    assert_eq!(second.skip_reason.as_deref(), Some("recent"));
+    assert_eq!(second_hits, 0);
+}
+
+#[test]
+fn periodic_check_skips_locally_modified_skill_and_reports_it() {
+    let (_home, svc, _lock) = fresh_service("update-modified");
+    let center = svc.center_path().unwrap();
+    let alpha = seed_center_skill(&center, "alpha", "v1");
+    svc.scan_center_into_db().unwrap();
+    write_update_skill_lock(&svc.home, &[("alpha", &fsutil::git_tree_hash(&alpha))]);
+    // The user edited the installed copy after it was recorded.
+    fs::write(alpha.join("reference.md"), "mine").unwrap();
+    enable_periodic_updates(&svc);
+    svc.set_skill_auto_update("alpha", true).unwrap();
+
+    let stub = svc.home.join("stub-repo");
+    write_stub_skill(&stub, "alpha", "v2");
+    set_skill_update_repo_stub(Some(stub));
+    let result = svc.run_periodic_skill_update_check().unwrap();
+    set_skill_update_repo_stub(None);
+
+    let report = result.report.unwrap();
+    let entry = report
+        .entries
+        .iter()
+        .find(|entry| entry.skill_id == "alpha")
+        .unwrap();
+    assert!(entry.locally_modified);
+    assert_eq!(
+        entry.auto_update_skipped.as_deref(),
+        Some("locally_modified")
+    );
+    assert!(!entry.auto_updated);
+    // Nothing was overwritten and the record was not rewritten.
+    assert_eq!(
+        fs::read_to_string(alpha.join("reference.md")).unwrap(),
+        "mine"
+    );
+    assert_eq!(
+        lock_entry_json(&svc.home, "alpha")["updatedAt"],
+        "2026-01-01T00:00:00Z"
+    );
+}
+
+#[test]
+fn periodic_check_is_off_by_default_and_never_touches_the_network() {
+    let (_home, svc, _lock) = fresh_service("update-off");
+    let center = svc.center_path().unwrap();
+    let alpha = seed_center_skill(&center, "alpha", "v1");
+    svc.scan_center_into_db().unwrap();
+    write_update_skill_lock(&svc.home, &[("alpha", &fsutil::git_tree_hash(&alpha))]);
+
+    let stub = svc.home.join("stub-repo");
+    write_stub_skill(&stub, "alpha", "v2");
+    set_skill_update_repo_stub(Some(stub));
+    let result = svc.run_periodic_skill_update_check().unwrap();
+    let hits = skill_update_repo_stub_hits();
+    set_skill_update_repo_stub(None);
+
+    assert!(!result.ran);
+    assert_eq!(result.skip_reason.as_deref(), Some("disabled"));
+    assert_eq!(hits, 0);
+    assert_eq!(
+        fs::read_to_string(alpha.join("reference.md")).unwrap(),
+        "v1"
+    );
+}
+
+#[test]
+fn update_check_ignores_skills_without_a_recorded_source() {
+    let (_home, svc, _lock) = fresh_service("update-no-source");
+    let center = svc.center_path().unwrap();
+    seed_center_skill(&center, "home-made", "v1");
+    svc.scan_center_into_db().unwrap();
+
+    let stub = svc.home.join("stub-repo");
+    write_stub_skill(&stub, "home-made", "v2");
+    set_skill_update_repo_stub(Some(stub));
+    let report = svc.check_all_skill_updates().unwrap();
+    let hits = skill_update_repo_stub_hits();
+    set_skill_update_repo_stub(None);
+
+    assert_eq!(report.checked_count, 0);
+    assert_eq!(report.update_count, 0);
+    assert_eq!(hits, 0);
+}
+
+#[test]
+fn manual_update_requires_confirmation_for_locally_modified_skill() {
+    let (_home, svc, _lock) = fresh_service("update-manual");
+    let center = svc.center_path().unwrap();
+    let alpha = seed_center_skill(&center, "alpha", "v1");
+    svc.scan_center_into_db().unwrap();
+    write_update_skill_lock(&svc.home, &[("alpha", &fsutil::git_tree_hash(&alpha))]);
+    fs::write(alpha.join("reference.md"), "mine").unwrap();
+
+    let stub = svc.home.join("stub-repo");
+    write_stub_skill(&stub, "alpha", "v2");
+    set_skill_update_repo_stub(Some(stub));
+    let blocked = svc.update_skill_from_source("alpha", false).unwrap();
+    assert!(!blocked.updated);
+    assert_eq!(blocked.skipped_reason.as_deref(), Some("locally_modified"));
+    assert!(blocked.locally_modified);
+    assert_eq!(
+        fs::read_to_string(alpha.join("reference.md")).unwrap(),
+        "mine"
+    );
+
+    let allowed = svc.update_skill_from_source("alpha", true).unwrap();
+    set_skill_update_repo_stub(None);
+    assert!(allowed.updated);
+    assert_eq!(
+        fs::read_to_string(alpha.join("reference.md")).unwrap(),
+        "v2"
+    );
+    assert_eq!(
+        lock_entry_json(&svc.home, "alpha")["skillFolderHash"].as_str(),
+        Some(fsutil::git_tree_hash(&alpha).as_str())
+    );
+}
+
+#[test]
+fn user_triggered_check_reports_updates_without_applying_them() {
+    let (_home, svc, _lock) = fresh_service("update-manual-check");
+    let center = svc.center_path().unwrap();
+    let alpha = seed_center_skill(&center, "alpha", "v1");
+    svc.scan_center_into_db().unwrap();
+    write_update_skill_lock(&svc.home, &[("alpha", &fsutil::git_tree_hash(&alpha))]);
+    // Even with both switches on, a check the user asked for only reports.
+    enable_periodic_updates(&svc);
+    svc.set_skill_auto_update("alpha", true).unwrap();
+
+    let stub = svc.home.join("stub-repo");
+    write_stub_skill(&stub, "alpha", "v2");
+    set_skill_update_repo_stub(Some(stub.clone()));
+    let report = svc.check_all_skill_updates().unwrap();
+    let single = svc.check_skill_update("alpha").unwrap();
+    set_skill_update_repo_stub(None);
+
+    let entry = report
+        .entries
+        .iter()
+        .find(|entry| entry.skill_id == "alpha")
+        .unwrap();
+    assert!(entry.update_available);
+    assert!(entry.auto_update_enabled);
+    assert!(!entry.auto_updated);
+    assert_eq!(entry.auto_update_skipped, None);
+    assert!(single.update_available);
+    assert!(!single.auto_updated);
+    assert_eq!(
+        fs::read_to_string(alpha.join("reference.md")).unwrap(),
+        "v1"
+    );
+    assert_eq!(
+        lock_entry_json(&svc.home, "alpha")["updatedAt"],
+        "2026-01-01T00:00:00Z"
+    );
+}
+
+#[test]
+fn periodic_check_skips_skill_without_a_known_baseline() {
+    let (_home, svc, _lock) = fresh_service("update-no-baseline");
+    let center = svc.center_path().unwrap();
+    let alpha = seed_center_skill(&center, "alpha", "v1");
+    svc.scan_center_into_db().unwrap();
+    // A source record with no folder hash cannot tell whether the user edited
+    // the installed copy, so auto-update must not overwrite it.
+    write_update_skill_lock(&svc.home, &[("alpha", "")]);
+    enable_periodic_updates(&svc);
+    svc.set_skill_auto_update("alpha", true).unwrap();
+
+    let stub = svc.home.join("stub-repo");
+    write_stub_skill(&stub, "alpha", "v2");
+    set_skill_update_repo_stub(Some(stub));
+    let result = svc.run_periodic_skill_update_check().unwrap();
+    set_skill_update_repo_stub(None);
+
+    let report = result.report.unwrap();
+    let entry = report
+        .entries
+        .iter()
+        .find(|entry| entry.skill_id == "alpha")
+        .unwrap();
+    assert!(!entry.baseline_known);
+    assert_eq!(
+        entry.auto_update_skipped.as_deref(),
+        Some("unknown_baseline")
+    );
+    assert!(!entry.auto_updated);
+    assert_eq!(
+        fs::read_to_string(alpha.join("reference.md")).unwrap(),
+        "v1"
+    );
+}
+
+#[test]
+fn update_errors_are_classified_into_readable_reasons() {
+    assert_eq!(
+        classify_update_error(
+            "Failed to clone https://github.com/owner/repo.git: fatal: repository \
+             'https://github.com/owner/repo.git/' not found"
+        )
+        .0,
+        "not_found"
+    );
+    assert_eq!(
+        classify_update_error(
+            "Failed to clone https://github.com/owner/repo.git: fatal: unable to access \
+             'https://github.com/owner/repo.git/': Could not resolve host: github.com"
+        )
+        .0,
+        "network"
+    );
+    assert_eq!(
+        classify_update_error("API rate limit exceeded for 203.0.113.1").0,
+        "rate_limited"
+    );
+    assert_eq!(classify_update_error("something odd happened").0, "unknown");
+    let (_, detail) = classify_update_error("raw technical text");
+    assert_eq!(detail, "raw technical text");
 }

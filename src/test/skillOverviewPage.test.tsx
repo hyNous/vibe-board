@@ -1,14 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { SkillOverviewPage } from '../components/skills-v2/SkillOverviewPage'
 import { skillApiV2 } from '../services/skillApiV2'
 import type {
   AgentSummary,
-  GitHubSkillSyncResult,
-  GitHubSkillUpdatePreview,
   SkillManagerOverview,
   SkillManagerSettings,
   SkillSummary,
+  SkillUpdateCheckEntry,
+  SkillUpdateCheckReport,
+  SkillUpdateRunResult,
+  SkillUpdateStatus,
 } from '../services/skillApiV2'
 import { useSkillStoreV2 } from '../stores/skillStoreV2'
 
@@ -96,6 +98,72 @@ const overview: SkillManagerOverview = {
   settings,
 }
 
+function updateCheckEntry(overrides: Partial<SkillUpdateCheckEntry> = {}): SkillUpdateCheckEntry {
+  return {
+    skillId: 'release-checklist',
+    name: 'Release Checklist',
+    sourceUri: 'github:owner/repo/skills/release-checklist',
+    updateAvailable: true,
+    locallyModified: false,
+    baselineKnown: true,
+    autoUpdateEnabled: false,
+    autoUpdated: false,
+    autoUpdateSkipped: null,
+    errorKind: null,
+    errorDetail: null,
+    changes: {
+      added: 1,
+      modified: 1,
+      removed: 0,
+      files: [
+        { path: 'new-notes.md', changeType: 'added' },
+        { path: 'SKILL.md', changeType: 'modified' },
+      ],
+      truncated: false,
+    },
+    ...overrides,
+  }
+}
+
+function updateReport(entries: SkillUpdateCheckEntry[]): SkillUpdateCheckReport {
+  return {
+    checkedAt: '2026-10-07T12:00:00Z',
+    checkedCount: entries.length,
+    updateCount: entries.filter((entry) => entry.updateAvailable).length,
+    failedCount: entries.filter((entry) => entry.errorKind).length,
+    entries,
+  }
+}
+
+function updateStatus(
+  report: SkillUpdateCheckReport | null,
+  overrides: Partial<SkillUpdateStatus> = {},
+): SkillUpdateStatus {
+  return {
+    periodicCheckEnabled: false,
+    lastCheckedAt: report?.checkedAt ?? null,
+    report,
+    autoUpdateSkillIds: [],
+    ...overrides,
+  }
+}
+
+function updateResult(overrides: Partial<SkillUpdateRunResult> = {}): SkillUpdateRunResult {
+  return {
+    skillId: 'release-checklist',
+    name: 'Release Checklist',
+    sourceUri: 'github:owner/repo/skills/release-checklist',
+    updated: true,
+    skippedReason: null,
+    locallyModified: false,
+    changes: null,
+    syncedAt: '2026-10-07T12:05:00Z',
+    errorKind: null,
+    errorDetail: null,
+    ...overrides,
+  }
+}
+
 function resetStore() {
   useSkillStoreV2.setState({
     initialized: true,
@@ -109,6 +177,9 @@ function resetStore() {
     unmanaged: [],
     selectedAgentId: null,
     selectedAgentDetail: null,
+    updateStatus: null,
+    updateChecking: false,
+    updateBusySkillId: null,
   })
 }
 
@@ -116,6 +187,7 @@ describe('SkillOverviewPage', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
     resetStore()
+    vi.spyOn(skillApiV2, 'skillUpdateStatus').mockResolvedValue(updateStatus(null))
   })
 
   it('shows real effect categories instead of promising generic or exclusive scopes', () => {
@@ -152,91 +224,159 @@ describe('SkillOverviewPage', () => {
     expect(useSkillStoreV2.getState().filters).toEqual({ query: '', source: 'github', status: 'conflict', type: 'pack' })
   })
 
-  it('checks GitHub skills hidden by full-manager filters while the visible search still narrows the overview', async () => {
+  it('checks all recorded sources no matter what the visible search shows', async () => {
     useSkillStoreV2.setState({ filters: { query: '', source: 'local_folder', status: '', type: '' } })
-    const checkSpy = vi.spyOn(skillApiV2, 'checkGitHubSkillUpdate').mockResolvedValue({
-      skillId: 'release-checklist',
-      sourceUri: 'github:owner/release-checklist',
-      localHash: 'a'.repeat(16),
-      remoteHash: 'a'.repeat(16),
+    const current = updateCheckEntry({
+      skillId: 'other',
+      name: 'Other',
       updateAvailable: false,
-      checkedAt: '2026-09-14T00:00:00Z',
+      changes: null,
     })
+    const checkSpy = vi
+      .spyOn(skillApiV2, 'checkAllSkillUpdates')
+      .mockResolvedValue(updateReport([updateCheckEntry(), current]))
 
     render(<SkillOverviewPage />)
 
-    fireEvent.click(screen.getByRole('button', { name: '检查更新' }))
-    await waitFor(() => expect(checkSpy).toHaveBeenCalledWith('release-checklist'))
-    expect(await screen.findByText('已是最新')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '检查全部更新' }))
+    await waitFor(() => expect(checkSpy).toHaveBeenCalledTimes(1))
+    expect(await screen.findByText('1 个可更新')).toBeInTheDocument()
+    expect(screen.getAllByText('Release Checklist').length).toBeGreaterThan(0)
+    expect(screen.getByRole('button', { name: '更新' })).toBeInTheDocument()
+    expect(screen.getByText('新增 1 · 修改 1 · 删除 0')).toBeInTheDocument()
 
     fireEvent.change(screen.getByPlaceholderText('搜索 Skill 名称或描述'), { target: { value: 'release' } })
-    expect(screen.getByRole('button', { name: /Release Checklist/ })).toBeInTheDocument()
-    expect(screen.queryByText('Local Only')).not.toBeInTheDocument()
     expect(useSkillStoreV2.getState().filters).toEqual({ query: 'release', source: 'local_folder', status: '', type: '' })
   })
 
-  it('asks for confirmation with a preview before overwriting the center library', async () => {
-    const preview: GitHubSkillUpdatePreview = {
-      skillId: 'release-checklist',
-      sourceUri: 'github:owner/release-checklist',
-      localHash: 'aaaaaaaaaaaa1111',
-      remoteHash: 'bbbbbbbbbbbb2222',
-      updateAvailable: true,
-      checkedAt: '2026-09-13T00:00:00Z',
-    }
-    const syncResult: GitHubSkillSyncResult = {
-      skillId: 'release-checklist',
-      sourceUri: preview.sourceUri,
-      previousHash: preview.localHash,
-      currentHash: preview.remoteHash,
-      updated: true,
-      syncedAt: '2026-09-13T00:01:00Z',
-    }
-    vi.spyOn(skillApiV2, 'checkGitHubSkillUpdate').mockResolvedValue(preview)
-    const syncSpy = vi.spyOn(skillApiV2, 'syncGitHubSkill').mockResolvedValue(syncResult)
-    vi.spyOn(skillApiV2, 'refreshOverview').mockResolvedValue(overview)
+  it('warns before overwriting a Skill the user edited', async () => {
+    vi.spyOn(skillApiV2, 'checkAllSkillUpdates').mockResolvedValue(
+      updateReport([updateCheckEntry({ locallyModified: true })]),
+    )
+    const updateSpy = vi.spyOn(skillApiV2, 'updateSkillFromSource').mockResolvedValue(updateResult())
+    vi.spyOn(skillApiV2, 'overview').mockResolvedValue(overview)
     vi.spyOn(skillApiV2, 'listUnmanaged').mockResolvedValue([])
     vi.spyOn(skillApiV2, 'listProjects').mockResolvedValue([])
 
     render(<SkillOverviewPage />)
 
-    fireEvent.click(screen.getByRole('button', { name: '检查更新' }))
-    expect(await screen.findByText('有更新可以安装')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '检查全部更新' }))
+    expect(await screen.findByText('1 个可更新')).toBeInTheDocument()
+    expect(screen.getAllByText('你改过这个 Skill，更新会覆盖你的修改。').length).toBeGreaterThan(0)
 
-    fireEvent.click(screen.getByRole('button', { name: '同步到中心库' }))
+    fireEvent.click(screen.getByRole('button', { name: '更新' }))
 
     const dialog = await screen.findByRole('dialog')
-    expect(dialog).toHaveTextContent('同步「Release Checklist」到中心库？')
-    expect(dialog).toHaveTextContent('这些修改会被远端版本覆盖')
-    expect(syncSpy).not.toHaveBeenCalled()
+    expect(dialog).toHaveTextContent('你改过这个 Skill，更新会覆盖你的修改。')
+    expect(dialog).toHaveTextContent('会用 GitHub 上的新版本替换本地文件')
+    expect(updateSpy).not.toHaveBeenCalled()
 
-    fireEvent.click(screen.getByRole('button', { name: '覆盖并同步' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: '更新' }))
 
-    await waitFor(() => expect(syncSpy).toHaveBeenCalledWith('release-checklist'))
+    await waitFor(() => expect(updateSpy).toHaveBeenCalledWith('release-checklist', true))
   })
 
-  it('does not sync when the confirmation is cancelled', async () => {
-    vi.spyOn(skillApiV2, 'checkGitHubSkillUpdate').mockResolvedValue({
-      skillId: 'release-checklist',
-      sourceUri: 'github:owner/release-checklist',
-      localHash: 'a'.repeat(16),
-      remoteHash: 'b'.repeat(16),
-      updateAvailable: true,
-      checkedAt: '2026-09-13T00:00:00Z',
-    })
-    const syncSpy = vi.spyOn(skillApiV2, 'syncGitHubSkill')
+  it('does not update when the confirmation is cancelled', async () => {
+    vi.spyOn(skillApiV2, 'checkAllSkillUpdates').mockResolvedValue(updateReport([updateCheckEntry()]))
+    const updateSpy = vi.spyOn(skillApiV2, 'updateSkillFromSource')
 
     render(<SkillOverviewPage />)
 
-    fireEvent.click(screen.getByRole('button', { name: '检查更新' }))
-    expect(await screen.findByText('有更新可以安装')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '同步到中心库' }))
+    fireEvent.click(screen.getByRole('button', { name: '检查全部更新' }))
+    expect(await screen.findByText('1 个可更新')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '更新' }))
 
-    expect(await screen.findByRole('dialog')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '取消' }))
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.click(within(dialog).getByRole('button', { name: '取消' }))
 
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-    expect(syncSpy).not.toHaveBeenCalled()
+    expect(updateSpy).not.toHaveBeenCalled()
+  })
+
+  it('lets the user switch auto-update on for one Skill', async () => {
+    vi.spyOn(skillApiV2, 'checkAllSkillUpdates').mockResolvedValue(updateReport([updateCheckEntry()]))
+    const toggleSpy = vi.spyOn(skillApiV2, 'setSkillAutoUpdate').mockResolvedValue(
+      updateStatus(updateReport([updateCheckEntry()]), { autoUpdateSkillIds: ['release-checklist'] }),
+    )
+
+    render(<SkillOverviewPage />)
+
+    fireEvent.click(screen.getByRole('button', { name: '检查全部更新' }))
+    expect(await screen.findByText('1 个可更新')).toBeInTheDocument()
+
+    const toggle = screen.getByRole('checkbox', { name: /自动更新/ })
+    expect(toggle).not.toBeChecked()
+    fireEvent.click(toggle)
+
+    await waitFor(() => expect(toggleSpy).toHaveBeenCalledWith('release-checklist', true))
+  })
+
+  it('shows automatic update results and skipped ones without an update button', () => {
+    const entries = [
+      updateCheckEntry({
+        skillId: 'alpha',
+        name: 'Alpha',
+        updateAvailable: false,
+        autoUpdated: true,
+        autoUpdateEnabled: true,
+        changes: null,
+      }),
+      updateCheckEntry({
+        skillId: 'beta',
+        name: 'Beta',
+        autoUpdateSkipped: 'locally_modified',
+        autoUpdateEnabled: true,
+      }),
+    ]
+    useSkillStoreV2.setState({
+      updateStatus: updateStatus(updateReport(entries), { periodicCheckEnabled: true }),
+    })
+
+    render(<SkillOverviewPage />)
+
+    expect(screen.getByText('已自动更新到新版本')).toBeInTheDocument()
+    expect(screen.getByText('已跳过：你改过这个 Skill，自动更新不会覆盖你的修改。')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '更新' })).toBeInTheDocument()
+  })
+
+  it('phrases check failures for people and keeps raw details folded', () => {
+    const entry = updateCheckEntry({
+      updateAvailable: false,
+      changes: null,
+      errorKind: 'rate_limited',
+      errorDetail: 'API rate limit exceeded for 203.0.113.1',
+    })
+    useSkillStoreV2.setState({ updateStatus: updateStatus(updateReport([entry])) })
+
+    render(<SkillOverviewPage />)
+
+    expect(screen.getByText('GitHub 暂时限制了访问频率，稍后再试。')).toBeInTheDocument()
+    expect(screen.queryByText(/API rate limit exceeded/)).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByTestId('skill-update-error-release-checklist'))
+
+    expect(screen.getByText(/API rate limit exceeded/)).toBeInTheDocument()
+  })
+
+  it('tells the user that Skills without a recorded source are not checked', async () => {
+    const localOnlyOverview: SkillManagerOverview = {
+      ...overview,
+      skills: [localSkill],
+    }
+    useSkillStoreV2.setState({
+      overview: localOnlyOverview,
+      skills: localOnlyOverview.skills,
+    })
+    const checkSpy = vi.spyOn(skillApiV2, 'checkAllSkillUpdates').mockResolvedValue(updateReport([]))
+
+    render(<SkillOverviewPage />)
+
+    expect(screen.getByRole('button', { name: '检查全部更新' })).toBeEnabled()
+    fireEvent.click(screen.getByRole('button', { name: '检查全部更新' }))
+    await waitFor(() => expect(checkSpy).toHaveBeenCalledTimes(1))
+
+    expect(await screen.findByText('全部已是最新')).toBeInTheDocument()
+    expect(screen.getByText(/没有来源记录的 Skill 不参与检查/)).toBeInTheDocument()
   })
 
   it('lists only program-detected Agents by default and reveals the rest from +', () => {
@@ -279,21 +419,5 @@ describe('SkillOverviewPage', () => {
     fireEvent.click(screen.getByTestId('skills-overview-scope-details'))
 
     expect(screen.getByTestId('skills-overview-scope-details-body')).toHaveTextContent('/home/user/.agents/skills')
-  })
-
-  it('disables the update check and says so when no GitHub source is recorded', () => {
-    const localOnlyOverview: SkillManagerOverview = {
-      ...overview,
-      skills: [localSkill],
-    }
-    useSkillStoreV2.setState({
-      overview: localOnlyOverview,
-      skills: localOnlyOverview.skills,
-    })
-
-    render(<SkillOverviewPage />)
-
-    expect(screen.getByText(/0 个可检查更新/)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '检查更新' })).toBeDisabled()
   })
 })

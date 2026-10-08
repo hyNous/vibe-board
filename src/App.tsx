@@ -2,6 +2,7 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { COLOR_THEMES, useThemeStore } from './stores/themeStore'
 import { useConfigStore } from './stores/configStore'
+import { useSkillStoreV2 } from './stores/skillStoreV2'
 import { BackgroundUpdater } from './components/BackgroundUpdater'
 import { useTauriInit } from './hooks/useTauri'
 import { useAutoHide } from './hooks/useAutoHide'
@@ -151,6 +152,14 @@ function App() {
   // Detect window on mount
   useEffect(() => {
     detectWindowLabel().then(setWindowLabel)
+  }, [])
+
+  // Open-source Skill update check. The backend only contacts GitHub when the
+  // user enabled the periodic setting and a day has passed; when it is off this
+  // resolves without any network access.
+  useEffect(() => {
+    if (!isTauri()) return
+    void useSkillStoreV2.getState().runPeriodicCheck()
   }, [])
 
   // Browser dev mode: primary modifier + , toggles settings view in same page

@@ -742,6 +742,52 @@
       "custom": "Custom",
       "github": "GitHub",
       "agent": "Synced from Agent"
+    },
+    "updates": {
+      "title": "Open-source Skill updates",
+      "checkAll": "Check all updates",
+      "checkOne": "Check for updates",
+      "checking": "Checking...",
+      "updating": "Updating...",
+      "lastChecked": "Last checked: {{time}}",
+      "neverChecked": "Not checked yet",
+      "summary": "{{n}} updates available",
+      "allCurrent": "Everything is up to date",
+      "noSources": "Skills without a recorded source are not checked.",
+      "update": "Update",
+      "confirmTitle": "Update \"{{name}}\"?",
+      "confirmBody": "The local files will be replaced with the GitHub version; Agent links stay the same.",
+      "confirmUpdate": "Update",
+      "modifiedNote": "You changed this Skill. Updating will overwrite your changes.",
+      "autoUpdate": "Auto-update",
+      "autoUpdateHint": "Only works after \"Check for updates regularly\" is on",
+      "autoUpdated": "Updated automatically",
+      "skippedModified": "Skipped: you changed this Skill, so auto-update did not overwrite your edits.",
+      "skippedUnknown": "Skipped: Vibe Board cannot tell whether this Skill was changed. Update it manually.",
+      "skippedFailed": "Skipped: the update did not finish.",
+      "changeSummary": "Added {{added}} · Modified {{modified}} · Removed {{removed}}",
+      "changesTruncated": "Only the first few files are listed.",
+      "change": {
+        "added": "Added",
+        "modified": "Modified",
+        "removed": "Removed"
+      },
+      "errors": {
+        "network": "Could not reach GitHub. Check your connection and try again later.",
+        "notFound": "The source repository for this Skill could not be found; it may have been deleted or renamed.",
+        "rateLimited": "GitHub temporarily limited access. Try again later.",
+        "unknown": "This check did not finish. Try again later."
+      },
+      "sourceTitle": "Open-source source updates",
+      "sourceHint": "Check GitHub for a new version. Updating replaces the local files; Agent links stay the same.",
+      "foundUpdate": "A new version is available",
+      "upToDate": "Up to date"
+    },
+    "settings": {
+      "openSourceUpdates": "Open-source Skill updates",
+      "periodicCheck": "Check for updates regularly",
+      "periodicCheckHelp": "When on, Vibe Board checks at most once a day whether the open-source Skills you installed have new versions. The check visits GitHub. It only notifies you and never changes files by itself; only Skills you switch to \"Auto-update\" are updated directly. Off by default.",
+      "lastChecked": "Last checked: {{time}}"
     }
   },
   "update": {

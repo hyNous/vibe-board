@@ -12,6 +12,9 @@ import type {
   DistributionPreview,
   ProjectSummary,
   ProjectDetail,
+  SkillUpdateStatus,
+  SkillUpdateCheckReport,
+  SkillUpdateRunResult,
 } from '../services/skillApiV2'
 import { skillApiV2 } from '../services/skillApiV2'
 
@@ -62,6 +65,9 @@ interface SkillV2State {
   startupScanInFlight: boolean
   lastOverviewLoadedAt: number
   customAgentDialogRequest: number
+  updateStatus: SkillUpdateStatus | null
+  updateChecking: boolean
+  updateBusySkillId: string | null
 }
 
 interface SkillV2Actions {
@@ -88,6 +94,11 @@ interface SkillV2Actions {
   setError: (err: string | null) => void
   setLastPreview: (p: DistributionPreview | null) => void
   requestCustomAgentDialog: () => void
+  loadUpdateStatus: () => Promise<void>
+  checkAllUpdates: () => Promise<SkillUpdateCheckReport | null>
+  updateSkill: (skillId: string, allowLocalOverwrite: boolean) => Promise<SkillUpdateRunResult>
+  setSkillAutoUpdate: (skillId: string, enabled: boolean) => Promise<void>
+  runPeriodicCheck: () => Promise<void>
 }
 
 export const useSkillStoreV2 = create<SkillV2State & SkillV2Actions>((set, get) => ({
@@ -119,6 +130,9 @@ export const useSkillStoreV2 = create<SkillV2State & SkillV2Actions>((set, get) 
   startupScanInFlight: false,
   lastOverviewLoadedAt: 0,
   customAgentDialogRequest: 0,
+  updateStatus: null,
+  updateChecking: false,
+  updateBusySkillId: null,
 
   init: async () => {
     // Page entry should be cheap: bootstrap only ensures DB/dirs are usable,
@@ -480,6 +494,79 @@ export const useSkillStoreV2 = create<SkillV2State & SkillV2Actions>((set, get) 
   setBusy: (action) => set({ busyAction: action }),
   setError: (err) => set({ error: err }),
   setLastPreview: (p) => set({ lastPreview: p }),
+  loadUpdateStatus: async () => {
+    const runtimeEnvironmentId = get().runtimeEnvironmentId
+    try {
+      const status = await skillApiV2.skillUpdateStatus()
+      if (get().runtimeEnvironmentId !== runtimeEnvironmentId) return
+      set({ updateStatus: status })
+    } catch {
+      // The update panel is secondary; a failure here must not blank the page.
+    }
+  },
+  checkAllUpdates: async () => {
+    const runtimeEnvironmentId = get().runtimeEnvironmentId
+    set({ updateChecking: true, error: null })
+    try {
+      const report = await skillApiV2.checkAllSkillUpdates()
+      if (get().runtimeEnvironmentId !== runtimeEnvironmentId) return null
+      set((state) => ({
+        updateStatus: {
+          periodicCheckEnabled: state.updateStatus?.periodicCheckEnabled ?? false,
+          lastCheckedAt: report.checkedAt,
+          report,
+          autoUpdateSkillIds: state.updateStatus?.autoUpdateSkillIds ?? [],
+        },
+      }))
+      return report
+    } catch (error) {
+      set({ error: String(error) })
+      return null
+    } finally {
+      if (get().runtimeEnvironmentId === runtimeEnvironmentId) {
+        set({ updateChecking: false })
+      }
+    }
+  },
+  updateSkill: async (skillId, allowLocalOverwrite) => {
+    const runtimeEnvironmentId = get().runtimeEnvironmentId
+    set({ updateBusySkillId: skillId, error: null })
+    try {
+      const result = await skillApiV2.updateSkillFromSource(skillId, allowLocalOverwrite)
+      if (get().runtimeEnvironmentId === runtimeEnvironmentId) {
+        await get().loadOverview(true)
+        await get().loadUpdateStatus()
+      }
+      return result
+    } finally {
+      if (get().runtimeEnvironmentId === runtimeEnvironmentId) {
+        set({ updateBusySkillId: null })
+      }
+    }
+  },
+  setSkillAutoUpdate: async (skillId, enabled) => {
+    const runtimeEnvironmentId = get().runtimeEnvironmentId
+    try {
+      const status = await skillApiV2.setSkillAutoUpdate(skillId, enabled)
+      if (get().runtimeEnvironmentId !== runtimeEnvironmentId) return
+      set({ updateStatus: status })
+    } catch (error) {
+      set({ error: String(error) })
+    }
+  },
+  runPeriodicCheck: async () => {
+    const runtimeEnvironmentId = get().runtimeEnvironmentId
+    try {
+      const result = await skillApiV2.runPeriodicSkillUpdateCheck()
+      if (get().runtimeEnvironmentId !== runtimeEnvironmentId) return
+      if (result.ran) {
+        await get().loadUpdateStatus()
+        await get().loadOverview(true)
+      }
+    } catch {
+      // A startup check is best-effort and must never surface an error bubble.
+    }
+  },
 }))
 
 /** The three origins every Skill falls into exactly one of. */

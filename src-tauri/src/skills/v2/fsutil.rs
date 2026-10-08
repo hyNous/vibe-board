@@ -4,7 +4,9 @@
 
 #![allow(clippy::needless_question_mark)]
 
+use sha1::Sha1;
 use sha2::{Digest, Sha256};
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 
@@ -368,6 +370,142 @@ pub fn hex_encode(bytes: &[u8]) -> String {
     s
 }
 
+/// Relative path -> absolute path for every file under `dir`, ignoring noise
+/// entries. Used for update previews (added / modified / removed files).
+pub fn file_map(dir: &Path) -> BTreeMap<String, PathBuf> {
+    let mut out = BTreeMap::new();
+    collect_relative_files(dir, dir, &mut out);
+    out
+}
+
+fn collect_relative_files(root: &Path, dir: &Path, out: &mut BTreeMap<String, PathBuf>) {
+    let Ok(rd) = fs::read_dir(dir) else {
+        return;
+    };
+    for entry in rd.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        if is_ignored_entry(&name) {
+            continue;
+        }
+        let path = entry.path();
+        let Ok(ft) = entry.file_type() else {
+            continue;
+        };
+        if ft.is_dir() {
+            if path.is_symlink() {
+                continue;
+            }
+            collect_relative_files(root, &path, out);
+        } else if ft.is_file() {
+            if let Ok(rel) = path.strip_prefix(root) {
+                out.insert(rel.to_string_lossy().replace('\\', "/"), path);
+            }
+        }
+    }
+}
+
+/// Git tree object SHA-1 for a directory, matching the `skillFolderHash` that
+/// the external `skills` tool records from the GitHub Trees API. Returns an
+/// empty string when the directory cannot be fully read; callers treat that as
+/// "unknown / changed" rather than "unchanged".
+pub fn git_tree_hash(dir: &Path) -> String {
+    match git_tree_oid(dir) {
+        Some(oid) => hex_encode(&oid[..]),
+        None => String::new(),
+    }
+}
+
+fn git_tree_oid(dir: &Path) -> Option<[u8; 20]> {
+    let mut entries: Vec<GitTreeEntry> = Vec::new();
+    let rd = fs::read_dir(dir).ok()?;
+    for entry in rd.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        if is_ignored_entry(&name) {
+            continue;
+        }
+        let path = entry.path();
+        let ft = entry.file_type().ok()?;
+        if ft.is_symlink() {
+            let target = fs::read_link(&path).ok()?;
+            let bytes = target.to_string_lossy().into_owned().into_bytes();
+            entries.push(GitTreeEntry {
+                mode: "120000",
+                name,
+                oid: git_object_oid(b"blob", &bytes),
+            });
+        } else if ft.is_dir() {
+            entries.push(GitTreeEntry {
+                mode: "40000",
+                name,
+                oid: git_tree_oid(&path)?,
+            });
+        } else if ft.is_file() {
+            let bytes = fs::read(&path).ok()?;
+            let mode = if file_is_executable(&entry) {
+                "100755"
+            } else {
+                "100644"
+            };
+            entries.push(GitTreeEntry {
+                mode,
+                name,
+                oid: git_object_oid(b"blob", &bytes),
+            });
+        }
+    }
+    entries.sort_by_key(git_tree_sort_key);
+    let mut body = Vec::new();
+    for entry in &entries {
+        body.extend_from_slice(entry.mode.as_bytes());
+        body.push(b' ');
+        body.extend_from_slice(entry.name.as_bytes());
+        body.push(0);
+        body.extend_from_slice(&entry.oid);
+    }
+    Some(git_object_oid(b"tree", &body))
+}
+
+struct GitTreeEntry {
+    mode: &'static str,
+    name: String,
+    oid: [u8; 20],
+}
+
+fn git_tree_sort_key(entry: &GitTreeEntry) -> Vec<u8> {
+    let mut key = entry.name.as_bytes().to_vec();
+    if entry.mode == "40000" {
+        key.push(b'/');
+    }
+    key
+}
+
+fn git_object_oid(kind: &[u8], content: &[u8]) -> [u8; 20] {
+    let mut hasher = Sha1::new();
+    hasher.update(kind);
+    hasher.update(b" ");
+    hasher.update(content.len().to_string().as_bytes());
+    hasher.update(b"\0");
+    hasher.update(content);
+    let digest = hasher.finalize();
+    let mut oid = [0u8; 20];
+    oid.copy_from_slice(&digest);
+    oid
+}
+
+#[cfg(unix)]
+fn file_is_executable(entry: &fs::DirEntry) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    entry
+        .metadata()
+        .map(|metadata| metadata.permissions().mode() & 0o111 != 0)
+        .unwrap_or(false)
+}
+
+#[cfg(not(unix))]
+fn file_is_executable(_entry: &fs::DirEntry) -> bool {
+    false
+}
+
 /// Sanitize a directory/file segment into a safe skill id.
 pub fn sanitize_id(raw: &str) -> String {
     let mut out = String::new();
@@ -638,6 +776,71 @@ fn resolve_symlink_chain(mut path: PathBuf) -> PathBuf {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use std::fs;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn temp_dir(label: &str) -> PathBuf {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!("vb-git-tree-{label}-{suffix}"));
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn git_tree_hash_matches_git_tree_object() {
+        let dir = temp_dir("known");
+        fs::write(
+            dir.join("SKILL.md"),
+            "---\nname: alpha\ndescription: demo\n---\n# alpha\n",
+        )
+        .unwrap();
+        fs::write(dir.join("reference.md"), "body").unwrap();
+        fs::create_dir_all(dir.join("nested")).unwrap();
+        fs::write(dir.join("nested/deep.txt"), "deep").unwrap();
+
+        // `git write-tree` in a scratch repository, as computed by Git itself.
+        assert_eq!(
+            git_tree_hash(&dir),
+            "e2a68a120828c529154ecf9455118c6bfa5ee7c3"
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn git_tree_hash_ignores_noise_and_follows_content() {
+        let dir = temp_dir("noise");
+        fs::write(dir.join("SKILL.md"), "one").unwrap();
+        let first = git_tree_hash(&dir);
+        assert_eq!(first.len(), 40);
+
+        fs::write(dir.join(".DS_Store"), "noise").unwrap();
+        fs::create_dir_all(dir.join("node_modules")).unwrap();
+        fs::write(dir.join("node_modules/dep.js"), "generated").unwrap();
+        assert_eq!(git_tree_hash(&dir), first);
+
+        fs::write(dir.join("SKILL.md"), "two").unwrap();
+        assert_ne!(git_tree_hash(&dir), first);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn file_map_skips_ignored_entries_and_normalizes_separators() {
+        let dir = temp_dir("map");
+        fs::write(dir.join("SKILL.md"), "x").unwrap();
+        fs::create_dir_all(dir.join("sub")).unwrap();
+        fs::write(dir.join("sub/ref.md"), "y").unwrap();
+        fs::write(dir.join("node_modules.js.tmp"), "noise").unwrap();
+
+        let map = file_map(&dir);
+        let keys: Vec<&str> = map.keys().map(String::as_str).collect();
+        assert_eq!(keys, vec!["SKILL.md", "sub/ref.md"]);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
     #[cfg(target_os = "windows")]
     #[test]
     fn windows_open_path_recognizes_urls_without_treating_paths_as_urls() {

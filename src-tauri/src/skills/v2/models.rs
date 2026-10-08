@@ -27,6 +27,16 @@ pub struct SkillManagerSettings {
     pub show_unmanaged: bool,
     #[serde(default = "default_true")]
     pub auto_sync_skill_packs: bool,
+    /// Periodic open-source Skill update check. Off by default: turning it on
+    /// lets Vibe Board contact GitHub at most once per day.
+    #[serde(default = "default_false")]
+    pub periodic_skill_update_check: bool,
+    #[serde(default)]
+    pub last_skill_update_check_at: Option<String>,
+}
+
+fn default_false() -> bool {
+    false
 }
 
 fn default_center_path() -> String {
@@ -69,6 +79,8 @@ impl Default for SkillManagerSettings {
             startup_scan: true,
             show_unmanaged: true,
             auto_sync_skill_packs: true,
+            periodic_skill_update_check: false,
+            last_skill_update_check_at: None,
         }
     }
 }
@@ -470,28 +482,100 @@ pub struct AddCenterSkillResult {
     pub skipped: Vec<String>,
 }
 
-/// Result of checking a GitHub-backed Skill against its recorded source.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+// ── Open-source Skill update checks ───────────────────────────────
+
+/// One file that differs between the installed Skill and its remote source.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-pub struct GitHubSkillUpdatePreview {
-    pub skill_id: String,
-    pub source_uri: String,
-    pub local_hash: String,
-    pub remote_hash: String,
-    pub update_available: bool,
-    pub checked_at: String,
+pub struct SkillUpdateFileChange {
+    pub path: String,
+    /// "added" | "modified" | "removed"
+    pub change_type: String,
 }
 
-/// Result of synchronising a GitHub-backed Skill into the center library.
+/// Human-sized summary of what an update would change. `files` is capped; the
+/// counts always cover every difference.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillUpdateChangeSummary {
+    pub added: usize,
+    pub modified: usize,
+    pub removed: usize,
+    pub files: Vec<SkillUpdateFileChange>,
+    pub truncated: bool,
+}
+
+/// One Skill in a batch update check.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GitHubSkillSyncResult {
+pub struct SkillUpdateCheckEntry {
     pub skill_id: String,
+    pub name: String,
     pub source_uri: String,
-    pub previous_hash: String,
-    pub current_hash: String,
+    pub update_available: bool,
+    pub locally_modified: bool,
+    /// False when neither the source record nor Vibe Board has a baseline for
+    /// this Skill, so local changes cannot be judged.
+    pub baseline_known: bool,
+    pub auto_update_enabled: bool,
+    /// Set on the periodic-check path when the new version was applied.
+    pub auto_updated: bool,
+    /// "locally_modified" | "apply_failed" when an enabled auto-update was skipped.
+    pub auto_update_skipped: Option<String>,
+    /// "network" | "not_found" | "rate_limited" | "unknown"
+    pub error_kind: Option<String>,
+    pub error_detail: Option<String>,
+    pub changes: Option<SkillUpdateChangeSummary>,
+}
+
+/// Batch result for the user-triggered and periodic checks.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillUpdateCheckReport {
+    pub checked_at: String,
+    pub checked_count: usize,
+    pub update_count: usize,
+    pub failed_count: usize,
+    pub entries: Vec<SkillUpdateCheckEntry>,
+}
+
+/// Persisted update state, so the library can show the last result after a
+/// startup check that happened while the page was closed.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillUpdateStatus {
+    pub periodic_check_enabled: bool,
+    pub last_checked_at: Option<String>,
+    pub report: Option<SkillUpdateCheckReport>,
+    pub auto_update_skill_ids: Vec<String>,
+}
+
+/// Result of updating one Skill in place from its recorded source.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillUpdateRunResult {
+    pub skill_id: String,
+    pub name: String,
+    pub source_uri: String,
     pub updated: bool,
+    /// "no_update" | "locally_modified" | "not_found" when nothing was written.
+    pub skipped_reason: Option<String>,
+    pub locally_modified: bool,
+    pub changes: Option<SkillUpdateChangeSummary>,
     pub synced_at: String,
+    /// "network" | "not_found" | "rate_limited" | "unknown"
+    pub error_kind: Option<String>,
+    pub error_detail: Option<String>,
+}
+
+/// Result of the app-startup periodic check.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PeriodicSkillUpdateResult {
+    pub ran: bool,
+    /// "disabled" | "recent" when the check was skipped.
+    pub skip_reason: Option<String>,
+    pub report: Option<SkillUpdateCheckReport>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -686,4 +770,5 @@ pub struct SettingsUpdate {
     pub startup_scan: Option<bool>,
     pub show_unmanaged: Option<bool>,
     pub auto_sync_skill_packs: Option<bool>,
+    pub periodic_skill_update_check: Option<bool>,
 }

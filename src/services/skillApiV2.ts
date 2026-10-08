@@ -21,6 +21,9 @@ export interface SkillManagerSettings {
   linkFailPolicy: 'ask' | 'copy'
   startupScan: boolean
   showUnmanaged: boolean
+  /** Periodic GitHub update check. Off by default. */
+  periodicSkillUpdateCheck?: boolean
+  lastSkillUpdateCheckAt?: string | null
 }
 
 export interface InstalledAgentRef {
@@ -499,22 +502,68 @@ export interface GitHubRepoImportResult {
   skippedSkills: string[]
 }
 
-export interface GitHubSkillUpdatePreview {
-  skillId: string
-  sourceUri: string
-  localHash: string
-  remoteHash: string
-  updateAvailable: boolean
-  checkedAt: string
+export interface SkillUpdateFileChange {
+  path: string
+  changeType: 'added' | 'modified' | 'removed' | string
 }
 
-export interface GitHubSkillSyncResult {
+export interface SkillUpdateChangeSummary {
+  added: number
+  modified: number
+  removed: number
+  files: SkillUpdateFileChange[]
+  truncated: boolean
+}
+
+export type SkillUpdateErrorKind = 'network' | 'not_found' | 'rate_limited' | 'unknown' | string
+
+export interface SkillUpdateCheckEntry {
   skillId: string
+  name: string
   sourceUri: string
-  previousHash: string
-  currentHash: string
+  updateAvailable: boolean
+  locallyModified: boolean
+  baselineKnown: boolean
+  autoUpdateEnabled: boolean
+  autoUpdated: boolean
+  autoUpdateSkipped: 'locally_modified' | 'unknown_baseline' | 'apply_failed' | string | null
+  errorKind: SkillUpdateErrorKind | null
+  errorDetail: string | null
+  changes: SkillUpdateChangeSummary | null
+}
+
+export interface SkillUpdateCheckReport {
+  checkedAt: string
+  checkedCount: number
+  updateCount: number
+  failedCount: number
+  entries: SkillUpdateCheckEntry[]
+}
+
+export interface SkillUpdateStatus {
+  periodicCheckEnabled: boolean
+  lastCheckedAt: string | null
+  report: SkillUpdateCheckReport | null
+  autoUpdateSkillIds: string[]
+}
+
+export interface SkillUpdateRunResult {
+  skillId: string
+  name: string
+  sourceUri: string
   updated: boolean
+  skippedReason: 'no_update' | 'locally_modified' | 'not_found' | string | null
+  locallyModified: boolean
+  changes: SkillUpdateChangeSummary | null
   syncedAt: string
+  errorKind: SkillUpdateErrorKind | null
+  errorDetail: string | null
+}
+
+export interface PeriodicSkillUpdateResult {
+  ran: boolean
+  skipReason: 'disabled' | 'recent' | string | null
+  report: SkillUpdateCheckReport | null
 }
 
 export const skillApiV2 = {
@@ -549,6 +598,7 @@ export const skillApiV2 = {
             linkFailPolicy: patch.linkFailPolicy ?? null,
             startupScan: patch.startupScan ?? null,
             showUnmanaged: patch.showUnmanaged ?? null,
+            periodicSkillUpdateCheck: patch.periodicSkillUpdateCheck ?? null,
           },
         })
       : Promise.resolve({} as SkillManagerSettings),
@@ -597,28 +647,54 @@ export const skillApiV2 = {
     isTauriRuntime()
       ? invoke<AddCenterSkillResult>('execute_add_center_skill', { input, decisions })
       : Promise.resolve({ skillIds: [], updated: [], skipped: [] }),
-  checkGitHubSkillUpdate: (skillId: string) =>
+  skillUpdateStatus: () =>
     isTauriRuntime()
-      ? invoke<GitHubSkillUpdatePreview>('check_github_skill_update', { skillId })
+      ? invoke<SkillUpdateStatus>('skill_update_status')
+      : Promise.resolve(demoUpdateStatus()),
+  checkAllSkillUpdates: () =>
+    isTauriRuntime()
+      ? invoke<SkillUpdateCheckReport>('check_all_skill_updates')
+      : Promise.resolve({ checkedAt: new Date().toISOString(), checkedCount: 0, updateCount: 0, failedCount: 0, entries: [] }),
+  checkSkillUpdate: (skillId: string) =>
+    isTauriRuntime()
+      ? invoke<SkillUpdateCheckEntry>('check_skill_update', { skillId })
       : Promise.resolve({
           skillId,
+          name: skillId,
           sourceUri: '',
-          localHash: '',
-          remoteHash: '',
           updateAvailable: false,
-          checkedAt: new Date().toISOString(),
+          locallyModified: false,
+          baselineKnown: false,
+          autoUpdateEnabled: false,
+          autoUpdated: false,
+          autoUpdateSkipped: null,
+          errorKind: null,
+          errorDetail: null,
+          changes: null,
         }),
-  syncGitHubSkill: (skillId: string) =>
+  runPeriodicSkillUpdateCheck: () =>
     isTauriRuntime()
-      ? invoke<GitHubSkillSyncResult>('sync_github_skill', { skillId })
+      ? invoke<PeriodicSkillUpdateResult>('run_periodic_skill_update_check')
+      : Promise.resolve({ ran: false, skipReason: 'disabled', report: null }),
+  updateSkillFromSource: (skillId: string, allowLocalOverwrite: boolean) =>
+    isTauriRuntime()
+      ? invoke<SkillUpdateRunResult>('update_skill_from_source', { skillId, allowLocalOverwrite })
       : Promise.resolve({
           skillId,
+          name: skillId,
           sourceUri: '',
-          previousHash: '',
-          currentHash: '',
           updated: false,
+          skippedReason: 'no_update',
+          locallyModified: false,
+          changes: null,
           syncedAt: new Date().toISOString(),
+          errorKind: null,
+          errorDetail: null,
         }),
+  setSkillAutoUpdate: (skillId: string, enabled: boolean) =>
+    isTauriRuntime()
+      ? invoke<SkillUpdateStatus>('set_skill_auto_update', { skillId, enabled })
+      : Promise.resolve({ ...demoUpdateStatus(), autoUpdateSkillIds: enabled ? [skillId] : [] }),
   previewGitHubRepoImport: (repoUrl: string, githubToken?: string) =>
     isTauriRuntime()
       ? invoke<GitHubRepoPreview>('preview_github_repo_import', {
@@ -959,6 +1035,15 @@ function demoProjectDetail(rootPath: string): ProjectDetail {
       { agentId: 'claude-code', path: `${rootPath}/.claude/CLAUDE.md`, exists: true, bytes: 3200 },
     ],
     health: [],
+  }
+}
+
+function demoUpdateStatus(): SkillUpdateStatus {
+  return {
+    periodicCheckEnabled: false,
+    lastCheckedAt: null,
+    report: null,
+    autoUpdateSkillIds: [],
   }
 }
 

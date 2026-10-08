@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useSkillStoreV2 } from '../../stores/skillStoreV2'
 import { skillApiV2 } from '../../services/skillApiV2'
 import { SettingDetails } from '../settings/SettingDetails'
 
 export function SettingsPageV2() {
+  const { t } = useTranslation()
   const state = useSkillStoreV2()
   const settings = state.settings
   const [busy, setBusy] = useState(false)
@@ -118,6 +120,33 @@ export function SettingsPageV2() {
             />
             显示还没纳入管理的 Skill
           </label>
+        </div>
+
+        <div className="sm2__issue">
+          <h4 className="sm2__settings-label">
+            {t('skills.settings.openSourceUpdates', { defaultValue: '开源 Skill 更新' })}
+          </h4>
+          <label className="sm2__checkbox-row">
+            <input
+              type="checkbox"
+              checked={settings.periodicSkillUpdateCheck ?? false}
+              onChange={(e) => update({ periodicSkillUpdateCheck: e.target.checked })}
+            />
+            {t('skills.settings.periodicCheck', { defaultValue: '定期检查更新' })}
+          </label>
+          <p className="sm2__settings-help">
+            {t('skills.settings.periodicCheckHelp', {
+              defaultValue: '打开后，Vibe Board 每天最多检查一次你安装的开源 Skill 是否有新版本：检查会访问 GitHub。发现新版本时只提示，不会自动改文件；只有单独打开「自动更新」的 Skill 才会直接更新。默认关闭。',
+            })}
+          </p>
+          <p className="sm2__settings-help">
+            {t('skills.settings.lastChecked', {
+              time: settings.lastSkillUpdateCheckAt
+                ? new Date(settings.lastSkillUpdateCheckAt).toLocaleString()
+                : t('skills.updates.neverChecked', { defaultValue: '还没有检查过' }),
+              defaultValue: '上次检查：{{time}}',
+            })}
+          </p>
         </div>
 
         <div className="sm2__issue">

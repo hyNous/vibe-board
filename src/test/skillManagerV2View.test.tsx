@@ -5344,6 +5344,29 @@ describe('Skill manager settings page', () => {
     expect(screen.queryByText('中心库路径')).not.toBeInTheDocument()
     expect(screen.queryByText('默认 ~/.agentbro/skills。修改后下次刷新生效。')).not.toBeInTheDocument()
   })
+
+  it('keeps the open-source update check off by default and explains the GitHub request', async () => {
+    const current = useSkillStoreV2.getState().settings!
+    const updateSettings = vi
+      .spyOn(skillApiV2, 'updateSettings')
+      .mockResolvedValue({ ...current, periodicSkillUpdateCheck: true })
+    const { SettingsPageV2 } = await import('../components/skills-v2/SettingsPageV2')
+
+    render(<SettingsPageV2 />)
+
+    const periodic = screen.getByRole('checkbox', { name: '定期检查更新' })
+    expect(periodic).not.toBeChecked()
+    expect(screen.getByText(/检查会访问 GitHub/)).toBeInTheDocument()
+    expect(screen.getByText(/只有单独打开「自动更新」的 Skill 才会直接更新/)).toBeInTheDocument()
+
+    fireEvent.click(periodic)
+
+    await waitFor(() =>
+      expect(updateSettings).toHaveBeenCalledWith(
+        expect.objectContaining({ periodicSkillUpdateCheck: true }),
+      ),
+    )
+  })
 })
 
 describe('Skill issues inside the library', () => {

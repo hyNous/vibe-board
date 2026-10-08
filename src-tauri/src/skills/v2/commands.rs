@@ -84,14 +84,39 @@ pub fn execute_add_center_skill(
     Ok(svc()?.execute_add_center_skill(input, decisions)?)
 }
 
+// Open-source Skill updates run on worker threads: the batch check and the
+// single update both clone from GitHub and must not freeze the webview.
 #[tauri::command(async)]
-pub fn check_github_skill_update(skill_id: String) -> Result<GitHubSkillUpdatePreview, String> {
-    Ok(svc()?.check_github_skill_update(&skill_id)?)
+pub fn skill_update_status() -> Result<SkillUpdateStatus, String> {
+    Ok(svc()?.skill_update_status()?)
 }
 
 #[tauri::command(async)]
-pub fn sync_github_skill(skill_id: String) -> Result<GitHubSkillSyncResult, String> {
-    Ok(svc()?.sync_github_skill(&skill_id)?)
+pub fn check_all_skill_updates() -> Result<SkillUpdateCheckReport, String> {
+    Ok(svc()?.check_all_skill_updates()?)
+}
+
+#[tauri::command(async)]
+pub fn check_skill_update(skill_id: String) -> Result<SkillUpdateCheckEntry, String> {
+    Ok(svc()?.check_skill_update(&skill_id)?)
+}
+
+#[tauri::command(async)]
+pub fn run_periodic_skill_update_check() -> Result<PeriodicSkillUpdateResult, String> {
+    Ok(svc()?.run_periodic_skill_update_check()?)
+}
+
+#[tauri::command(async)]
+pub fn update_skill_from_source(
+    skill_id: String,
+    allow_local_overwrite: bool,
+) -> Result<SkillUpdateRunResult, String> {
+    Ok(svc()?.update_skill_from_source(&skill_id, allow_local_overwrite)?)
+}
+
+#[tauri::command(async)]
+pub fn set_skill_auto_update(skill_id: String, enabled: bool) -> Result<SkillUpdateStatus, String> {
+    Ok(svc()?.set_skill_auto_update(&skill_id, enabled)?)
 }
 
 #[tauri::command(async)]

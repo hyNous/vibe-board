@@ -419,11 +419,11 @@ fn ensure_column(
 
 // ── Settings (key/value in DB, with JSON file mirror) ─────────────
 
-pub fn load_settings_json(conn: &Connection) -> serde_json::Value {
+pub fn load_setting_value(conn: &Connection, key: &str) -> serde_json::Value {
     let row: Option<String> = conn
         .query_row(
-            "SELECT value FROM settings WHERE key = 'settings'",
-            [],
+            "SELECT value FROM settings WHERE key = ?1",
+            params![key],
             |r| r.get(0),
         )
         .optional()
@@ -433,15 +433,27 @@ pub fn load_settings_json(conn: &Connection) -> serde_json::Value {
         .unwrap_or_else(|| serde_json::json!({}))
 }
 
-pub fn save_settings_json(conn: &Connection, value: &serde_json::Value) -> Result<(), String> {
+pub fn save_setting_value(
+    conn: &Connection,
+    key: &str,
+    value: &serde_json::Value,
+) -> Result<(), String> {
     let s = serde_json::to_string(value).map_err(|e| e.to_string())?;
     conn.execute(
-        "INSERT INTO settings(key, value) VALUES('settings', ?1)
+        "INSERT INTO settings(key, value) VALUES(?1, ?2)
          ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-        params![s],
+        params![key, s],
     )
     .map_err(|e| e.to_string())?;
     Ok(())
+}
+
+pub fn load_settings_json(conn: &Connection) -> serde_json::Value {
+    load_setting_value(conn, "settings")
+}
+
+pub fn save_settings_json(conn: &Connection, value: &serde_json::Value) -> Result<(), String> {
+    save_setting_value(conn, "settings", value)
 }
 
 pub fn now_iso() -> String {

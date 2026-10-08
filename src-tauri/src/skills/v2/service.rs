@@ -25,6 +25,52 @@ const DEFAULT_SKILL_PACK_NAME: &str = "全量技能包";
 const DEFAULT_SKILL_PACK_DESCRIPTION: &str =
     "中心库全部 Skills。无需维护成员，应用时按当前中心库全量分发。";
 
+/// Open-source update checks: at most once per 24 hours on the periodic path.
+const SKILL_UPDATE_CHECK_INTERVAL_SECS: i64 = 24 * 60 * 60;
+/// File names listed in a change summary before it is truncated.
+const SKILL_UPDATE_MAX_CHANGE_FILES: usize = 80;
+const SKILL_UPDATE_AUTO_KEY: &str = "skill_update_auto";
+const SKILL_UPDATE_BASELINE_KEY: &str = "skill_update_baselines";
+const SKILL_UPDATE_REPORT_KEY: &str = "skill_update_report";
+
+/// Test seam: when set, update checks read repositories from this local
+/// directory instead of cloning GitHub, so tests never touch the network.
+#[cfg(test)]
+pub(crate) static SKILL_UPDATE_REPO_STUB: std::sync::OnceLock<std::sync::Mutex<Option<PathBuf>>> =
+    std::sync::OnceLock::new();
+#[cfg(test)]
+pub(crate) static SKILL_UPDATE_REPO_STUB_HITS: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+
+#[cfg(test)]
+pub(crate) fn set_skill_update_repo_stub(path: Option<PathBuf>) {
+    *SKILL_UPDATE_REPO_STUB
+        .get_or_init(|| std::sync::Mutex::new(None))
+        .lock()
+        .unwrap_or_else(|error| error.into_inner()) = path;
+    SKILL_UPDATE_REPO_STUB_HITS.store(0, std::sync::atomic::Ordering::SeqCst);
+}
+
+#[cfg(test)]
+pub(crate) fn skill_update_repo_stub_hits() -> usize {
+    SKILL_UPDATE_REPO_STUB_HITS.load(std::sync::atomic::Ordering::SeqCst)
+}
+
+#[derive(Debug, Clone)]
+struct UpdateCandidate {
+    skill_id: String,
+    name: String,
+    center_path: PathBuf,
+    repo_owner: String,
+    repo_name: String,
+    repo_ref: Option<String>,
+    /// Skill folder inside the repository; empty means the repository root.
+    skill_rel: String,
+    source_uri: String,
+    has_lock_entry: bool,
+    lock_baseline: Option<String>,
+}
+
 pub struct Service {
     pub db: Arc<Db>,
     pub home: PathBuf,
@@ -177,6 +223,9 @@ impl Service {
             }
             if let Some(v) = update.auto_sync_skill_packs {
                 current.auto_sync_skill_packs = v;
+            }
+            if let Some(v) = update.periodic_skill_update_check {
+                current.periodic_skill_update_check = v;
             }
             let previous_center = normalize_fixed_center_path(&self.home, &mut current);
             let val = serde_json::to_value(&current).map_err(|e| e.to_string())?;
@@ -1153,103 +1202,662 @@ impl Service {
         })
     }
 
-    pub fn check_github_skill_update(
-        &self,
-        skill_id: &str,
-    ) -> Result<GitHubSkillUpdatePreview, String> {
-        let row = self
-            .skill_row(skill_id)?
-            .ok_or_else(|| format!("Skill not found: {skill_id}"))?;
-        let source = self.source_for_skill(skill_id)?;
-        let mut is_github = source
-            .as_ref()
-            .is_some_and(|detail| detail.source_type == "github");
-        let mut source_uri = source.as_ref().and_then(|detail| detail.source_uri.clone());
-        if let Some(uri) = source_uri.as_deref() {
-            is_github = is_github || is_github_source_uri(uri);
-        }
-        if !is_github {
-            // The external `skills` tool records GitHub origins that Vibe Board
-            // never imported itself; fall back to that read-only record.
-            source_uri = self.skill_lock_github_source(skill_id);
-            is_github = source_uri.is_some();
-        }
-        if !is_github {
-            return Err("Only GitHub-backed Skills can be checked for updates.".to_string());
-        }
-        let source_uri =
-            source_uri.ok_or_else(|| "This Skill has no recorded GitHub URI.".to_string())?;
-        let center = Path::new(&row.center_path);
-        if !center.is_dir() {
-            return Err(format!(
-                "Center Skill directory is missing: {}",
-                center.display()
-            ));
-        }
-        // Compare contents rather than absolute/root directory names: a cloned
-        // GitHub subdirectory lives under a temporary `repo` path while the
-        // center copy is named after the Skill id.
-        let local_hash = fsutil::hash_dir_contents(center);
-        let (remote, temp_root) =
-            crate::skills::installer::resolve_external_skill_source(&source_uri)?;
-        let remote_hash = fsutil::hash_dir_contents(&remote);
-        let result = GitHubSkillUpdatePreview {
-            skill_id: skill_id.to_string(),
-            source_uri,
-            local_hash: local_hash.clone(),
-            remote_hash: remote_hash.clone(),
-            update_available: local_hash != remote_hash,
-            checked_at: db::now_iso(),
-        };
-        if let Some(root) = temp_root {
-            let _ = std::fs::remove_dir_all(root);
-        }
-        Ok(result)
+    // ── Open-source Skill update checks ───────────────────────────
+
+    /// Setting, last check time, last report and per-Skill auto-update wishes.
+    pub fn skill_update_status(&self) -> Result<SkillUpdateStatus, String> {
+        let settings = self.settings()?;
+        Ok(SkillUpdateStatus {
+            periodic_check_enabled: settings.periodic_skill_update_check,
+            last_checked_at: settings.last_skill_update_check_at,
+            report: self.persisted_update_report(),
+            auto_update_skill_ids: self.auto_update_skill_ids()?,
+        })
     }
 
-    pub fn sync_github_skill(&self, skill_id: &str) -> Result<GitHubSkillSyncResult, String> {
-        let preview = self.check_github_skill_update(skill_id)?;
-        if !preview.update_available {
-            return Ok(GitHubSkillSyncResult {
-                skill_id: preview.skill_id,
-                source_uri: preview.source_uri,
-                previous_hash: preview.local_hash.clone(),
-                current_hash: preview.local_hash,
-                updated: false,
-                synced_at: db::now_iso(),
+    /// User-triggered batch check. Downloads one repository per repository, not
+    /// once per Skill, and writes nothing to the Skill files.
+    pub fn check_all_skill_updates(&self) -> Result<SkillUpdateCheckReport, String> {
+        self.run_skill_update_check(false)
+    }
+
+    /// App-startup check. Runs only when the setting is on and the last check is
+    /// more than 24 hours old. It reports everything and applies only the
+    /// Skills the user explicitly switched to auto-update.
+    pub fn run_periodic_skill_update_check(&self) -> Result<PeriodicSkillUpdateResult, String> {
+        let settings = self.settings()?;
+        if !settings.periodic_skill_update_check {
+            return Ok(PeriodicSkillUpdateResult {
+                ran: false,
+                skip_reason: Some("disabled".to_string()),
+                report: None,
             });
         }
+        if let Some(last) = settings.last_skill_update_check_at.as_deref() {
+            if let Ok(last) = chrono::DateTime::parse_from_rfc3339(last) {
+                let elapsed = chrono::Utc::now()
+                    .signed_duration_since(last.with_timezone(&chrono::Utc))
+                    .num_seconds();
+                if (0..SKILL_UPDATE_CHECK_INTERVAL_SECS).contains(&elapsed) {
+                    return Ok(PeriodicSkillUpdateResult {
+                        ran: false,
+                        skip_reason: Some("recent".to_string()),
+                        report: self.persisted_update_report(),
+                    });
+                }
+            }
+        }
+        let report = self.run_skill_update_check(true)?;
+        self.set_last_skill_update_check_at(&db::now_iso())?;
+        Ok(PeriodicSkillUpdateResult {
+            ran: true,
+            skip_reason: None,
+            report: Some(report),
+        })
+    }
 
-        let (remote, temp_root) =
-            crate::skills::installer::resolve_external_skill_source(&preview.source_uri)?;
-        let import = self.execute_add_center_skill(
-            AddCenterSkillInput {
-                source_path: remote.display().to_string(),
-                source_type: "github".to_string(),
-                source_uri: Some(preview.source_uri.clone()),
-                imported_from_agent: None,
-                imported_from_path: None,
-                multi: Some(false),
-                import_mode: Some("copy".to_string()),
-            },
-            Vec::new(),
+    /// Update one Skill in place from its recorded source. Local changes block
+    /// the write unless the user confirmed the overwrite. Agent links are not
+    /// touched: the Skill folder keeps its path.
+    pub fn update_skill_from_source(
+        &self,
+        skill_id: &str,
+        allow_local_overwrite: bool,
+    ) -> Result<SkillUpdateRunResult, String> {
+        let candidate = self
+            .update_candidates()?
+            .into_iter()
+            .find(|candidate| candidate.skill_id == skill_id)
+            .ok_or_else(|| format!("Skill '{skill_id}' has no recorded source to update from."))?;
+        let baselines = self.update_baselines();
+        let baseline = baseline_for(&candidate, &baselines);
+        let (repo_dir, temp_root) = match self.checkout_update_repo(&candidate) {
+            Ok(checkout) => checkout,
+            Err(error) => {
+                let (kind, detail) = classify_update_error(&error);
+                return Ok(SkillUpdateRunResult {
+                    skill_id: candidate.skill_id.clone(),
+                    name: candidate.name.clone(),
+                    source_uri: candidate.source_uri.clone(),
+                    updated: false,
+                    skipped_reason: None,
+                    locally_modified: false,
+                    changes: None,
+                    synced_at: db::now_iso(),
+                    error_kind: Some(kind),
+                    error_detail: Some(detail),
+                });
+            }
+        };
+        let outcome = self.update_candidate_from_checkout(
+            &candidate,
+            &repo_dir,
+            &baseline,
+            allow_local_overwrite,
         );
         if let Some(root) = temp_root {
             let _ = std::fs::remove_dir_all(root);
         }
-        import?;
-        let current_hash = self
-            .skill_row(skill_id)?
-            .map(|row| fsutil::hash_dir(Path::new(&row.center_path)))
-            .unwrap_or_else(|| preview.remote_hash.clone());
-        Ok(GitHubSkillSyncResult {
-            skill_id: preview.skill_id,
-            source_uri: preview.source_uri,
-            previous_hash: preview.local_hash,
-            current_hash,
-            updated: true,
+        outcome
+    }
+
+    /// Check one Skill without writing anything. Used by the detail view.
+    pub fn check_skill_update(&self, skill_id: &str) -> Result<SkillUpdateCheckEntry, String> {
+        let candidate = self
+            .update_candidates()?
+            .into_iter()
+            .find(|candidate| candidate.skill_id == skill_id)
+            .ok_or_else(|| {
+                format!("Skill '{skill_id}' has no recorded source to check updates against.")
+            })?;
+        let baselines = self.update_baselines();
+        let baseline = baseline_for(&candidate, &baselines);
+        let auto_enabled = self
+            .auto_update_skill_ids()?
+            .iter()
+            .any(|id| id.eq_ignore_ascii_case(&candidate.skill_id));
+        let (repo_dir, temp_root) = match self.checkout_update_repo(&candidate) {
+            Ok(checkout) => checkout,
+            Err(error) => {
+                let (kind, detail) = classify_update_error(&error);
+                return Ok(SkillUpdateCheckEntry {
+                    skill_id: candidate.skill_id.clone(),
+                    name: candidate.name.clone(),
+                    source_uri: candidate.source_uri.clone(),
+                    update_available: false,
+                    locally_modified: false,
+                    baseline_known: baseline.is_some(),
+                    auto_update_enabled: auto_enabled,
+                    auto_updated: false,
+                    auto_update_skipped: None,
+                    error_kind: Some(kind),
+                    error_detail: Some(detail),
+                    changes: None,
+                });
+            }
+        };
+        let entry = self.check_candidate_from_checkout(
+            &candidate,
+            &repo_dir,
+            baseline,
+            auto_enabled,
+            false,
+        );
+        if let Some(root) = temp_root {
+            let _ = std::fs::remove_dir_all(root);
+        }
+        Ok(entry)
+    }
+
+    /// Turn auto-update on or off for one Skill. Only Skills with a recorded
+    /// source can participate.
+    pub fn set_skill_auto_update(
+        &self,
+        skill_id: &str,
+        enabled: bool,
+    ) -> Result<SkillUpdateStatus, String> {
+        if !self
+            .update_candidates()?
+            .iter()
+            .any(|candidate| candidate.skill_id == skill_id)
+        {
+            return Err(format!(
+                "Skill '{skill_id}' has no recorded source, so it cannot auto-update."
+            ));
+        }
+        let mut ids = self.auto_update_skill_ids()?;
+        if enabled {
+            if !ids.iter().any(|id| id.eq_ignore_ascii_case(skill_id)) {
+                ids.push(skill_id.to_string());
+            }
+        } else {
+            ids.retain(|id| !id.eq_ignore_ascii_case(skill_id));
+        }
+        self.save_auto_update_skill_ids(&ids)?;
+        self.skill_update_status()
+    }
+
+    fn run_skill_update_check(&self, auto_apply: bool) -> Result<SkillUpdateCheckReport, String> {
+        let candidates = self.update_candidates()?;
+        let baselines = self.update_baselines();
+        let auto_ids = self.auto_update_skill_ids()?;
+        let mut groups: BTreeMap<(String, String), Vec<UpdateCandidate>> = BTreeMap::new();
+        for candidate in candidates {
+            groups
+                .entry((
+                    candidate.repo_owner.to_ascii_lowercase(),
+                    candidate.repo_name.to_ascii_lowercase(),
+                ))
+                .or_default()
+                .push(candidate);
+        }
+        let mut entries = Vec::new();
+        for group in groups.values() {
+            let first = &group[0];
+            match self.checkout_update_repo(first) {
+                Ok((repo_dir, temp_root)) => {
+                    for candidate in group {
+                        let baseline = baseline_for(candidate, &baselines);
+                        let auto_enabled = auto_ids
+                            .iter()
+                            .any(|id| id.eq_ignore_ascii_case(&candidate.skill_id));
+                        entries.push(self.check_candidate_from_checkout(
+                            candidate,
+                            &repo_dir,
+                            baseline,
+                            auto_enabled,
+                            auto_apply,
+                        ));
+                    }
+                    if let Some(root) = temp_root {
+                        let _ = std::fs::remove_dir_all(root);
+                    }
+                }
+                Err(error) => {
+                    let (kind, detail) = classify_update_error(&error);
+                    for candidate in group {
+                        let baseline = baseline_for(candidate, &baselines);
+                        entries.push(SkillUpdateCheckEntry {
+                            skill_id: candidate.skill_id.clone(),
+                            name: candidate.name.clone(),
+                            source_uri: candidate.source_uri.clone(),
+                            update_available: false,
+                            locally_modified: false,
+                            baseline_known: baseline.is_some(),
+                            auto_update_enabled: auto_ids
+                                .iter()
+                                .any(|id| id.eq_ignore_ascii_case(&candidate.skill_id)),
+                            auto_updated: false,
+                            auto_update_skipped: None,
+                            error_kind: Some(kind.clone()),
+                            error_detail: Some(detail.clone()),
+                            changes: None,
+                        });
+                    }
+                }
+            }
+        }
+        entries.sort_by(|left, right| {
+            left.name
+                .to_ascii_lowercase()
+                .cmp(&right.name.to_ascii_lowercase())
+                .then_with(|| left.skill_id.cmp(&right.skill_id))
+        });
+        let report = SkillUpdateCheckReport {
+            checked_at: db::now_iso(),
+            checked_count: entries.len(),
+            update_count: entries
+                .iter()
+                .filter(|entry| entry.update_available)
+                .count(),
+            failed_count: entries
+                .iter()
+                .filter(|entry| entry.error_kind.is_some())
+                .count(),
+            entries,
+        };
+        self.persist_update_report(&report)?;
+        Ok(report)
+    }
+
+    fn check_candidate_from_checkout(
+        &self,
+        candidate: &UpdateCandidate,
+        repo_dir: &Path,
+        baseline: Option<String>,
+        auto_enabled: bool,
+        auto_apply: bool,
+    ) -> SkillUpdateCheckEntry {
+        let remote_dir = repo_dir.join(relative_path(&candidate.skill_rel));
+        let baseline_hash = baseline.as_deref().unwrap_or_default();
+        let mut entry = SkillUpdateCheckEntry {
+            skill_id: candidate.skill_id.clone(),
+            name: candidate.name.clone(),
+            source_uri: candidate.source_uri.clone(),
+            update_available: false,
+            locally_modified: false,
+            baseline_known: !baseline_hash.is_empty(),
+            auto_update_enabled: auto_enabled,
+            auto_updated: false,
+            auto_update_skipped: None,
+            error_kind: None,
+            error_detail: None,
+            changes: None,
+        };
+        if !fsutil::is_skill_dir(&remote_dir) {
+            entry.error_kind = Some("not_found".to_string());
+            entry.error_detail = Some(format!(
+                "The source no longer contains the Skill folder '{}'.",
+                candidate.skill_rel
+            ));
+            return entry;
+        }
+        let local_hash = fsutil::git_tree_hash(&candidate.center_path);
+        // Compare the two working copies with the same hash function, so a
+        // checkout that applies line-ending or mode conversion can never look
+        // different forever. The lock file's `skillFolderHash` is the exact Git
+        // tree SHA; it is written separately when applying.
+        let remote_hash = fsutil::git_tree_hash(&remote_dir);
+        let remote_git_hash =
+            crate::skills::installer::git_tree_hash_at(repo_dir, &candidate.skill_rel);
+        entry.locally_modified = !baseline_hash.is_empty() && baseline_hash != local_hash;
+        entry.update_available =
+            local_hash.is_empty() || remote_hash.is_empty() || remote_hash != local_hash;
+        if entry.update_available {
+            entry.changes = Some(diff_skill_dirs(&remote_dir, &candidate.center_path));
+        }
+        if auto_apply && auto_enabled && entry.update_available {
+            if entry.locally_modified {
+                entry.auto_update_skipped = Some("locally_modified".to_string());
+            } else if !entry.baseline_known {
+                entry.auto_update_skipped = Some("unknown_baseline".to_string());
+            } else {
+                match self.apply_remote_skill_dir(
+                    candidate,
+                    &remote_dir,
+                    remote_git_hash.as_deref(),
+                ) {
+                    Ok(()) => {
+                        entry.auto_updated = true;
+                        entry.update_available = false;
+                    }
+                    Err(error) => {
+                        let (kind, detail) = classify_update_error(&error);
+                        entry.auto_update_skipped = Some("apply_failed".to_string());
+                        entry.error_kind = Some(kind);
+                        entry.error_detail = Some(detail);
+                    }
+                }
+            }
+        }
+        entry
+    }
+
+    fn update_candidate_from_checkout(
+        &self,
+        candidate: &UpdateCandidate,
+        repo_dir: &Path,
+        baseline: &Option<String>,
+        allow_local_overwrite: bool,
+    ) -> Result<SkillUpdateRunResult, String> {
+        let mut result = SkillUpdateRunResult {
+            skill_id: candidate.skill_id.clone(),
+            name: candidate.name.clone(),
+            source_uri: candidate.source_uri.clone(),
+            updated: false,
+            skipped_reason: None,
+            locally_modified: false,
+            changes: None,
             synced_at: db::now_iso(),
+            error_kind: None,
+            error_detail: None,
+        };
+        let remote_dir = repo_dir.join(relative_path(&candidate.skill_rel));
+        if !fsutil::is_skill_dir(&remote_dir) {
+            result.skipped_reason = Some("not_found".to_string());
+            result.error_kind = Some("not_found".to_string());
+            result.error_detail = Some(format!(
+                "The source no longer contains the Skill folder '{}'.",
+                candidate.skill_rel
+            ));
+            return Ok(result);
+        }
+        let local_hash = fsutil::git_tree_hash(&candidate.center_path);
+        let remote_hash = fsutil::git_tree_hash(&remote_dir);
+        let remote_git_hash =
+            crate::skills::installer::git_tree_hash_at(repo_dir, &candidate.skill_rel);
+        result.locally_modified = baseline
+            .as_deref()
+            .is_some_and(|value| !value.is_empty() && value != local_hash);
+        result.changes = Some(diff_skill_dirs(&remote_dir, &candidate.center_path));
+        if !remote_hash.is_empty() && remote_hash == local_hash {
+            result.skipped_reason = Some("no_update".to_string());
+            result.changes = None;
+            return Ok(result);
+        }
+        if result.locally_modified && !allow_local_overwrite {
+            result.skipped_reason = Some("locally_modified".to_string());
+            return Ok(result);
+        }
+        self.apply_remote_skill_dir(candidate, &remote_dir, remote_git_hash.as_deref())?;
+        result.updated = true;
+        result.synced_at = db::now_iso();
+        Ok(result)
+    }
+
+    fn apply_remote_skill_dir(
+        &self,
+        candidate: &UpdateCandidate,
+        remote_dir: &Path,
+        remote_git_hash: Option<&str>,
+    ) -> Result<(), String> {
+        self.replace_center_skill_dir(&candidate.skill_id, remote_dir, &candidate.source_uri)?;
+        let center = self.center_path()?.join(&candidate.skill_id);
+        // The local baseline is the tree hash of the files actually on disk, so
+        // the next check compares like with like. The lock file keeps the exact
+        // Git tree SHA that `npx skills` expects, falling back to the local hash
+        // when the checkout has no Git metadata (local stubs, no network).
+        let local_hash = fsutil::git_tree_hash(&center);
+        self.record_update_baseline(&candidate.skill_id, &local_hash)?;
+        if candidate.has_lock_entry {
+            let lock_hash = remote_git_hash
+                .filter(|hash| !hash.is_empty())
+                .unwrap_or(local_hash.as_str());
+            skill_lock::update_installed_skill(
+                &self.home,
+                &candidate.skill_id,
+                lock_hash,
+                &db::now_iso(),
+            )?;
+        }
+        Ok(())
+    }
+
+    /// Replace the center copy of a Skill in place, with a staging directory so
+    /// a failed copy never leaves a half-written Skill behind. Agent links
+    /// point at this path and keep working.
+    fn replace_center_skill_dir(
+        &self,
+        skill_id: &str,
+        remote_dir: &Path,
+        source_uri: &str,
+    ) -> Result<(), String> {
+        if !fsutil::is_skill_dir(remote_dir) {
+            return Err(format!(
+                "Source is not a valid Skill directory: {}",
+                remote_dir.display()
+            ));
+        }
+        let center = self.center_path()?;
+        std::fs::create_dir_all(&center).map_err(|error| format!("center mkdir: {error}"))?;
+        let dest = center.join(skill_id);
+        let staging = center.join(format!(".{skill_id}.vibeboard-staging-{}", uuid_short()));
+        fsutil::copy_dir_recursive(remote_dir, &staging)?;
+        let previous = center.join(format!(".{skill_id}.vibeboard-previous-{}", uuid_short()));
+        let had_dest = dest.exists() || dest.is_symlink();
+        if had_dest {
+            if let Err(error) = std::fs::rename(&dest, &previous) {
+                let _ = fsutil::remove_path(&staging);
+                return Err(format!("prepare update of '{}': {error}", dest.display()));
+            }
+        }
+        if let Err(error) = std::fs::rename(&staging, &dest) {
+            if had_dest {
+                let _ = std::fs::rename(&previous, &dest);
+            }
+            let _ = fsutil::remove_path(&staging);
+            return Err(format!("replace Skill '{}': {error}", dest.display()));
+        }
+        if had_dest {
+            let _ = fsutil::remove_path(&previous);
+        }
+        let input = AddCenterSkillInput {
+            source_path: remote_dir.display().to_string(),
+            source_type: "github".to_string(),
+            source_uri: Some(source_uri.to_string()),
+            imported_from_agent: None,
+            imported_from_path: None,
+            multi: Some(false),
+            import_mode: Some("copy".to_string()),
+        };
+        if let Err(error) = self.record_source_after_write(skill_id, &dest, remote_dir, input) {
+            log::warn!(
+                "Skill '{skill_id}' was updated but its record could not be refreshed: {error}"
+            );
+        }
+        if let Err(error) = self.refresh_targets_for_skill(skill_id) {
+            log::warn!("Skill '{skill_id}' targets were not refreshed after update: {error}");
+        }
+        self.refresh_snapshot_best_effort();
+        Ok(())
+    }
+
+    fn update_candidates(&self) -> Result<Vec<UpdateCandidate>, String> {
+        let lock_index = skill_lock::load(&self.home);
+        let rows = self.db.with_conn(|connection| {
+            let mut statement = connection
+                .prepare(
+                    "SELECT s.id, s.name, s.description, s.skill_type, s.current_hash, s.center_path,
+                            src.source_type, src.source_uri
+                     FROM skills s LEFT JOIN skill_sources src ON src.skill_id = s.id
+                     ORDER BY s.name COLLATE NOCASE",
+                )
+                .map_err(|error| error.to_string())?;
+            let rows = statement
+                .query_map([], |row| {
+                    Ok(SkillRow {
+                        id: row.get(0)?,
+                        name: row.get(1)?,
+                        description: row.get(2)?,
+                        skill_type: row.get(3)?,
+                        current_hash: row.get(4)?,
+                        center_path: row.get(5)?,
+                        source_type: row.get(6)?,
+                        source_uri: row.get(7)?,
+                    })
+                })
+                .map_err(|error| error.to_string())?;
+            let mut values = Vec::new();
+            for row in rows {
+                values.push(row.map_err(|error| error.to_string())?);
+            }
+            Ok(values)
+        })?;
+        let mut candidates = Vec::new();
+        for row in rows {
+            let center_path = PathBuf::from(&row.center_path);
+            if !center_path.is_dir() {
+                continue;
+            }
+            let lock_entry = skill_lock::find(&lock_index, &row.id);
+            let lock_repo = lock_entry.and_then(skill_lock::github_repo);
+            let (owner, repo, skill_rel, source_ref, source_uri, has_lock_entry, lock_baseline) =
+                if let (Some(entry), Some((owner, repo))) = (lock_entry, lock_repo) {
+                    let source_uri = skill_lock::github_source_spec(entry).unwrap_or_default();
+                    (
+                        owner,
+                        repo,
+                        skill_lock::skill_dir(entry),
+                        entry.source_ref.clone(),
+                        source_uri,
+                        true,
+                        entry.skill_folder_hash.clone(),
+                    )
+                } else if let Some(spec) = row
+                    .source_uri
+                    .as_deref()
+                    .filter(|uri| is_github_source_uri(uri))
+                    .and_then(parse_github_update_spec)
+                {
+                    (
+                        spec.0,
+                        spec.1,
+                        spec.2,
+                        None,
+                        row.source_uri.clone().unwrap_or_default(),
+                        false,
+                        None,
+                    )
+                } else {
+                    continue;
+                };
+            candidates.push(UpdateCandidate {
+                skill_id: row.id,
+                name: row.name,
+                center_path,
+                repo_owner: owner,
+                repo_name: repo,
+                repo_ref: source_ref,
+                skill_rel,
+                source_uri,
+                has_lock_entry,
+                lock_baseline,
+            });
+        }
+        Ok(candidates)
+    }
+
+    /// One repository checkout per repository, shared by every Skill in it.
+    fn checkout_update_repo(
+        &self,
+        candidate: &UpdateCandidate,
+    ) -> Result<(PathBuf, Option<PathBuf>), String> {
+        #[cfg(test)]
+        {
+            use std::sync::atomic::Ordering;
+            let stub = SKILL_UPDATE_REPO_STUB
+                .get_or_init(|| std::sync::Mutex::new(None))
+                .lock()
+                .unwrap_or_else(|error| error.into_inner())
+                .clone();
+            if let Some(stub) = stub {
+                SKILL_UPDATE_REPO_STUB_HITS.fetch_add(1, Ordering::SeqCst);
+                return Ok((stub, None));
+            }
+        }
+        crate::skills::installer::checkout_github_repo(
+            &candidate.repo_owner,
+            &candidate.repo_name,
+            candidate.repo_ref.as_deref(),
+        )
+    }
+
+    fn persisted_update_report(&self) -> Option<SkillUpdateCheckReport> {
+        self.db
+            .with_conn(|connection| Ok(db::load_setting_value(connection, SKILL_UPDATE_REPORT_KEY)))
+            .ok()
+            .filter(|value| value.as_object().is_some_and(|object| !object.is_empty()))
+            .and_then(|value| serde_json::from_value(value).ok())
+    }
+
+    fn persist_update_report(&self, report: &SkillUpdateCheckReport) -> Result<(), String> {
+        let value = serde_json::to_value(report).map_err(|error| error.to_string())?;
+        self.db.with_conn(|connection| {
+            db::save_setting_value(connection, SKILL_UPDATE_REPORT_KEY, &value)
         })
+    }
+
+    fn update_baselines(&self) -> HashMap<String, String> {
+        self.db
+            .with_conn(|connection| {
+                Ok(db::load_setting_value(
+                    connection,
+                    SKILL_UPDATE_BASELINE_KEY,
+                ))
+            })
+            .ok()
+            .and_then(|value| serde_json::from_value(value).ok())
+            .unwrap_or_default()
+    }
+
+    fn record_update_baseline(&self, skill_id: &str, hash: &str) -> Result<(), String> {
+        self.db.with_conn(|connection| {
+            let mut baselines: HashMap<String, String> = serde_json::from_value(
+                db::load_setting_value(connection, SKILL_UPDATE_BASELINE_KEY),
+            )
+            .unwrap_or_default();
+            baselines.insert(skill_id.to_string(), hash.to_string());
+            let value = serde_json::to_value(&baselines).map_err(|error| error.to_string())?;
+            db::save_setting_value(connection, SKILL_UPDATE_BASELINE_KEY, &value)
+        })
+    }
+
+    fn auto_update_skill_ids(&self) -> Result<Vec<String>, String> {
+        let value = self.db.with_conn(|connection| {
+            Ok(db::load_setting_value(connection, SKILL_UPDATE_AUTO_KEY))
+        })?;
+        Ok(serde_json::from_value(value).unwrap_or_default())
+    }
+
+    fn save_auto_update_skill_ids(&self, ids: &[String]) -> Result<(), String> {
+        let value = serde_json::to_value(ids).map_err(|error| error.to_string())?;
+        self.db.with_conn(|connection| {
+            db::save_setting_value(connection, SKILL_UPDATE_AUTO_KEY, &value)
+        })
+    }
+
+    fn set_last_skill_update_check_at(&self, value: &str) -> Result<(), String> {
+        let next = self.db.with_conn(|connection| {
+            let raw = db::load_settings_json(connection);
+            let mut current: SkillManagerSettings = if raw
+                .as_object()
+                .map(|object| object.is_empty())
+                .unwrap_or(true)
+            {
+                SkillManagerSettings::default()
+            } else {
+                serde_json::from_value(raw).map_err(|error| error.to_string())?
+            };
+            current.last_skill_update_check_at = Some(value.to_string());
+            let json = serde_json::to_value(&current).map_err(|error| error.to_string())?;
+            db::save_settings_json(connection, &json)?;
+            Ok(json)
+        })?;
+        let _ = std::fs::write(
+            fsutil::settings_path(),
+            serde_json::to_string_pretty(&next).unwrap_or_default(),
+        );
+        Ok(())
     }
 
     fn frontmatter_for_skill(&self, skill_id: &str) -> Result<BTreeMap<String, String>, String> {
@@ -1267,14 +1875,6 @@ impl Service {
                 None => Ok(BTreeMap::new()),
             }
         })
-    }
-
-    /// GitHub origin recorded by the external `skills` tool. The lock file is
-    /// only ever read; a missing or malformed file simply yields `None`.
-    fn skill_lock_github_source(&self, skill_id: &str) -> Option<String> {
-        let index = skill_lock::load(&self.home);
-        let entry = skill_lock::find(&index, skill_id)?;
-        skill_lock::github_source_spec(entry)
     }
 
     fn source_for_skill(&self, skill_id: &str) -> Result<Option<SkillSourceDetail>, String> {
@@ -6547,6 +7147,151 @@ fn is_github_source_uri(uri: &str) -> bool {
     uri.starts_with("github:")
         || uri.starts_with("https://github.com/")
         || uri.starts_with("http://github.com/")
+}
+
+fn relative_path(relative: &str) -> PathBuf {
+    relative
+        .split('/')
+        .filter(|part| !part.is_empty())
+        .collect()
+}
+
+fn baseline_for(
+    candidate: &UpdateCandidate,
+    baselines: &HashMap<String, String>,
+) -> Option<String> {
+    baselines
+        .get(&candidate.skill_id)
+        .cloned()
+        .filter(|value| !value.is_empty())
+        .or_else(|| {
+            candidate
+                .lock_baseline
+                .clone()
+                .filter(|value| !value.is_empty())
+        })
+}
+
+fn diff_skill_dirs(remote: &Path, local: &Path) -> SkillUpdateChangeSummary {
+    let remote_files = fsutil::file_map(remote);
+    let local_files = fsutil::file_map(local);
+    let mut changes = Vec::new();
+    let mut added = 0usize;
+    let mut modified = 0usize;
+    let mut removed = 0usize;
+    for (path, remote_path) in &remote_files {
+        match local_files.get(path) {
+            None => {
+                added += 1;
+                changes.push(SkillUpdateFileChange {
+                    path: path.clone(),
+                    change_type: "added".to_string(),
+                });
+            }
+            Some(local_path) => {
+                if !files_equal(remote_path, local_path) {
+                    modified += 1;
+                    changes.push(SkillUpdateFileChange {
+                        path: path.clone(),
+                        change_type: "modified".to_string(),
+                    });
+                }
+            }
+        }
+    }
+    for path in local_files.keys() {
+        if !remote_files.contains_key(path) {
+            removed += 1;
+            changes.push(SkillUpdateFileChange {
+                path: path.clone(),
+                change_type: "removed".to_string(),
+            });
+        }
+    }
+    changes.sort_by(|left, right| left.path.cmp(&right.path));
+    let truncated = changes.len() > SKILL_UPDATE_MAX_CHANGE_FILES;
+    changes.truncate(SKILL_UPDATE_MAX_CHANGE_FILES);
+    SkillUpdateChangeSummary {
+        added,
+        modified,
+        removed,
+        files: changes,
+        truncated,
+    }
+}
+
+fn files_equal(left: &Path, right: &Path) -> bool {
+    match (std::fs::read(left), std::fs::read(right)) {
+        (Ok(left), Ok(right)) => left == right,
+        _ => false,
+    }
+}
+
+/// Turn a raw installer/network error into a stable kind the UI can phrase,
+/// keeping the raw text for the "details" fold.
+pub(crate) fn classify_update_error(raw: &str) -> (String, String) {
+    let lower = raw.to_ascii_lowercase();
+    let kind = if lower.contains("rate limit")
+        || lower.contains("too many requests")
+        || lower.contains("api rate")
+    {
+        "rate_limited"
+    } else if lower.contains("repository not found")
+        || lower.contains("not found")
+        || lower.contains("no valid skill directories")
+        || lower.contains(" 404")
+    {
+        "not_found"
+    } else if lower.contains("could not resolve host")
+        || lower.contains("failed to connect")
+        || lower.contains("network is unreachable")
+        || lower.contains("timed out")
+        || lower.contains("timeout")
+        || lower.contains("connection refused")
+        || lower.contains("failed to clone")
+        || lower.contains("failed to prepare")
+        || lower.contains("failed to fetch")
+        || lower.contains("failed to run curl")
+        || lower.contains("could not read from remote")
+        || lower.contains("early eof")
+        || lower.contains("rpc failed")
+    {
+        "network"
+    } else {
+        "unknown"
+    };
+    (kind.to_string(), raw.to_string())
+}
+
+/// Parse a `github:owner/repo[/path]`, `https://github.com/owner/repo[/tree/ref/path]`
+/// or bare `owner/repo` source spec into owner, repo and in-repo folder.
+fn parse_github_update_spec(spec: &str) -> Option<(String, String, String)> {
+    let spec = spec.trim();
+    if let Some(rest) = spec.strip_prefix("github:") {
+        let parts: Vec<&str> = rest.split('/').filter(|part| !part.is_empty()).collect();
+        if parts.len() < 2 {
+            return None;
+        }
+        let owner = parts[0].to_string();
+        let repo = parts[1].trim_end_matches(".git").to_string();
+        let path = parts[2..].join("/");
+        return Some((owner, repo, skill_lock::skill_dir_from_path(&path)));
+    }
+    let rest = spec
+        .strip_prefix("https://github.com/")
+        .or_else(|| spec.strip_prefix("http://github.com/"))?;
+    let parts: Vec<&str> = rest.split('/').filter(|part| !part.is_empty()).collect();
+    if parts.len() < 2 {
+        return None;
+    }
+    let owner = parts[0].to_string();
+    let repo = parts[1].trim_end_matches(".git").to_string();
+    let path = if parts.len() > 3 && parts[2] == "tree" {
+        parts[4..].join("/")
+    } else {
+        parts[2..].join("/")
+    };
+    Some((owner, repo, skill_lock::skill_dir_from_path(&path)))
 }
 
 /// Fill in the GitHub origin recorded by the external lock file when the Skill

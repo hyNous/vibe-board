@@ -742,6 +742,52 @@
       "custom": "自定义",
       "github": "GitHub",
       "agent": "从 Agent 同步"
+    },
+    "updates": {
+      "title": "开源 Skill 更新",
+      "checkAll": "检查全部更新",
+      "checkOne": "检查更新",
+      "checking": "正在检查…",
+      "updating": "正在更新…",
+      "lastChecked": "上次检查：{{time}}",
+      "neverChecked": "还没有检查过",
+      "summary": "{{n}} 个可更新",
+      "allCurrent": "全部已是最新",
+      "noSources": "没有来源记录的 Skill 不参与检查。",
+      "update": "更新",
+      "confirmTitle": "更新「{{name}}」？",
+      "confirmBody": "会用 GitHub 上的新版本替换本地文件；各 Agent 的链接不变。",
+      "confirmUpdate": "更新",
+      "modifiedNote": "你改过这个 Skill，更新会覆盖你的修改。",
+      "autoUpdate": "自动更新",
+      "autoUpdateHint": "只有打开「定期检查更新」后才生效",
+      "autoUpdated": "已自动更新到新版本",
+      "skippedModified": "已跳过：你改过这个 Skill，自动更新不会覆盖你的修改。",
+      "skippedUnknown": "已跳过：无法确认这个 Skill 有没有被改过，请手动更新。",
+      "skippedFailed": "已跳过：更新没有成功。",
+      "changeSummary": "新增 {{added}} · 修改 {{modified}} · 删除 {{removed}}",
+      "changesTruncated": "只列出了前面一部分文件。",
+      "change": {
+        "added": "新增",
+        "modified": "修改",
+        "removed": "删除"
+      },
+      "errors": {
+        "network": "网络不通，没能连上 GitHub。检查一下网络，稍后再试。",
+        "notFound": "找不到这个 Skill 的来源仓库，可能已被删除或改名。",
+        "rateLimited": "GitHub 暂时限制了访问频率，稍后再试。",
+        "unknown": "这次检查没有完成，稍后再试。"
+      },
+      "sourceTitle": "开源来源更新",
+      "sourceHint": "检查 GitHub 上的新版本；更新会替换本地文件，各 Agent 的链接不变。",
+      "foundUpdate": "有新版本可以更新",
+      "upToDate": "已是最新"
+    },
+    "settings": {
+      "openSourceUpdates": "开源 Skill 更新",
+      "periodicCheck": "定期检查更新",
+      "periodicCheckHelp": "打开后，Vibe Board 每天最多检查一次你安装的开源 Skill 是否有新版本：检查会访问 GitHub。发现新版本时只提示，不会自动改文件；只有单独打开「自动更新」的 Skill 才会直接更新。默认关闭。",
+      "lastChecked": "上次检查：{{time}}"
     }
   },
   "update": {
