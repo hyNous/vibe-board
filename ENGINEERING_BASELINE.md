@@ -603,6 +603,36 @@ Rust 测试在 Windows 上真实创建目录联接覆盖软链路径。
 
 **Verification**：检查命令全绿；测试期间真实用户目录无改动；父级用维护者本机的真实目录结构（只读）核对派活关系显示与换行符判定。
 
+**状态（2026-10-08）：PASS WITH RISKS，已合入（`be404c3`）。**
+父级独立验证：前端 448 项全过；`cargo test --lib` 607 通过 / 22 失败，失败集合 = 已知名单子集；测试期间真实目录无改动。
+只读核对维护者真实目录：Claude Code、Codex 都显示已连上 OpenCode 与 Antigravity，OpenCode、Antigravity 不再显示连到自己（父级补修）。
+父级补修：断开时不删除共用目录 `~/.agents/skills` 中唯一的一份原件，改为保留并说明（`keep_shared`）。
+**换行符修复的真实效果**：本机 27 个带来源记录的 Skill 中 23 个判定正确；其余 4 个对不上的原因不是换行符——`oil-ui`、`beautify-github-readme`
+含可执行文件（Windows 上丢失可执行位）、`create-technical-spike` 的 SKILL.md 被某个安装工具改写过头部、`oil-skill-creator` 的安装记录无法用
+标准 Git 格式在本地复算。结论：安装记录在 Windows 上不能总被复现，界面措辞改为「和安装时记录的版本对不上，可能被改过」。
+
+**同期修复（`9cab51f`）**：bridge 上报会话进程时跳过运行 Hook 的临时 bash / cmd / PowerShell。此前看板每秒判定 Claude Code 会话「进程已结束」
+并删除（维护者日志中同一批会话被删 1295 次），导致 Claude Code 会话从不显示。待维护者重装后实测。
+
+### M15 — 删除匿名统计上报；如实说明软件更新方式（维护者 2026-10-08 决定）
+
+**背景**：`src-tauri/src/telemetry.rs` 的匿名使用统计默认开启，但打包时从未配置上报地址，实际从不发送；设置里也没有任何查看或关闭的入口
+（原首次同意弹窗 `FirstRunWelcome` 已无引用）。维护者决定**整块删除**。另：「关于」页的「自动检查更新」「自动安装更新」开关在当前构建下不起作用
+（未配置更新来源），教程却描述为可自动更新。维护者决定**教程如实写、隐藏这两个开关**。
+
+**Acceptance Criteria**
+1. 删除统计上报：`telemetry.rs`、`TelemetryService` 的创建与所有 `record_*` 调用、相关 Tauri 命令（如设置是否允许统计）、前端 `FirstRunWelcome`
+   与相关 store 字段和文案；全仓库搜索不到 `telemetry`、`analytics`（兼容测试与说明除外）、`SLS` 上报相关代码。
+2. 配置兼容：旧 `config.json` 中的 `analyticsEnabled`、`analyticsConsentPromptCompleted` 能正常加载且不再写回（测试，隔离目录）；
+   前端本地存储里的同名旧字段同样被剥离。
+3. 「关于」页隐藏「自动检查更新」「自动安装更新」两个开关；保留手动「检查更新」按钮与其现有行为。相应配置项保留可加载（不删字段，避免旧配置报错）。
+4. 教程（`public/tutorial/index.html`，中英两处）「关于」一节改为如实描述：目前需要到 GitHub Releases（`hyNous/vibe-board`）下载新版安装包手动更新；
+   不提已隐藏的开关；仍不出现 `http://` / `https://` 字样（已有测试）。
+5. README（中英）、`docs/privacy-policy.md` 中关于匿名统计的描述同步删除或改为「不收集任何使用统计」。
+6. 不改其它功能；检查命令全绿；被删测试只覆盖被删功能并列出。
+
+**Verification**：检查命令全绿；父级全仓库搜索确认无残留上报代码；维护者目视「关于」页与教程。
+
 ## 8. Known Trade-offs
 
 - **推翻 PRD 两处**：保留 Skill 管理（PRD 5.3 非目标）；删除审批操作（PRD 8.5 MVP）。均为维护者确认。
