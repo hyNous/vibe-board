@@ -565,6 +565,15 @@ Rust 测试在 Windows 上真实创建目录联接覆盖软链路径。
 **Verification**：检查命令全绿；所有涉及网络的测试用本地桩（本地 git 仓库或桩下载），不真实访问 GitHub；父级用隔离 HOME 跑通
 「检查 → 提示 → 手动更新」「自动更新」「本地改过跳过」三条路径；维护者目视。
 
+**状态（2026-10-08）：PASS WITH RISKS，已合入（`c51d8a8`）。**
+2026-10-07 夜间暂停后，以本地 `wip/m13-skill-update` 的半成品为起点续做完成。worker 修正：可用性比较与 Vibe Board 基线统一用工作副本树哈希
+（Windows 上 git 换行转换会让仓库树哈希与本地永远不等，导致反复提示更新），只有写回 `.skill-lock.json` 的 `skillFolderHash` 用 Git 树哈希。
+父级独立验证：前端 45 文件 445 项全过，lint / build / fmt / check 通过；`cargo test --lib` 597 通过 / 22 失败，失败集合 = 已知名单子集；
+读代码核对就地替换（暂存目录 → 改名替换 → 失败回滚，链接只删链接）与写入目录确为 `~/.agents/skills`；测试期间真实 `~/.agents`、`~/.claude`、
+`~/.codex`、`~/.vibeboard`、`~/.gemini/config` 无任何文件被改动。
+
+**风险记录**：①真实 GitHub 路径未实测（测试全部用本地桩）。②锁文件若固定到某个提交，更新会按「未知错误」提示。③界面未目视。
+
 ## 8. Known Trade-offs
 
 - **推翻 PRD 两处**：保留 Skill 管理（PRD 5.3 非目标）；删除审批操作（PRD 8.5 MVP）。均为维护者确认。
