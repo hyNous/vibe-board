@@ -574,6 +574,35 @@ Rust 测试在 Windows 上真实创建目录联接覆盖软链路径。
 
 **风险记录**：①真实 GitHub 路径未实测（测试全部用本地桩）。②锁文件若固定到某个提交，更新会按「未知错误」提示。③界面未目视。
 
+### M14 — 派活工具独立 + Agent 读取目录表纠正（维护者 2026-10-08 确认）
+
+**背景**：维护者要求派活工具「没有 Vibe Board 也能独立存在，Vibe Board 只是方便设置」。四个派活 Skill 已独立发布为
+`hyNous/agent-dispatch`（2026-10-08），本机已用 `npx skills add hyNous/agent-dispatch` 重装并带上来源记录。另：Vibe Board 内置的
+「各 Agent 读哪个 Skill 目录」表与实际不符，导致 Codex 明明能派活却显示未连上。
+
+**已在本机核实的读取位置（2026-10-07 / 10-08）**：
+- Codex：直接读 `~/.agents/skills`（`~/.codex/skills` 只有它自带的 5 个系统 Skill）；统一安装器报告 Codex 访问方式为 universal。
+- OpenCode：`opencode debug skill` 实测读 `~/.agents/skills`（43 个）与 `~/.claude/skills`；Vibe Board 表中写的 `~/.opencode/skills` 错误。
+- Claude Code：读 `~/.claude/skills`（安装器在此建立指向 `~/.agents/skills` 的链接）。
+- Antigravity：全局读 `~/.gemini/config/skills` 以及 `~/.gemini/config/skills.json` 中 `entries` 列出的目录；项目内读 `.agents/skills`。
+  维护者本机已在 skills.json 中加入 `~/.agents/skills`。
+
+**Acceptance Criteria**
+1. 安装包不再自带四个派活 Skill（删除 `src-tauri/resources/dispatch-skills` 及其打包配置与 NOTICE 中的相应说明）。派活关系页检测本机是否已装
+   这套工具；未装时显示「从 GitHub 安装（hyNous/agent-dispatch）」，说明会访问 GitHub、装到 `~/.agents/skills`，确认后才安装；
+   安装结果在 `~/.agents/.skill-lock.json` 留有来源记录，之后能被 M13 的检查更新覆盖。测试用本地桩，不真实访问 GitHub。
+2. 「各 Agent 读哪个目录」改为一处统一的定义，每个 Agent 可有多个读取位置（例如 OpenCode 两处、Antigravity 含 skills.json 声明的目录），
+   派活关系页与 Skill 管理的「生效于」都用这份定义。按上面核实的事实修正 Codex、OpenCode、Antigravity；其余未核实的 Agent 保持原值并在代码中标注「未核实」。
+3. 派活关系判断改为「该 Agent 实际能读到工人的 Skill」：Codex、OpenCode 读 `~/.agents/skills`，所以工人装在那里时两者都显示已连上；
+   共用同一目录的 Agent 在界面上如实标明「与 X 共用」，断开其一会提示同时影响另一个。维护者本机状态下，Codex 应显示已连上 OpenCode 与 Antigravity（测试夹具复现）。
+4. 「生效于」对读共用目录的 Agent，不再额外复制或链接一份，而是显示为「已生效（共用目录）」。
+5. 修复 M13 的换行符误判：Windows 上 git 的 `core.autocrlf=true` 会把装下来的文本文件转成 CRLF，导致本地指纹与 `.skill-lock.json`
+   的 `skillFolderHash`（仓库中为 LF）永远不等，所有 npx 装的 Skill 都被误判为「本地改过」。计算用于比对的 Git 树哈希时，对文本文件按 git
+   的规则把 CRLF 视为 LF；测试夹具：CRLF 文件 + 按 LF 计算的锁文件哈希 → 判定为未改动；真正改过内容 → 仍判定为改过。
+6. 不写全局指令文件；会写用户目录的操作都先说明并确认；文案遵循 M11 准则。
+
+**Verification**：检查命令全绿；测试期间真实用户目录无改动；父级用维护者本机的真实目录结构（只读）核对派活关系显示与换行符判定。
+
 ## 8. Known Trade-offs
 
 - **推翻 PRD 两处**：保留 Skill 管理（PRD 5.3 非目标）；删除审批操作（PRD 8.5 MVP）。均为维护者确认。
