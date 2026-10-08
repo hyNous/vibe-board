@@ -515,9 +515,9 @@ impl Service {
         let mut seen_skill_ids = BTreeSet::new();
         let shared_skills_dir = self.home.join(".agents").join("skills");
         for skills_dir in skill_dirs {
-            if agent_meta::inherits_shared_agents_skills(agent_id)
-                && skills_dir == shared_skills_dir
-            {
+            // The shared root is inventoried once through the `agents`
+            // pseudo-agent; no Agent owns duplicate rows for it.
+            if agent_id != SHARED_SKILLS_AGENT_ID && skills_dir == shared_skills_dir {
                 continue;
             }
             if !skills_dir.is_dir() {
@@ -582,7 +582,9 @@ impl Service {
 
     pub fn scan_agent_inventory_into_db(&self, agent_id: &str) -> Result<AgentScanResult, String> {
         let mut result = self.scan_one_agent_into_db(agent_id)?;
-        if agent_meta::inherits_shared_agents_skills(agent_id) {
+        if agent_id != SHARED_SKILLS_AGENT_ID
+            && agent_meta::reads_shared_agents_skills(&self.home, agent_id)
+        {
             let shared = self.scan_one_agent_into_db(SHARED_SKILLS_AGENT_ID)?;
             result.included_shared = true;
             result.shared_managed = shared.managed;
@@ -3285,6 +3287,30 @@ impl Service {
                 }
             };
             for agent in &target_agents {
+                // Agents that read the shared `.agents/skills` root already see
+                // every Skill present there; writing a per-Agent copy or link
+                // would duplicate it without changing what the Agent loads.
+                if let Some(shared_dir) = agent_meta::agent_read_skill_dirs(&self.home, agent)
+                    .dirs
+                    .into_iter()
+                    .find(|dir| {
+                        dir.shared
+                            && !matches!(inspect_path(&dir.path.join(skill_id)), PathKind::Missing)
+                    })
+                {
+                    changes.push(DistributionChange {
+                        skill_id: skill_id.clone(),
+                        agent_id: agent.clone(),
+                        action: "shared".to_string(),
+                        actual_mode: None,
+                        reason: Some(
+                            "Already effective through the shared .agents Skill directory; no extra copy is written."
+                                .to_string(),
+                        ),
+                        target_path: shared_dir.path.join(skill_id).display().to_string(),
+                    });
+                    continue;
+                }
                 let dir = match agent_meta::agent_skills_dir(&self.home, agent) {
                     Some(d) => d,
                     None => {
@@ -3599,6 +3625,8 @@ impl Service {
                 "reuse" => {
                     self.append_claim(&change.target_path, &change.agent_id, claim_origin.clone())?;
                 }
+                // Shared-directory Agents need no write at all.
+                "shared" => {}
                 "convert" | "reinstall" => {
                     let actual = change
                         .actual_mode
@@ -6073,7 +6101,7 @@ impl Service {
                 .cmp(&unmanaged_skill_name(right).to_lowercase())
                 .then_with(|| left.path.cmp(&right.path))
         });
-        let inherits_shared_skills = agent_meta::inherits_shared_agents_skills(agent_id);
+        let inherits_shared_skills = agent_meta::reads_shared_agents_skills(&self.home, agent_id);
 
         let applied_packs = self.applied_packs_for_agent(agent_id)?;
         let available_packs = self.list_skill_packs()?;
@@ -6173,7 +6201,7 @@ impl Service {
         &self,
         agent_id: &str,
     ) -> Result<(Vec<SkillTargetDetail>, Vec<UnmanagedItemDto>), String> {
-        if !agent_meta::inherits_shared_agents_skills(agent_id) {
+        if !agent_meta::reads_shared_agents_skills(&self.home, agent_id) {
             return Ok((Vec::new(), Vec::new()));
         }
         let mut managed_by_path = BTreeMap::new();

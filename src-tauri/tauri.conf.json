@@ -54,7 +54,6 @@
     ],
     "resources": {
       "target/vibe-board-bridge-resource/vibe-board-bridge": "vibe-board-bridge",
-      "resources/dispatch-skills": "dispatch-skills",
       "resources/usage": "usage"
     }
   }

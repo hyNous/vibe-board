@@ -249,79 +249,221 @@ fn humanize(id: &str) -> String {
         .join(" ")
 }
 
-/// Resolve the primary skills directory for an agent under a given home.
-pub fn agent_skills_dir(home: &std::path::Path, agent: &str) -> Option<PathBuf> {
-    // Use the existing resolver by temporarily relying on its home() helper.
-    // agent_paths uses dirs::home_dir(), so we pass-through; for tests we set
-    // HOME env. To support a custom home we replicate the minimal mapping here.
-    let rel = match agent {
-        "openclaw" => return Some(openclaw_workspace_dir(home).join("skills")),
-        "agents" => ".agents/skills",
-        "claude-code" => ".claude/skills",
-        "codex" => ".codex/skills",
-        "gemini" => ".gemini/skills",
-        "antigravity" => ".gemini/config/skills",
-        "cursor" => ".cursor/skills",
-        "opencode" => ".opencode/skills",
-        "qclaw" => ".qclaw/skills",
-        "easyclaw" => ".easyclaw/skills",
-        "easyclaw-v2" => ".easyclaw-20260322-01/skills",
-        "autoclaw" => ".openclaw-autoclaw/skills",
-        "copilot" => ".copilot/skills",
-        "qwen" => ".qwen/skills",
-        "kimi" => return Some(agent_paths::kimi_code_home_for(home).join("skills")),
-        "doubao" => return Some(agent_paths::doubao_user_skills_dir_for(home)),
-        "deepseek" => ".deepseek/skills",
-        "workbuddy" => ".workbuddy/skills",
-        "zcode" => ".zcode/skills",
-        "windsurf" => ".windsurf/skills",
-        "augment" => ".augment/skills",
-        "kilocode" => ".kilocode/skills",
-        "aider" => ".aider/skills",
-        "amp" => ".amp/skills",
-        "kiro" => ".kiro/skills",
-        "hermes" => ".hermes/skills",
-        _ => {
-            return agent_paths::paths_for_agent(agent)
-                .skill_dirs
-                .first()
-                .cloned()
-        }
-    };
-    Some(home.join(rel))
+/// One user-level Skills directory an Agent reads.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AgentSkillReadDir {
+    pub path: PathBuf,
+    /// The shared `.agents/skills` root. Several Agents read it, so Vibe Board
+    /// never writes a second per-Agent copy for Agents that only see a Skill
+    /// through this directory.
+    pub shared: bool,
 }
 
-/// Resolve every skill root OpenClaw can load from local filesystem sources,
-/// ordered from highest precedence to lowest.
-pub fn agent_skill_dirs(home: &Path, agent: &str) -> Vec<PathBuf> {
-    if agent == "doubao" {
-        return agent_paths::doubao_skill_dirs_for(home);
+/// The single source of truth for "which Skills directories does this Agent
+/// read". The Handoff page and Skill Manager both resolve paths through this.
+#[derive(Debug, Clone)]
+pub struct AgentSkillReadDirs {
+    pub dirs: Vec<AgentSkillReadDir>,
+    /// True when the read locations were verified against real Agent behaviour
+    /// on 2026-10-08. Unverified Agents keep the historical table values.
+    pub verified: bool,
+}
+
+fn read_dirs(
+    verified: bool,
+    entries: Vec<(PathBuf, bool)>,
+    shared_root: &Path,
+) -> AgentSkillReadDirs {
+    AgentSkillReadDirs {
+        dirs: entries
+            .into_iter()
+            .map(|(path, shared)| AgentSkillReadDir {
+                shared: shared || path == shared_root,
+                path,
+            })
+            .collect(),
+        verified,
     }
-    if agent != "openclaw" {
-        let mut dirs = if table().iter().all(|m| m.id != agent) {
-            agent_paths::paths_for_agent(agent).skill_dirs
-        } else {
-            agent_skills_dir(home, agent).into_iter().collect()
-        };
-        if inherits_shared_agents_skills(agent) {
-            dirs.push(home.join(".agents").join("skills"));
+}
+
+/// Verified read locations (maintainer machine, 2026-10-08):
+/// - Claude Code reads `~/.claude/skills`.
+/// - Codex reads `~/.agents/skills`; `~/.codex/skills` holds its own system
+///   Skills.
+/// - OpenCode reads `~/.agents/skills` and `~/.claude/skills`.
+/// - Antigravity reads `~/.gemini/config/skills` plus every directory declared
+///   in `~/.gemini/config/skills.json` under `entries`.
+///
+/// Every other Agent is marked unverified and keeps its historical values.
+pub fn agent_read_skill_dirs(home: &Path, agent: &str) -> AgentSkillReadDirs {
+    // Keep the historical path spellings for the shared root and each Agent
+    // directory so stored/unmanaged path strings stay stable.
+    let shared = home.join(".agents/skills");
+    match agent {
+        "claude-code" => read_dirs(true, vec![(home.join(".claude/skills"), false)], &shared),
+        "codex" => read_dirs(
+            true,
+            vec![(home.join(".codex/skills"), false), (shared.clone(), true)],
+            &shared,
+        ),
+        "opencode" => read_dirs(
+            true,
+            vec![(shared.clone(), true), (home.join(".claude/skills"), false)],
+            &shared,
+        ),
+        "antigravity" => {
+            let mut entries = vec![(home.join(".gemini/config/skills"), false)];
+            entries.extend(
+                antigravity_declared_skill_dirs(home)
+                    .into_iter()
+                    .map(|path| (path, false)),
+            );
+            read_dirs(true, entries, &shared)
         }
-        return dedupe_paths(dirs);
+        // Unverified Agents: historical values, never silently corrected.
+        "agents" => read_dirs(false, vec![(shared.clone(), true)], &shared),
+        "openclaw" => {
+            let workspace = openclaw_workspace_dir(home);
+            let mut entries = vec![
+                (workspace.join("skills"), false),
+                (workspace.join(".agents").join("skills"), false),
+                (shared.clone(), true),
+                (home.join(".openclaw").join("skills"), false),
+                (home.join(".openclaw").join("plugin-skills"), false),
+            ];
+            entries.extend(
+                openclaw_bundled_skill_dirs()
+                    .into_iter()
+                    .map(|path| (path, false)),
+            );
+            read_dirs(false, entries, &shared)
+        }
+        "doubao" => read_dirs(
+            false,
+            agent_paths::doubao_skill_dirs_for(home)
+                .into_iter()
+                .map(|path| (path, false))
+                .collect(),
+            &shared,
+        ),
+        "kimi" => read_dirs(
+            false,
+            vec![
+                (agent_paths::kimi_code_home_for(home).join("skills"), false),
+                (shared.clone(), true),
+            ],
+            &shared,
+        ),
+        other => {
+            let rel = match other {
+                "gemini" => Some(".gemini/skills"),
+                "cursor" => Some(".cursor/skills"),
+                "qclaw" => Some(".qclaw/skills"),
+                "easyclaw" => Some(".easyclaw/skills"),
+                "easyclaw-v2" => Some(".easyclaw-20260322-01/skills"),
+                "autoclaw" => Some(".openclaw-autoclaw/skills"),
+                "copilot" => Some(".copilot/skills"),
+                "qwen" => Some(".qwen/skills"),
+                "deepseek" => Some(".deepseek/skills"),
+                "workbuddy" => Some(".workbuddy/skills"),
+                "zcode" => Some(".zcode/skills"),
+                "windsurf" => Some(".windsurf/skills"),
+                "augment" => Some(".augment/skills"),
+                "kilocode" => Some(".kilocode/skills"),
+                "aider" => Some(".aider/skills"),
+                "amp" => Some(".amp/skills"),
+                "kiro" => Some(".kiro/skills"),
+                "hermes" => Some(".hermes/skills"),
+                _ => None,
+            };
+            match rel {
+                Some(rel) => {
+                    let mut entries = vec![(home.join(rel), false)];
+                    if other == "zcode" {
+                        entries.push((shared.clone(), true));
+                    }
+                    read_dirs(false, entries, &shared)
+                }
+                None => read_dirs(
+                    false,
+                    agent_paths::paths_for_agent(other)
+                        .skill_dirs
+                        .into_iter()
+                        .map(|path| (path, false))
+                        .collect(),
+                    &shared,
+                ),
+            }
+        }
     }
-    let workspace = openclaw_workspace_dir(home);
-    let mut dirs = vec![
-        workspace.join("skills"),
-        workspace.join(".agents").join("skills"),
-        home.join(".agents").join("skills"),
-        home.join(".openclaw").join("skills"),
-        home.join(".openclaw").join("plugin-skills"),
-    ];
-    dirs.extend(openclaw_bundled_skill_dirs());
+}
+
+/// Directories Antigravity reads because `~/.gemini/config/skills.json` lists
+/// them under `entries`. Entries are path strings or objects carrying a
+/// path-like field. Relative entries are ignored rather than guessed.
+fn antigravity_declared_skill_dirs(home: &Path) -> Vec<PathBuf> {
+    let path = home.join(".gemini").join("config").join("skills.json");
+    let Ok(content) = std::fs::read_to_string(&path) else {
+        return Vec::new();
+    };
+    let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) else {
+        return Vec::new();
+    };
+    let Some(entries) = json.get("entries").and_then(|value| value.as_array()) else {
+        return Vec::new();
+    };
+    let mut dirs = Vec::new();
+    for entry in entries {
+        let raw = entry.as_str().map(ToString::to_string).or_else(|| {
+            ["path", "dir", "directory", "skillDir", "skillsDir"]
+                .iter()
+                .find_map(|key| {
+                    entry
+                        .get(*key)
+                        .and_then(|value| value.as_str())
+                        .map(ToString::to_string)
+                })
+        });
+        let Some(raw) = raw else {
+            continue;
+        };
+        let trimmed = raw.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let expanded = expand_home(home, trimmed);
+        if expanded.is_absolute() {
+            dirs.push(expanded);
+        }
+    }
     dedupe_paths(dirs)
 }
 
-pub fn inherits_shared_agents_skills(agent: &str) -> bool {
-    matches!(agent, "codex" | "kimi" | "openclaw" | "zcode")
+/// Resolve the primary Skills directory for an Agent under a given home.
+pub fn agent_skills_dir(home: &std::path::Path, agent: &str) -> Option<PathBuf> {
+    agent_read_skill_dirs(home, agent)
+        .dirs
+        .into_iter()
+        .next()
+        .map(|dir| dir.path)
+}
+
+/// Resolve every skill root an Agent reads, ordered from highest precedence
+/// to lowest.
+pub fn agent_skill_dirs(home: &Path, agent: &str) -> Vec<PathBuf> {
+    agent_read_skill_dirs(home, agent)
+        .dirs
+        .into_iter()
+        .map(|dir| dir.path)
+        .collect()
+}
+
+/// Whether this Agent reads the shared `.agents/skills` root.
+pub fn reads_shared_agents_skills(home: &Path, agent: &str) -> bool {
+    agent_read_skill_dirs(home, agent)
+        .dirs
+        .iter()
+        .any(|dir| dir.shared)
 }
 
 pub fn agent_owned_skill_dirs(home: &Path, agent: &str) -> Vec<PathBuf> {
@@ -338,10 +480,11 @@ pub fn agent_owned_skill_dirs(home: &Path, agent: &str) -> Vec<PathBuf> {
             home.join(".openclaw").join("plugin-skills"),
         ];
     }
-    let shared = home.join(".agents").join("skills");
-    agent_skill_dirs(home, agent)
+    agent_read_skill_dirs(home, agent)
+        .dirs
         .into_iter()
-        .filter(|path| path != &shared)
+        .filter(|dir| !dir.shared)
+        .map(|dir| dir.path)
         .collect()
 }
 
@@ -577,13 +720,108 @@ mod tests {
     }
 
     #[test]
-    fn shared_agents_skill_consumers_are_explicit() {
-        for agent in ["codex", "kimi", "openclaw", "zcode"] {
-            assert!(inherits_shared_agents_skills(agent), "{agent}");
+    fn verified_read_locations_match_agent_behavior() {
+        let home = Path::new("/Users/tester");
+        let shared = home.join(".agents/skills");
+        let entries = |agent: &str| {
+            agent_read_skill_dirs(home, agent)
+                .dirs
+                .into_iter()
+                .map(|dir| (dir.path, dir.shared))
+                .collect::<Vec<_>>()
+        };
+
+        let claude = agent_read_skill_dirs(home, "claude-code");
+        assert!(claude.verified);
+        assert_eq!(
+            entries("claude-code"),
+            vec![(home.join(".claude/skills"), false)]
+        );
+
+        let codex = agent_read_skill_dirs(home, "codex");
+        assert!(codex.verified);
+        assert_eq!(
+            entries("codex"),
+            vec![(home.join(".codex/skills"), false), (shared.clone(), true)]
+        );
+
+        let opencode = agent_read_skill_dirs(home, "opencode");
+        assert!(opencode.verified);
+        assert_eq!(
+            entries("opencode"),
+            vec![(shared.clone(), true), (home.join(".claude/skills"), false)]
+        );
+        assert_eq!(
+            agent_skills_dir(home, "opencode"),
+            Some(shared.clone()),
+            "the shared root is OpenCode's primary location"
+        );
+
+        let antigravity = agent_read_skill_dirs(home, "antigravity");
+        assert!(antigravity.verified);
+        assert_eq!(
+            entries("antigravity"),
+            vec![(home.join(".gemini/config/skills"), false)]
+        );
+
+        // Unverified Agents keep the historical table.
+        assert!(!agent_read_skill_dirs(home, "gemini").verified);
+        assert_eq!(
+            entries("gemini"),
+            vec![(home.join(".gemini/skills"), false)]
+        );
+    }
+
+    #[test]
+    fn shared_agents_skill_consumers_come_from_the_read_table() {
+        let home = Path::new("/Users/tester");
+        for agent in ["codex", "kimi", "openclaw", "opencode", "zcode", "agents"] {
+            assert!(reads_shared_agents_skills(home, agent), "{agent}");
         }
-        for agent in ["claude-code", "cursor", "gemini", "agents"] {
-            assert!(!inherits_shared_agents_skills(agent), "{agent}");
+        for agent in ["claude-code", "cursor", "gemini"] {
+            assert!(!reads_shared_agents_skills(home, agent), "{agent}");
         }
+    }
+
+    #[test]
+    fn antigravity_reads_directories_declared_in_skills_json() {
+        let home = std::env::temp_dir().join(format!(
+            "agentbro-antigravity-read-dirs-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let config = home.join(".gemini").join("config");
+        std::fs::create_dir_all(&config).unwrap();
+        let custom = home.join("custom-skills").display().to_string();
+        std::fs::write(
+            config.join("skills.json"),
+            serde_json::json!({
+                "entries": [
+                    "~/.agents/skills",
+                    { "path": custom },
+                    { "path": "relative/ignored" },
+                    "",
+                ]
+            })
+            .to_string(),
+        )
+        .unwrap();
+
+        let dirs = agent_read_skill_dirs(&home, "antigravity");
+        let paths = dirs
+            .dirs
+            .iter()
+            .map(|dir| (dir.path.clone(), dir.shared))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            paths,
+            vec![
+                (home.join(".gemini/config/skills"), false),
+                (home.join(".agents/skills"), true),
+                (home.join("custom-skills"), false),
+            ]
+        );
+
+        std::fs::remove_dir_all(home).unwrap();
     }
 
     #[test]

@@ -1,23 +1,29 @@
-//! Dispatch relationship tree (settings → 派发框架).
+//! Handoff relationship tree (settings → 派活关系).
 //!
-//! A "main Agent → worker" connection means that Agent's user-level Skill
-//! directory contains the worker's dispatch Skill together with the shared
-//! `external-agent-core` runtime and the `external-agent-setup` entry point.
-//! This module detects the tree, previews exactly what connecting or
-//! disconnecting would write or remove, and only touches the filesystem after
-//! an explicit confirmation. Disconnecting removes a link itself, never the
-//! directory it points to, and leaves user-edited copies alone. It never
-//! installs a CLI, never reads credential values, and never edits global
-//! instruction files (`CLAUDE.md` / `AGENTS.md`).
+//! The dispatch tool is the separately published `hyNous/agent-dispatch` Skill
+//! set. Vibe Board no longer bundles it: the page detects whether this machine
+//! already has it under the shared `~/.agents/skills` root, offers an explicit
+//! install from GitHub when it does not, and only then shows which Agent can
+//! read which worker Skill. Detection follows the Agent read-directory table in
+//! `skills::v2::agent_meta`; a Skill visible through the shared root is shared
+//! by every Agent that reads it, and disconnecting one of those Agents warns
+//! about the others. Disconnecting removes a link itself, never the directory
+//! it points to, and leaves user-edited copies alone. It never installs a CLI,
+//! never reads credential values, and never edits global instruction files
+//! (`CLAUDE.md` / `AGENTS.md`).
 
 use crate::platform::process::background_command;
-use crate::skills::v2::{agent_meta, fsutil};
+use crate::skills::v2::{agent_meta, fsutil, skill_lock};
 use serde::Serialize;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 use std::time::{Duration, Instant};
-use tauri::{AppHandle, Manager};
+
+/// The separately published Skill repository this page installs on demand.
+const DISPATCH_REPO: &str = "hyNous/agent-dispatch";
+const DISPATCH_REPO_OWNER: &str = "hyNous";
+const DISPATCH_REPO_NAME: &str = "agent-dispatch";
 
 /// Only the Claude Code and Codex dispatchers were verified end to end; other
 /// Agents can be connected too, but their node is marked as unverified.
@@ -29,6 +35,14 @@ const WORKER_SKILLS: [(&str, &str); 2] = [
     ("antigravity", "antigravity-agent"),
 ];
 
+/// Every Skill the dispatch tool installs under `~/.agents/skills`.
+const INSTALLED_SKILLS: [&str; 4] = [
+    "external-agent-core",
+    "external-agent-setup",
+    "opencode-agent",
+    "antigravity-agent",
+];
+
 /// Shared parts of every connection: the runtime the worker Skill loads and
 /// the setup Skill that connects tools which are not built in. The setup Skill
 /// stays behind when the last worker is disconnected.
@@ -36,7 +50,9 @@ const SHARED_SKILLS: [&str; 2] = ["external-agent-core", "external-agent-setup"]
 const WORKER_ORDER: [&str; 2] = ["opencode", "antigravity"];
 const CATALOG_RELATIVE: &str = "external-agent-setup/providers.json";
 const VERSION_TIMEOUT: Duration = Duration::from_secs(5);
+const INSTALL_TIMEOUT: Duration = Duration::from_secs(300);
 const VERSION_MAX_CHARS: usize = 120;
+const INSTALL_OUTPUT_MAX_CHARS: usize = 600;
 const SAFE_ENV_NAMES: [&str; 18] = [
     "PATH",
     "Path",
@@ -78,8 +94,16 @@ pub struct DispatchWorkerStatus {
     pub program_path: Option<String>,
     pub version: Option<String>,
     /// Credential *file* presence only; values are never read or reported.
-    /// `null` when the bundled profile declares no credential file.
+    /// `null` when the installed profile declares no credential file.
     pub credential_file_present: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DispatchReadDir {
+    pub path: String,
+    /// The shared `.agents/skills` root.
+    pub shared: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -88,6 +112,11 @@ pub struct DispatchConnection {
     pub worker_id: String,
     pub display_name: String,
     pub skill_id: String,
+    /// The Agent read-directory that currently contains the worker Skill.
+    pub dir: String,
+    /// Other visible Agents that read the same shared directory and therefore
+    /// see the same worker; empty for an Agent-private directory.
+    pub shared_with: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -98,7 +127,7 @@ pub struct DispatchAgentNode {
     /// Whether this dispatcher has been verified end to end. Unverified Agents
     /// are shown with a light hint and can still be connected.
     pub verified: bool,
-    pub skills_dir: String,
+    pub read_dirs: Vec<DispatchReadDir>,
     pub connections: Vec<DispatchConnection>,
     /// Detected workers that are not connected to this Agent yet.
     pub addable_workers: Vec<String>,
@@ -110,9 +139,18 @@ pub struct DispatchTree {
     pub node: DispatchNodeStatus,
     pub agents: Vec<DispatchAgentNode>,
     pub workers: Vec<DispatchWorkerStatus>,
-    /// False when the bundled dispatch Skills are missing from this
-    /// installation, so the page can explain why nothing can be added.
-    pub skills_ready: bool,
+    /// False until the `hyNous/agent-dispatch` Skills are installed under
+    /// `~/.agents/skills`; the page then offers the GitHub install.
+    pub tool_installed: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DispatchInstallResult {
+    pub tool_installed: bool,
+    /// True when `~/.agents/.skill-lock.json` records the GitHub origin, so the
+    /// Skill update check can take over later.
+    pub source_recorded: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -151,9 +189,12 @@ pub struct DispatchConnectResult {
 pub struct DispatchRemoval {
     pub skill_id: String,
     pub target_path: String,
-    /// `remove` (bundled copy removed), `remove_link` (only the link is
+    /// `remove` (installed copy removed), `remove_link` (only the link is
     /// removed) or `keep_modified` (user-edited copy left in place).
     pub action: String,
+    /// Other visible Agents that share this directory, so the page can say who
+    /// else is affected.
+    pub shared_with: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -165,6 +206,9 @@ pub struct DispatchDisconnectPlan {
     pub worker_display_name: String,
     pub removals: Vec<DispatchRemoval>,
     pub kept: Vec<DispatchRemoval>,
+    /// Union of the other Agents affected because a removal happens in a
+    /// directory they also read.
+    pub affected_agents: Vec<String>,
     pub can_apply: bool,
 }
 
@@ -176,89 +220,154 @@ pub struct DispatchDisconnectResult {
 }
 
 #[tauri::command(async)]
-pub fn dispatch_tree(app: AppHandle) -> Result<DispatchTree, String> {
+pub fn dispatch_tree() -> Result<DispatchTree, String> {
     let home = fsutil::home();
     let program_detected = |agent_id: &str| {
         agent_meta::agent_program_detected(agent_id, agent_meta::agent_installed(&home, agent_id))
     };
-    Ok(tree_at(
-        dispatch_skills_root(&app).as_deref(),
-        &home,
-        &program_detected,
-    ))
+    Ok(tree_at(&home, &program_detected))
+}
+
+#[tauri::command(async)]
+pub fn dispatch_install_tool(confirm: bool) -> Result<DispatchInstallResult, String> {
+    install_tool_at(&fsutil::home(), confirm)
 }
 
 #[tauri::command(async)]
 pub fn dispatch_connect_plan(
-    app: AppHandle,
     agent_id: String,
     worker_id: String,
 ) -> Result<DispatchConnectPlan, String> {
-    connect_plan_at(
-        dispatch_skills_root(&app).as_deref(),
-        &fsutil::home(),
-        &agent_id,
-        &worker_id,
-    )
+    connect_plan_at(&fsutil::home(), &agent_id, &worker_id)
 }
 
 #[tauri::command(async)]
 pub fn dispatch_connect_apply(
-    app: AppHandle,
     agent_id: String,
     worker_id: String,
     confirm: bool,
 ) -> Result<DispatchConnectResult, String> {
-    connect_apply_at(
-        dispatch_skills_root(&app).as_deref(),
-        &fsutil::home(),
-        &agent_id,
-        &worker_id,
-        confirm,
-    )
+    connect_apply_at(&fsutil::home(), &agent_id, &worker_id, confirm)
 }
 
 #[tauri::command(async)]
 pub fn dispatch_disconnect_plan(
-    app: AppHandle,
     agent_id: String,
     worker_id: String,
 ) -> Result<DispatchDisconnectPlan, String> {
-    disconnect_plan_at(
-        dispatch_skills_root(&app).as_deref(),
-        &fsutil::home(),
-        &agent_id,
-        &worker_id,
-    )
+    disconnect_plan_at(&fsutil::home(), &agent_id, &worker_id)
 }
 
 #[tauri::command(async)]
 pub fn dispatch_disconnect_apply(
-    app: AppHandle,
     agent_id: String,
     worker_id: String,
     confirm: bool,
 ) -> Result<DispatchDisconnectResult, String> {
-    disconnect_apply_at(
-        dispatch_skills_root(&app).as_deref(),
-        &fsutil::home(),
-        &agent_id,
-        &worker_id,
-        confirm,
-    )
+    disconnect_apply_at(&fsutil::home(), &agent_id, &worker_id, confirm)
 }
 
-fn dispatch_skills_root(app: &AppHandle) -> Option<PathBuf> {
-    let mut candidates = Vec::new();
-    if let Ok(resource_dir) = app.path().resource_dir() {
-        candidates.push(resource_dir.join("dispatch-skills"));
+/// The shared root every Agent that reads it loads Skills from.
+fn installed_skills_root(home: &Path) -> PathBuf {
+    home.join(".agents").join("skills")
+}
+
+/// Whether the separately published dispatch tool is installed on this machine.
+fn dispatch_skills_installed(home: &Path) -> bool {
+    let root = installed_skills_root(home);
+    INSTALLED_SKILLS
+        .iter()
+        .all(|skill_id| root.join(skill_id).join("SKILL.md").is_file())
+}
+
+/// Install the tool from GitHub through `npx skills`, after confirmation.
+/// Network access happens inside the user's own Node/npm tooling; Vibe Board
+/// only runs the documented command and verifies the result.
+fn install_tool_at(home: &Path, confirm: bool) -> Result<DispatchInstallResult, String> {
+    if !confirm {
+        return Err(
+            "CONFIRMATION_REQUIRED: explain the GitHub download and confirm before installing"
+                .to_string(),
+        );
     }
-    candidates.push(
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("resources")
-            .join("dispatch-skills"),
-    );
-    candidates.into_iter().find(|path| path.is_dir())
+    let npx = find_on_path("npx")
+        .ok_or_else(|| "NODE_MISSING: Node.js (npx) was not found on PATH".to_string())?;
+    let mut command = npx_command(&npx);
+    command
+        .args([
+            "skills",
+            "add",
+            DISPATCH_REPO,
+            "--global",
+            "--agent",
+            "claude-code",
+            "--agent",
+            "codex",
+            "--yes",
+        ])
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    apply_safe_env(&mut command, home);
+    let output = run_with_timeout(command, INSTALL_TIMEOUT)
+        .ok_or_else(|| "INSTALL_TIMEOUT: the install command did not finish".to_string())?;
+    if !output.status.success() {
+        return Err(format!(
+            "INSTALL_FAILED: {}",
+            install_output_detail(&output)
+        ));
+    }
+    if !dispatch_skills_installed(home) {
+        return Err(
+            "INSTALL_INCOMPLETE: the install command finished but the Skill files are missing"
+                .to_string(),
+        );
+    }
+    let lock = skill_lock::load(home);
+    let source_recorded = INSTALLED_SKILLS.iter().all(|skill_id| {
+        skill_lock::find(&lock, skill_id)
+            .and_then(skill_lock::github_repo)
+            .is_some_and(|(owner, repo)| {
+                owner.eq_ignore_ascii_case(DISPATCH_REPO_OWNER)
+                    && repo.eq_ignore_ascii_case(DISPATCH_REPO_NAME)
+            })
+    });
+    Ok(DispatchInstallResult {
+        tool_installed: true,
+        source_recorded,
+    })
+}
+
+fn npx_command(npx: &Path) -> Command {
+    #[cfg(windows)]
+    {
+        // `npx` is a `.cmd` shim that CreateProcess cannot run directly; cmd.exe
+        // also resolves it from the already-verified PATH.
+        let _ = npx;
+        let mut command = background_command("cmd");
+        command.arg("/C").arg("npx");
+        command
+    }
+    #[cfg(not(windows))]
+    {
+        background_command(npx)
+    }
+}
+
+fn install_output_detail(output: &Output) -> String {
+    let bytes = if output.stderr.iter().any(|byte| !byte.is_ascii_whitespace()) {
+        &output.stderr
+    } else {
+        &output.stdout
+    };
+    let text = String::from_utf8_lossy(bytes);
+    text.lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty())
+        .unwrap_or("no output")
+        .chars()
+        .take(INSTALL_OUTPUT_MAX_CHARS)
+        .collect()
 }
 
 struct WorkerProfile {
@@ -269,8 +378,10 @@ struct WorkerProfile {
     credential_file_candidates: Vec<String>,
 }
 
-fn load_profiles(resources_root: &Path) -> Result<BTreeMap<String, WorkerProfile>, String> {
-    let path = resources_root.join(CATALOG_RELATIVE);
+/// Worker command profiles come from the installed `external-agent-setup`
+/// Skill, so detection follows the same catalog the worker itself uses.
+fn load_profiles(home: &Path) -> Result<BTreeMap<String, WorkerProfile>, String> {
+    let path = installed_skills_root(home).join(CATALOG_RELATIVE);
     let content = std::fs::read_to_string(&path)
         .map_err(|error| format!("failed to read {}: {error}", path.display()))?;
     let catalog: serde_json::Value = serde_json::from_str(&content)
@@ -333,12 +444,9 @@ fn load_profiles(resources_root: &Path) -> Result<BTreeMap<String, WorkerProfile
     Ok(profiles)
 }
 
-fn tree_at(
-    resources_root: Option<&Path>,
-    home: &Path,
-    program_detected: &dyn Fn(&str) -> bool,
-) -> DispatchTree {
-    let profiles = resources_root.and_then(|root| load_profiles(root).ok());
+fn tree_at(home: &Path, program_detected: &dyn Fn(&str) -> bool) -> DispatchTree {
+    let tool_installed = dispatch_skills_installed(home);
+    let profiles = load_profiles(home).ok();
     let workers = profiles
         .as_ref()
         .map(|profiles| detect_workers(profiles, home))
@@ -349,18 +457,37 @@ fn tree_at(
         .map(|worker| worker.id.clone())
         .collect::<Vec<_>>();
 
-    let agents = agent_meta::visible_agent_ids()
+    let agent_ids = agent_meta::visible_agent_ids()
         .into_iter()
         .filter(|agent_id| program_detected(agent_id))
-        .filter_map(|agent_id| {
-            let skills_dir = normalized_agent_skills_dir(home, &agent_id)?;
+        .collect::<Vec<_>>();
+    let agents = agent_ids
+        .iter()
+        .map(|agent_id| {
+            let read = agent_meta::agent_read_skill_dirs(home, agent_id);
+            let read_dirs = read
+                .dirs
+                .iter()
+                .map(|dir| DispatchReadDir {
+                    path: native_path(&dir.path).display().to_string(),
+                    shared: dir.shared,
+                })
+                .collect::<Vec<_>>();
+            // An Agent never dispatches to itself: OpenCode reading the shared
+            // folder that holds opencode-agent is not a connection to itself.
             let connections = WORKER_SKILLS
                 .iter()
-                .filter(|(_, skill_id)| skills_dir.join(skill_id).join("SKILL.md").is_file())
-                .map(|(worker_id, skill_id)| DispatchConnection {
-                    worker_id: (*worker_id).to_string(),
-                    display_name: agent_meta::display_name(worker_id),
-                    skill_id: (*skill_id).to_string(),
+                .filter(|(worker_id, _)| *worker_id != agent_id.as_str())
+                .filter_map(|(worker_id, skill_id)| {
+                    let (matched, shared_with) =
+                        find_worker_dir(home, agent_id, skill_id, &read.dirs, &agent_ids)?;
+                    Some(DispatchConnection {
+                        worker_id: (*worker_id).to_string(),
+                        display_name: agent_meta::display_name(worker_id),
+                        skill_id: (*skill_id).to_string(),
+                        dir: native_path(&matched.path).display().to_string(),
+                        shared_with,
+                    })
                 })
                 .collect::<Vec<_>>();
             let connected = connections
@@ -374,14 +501,14 @@ fn tree_at(
                 .filter(|worker_id| !connected.contains(&worker_id.as_str()))
                 .map(|worker_id| worker_id.to_string())
                 .collect::<Vec<_>>();
-            Some(DispatchAgentNode {
+            DispatchAgentNode {
                 agent_id: agent_id.clone(),
-                display_name: agent_meta::display_name(&agent_id),
+                display_name: agent_meta::display_name(agent_id),
                 verified: VERIFIED_AGENT_IDS.contains(&agent_id.as_str()),
-                skills_dir: skills_dir.display().to_string(),
+                read_dirs,
                 connections,
                 addable_workers,
-            })
+            }
         })
         .collect();
 
@@ -389,20 +516,60 @@ fn tree_at(
         node: detect_node(home),
         agents,
         workers,
-        skills_ready: bundled_skills_ready(resources_root),
+        tool_installed,
     }
 }
 
-fn bundled_skills_ready(resources_root: Option<&Path>) -> bool {
-    let Some(root) = resources_root else {
-        return false;
-    };
-    SHARED_SKILLS
+/// Find the first read directory that contains the worker Skill. For a shared
+/// directory the other visible Agents reading it are reported too.
+fn find_worker_dir(
+    home: &Path,
+    agent_id: &str,
+    skill_id: &str,
+    read_dirs: &[agent_meta::AgentSkillReadDir],
+    visible_agents: &[String],
+) -> Option<(agent_meta::AgentSkillReadDir, Vec<String>)> {
+    for dir in read_dirs {
+        if !dir.path.join(skill_id).join("SKILL.md").is_file() {
+            continue;
+        }
+        let shared_with = if dir.shared {
+            shared_dir_agents(home, &dir.path, skill_id, agent_id, visible_agents)
+                .into_iter()
+                .map(|other| agent_meta::display_name(&other))
+                .collect()
+        } else {
+            Vec::new()
+        };
+        return Some((dir.clone(), shared_with));
+    }
+    None
+}
+
+/// Other visible Agents that read the same shared directory and see the same
+/// worker Skill there.
+fn shared_dir_agents(
+    home: &Path,
+    dir: &Path,
+    skill_id: &str,
+    agent_id: &str,
+    visible_agents: &[String],
+) -> Vec<String> {
+    visible_agents
         .iter()
-        .all(|skill_id| root.join(skill_id).join("SKILL.md").is_file())
-        && WORKER_SKILLS
-            .iter()
-            .all(|(_, skill_id)| root.join(skill_id).join("SKILL.md").is_file())
+        .filter(|other| other.as_str() != agent_id)
+        .filter(|other| {
+            agent_meta::agent_read_skill_dirs(home, other)
+                .dirs
+                .iter()
+                .any(|candidate| {
+                    candidate.shared
+                        && candidate.path.as_path() == dir
+                        && candidate.path.join(skill_id).join("SKILL.md").is_file()
+                })
+        })
+        .cloned()
+        .collect()
 }
 
 fn detect_node(home: &Path) -> DispatchNodeStatus {
@@ -471,23 +638,27 @@ fn connection_skill_ids(worker_id: &str) -> Result<Vec<&'static str>, String> {
     Ok(skill_ids)
 }
 
-fn normalized_agent_skills_dir(home: &Path, agent_id: &str) -> Option<PathBuf> {
-    agent_meta::agent_skills_dir(home, agent_id).map(|dir| native_path(&dir))
-}
-
-fn dispatch_agent_skills_dir(home: &Path, agent_id: &str) -> Result<PathBuf, String> {
+/// The directory a connection writes. A shared read location comes first: a
+/// Skill written there is visible to every Agent that reads it, so no
+/// Agent-private duplicate is created. Agents without a shared location use
+/// their first private directory.
+fn dispatch_target_dir(home: &Path, agent_id: &str) -> Result<PathBuf, String> {
     if !agent_meta::visible_agent_ids()
         .iter()
         .any(|id| id == agent_id)
     {
         return Err(format!("UNKNOWN_AGENT: {agent_id} is not a known Agent"));
     }
-    normalized_agent_skills_dir(home, agent_id)
+    let read = agent_meta::agent_read_skill_dirs(home, agent_id);
+    read.dirs
+        .iter()
+        .find(|dir| dir.shared)
+        .or_else(|| read.dirs.first())
+        .map(|dir| native_path(&dir.path))
         .ok_or_else(|| format!("NO_SKILLS_DIR: {agent_id} has no user-level Skill directory"))
 }
 
 fn connect_plan_at(
-    resources_root: Option<&Path>,
     home: &Path,
     agent_id: &str,
     worker_id: &str,
@@ -495,21 +666,22 @@ fn connect_plan_at(
     if agent_id == worker_id {
         return Err(format!("{agent_id} cannot dispatch tasks to itself"));
     }
-    let skills_dir = dispatch_agent_skills_dir(home, agent_id)?;
+    let target_dir = dispatch_target_dir(home, agent_id)?;
     let skill_ids = connection_skill_ids(worker_id)?;
+    let source_root = installed_skills_root(home);
 
     let mut files = Vec::new();
-    let mut missing_skills = resources_root.is_none();
-    if let Some(root) = resources_root {
+    let mut missing_skills = !dispatch_skills_installed(home);
+    if !missing_skills {
         for skill_id in skill_ids {
-            let source_dir = root.join(skill_id);
+            let source_dir = source_root.join(skill_id);
             if !source_dir.join("SKILL.md").is_file() {
                 missing_skills = true;
                 continue;
             }
-            let target_dir = skills_dir.join(skill_id);
+            let target = target_dir.join(skill_id);
             for (relative, source_path) in collect_skill_files(&source_dir)? {
-                let target_path = join_relative(&target_dir, &relative);
+                let target_path = join_relative(&target, &relative);
                 let change = planned_change(&source_path, &target_path);
                 files.push(DispatchPlanFile {
                     skill_id: skill_id.to_string(),
@@ -524,7 +696,7 @@ fn connect_plan_at(
 
     let mut blockers = Vec::new();
     if missing_skills {
-        blockers.push("skills_missing".to_string());
+        blockers.push("tool_missing".to_string());
     }
     if !detect_node(home).available {
         blockers.push("node_missing".to_string());
@@ -543,7 +715,6 @@ fn connect_plan_at(
 }
 
 fn connect_apply_at(
-    resources_root: Option<&Path>,
     home: &Path,
     agent_id: &str,
     worker_id: &str,
@@ -555,7 +726,7 @@ fn connect_apply_at(
                 .to_string(),
         );
     }
-    let plan = connect_plan_at(resources_root, home, agent_id, worker_id)?;
+    let plan = connect_plan_at(home, agent_id, worker_id)?;
     if !plan.blockers.is_empty() {
         return Err(format!(
             "DISPATCH_PLAN_BLOCKED: {}",
@@ -588,62 +759,132 @@ fn connect_apply_at(
 enum SkillTargetState {
     Missing,
     Link,
-    BundledCopy,
+    InstalledCopy,
+    /// The one real copy in the shared Skill folder (`~/.agents/skills`) that
+    /// every Agent reading that folder uses. Disconnecting never deletes it:
+    /// there is no other copy to compare against, so local edits would be
+    /// lost, and links from other Agents would be left dangling.
+    SharedInstall,
     Modified,
 }
 
 fn disconnect_plan_at(
-    resources_root: Option<&Path>,
     home: &Path,
     agent_id: &str,
     worker_id: &str,
 ) -> Result<DispatchDisconnectPlan, String> {
     let worker_skill = worker_skill_id(worker_id)
         .ok_or_else(|| format!("UNKNOWN_WORKER: {worker_id} is not a known worker"))?;
-    let skills_dir = dispatch_agent_skills_dir(home, agent_id)?;
+    let read = agent_meta::agent_read_skill_dirs(home, agent_id);
+    if !agent_meta::visible_agent_ids()
+        .iter()
+        .any(|id| id == agent_id)
+    {
+        return Err(format!("UNKNOWN_AGENT: {agent_id} is not a known Agent"));
+    }
+    let detected_agents = detected_visible_agents(home);
 
     let mut removals = Vec::new();
     let mut kept = Vec::new();
+    let mut removing_dirs: Vec<PathBuf> = Vec::new();
 
-    let worker_target = skills_dir.join(worker_skill);
-    let worker_state = classify_target(
-        bundled_skill_dir(resources_root, worker_skill),
-        &worker_target,
-    );
-    let worker_removed = match worker_state {
-        SkillTargetState::Missing => false,
-        SkillTargetState::Link => {
-            removals.push(removal(worker_skill, &worker_target, "remove_link"));
-            true
-        }
-        SkillTargetState::BundledCopy => {
-            removals.push(removal(worker_skill, &worker_target, "remove"));
-            true
-        }
-        SkillTargetState::Modified => {
-            kept.push(removal(worker_skill, &worker_target, "keep_modified"));
-            false
-        }
-    };
-
-    let other_worker_connected = WORKER_SKILLS
-        .iter()
-        .filter(|(id, _)| *id != worker_id)
-        .any(|(_, skill_id)| skills_dir.join(skill_id).join("SKILL.md").is_file());
-    let worker_stays = worker_target.join("SKILL.md").is_file() && !worker_removed;
-    if !other_worker_connected && !worker_stays {
-        let core_skill = "external-agent-core";
-        let core_target = skills_dir.join(core_skill);
-        match classify_target(bundled_skill_dir(resources_root, core_skill), &core_target) {
+    for dir in &read.dirs {
+        let target = native_path(&dir.path).join(worker_skill);
+        let shared_with = if dir.shared {
+            shared_dir_agents(home, &dir.path, worker_skill, agent_id, &detected_agents)
+                .into_iter()
+                .map(|other| agent_meta::display_name(&other))
+                .collect()
+        } else {
+            Vec::new()
+        };
+        let source = installed_skill_dir(home, worker_skill);
+        match classify_target(source, &target) {
             SkillTargetState::Missing => {}
             SkillTargetState::Link => {
-                removals.push(removal(core_skill, &core_target, "remove_link"));
+                removals.push(removal(worker_skill, &target, "remove_link", shared_with));
+                removing_dirs.push(dir.path.clone());
             }
-            SkillTargetState::BundledCopy => {
-                removals.push(removal(core_skill, &core_target, "remove"));
+            SkillTargetState::InstalledCopy => {
+                removals.push(removal(worker_skill, &target, "remove", shared_with));
+                removing_dirs.push(dir.path.clone());
+            }
+            SkillTargetState::SharedInstall => {
+                kept.push(removal(worker_skill, &target, "keep_shared", shared_with));
             }
             SkillTargetState::Modified => {
-                kept.push(removal(core_skill, &core_target, "keep_modified"));
+                kept.push(removal(worker_skill, &target, "keep_modified", shared_with));
+            }
+        }
+    }
+
+    // Remove the shared core from a directory only when no other worker remains
+    // there and no other Agent that reads the directory still dispatches from it.
+    for dir in &removing_dirs {
+        let other_worker_connected = WORKER_SKILLS
+            .iter()
+            .filter(|(id, _)| *id != worker_id)
+            .any(|(_, skill_id)| dir.join(skill_id).join("SKILL.md").is_file());
+        let other_agent_connected = detected_agents.iter().any(|other| {
+            other.as_str() != agent_id
+                && agent_meta::agent_read_skill_dirs(home, other)
+                    .dirs
+                    .iter()
+                    .any(|candidate| {
+                        candidate.shared
+                            && candidate.path.as_path() == dir.as_path()
+                            && WORKER_SKILLS.iter().any(|(_, skill_id)| {
+                                candidate.path.join(skill_id).join("SKILL.md").is_file()
+                            })
+                    })
+        });
+        if other_worker_connected || other_agent_connected {
+            continue;
+        }
+        let core_skill = "external-agent-core";
+        let core_target = dir.join(core_skill);
+        let shared_with = detected_agents
+            .iter()
+            .filter(|other| other.as_str() != agent_id)
+            .filter(|other| {
+                agent_meta::agent_read_skill_dirs(home, other)
+                    .dirs
+                    .iter()
+                    .any(|candidate| candidate.shared && candidate.path.as_path() == dir.as_path())
+            })
+            .map(|other| agent_meta::display_name(other))
+            .collect();
+        match classify_target(installed_skill_dir(home, core_skill), &core_target) {
+            SkillTargetState::Missing => {}
+            SkillTargetState::Link => removals.push(removal(
+                core_skill,
+                &core_target,
+                "remove_link",
+                shared_with,
+            )),
+            SkillTargetState::InstalledCopy => {
+                removals.push(removal(core_skill, &core_target, "remove", shared_with))
+            }
+            SkillTargetState::SharedInstall => kept.push(removal(
+                core_skill,
+                &core_target,
+                "keep_shared",
+                shared_with,
+            )),
+            SkillTargetState::Modified => kept.push(removal(
+                core_skill,
+                &core_target,
+                "keep_modified",
+                shared_with,
+            )),
+        }
+    }
+
+    let mut affected_agents = Vec::new();
+    for entry in &removals {
+        for agent in &entry.shared_with {
+            if !affected_agents.contains(agent) {
+                affected_agents.push(agent.clone());
             }
         }
     }
@@ -656,11 +897,11 @@ fn disconnect_plan_at(
         can_apply: !removals.is_empty() || !kept.is_empty(),
         removals,
         kept,
+        affected_agents,
     })
 }
 
 fn disconnect_apply_at(
-    resources_root: Option<&Path>,
     home: &Path,
     agent_id: &str,
     worker_id: &str,
@@ -672,7 +913,7 @@ fn disconnect_apply_at(
                 .to_string(),
         );
     }
-    let plan = disconnect_plan_at(resources_root, home, agent_id, worker_id)?;
+    let plan = disconnect_plan_at(home, agent_id, worker_id)?;
     let mut removed = Vec::new();
     for entry in &plan.removals {
         let path = Path::new(&entry.target_path);
@@ -690,16 +931,23 @@ fn disconnect_apply_at(
     })
 }
 
-fn removal(skill_id: &str, target: &Path, action: &str) -> DispatchRemoval {
+fn removal(
+    skill_id: &str,
+    target: &Path,
+    action: &str,
+    shared_with: Vec<String>,
+) -> DispatchRemoval {
     DispatchRemoval {
         skill_id: skill_id.to_string(),
         target_path: native_path(target).display().to_string(),
         action: action.to_string(),
+        shared_with,
     }
 }
 
-fn bundled_skill_dir(resources_root: Option<&Path>, skill_id: &str) -> Option<PathBuf> {
-    resources_root.map(|root| root.join(skill_id))
+fn installed_skill_dir(home: &Path, skill_id: &str) -> Option<PathBuf> {
+    let path = installed_skills_root(home).join(skill_id);
+    path.is_dir().then_some(path)
 }
 
 fn classify_target(source_dir: Option<PathBuf>, target_dir: &Path) -> SkillTargetState {
@@ -713,17 +961,20 @@ fn classify_target(source_dir: Option<PathBuf>, target_dir: &Path) -> SkillTarge
         return SkillTargetState::Modified;
     }
     let Some(source_dir) = source_dir else {
-        // Without the bundled copy there is no proof the local files are
-        // untouched, so a user directory is never deleted.
+        // Without an unmodified installed copy there is no proof the local
+        // files are untouched, so a user directory is never deleted.
         return SkillTargetState::Modified;
     };
-    match directory_matches_bundle(&source_dir, target_dir) {
-        Ok(true) => SkillTargetState::BundledCopy,
+    if source_dir.as_path() == target_dir {
+        return SkillTargetState::SharedInstall;
+    }
+    match directory_matches_source(&source_dir, target_dir) {
+        Ok(true) => SkillTargetState::InstalledCopy,
         _ => SkillTargetState::Modified,
     }
 }
 
-fn directory_matches_bundle(source_dir: &Path, target_dir: &Path) -> Result<bool, String> {
+fn directory_matches_source(source_dir: &Path, target_dir: &Path) -> Result<bool, String> {
     let source = collect_skill_files(source_dir)?;
     let target = collect_skill_files(target_dir)?;
     if source.len() != target.len() {
@@ -744,6 +995,18 @@ fn directory_matches_bundle(source_dir: &Path, target_dir: &Path) -> Result<bool
         }
     }
     Ok(true)
+}
+
+fn detected_visible_agents(home: &Path) -> Vec<String> {
+    agent_meta::visible_agent_ids()
+        .into_iter()
+        .filter(|agent_id| {
+            agent_meta::agent_program_detected(
+                agent_id,
+                agent_meta::agent_installed(home, agent_id),
+            )
+        })
+        .collect()
 }
 
 #[cfg(windows)]
@@ -1054,13 +1317,47 @@ mod tests {
             path
         }
 
-        fn skills_root(&self, agent_id: &str) -> PathBuf {
-            let relative = match agent_id {
-                "claude-code" => ".claude",
-                "codex" => ".codex",
-                other => panic!("no test skill root for {other}"),
-            };
-            self.home.join(relative).join("skills")
+        /// A local stand-in for `npx skills add`: writes the installed Skill
+        /// tree and the `.skill-lock.json` source records itself, so no test
+        /// ever reaches GitHub or a real npm.
+        fn stub_npx_install(&self) -> PathBuf {
+            let path = self.bin.join(stub_file_name("npx"));
+            #[cfg(windows)]
+            {
+                let script = format!(
+                    "@echo off\r\n\
+                     echo %*> \"%HOME%\\npx-args.txt\"\r\n\
+                     set \"ROOT=%HOME%\\.agents\\skills\"\r\n\
+                     mkdir \"%ROOT%\\external-agent-core\" 2>nul\r\n\
+                     mkdir \"%ROOT%\\external-agent-setup\" 2>nul\r\n\
+                     mkdir \"%ROOT%\\opencode-agent\" 2>nul\r\n\
+                     mkdir \"%ROOT%\\antigravity-agent\" 2>nul\r\n\
+                     echo # core> \"%ROOT%\\external-agent-core\\SKILL.md\"\r\n\
+                     echo # setup> \"%ROOT%\\external-agent-setup\\SKILL.md\"\r\n\
+                     echo # opencode> \"%ROOT%\\opencode-agent\\SKILL.md\"\r\n\
+                     echo # antigravity> \"%ROOT%\\antigravity-agent\\SKILL.md\"\r\n\
+                     echo {{\"version\":3,\"skills\":{{\"external-agent-core\":{{\"sourceType\":\"github\",\"sourceUrl\":\"https://github.com/hyNous/agent-dispatch.git\",\"skillPath\":\"skills/external-agent-core/SKILL.md\"}},\"external-agent-setup\":{{\"sourceType\":\"github\",\"sourceUrl\":\"https://github.com/hyNous/agent-dispatch.git\"}},\"opencode-agent\":{{\"sourceType\":\"github\",\"sourceUrl\":\"https://github.com/hyNous/agent-dispatch.git\"}},\"antigravity-agent\":{{\"sourceType\":\"github\",\"sourceUrl\":\"https://github.com/hyNous/agent-dispatch.git\"}}}}}}> \"%HOME%\\.agents\\.skill-lock.json\"\r\n\
+                     exit /b 0\r\n"
+                );
+                std::fs::write(&path, script).unwrap();
+            }
+            #[cfg(not(windows))]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let script = "#!/bin/sh\n\
+                    printf '%s\\n' \"$@\" > \"$HOME/npx-args.txt\"\n\
+                    ROOT=\"$HOME/.agents/skills\"\n\
+                    mkdir -p \"$ROOT/external-agent-core\" \"$ROOT/external-agent-setup\" \"$ROOT/opencode-agent\" \"$ROOT/antigravity-agent\"\n\
+                    printf '# core\\n' > \"$ROOT/external-agent-core/SKILL.md\"\n\
+                    printf '# setup\\n' > \"$ROOT/external-agent-setup/SKILL.md\"\n\
+                    printf '# opencode\\n' > \"$ROOT/opencode-agent/SKILL.md\"\n\
+                    printf '# antigravity\\n' > \"$ROOT/antigravity-agent/SKILL.md\"\n\
+                    printf '{\"version\":3,\"skills\":{\"external-agent-core\":{\"sourceType\":\"github\",\"sourceUrl\":\"https://github.com/hyNous/agent-dispatch.git\"},\"external-agent-setup\":{\"sourceType\":\"github\",\"sourceUrl\":\"https://github.com/hyNous/agent-dispatch.git\"},\"opencode-agent\":{\"sourceType\":\"github\",\"sourceUrl\":\"https://github.com/hyNous/agent-dispatch.git\"},\"antigravity-agent\":{\"sourceType\":\"github\",\"sourceUrl\":\"https://github.com/hyNous/agent-dispatch.git\"}}}\\n' > \"$HOME/.agents/.skill-lock.json\"\n\
+                    exit 0\n";
+                std::fs::write(&path, script).unwrap();
+                std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+            }
+            path
         }
     }
 
@@ -1087,10 +1384,36 @@ mod tests {
         }
     }
 
-    fn repository_resources() -> PathBuf {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("resources")
-            .join("dispatch-skills")
+    /// Reproduce the maintainer machine: the dispatch Skills are installed in
+    /// the shared root and a local catalog describes the two workers.
+    fn seed_installed_dispatch_skills(env: &TempEnv) {
+        let root = installed_skills_root(&env.home);
+        for skill in INSTALLED_SKILLS {
+            std::fs::create_dir_all(root.join(skill)).unwrap();
+            std::fs::write(root.join(skill).join("SKILL.md"), format!("# {skill}\n")).unwrap();
+        }
+        std::fs::write(
+            root.join("external-agent-setup").join("providers.json"),
+            serde_json::json!({
+                "providers": {
+                    "opencode": {
+                        "command": "opencode",
+                        "command_env": "OPENCODE_BIN",
+                        "check_args": ["--version"],
+                        "quota_check": {
+                            "credential_file_candidates": ["${USERPROFILE}/.local/share/opencode/auth.json"]
+                        }
+                    },
+                    "antigravity": {
+                        "command": "agy",
+                        "command_env": "AGY_BIN",
+                        "check_args": ["--version"]
+                    }
+                }
+            })
+            .to_string(),
+        )
+        .unwrap();
     }
 
     fn stub_workers(env: &TempEnv) {
@@ -1117,14 +1440,6 @@ mod tests {
         }
         files.sort();
         files
-    }
-
-    fn copy_skill(source_root: &Path, skill_id: &str, target_dir: &Path) {
-        for (relative, source_path) in collect_skill_files(&source_root.join(skill_id)).unwrap() {
-            let target_path = join_relative(target_dir, &relative);
-            std::fs::create_dir_all(target_path.parent().unwrap()).unwrap();
-            std::fs::write(&target_path, std::fs::read(&source_path).unwrap()).unwrap();
-        }
     }
 
     /// Directory symlink on unix, junction on Windows (junctions need no
@@ -1156,12 +1471,17 @@ mod tests {
         }
     }
 
-    fn tree_for(env: &TempEnv, resources: &Path, detected: &[&str]) -> DispatchTree {
+    fn tree_for(env: &TempEnv, detected: &[&str]) -> DispatchTree {
         // Production detection walks PATH; tests inject the Agent ids so the
         // tree shape never depends on programs installed on the test machine.
-        tree_at(Some(resources), &env.home, &|agent_id| {
-            detected.contains(&agent_id)
-        })
+        tree_at(&env.home, &|agent_id| detected.contains(&agent_id))
+    }
+
+    fn connection_workers(node: &DispatchAgentNode) -> Vec<&str> {
+        node.connections
+            .iter()
+            .map(|connection| connection.worker_id.as_str())
+            .collect()
     }
 
     #[test]
@@ -1191,56 +1511,154 @@ mod tests {
     }
 
     #[test]
-    fn tree_lists_detected_agents_with_their_connections_and_addable_workers() {
-        let env = TempEnv::new("tree");
+    fn tree_offers_the_github_install_before_the_tool_is_installed() {
+        let env = TempEnv::new("not-installed");
         stub_workers(&env);
-        let resources = repository_resources();
-        connect_apply_at(Some(&resources), &env.home, "claude-code", "opencode", true).unwrap();
 
-        let tree = tree_for(&env, &resources, &["claude-code", "codex", "gemini"]);
+        let tree = tree_for(&env, &["claude-code", "codex"]);
 
-        assert!(tree.node.available);
-        assert!(tree.skills_ready);
-        let ids = tree
+        assert!(!tree.tool_installed);
+        assert!(tree.workers.is_empty(), "no catalog before the install");
+        assert!(tree.agents.iter().all(|agent| agent.connections.is_empty()));
+        assert!(tree
             .agents
             .iter()
-            .map(|agent| agent.agent_id.as_str())
-            .collect::<Vec<_>>();
-        assert_eq!(ids, vec!["claude-code", "codex", "gemini"]);
+            .all(|agent| agent.addable_workers.is_empty()));
+    }
 
-        let claude = &tree.agents[0];
-        assert_eq!(claude.display_name, "Claude Code");
-        assert!(claude.verified);
+    #[test]
+    fn install_requires_confirmation_then_installs_through_a_local_stub() {
+        let env = TempEnv::new("install");
+        stub_workers(&env);
+        env.stub_npx_install();
+
+        let error = install_tool_at(&env.home, false).unwrap_err();
+        assert!(error.contains("CONFIRMATION_REQUIRED"), "{error}");
+        assert!(!env.home.join(".agents").exists());
+
+        let result = install_tool_at(&env.home, true).unwrap();
+        assert!(result.tool_installed);
+        assert!(result.source_recorded);
+        assert!(dispatch_skills_installed(&env.home));
+
+        let args = std::fs::read_to_string(env.home.join("npx-args.txt")).unwrap();
+        for expected in [
+            "skills",
+            "add",
+            "hyNous/agent-dispatch",
+            "--global",
+            "--agent",
+            "claude-code",
+            "--agent",
+            "codex",
+            "--yes",
+        ] {
+            assert!(args.contains(expected), "{expected} missing from {args}");
+        }
+
+        let lock = skill_lock::load(&env.home);
         assert_eq!(
-            claude
+            skill_lock::github_repo(skill_lock::find(&lock, "opencode-agent").unwrap()),
+            Some(("hyNous".to_string(), "agent-dispatch".to_string()))
+        );
+
+        let tree = tree_for(&env, &["claude-code", "codex"]);
+        assert!(tree.tool_installed);
+    }
+
+    #[test]
+    fn install_without_npx_reports_missing_node() {
+        let env = TempEnv::new("install-no-node");
+
+        let error = install_tool_at(&env.home, true).unwrap_err();
+        assert!(error.contains("NODE_MISSING"), "{error}");
+        assert!(!env.home.join(".agents").exists());
+    }
+
+    #[test]
+    fn maintainer_fixture_connects_claude_code_codex_and_opencode() {
+        let env = TempEnv::new("fixture");
+        stub_workers(&env);
+        seed_installed_dispatch_skills(&env);
+
+        let shared = installed_skills_root(&env.home);
+        let claude_root = env.home.join(".claude").join("skills");
+        std::fs::create_dir_all(&claude_root).unwrap();
+        for skill in INSTALLED_SKILLS {
+            if !make_dir_link(&shared.join(skill), &claude_root.join(skill)) {
+                eprintln!(
+                    "skipping link assertions: this filesystem cannot create directory links"
+                );
+                return;
+            }
+        }
+
+        let tree = tree_for(&env, &["claude-code", "codex", "opencode"]);
+        assert!(tree.tool_installed);
+        let node = |id: &str| {
+            tree.agents
+                .iter()
+                .find(|agent| agent.agent_id == id)
+                .unwrap_or_else(|| panic!("{id} node"))
+        };
+        for agent_id in ["claude-code", "codex"] {
+            assert_eq!(
+                connection_workers(node(agent_id)),
+                vec!["opencode", "antigravity"],
+                "{agent_id} must read both workers"
+            );
+        }
+        // OpenCode reads the same folder but is never its own worker.
+        assert_eq!(connection_workers(node("opencode")), vec!["antigravity"]);
+
+        // The shared-dir Agents name each other; Claude Code has its own links.
+        let codex = node("codex");
+        let shared_connection = codex
+            .connections
+            .iter()
+            .find(|connection| connection.worker_id == "opencode")
+            .unwrap();
+        assert!(Path::new(&shared_connection.dir) == installed_skills_root(&env.home).as_path());
+        assert!(
+            shared_connection
+                .shared_with
+                .iter()
+                .any(|name| name == "OpenCode"),
+            "{:?}",
+            shared_connection.shared_with
+        );
+        let claude = node("claude-code");
+        assert!(claude
+            .connections
+            .iter()
+            .all(|connection| connection.shared_with.is_empty()));
+        let opencode = node("opencode");
+        assert!(
+            opencode
                 .connections
                 .iter()
-                .map(|connection| connection.worker_id.as_str())
-                .collect::<Vec<_>>(),
-            vec!["opencode"]
+                .all(|connection| connection.shared_with.iter().any(|name| name == "Codex")),
+            "{:?}",
+            opencode.connections
         );
-        assert_eq!(claude.addable_workers, vec!["antigravity"]);
 
-        let codex = &tree.agents[1];
-        assert!(codex.verified);
-        assert!(codex.connections.is_empty());
-        assert_eq!(codex.addable_workers, vec!["opencode", "antigravity"]);
-
-        let gemini = &tree.agents[2];
-        assert!(!gemini.verified, "only Claude Code and Codex are verified");
-        assert_eq!(gemini.addable_workers, vec!["opencode", "antigravity"]);
-
-        assert_eq!(tree.workers.len(), 2);
-        assert!(tree.workers.iter().all(|worker| worker.detected));
+        assert!(node("claude-code").addable_workers.is_empty());
+        assert!(node("codex").addable_workers.is_empty());
+        assert!(node("opencode").addable_workers.is_empty());
     }
 
     #[test]
     fn an_agent_is_never_offered_as_its_own_worker() {
         let env = TempEnv::new("self");
         stub_workers(&env);
-        let resources = repository_resources();
+        seed_installed_dispatch_skills(&env);
+        // The fixture pre-installs both workers, so make them addable again by
+        // removing the workers from the shared root.
+        for skill in ["opencode-agent", "antigravity-agent"] {
+            std::fs::remove_dir_all(installed_skills_root(&env.home).join(skill)).unwrap();
+        }
 
-        let tree = tree_for(&env, &resources, &["opencode", "antigravity"]);
+        let tree = tree_for(&env, &["opencode", "antigravity"]);
         let node = |id: &str| {
             tree.agents
                 .iter()
@@ -1250,7 +1668,7 @@ mod tests {
         assert_eq!(node("opencode").addable_workers, vec!["antigravity"]);
         assert_eq!(node("antigravity").addable_workers, vec!["opencode"]);
 
-        let error = connect_plan_at(Some(&resources), &env.home, "opencode", "opencode")
+        let error = connect_plan_at(&env.home, "opencode", "opencode")
             .expect_err("self dispatch is rejected");
         assert!(error.contains("itself"), "{error}");
     }
@@ -1259,9 +1677,9 @@ mod tests {
     fn tree_omits_agents_without_a_detected_program() {
         let env = TempEnv::new("tree-undetected");
         stub_workers(&env);
-        let resources = repository_resources();
+        seed_installed_dispatch_skills(&env);
 
-        let tree = tree_for(&env, &resources, &["claude-code"]);
+        let tree = tree_for(&env, &["claude-code"]);
 
         assert_eq!(tree.agents.len(), 1);
         assert_eq!(tree.agents[0].agent_id, "claude-code");
@@ -1271,33 +1689,29 @@ mod tests {
     fn tree_reports_a_linked_worker_as_connected() {
         let env = TempEnv::new("tree-link");
         stub_workers(&env);
-        let resources = repository_resources();
-        let stored = env.home.join("skill-store").join("opencode-agent");
-        copy_skill(&resources, "opencode-agent", &stored);
-        let link = env.skills_root("claude-code").join("opencode-agent");
+        seed_installed_dispatch_skills(&env);
+        let stored = installed_skills_root(&env.home).join("opencode-agent");
+        let link = env
+            .home
+            .join(".claude")
+            .join("skills")
+            .join("opencode-agent");
         std::fs::create_dir_all(link.parent().unwrap()).unwrap();
         if !make_dir_link(&stored, &link) {
             eprintln!("skipping link assertions: this filesystem cannot create directory links");
             return;
         }
 
-        let tree = tree_for(&env, &resources, &["claude-code"]);
+        let tree = tree_for(&env, &["claude-code"]);
 
-        assert_eq!(
-            tree.agents[0]
-                .connections
-                .iter()
-                .map(|connection| connection.worker_id.as_str())
-                .collect::<Vec<_>>(),
-            vec!["opencode"]
-        );
-        assert_eq!(tree.agents[0].addable_workers, vec!["antigravity"]);
+        assert_eq!(connection_workers(&tree.agents[0]), vec!["opencode"]);
     }
 
     #[test]
     fn detection_reports_stub_programs_without_credential_values() {
         let env = TempEnv::new("detect");
         stub_workers(&env);
+        seed_installed_dispatch_skills(&env);
         let credential_file = env.home.join(".local/share/opencode/auth.json");
         std::fs::create_dir_all(credential_file.parent().unwrap()).unwrap();
         std::fs::write(
@@ -1307,7 +1721,7 @@ mod tests {
         .unwrap();
         std::env::set_var("OPENCODE_API_KEY", "another-secret-marker");
 
-        let tree = tree_for(&env, &repository_resources(), &["claude-code"]);
+        let tree = tree_for(&env, &["claude-code"]);
 
         assert!(tree.node.available);
         assert!(tree
@@ -1349,9 +1763,9 @@ mod tests {
     fn connect_plan_lists_exactly_the_files_apply_writes() {
         let env = TempEnv::new("plan-apply");
         stub_workers(&env);
-        let resources = repository_resources();
+        seed_installed_dispatch_skills(&env);
 
-        let plan = connect_plan_at(Some(&resources), &env.home, "claude-code", "opencode").unwrap();
+        let plan = connect_plan_at(&env.home, "claude-code", "opencode").unwrap();
         assert!(plan.blockers.is_empty(), "{:?}", plan.blockers);
         assert!(plan.can_apply);
         assert_eq!(plan.agent_display_name, "Claude Code");
@@ -1376,7 +1790,7 @@ mod tests {
         );
         planned_paths.sort();
 
-        let skills_root = env.skills_root("claude-code");
+        let skills_root = env.home.join(".claude").join("skills");
         for file in &plan.files {
             let target = Path::new(&file.target_path);
             assert!(
@@ -1397,8 +1811,7 @@ mod tests {
             );
         }
 
-        let result =
-            connect_apply_at(Some(&resources), &env.home, "claude-code", "opencode", true).unwrap();
+        let result = connect_apply_at(&env.home, "claude-code", "opencode", true).unwrap();
         assert_eq!(result.written_files, plan.files);
 
         let written = walk_files(&skills_root);
@@ -1420,27 +1833,13 @@ mod tests {
     fn connect_requires_confirmation_and_writes_nothing_without_it() {
         let env = TempEnv::new("confirm");
         stub_workers(&env);
-        let resources = repository_resources();
+        seed_installed_dispatch_skills(&env);
 
-        let error = connect_apply_at(
-            Some(&resources),
-            &env.home,
-            "claude-code",
-            "opencode",
-            false,
-        )
-        .unwrap_err();
+        let error = connect_apply_at(&env.home, "claude-code", "opencode", false).unwrap_err();
         assert!(error.contains("CONFIRMATION_REQUIRED"), "{error}");
         assert!(!env.home.join(".claude").exists());
 
-        let error = disconnect_apply_at(
-            Some(&resources),
-            &env.home,
-            "claude-code",
-            "opencode",
-            false,
-        )
-        .unwrap_err();
+        let error = disconnect_apply_at(&env.home, "claude-code", "opencode", false).unwrap_err();
         assert!(error.contains("CONFIRMATION_REQUIRED"), "{error}");
         assert!(!env.home.join(".claude").exists());
     }
@@ -1449,7 +1848,7 @@ mod tests {
     fn connect_is_idempotent_and_never_touches_global_instruction_files() {
         let env = TempEnv::new("idempotent");
         stub_workers(&env);
-        let resources = repository_resources();
+        seed_installed_dispatch_skills(&env);
 
         let instruction_files = [
             env.home.join(".claude").join("CLAUDE.md"),
@@ -1469,9 +1868,8 @@ mod tests {
             .map(|path| std::fs::read(path).unwrap())
             .collect::<Vec<_>>();
 
-        let first =
-            connect_apply_at(Some(&resources), &env.home, "claude-code", "opencode", true).unwrap();
-        let first_snapshot = walk_files(&env.skills_root("claude-code"))
+        let first = connect_apply_at(&env.home, "claude-code", "opencode", true).unwrap();
+        let first_snapshot = walk_files(&env.home.join(".claude").join("skills"))
             .into_iter()
             .map(|path| (path.clone(), std::fs::read(&path).unwrap()))
             .collect::<Vec<_>>();
@@ -1480,8 +1878,7 @@ mod tests {
             .iter()
             .all(|file| file.change == "create"));
 
-        let second =
-            connect_apply_at(Some(&resources), &env.home, "claude-code", "opencode", true).unwrap();
+        let second = connect_apply_at(&env.home, "claude-code", "opencode", true).unwrap();
         let paths = |files: &[DispatchPlanFile]| {
             files
                 .iter()
@@ -1494,7 +1891,7 @@ mod tests {
             .iter()
             .all(|file| file.change == "unchanged"));
 
-        let second_snapshot = walk_files(&env.skills_root("claude-code"))
+        let second_snapshot = walk_files(&env.home.join(".claude").join("skills"))
             .into_iter()
             .map(|path| (path.clone(), std::fs::read(&path).unwrap()))
             .collect::<Vec<_>>();
@@ -1511,16 +1908,18 @@ mod tests {
     fn connect_plan_marks_a_locally_edited_copy_as_overwritten() {
         let env = TempEnv::new("overwrite");
         stub_workers(&env);
-        let resources = repository_resources();
-        connect_apply_at(Some(&resources), &env.home, "claude-code", "opencode", true).unwrap();
+        seed_installed_dispatch_skills(&env);
+        connect_apply_at(&env.home, "claude-code", "opencode", true).unwrap();
 
         let edited = env
-            .skills_root("claude-code")
+            .home
+            .join(".claude")
+            .join("skills")
             .join("opencode-agent")
             .join("SKILL.md");
         std::fs::write(&edited, "my own edited copy\n").unwrap();
 
-        let plan = connect_plan_at(Some(&resources), &env.home, "claude-code", "opencode").unwrap();
+        let plan = connect_plan_at(&env.home, "claude-code", "opencode").unwrap();
         let edited_entry = plan
             .files
             .iter()
@@ -1546,12 +1945,12 @@ mod tests {
         let env = TempEnv::new("no-node");
         env.stub("opencode", "1.2.3");
         env.stub("agy", "3.4.5");
-        let resources = repository_resources();
+        seed_installed_dispatch_skills(&env);
 
-        let tree = tree_for(&env, &resources, &["claude-code"]);
+        let tree = tree_for(&env, &["claude-code"]);
         assert!(!tree.node.available);
 
-        let plan = connect_plan_at(Some(&resources), &env.home, "claude-code", "opencode").unwrap();
+        let plan = connect_plan_at(&env.home, "claude-code", "opencode").unwrap();
         assert!(plan.blockers.contains(&"node_missing".to_string()));
         assert!(!plan.can_apply);
         assert!(
@@ -1559,8 +1958,7 @@ mod tests {
             "preview still lists what would be installed"
         );
 
-        let error = connect_apply_at(Some(&resources), &env.home, "claude-code", "opencode", true)
-            .unwrap_err();
+        let error = connect_apply_at(&env.home, "claude-code", "opencode", true).unwrap_err();
         assert!(error.contains("node_missing"), "{error}");
         assert!(!env.home.join(".claude").exists());
     }
@@ -1569,25 +1967,26 @@ mod tests {
     fn disconnect_removes_links_without_touching_their_targets() {
         let env = TempEnv::new("disconnect-link");
         stub_workers(&env);
-        let resources = repository_resources();
-        let worker_store = env.home.join("skill-store").join("opencode-agent");
-        let core_store = env.home.join("skill-store").join("external-agent-core");
-        copy_skill(&resources, "opencode-agent", &worker_store);
-        copy_skill(&resources, "external-agent-core", &core_store);
-        connect_apply_at(Some(&resources), &env.home, "claude-code", "opencode", true).unwrap();
+        seed_installed_dispatch_skills(&env);
+        connect_apply_at(&env.home, "claude-code", "opencode", true).unwrap();
 
-        let skills_root = env.skills_root("claude-code");
+        let skills_root = env.home.join(".claude").join("skills");
         let worker_link = skills_root.join("opencode-agent");
         let core_link = skills_root.join("external-agent-core");
         std::fs::remove_dir_all(&worker_link).unwrap();
         std::fs::remove_dir_all(&core_link).unwrap();
-        if !make_dir_link(&worker_store, &worker_link) || !make_dir_link(&core_store, &core_link) {
+        if !make_dir_link(
+            &installed_skills_root(&env.home).join("opencode-agent"),
+            &worker_link,
+        ) || !make_dir_link(
+            &installed_skills_root(&env.home).join("external-agent-core"),
+            &core_link,
+        ) {
             eprintln!("skipping link assertions: this filesystem cannot create directory links");
             return;
         }
 
-        let plan =
-            disconnect_plan_at(Some(&resources), &env.home, "claude-code", "opencode").unwrap();
+        let plan = disconnect_plan_at(&env.home, "claude-code", "opencode").unwrap();
         assert!(plan.can_apply);
         assert_eq!(
             plan.removals
@@ -1601,14 +2000,14 @@ mod tests {
         );
         assert!(plan.kept.is_empty());
 
-        let result =
-            disconnect_apply_at(Some(&resources), &env.home, "claude-code", "opencode", true)
-                .unwrap();
+        let result = disconnect_apply_at(&env.home, "claude-code", "opencode", true).unwrap();
         assert_eq!(result.removed, plan.removals);
         assert!(!worker_link.exists(), "the link must be gone");
         assert!(!core_link.exists(), "the core link must be gone");
-        assert!(worker_store.join("SKILL.md").is_file());
-        assert!(core_store.join("SKILL.md").is_file());
+        assert!(installed_skills_root(&env.home)
+            .join("opencode-agent")
+            .join("SKILL.md")
+            .is_file());
         assert!(
             skills_root
                 .join("external-agent-setup")
@@ -1622,15 +2021,17 @@ mod tests {
     fn disconnect_keeps_a_user_modified_worker_skill_and_explains_why() {
         let env = TempEnv::new("disconnect-modified");
         stub_workers(&env);
-        let resources = repository_resources();
-        connect_apply_at(Some(&resources), &env.home, "claude-code", "opencode", true).unwrap();
+        seed_installed_dispatch_skills(&env);
+        connect_apply_at(&env.home, "claude-code", "opencode", true).unwrap();
 
-        let skills_root = env.skills_root("claude-code");
-        let worker_skill = skills_root.join("opencode-agent");
+        let worker_skill = env
+            .home
+            .join(".claude")
+            .join("skills")
+            .join("opencode-agent");
         std::fs::write(worker_skill.join("SKILL.md"), "my own edited copy\n").unwrap();
 
-        let plan =
-            disconnect_plan_at(Some(&resources), &env.home, "claude-code", "opencode").unwrap();
+        let plan = disconnect_plan_at(&env.home, "claude-code", "opencode").unwrap();
         assert!(
             plan.can_apply,
             "the user can still confirm and see the reason"
@@ -1647,13 +2048,14 @@ mod tests {
             "the shared core must stay while the worker copy remains"
         );
 
-        let result =
-            disconnect_apply_at(Some(&resources), &env.home, "claude-code", "opencode", true)
-                .unwrap();
+        let result = disconnect_apply_at(&env.home, "claude-code", "opencode", true).unwrap();
         assert!(result.removed.is_empty());
         assert_eq!(result.kept, plan.kept);
         assert!(worker_skill.join("SKILL.md").is_file());
-        assert!(skills_root
+        assert!(env
+            .home
+            .join(".claude")
+            .join("skills")
             .join("external-agent-core")
             .join("SKILL.md")
             .is_file());
@@ -1663,23 +2065,14 @@ mod tests {
     fn disconnect_removes_the_shared_core_only_after_the_last_worker() {
         let env = TempEnv::new("disconnect-last");
         stub_workers(&env);
-        let resources = repository_resources();
-        connect_apply_at(Some(&resources), &env.home, "claude-code", "opencode", true).unwrap();
-        connect_apply_at(
-            Some(&resources),
-            &env.home,
-            "claude-code",
-            "antigravity",
-            true,
-        )
-        .unwrap();
+        seed_installed_dispatch_skills(&env);
+        connect_apply_at(&env.home, "claude-code", "opencode", true).unwrap();
+        connect_apply_at(&env.home, "claude-code", "antigravity", true).unwrap();
 
-        let skills_root = env.skills_root("claude-code");
+        let skills_root = env.home.join(".claude").join("skills");
         let core = skills_root.join("external-agent-core");
 
-        let first =
-            disconnect_apply_at(Some(&resources), &env.home, "claude-code", "opencode", true)
-                .unwrap();
+        let first = disconnect_apply_at(&env.home, "claude-code", "opencode", true).unwrap();
         assert_eq!(
             first
                 .removed
@@ -1693,14 +2086,7 @@ mod tests {
             "another worker still needs the core"
         );
 
-        let second = disconnect_apply_at(
-            Some(&resources),
-            &env.home,
-            "claude-code",
-            "antigravity",
-            true,
-        )
-        .unwrap();
+        let second = disconnect_apply_at(&env.home, "claude-code", "antigravity", true).unwrap();
         assert_eq!(
             second
                 .removed
@@ -1711,7 +2097,50 @@ mod tests {
         );
         assert!(!core.exists());
 
-        let tree = tree_for(&env, &resources, &["claude-code"]);
+        let tree = tree_for(&env, &["claude-code"]);
         assert!(tree.agents[0].connections.is_empty());
+    }
+
+    #[test]
+    fn disconnecting_a_shared_worker_warns_about_the_other_shared_agent() {
+        let env = TempEnv::new("disconnect-shared");
+        stub_workers(&env);
+        seed_installed_dispatch_skills(&env);
+
+        // Codex reads the worker from the one shared copy in ~/.agents/skills.
+        // Disconnecting must not delete that copy: every other Agent reading the
+        // folder (OpenCode here, Claude Code through its link) would lose it,
+        // and local edits there have nothing to be compared against.
+        let shared_copy = env
+            .home
+            .join(".agents")
+            .join("skills")
+            .join("opencode-agent");
+        let plan = disconnect_plan_at(&env.home, "codex", "opencode").unwrap();
+        let kept = plan
+            .kept
+            .iter()
+            .find(|entry| entry.skill_id == "opencode-agent")
+            .expect("shared copy is kept");
+        assert_eq!(kept.action, "keep_shared");
+        assert!(
+            kept.shared_with.iter().any(|name| name == "OpenCode"),
+            "{:?}",
+            kept.shared_with
+        );
+        assert!(plan
+            .removals
+            .iter()
+            .all(|entry| Path::new(&entry.target_path) != shared_copy));
+
+        let result = disconnect_apply_at(&env.home, "codex", "opencode", true).unwrap();
+        assert!(result
+            .removed
+            .iter()
+            .all(|entry| entry.skill_id != "opencode-agent"));
+        assert!(
+            shared_copy.join("SKILL.md").is_file(),
+            "shared copy survives"
+        );
     }
 }

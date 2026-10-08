@@ -10,7 +10,7 @@ import { changeSummaryText, skillUpdateErrorText } from './skillUpdateText'
 function skippedText(t: TFunction, reason: string): string {
   if (reason === 'locally_modified') {
     return t('skills.updates.skippedModified', {
-      defaultValue: '已跳过：你改过这个 Skill，自动更新不会覆盖你的修改。',
+      defaultValue: '已跳过：这个 Skill 和安装时记录的版本对不上，可能被改过，自动更新不会覆盖它。',
     })
   }
   if (reason === 'unknown_baseline') {
@@ -108,7 +108,7 @@ export function SkillUpdatePanel() {
           <span className="vb-skills-updates__name">{entry.name}</span>
           {entry.locallyModified && (
             <span className="vb-skills-updates__warning" role="status">
-              {t('skills.updates.modifiedNote', { defaultValue: '你改过这个 Skill，更新会覆盖你的修改。' })}
+              {t('skills.updates.modifiedNote', { defaultValue: '这个 Skill 和安装时记录的版本对不上，可能被改过，更新会覆盖本地内容。' })}
             </span>
           )}
           {entry.changes && (
@@ -207,7 +207,7 @@ export function SkillUpdatePanel() {
             <p>{t('skills.updates.confirmBody', { defaultValue: '会用 GitHub 上的新版本替换本地文件；各 Agent 的链接不变。' })}</p>
             {confirmEntry.locallyModified && (
               <p className="vb-skills-sync-preview__warning" role="alert">
-                {t('skills.updates.modifiedNote', { defaultValue: '你改过这个 Skill，更新会覆盖你的修改。' })}
+                {t('skills.updates.modifiedNote', { defaultValue: '这个 Skill 和安装时记录的版本对不上，可能被改过，更新会覆盖本地内容。' })}
               </p>
             )}
             {confirmEntry.changes && (

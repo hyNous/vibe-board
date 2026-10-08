@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
+import type { TFunction } from 'i18next'
 import {
   dispatchApi,
   type DispatchAgentNode,
@@ -17,8 +18,31 @@ import './DispatchSection.css'
 
 const BLOCKER_KEYS: Record<string, string> = {
   node_missing: 'settings.dispatch.blockerNodeMissing',
-  skills_missing: 'settings.dispatch.blockerSkillsMissing',
+  tool_missing: 'settings.dispatch.blockerToolMissing',
 }
+
+function installErrorMessage(t: TFunction, error: unknown) {
+  const message = String(error)
+  if (message.includes('NODE_MISSING')) {
+    return t('settings.dispatch.installNodeMissing', {
+      defaultValue: 'Node.js was not found. The install needs Node, so install it yourself and reopen this page.',
+    })
+  }
+  const failed = message.match(/INSTALL_FAILED:\s*([\s\S]*)/)
+  if (failed) {
+    return t('settings.dispatch.installFailed', {
+      detail: failed[1].trim(),
+      defaultValue: 'The install did not finish: {{detail}}',
+    })
+  }
+  if (message.includes('INSTALL_INCOMPLETE')) {
+    return t('settings.dispatch.installIncomplete', {
+      defaultValue: 'The install command finished but the tool files are incomplete. Try again, or install it manually following the tutorial.',
+    })
+  }
+  return message
+}
+
 
 type PendingChange =
   | { kind: 'connect'; plan: DispatchConnectPlan }
@@ -78,6 +102,8 @@ export function DispatchSection() {
   const [appliedFiles, setAppliedFiles] = useState<DispatchPlanFile[]>([])
   const [kept, setKept] = useState<DispatchRemoval[]>([])
   const [copied, setCopied] = useState(false)
+  const [installOpen, setInstallOpen] = useState(false)
+  const [installing, setInstalling] = useState(false)
 
   const loadTree = useCallback(async () => {
     try {
@@ -93,7 +119,29 @@ export function DispatchSection() {
     void loadTree()
   }, [loadTree])
 
-  const addDisabled = busy || !tree?.node.available || !tree?.skillsReady
+  const addDisabled = busy || !tree?.node.available || !tree?.toolInstalled
+
+  const installTool = async () => {
+    setInstalling(true)
+    setError('')
+    setNotice('')
+    try {
+      const result = await dispatchApi.install(true)
+      if (result.sourceRecorded) {
+        setNotice(t('settings.dispatch.installDone', { defaultValue: 'The handoff tool is installed.' }))
+      } else {
+        setError(t('settings.dispatch.installSourceMissing', {
+          defaultValue: 'The tool is installed, but its GitHub source record is missing, so the Skill update check cannot take over. Reinstall with GitHub available.',
+        }))
+      }
+      setInstallOpen(false)
+      await loadTree()
+    } catch (err) {
+      setError(installErrorMessage(t, err))
+    } finally {
+      setInstalling(false)
+    }
+  }
 
   const beginConnect = async (agentId: string, workerId: string) => {
     setBusy(true)
@@ -215,7 +263,7 @@ export function DispatchSection() {
             <div className="dispatch-warning" role="alert" data-testid="dispatch-overwrite-warning">
               {t('settings.dispatch.overwriteWarning', {
                 count: overwriteCount,
-                defaultValue: '其中 {{count}} 个文件已存在且内容不同（可能是你自己改过的版本），确认后会被随包版本覆盖。',
+                defaultValue: '其中 {{count}} 个文件已存在且内容不同（可能是你自己改过的版本），确认后会被已安装版本覆盖。',
               })}
             </div>
           )}
@@ -279,6 +327,14 @@ export function DispatchSection() {
             defaultValue: '断开后，{{agent}} 就不能把任务派给 {{worker}} 了。',
           })}
         </p>
+        {plan.affectedAgents.length > 0 && (
+          <div className="dispatch-warning" role="alert" data-testid="dispatch-shared-warning">
+            {t('settings.dispatch.disconnectSharedWarning', {
+              agents: plan.affectedAgents.join(t('settings.dispatch.listSeparator', { defaultValue: '、' })),
+              defaultValue: '这个工人装在共用目录里。断开后，同样读取该目录的 {{agents}} 也会一起失去它。',
+            })}
+          </div>
+        )}
         <Details
           label={t('settings.dispatch.details')}
           testId={`dispatch-removals-${agent.agentId}-${plan.workerId}`}
@@ -294,17 +350,24 @@ export function DispatchSection() {
               {renderRemovalList(plan.removals, 'dispatch-removals')}
             </>
           )}
-          {plan.kept.length > 0 && (
+          {plan.kept.some((entry) => entry.action === 'keep_modified') && (
             <>
               <div className="dispatch-details__count">
                 {t('settings.dispatch.keptHint', {
-                  defaultValue: '以下内容与随包版本不同（你自己改过），已保留：',
+                  defaultValue: '以下内容与已安装版本不同（你自己改过），已保留：',
                 })}
               </div>
-              {renderRemovalList(plan.kept, 'dispatch-kept')}
+              {renderRemovalList(plan.kept.filter((entry) => entry.action === 'keep_modified'), 'dispatch-kept')}
             </>
           )}
         </Details>
+        {plan.kept.some((entry) => entry.action === 'keep_shared') && (
+          <div className="dispatch-warning" data-testid="dispatch-shared-kept" role="status">
+            {t('settings.dispatch.keptSharedHint', {
+              defaultValue: '这个工人放在多个 Agent 共用的 Skill 文件夹里，断开不会删除它，其他 Agent 仍可使用。如需彻底停用，请到 Skill 页面卸载。',
+            })}
+          </div>
+        )}
         <div className="dispatch-actions">
           <button
             type="button"
@@ -355,12 +418,70 @@ export function DispatchSection() {
           })}
         </div>
       )}
-      {tree && !tree.skillsReady && (
-        <div className="hook-error-card" role="alert" data-testid="dispatch-skills-missing">
-          {t('settings.dispatch.skillsMissing', {
-            defaultValue: '安装包里的派发内容不完整。请重新安装 Vibe Board 后再试。',
-          })}
-        </div>
+
+      {tree && !tree.toolInstalled && (
+        <SettingGroup label={t('settings.dispatch.installTitle', { defaultValue: '先安装派活工具' })}>
+          <p className="dispatch-install__desc" data-testid="dispatch-install-desc">
+            {t('settings.dispatch.installDesc', {
+              defaultValue: '这套工具不在 Vibe Board 安装包里，只在你确认后从 GitHub 下载安装一次，之后没有 Vibe Board 也能单独使用。',
+            })}
+          </p>
+          {!installOpen ? (
+            <div className="dispatch-actions">
+              <button
+                type="button"
+                className="dispatch-actions__primary"
+                data-testid="dispatch-install-start"
+                disabled={busy || installing || !tree.node.available}
+                onClick={() => {
+                  setError('')
+                  setInstallOpen(true)
+                }}
+              >
+                {t('settings.dispatch.installButton', { defaultValue: '从 GitHub 安装（hyNous/agent-dispatch）' })}
+              </button>
+            </div>
+          ) : (
+            <div className="dispatch-confirm" data-testid="dispatch-install-confirm">
+              <p className="dispatch-confirm__sentence">
+                {t('settings.dispatch.installConfirmDesc', {
+                  defaultValue: '会访问 GitHub 下载 hyNous/agent-dispatch，安装到本机用户目录，并留下来源记录，之后 Vibe Board 的 Skill 更新检查可以接手。确定现在安装吗？',
+                })}
+              </p>
+              <Details label={t('settings.dispatch.details', { defaultValue: '详情' })} testId="dispatch-install-details">
+                <div className="dispatch-details__row">
+                  <span>{t('settings.dispatch.installTarget', { defaultValue: '安装目录' })}</span>
+                  <code>~/.agents/skills</code>
+                </div>
+                <div className="dispatch-details__row">
+                  <span>{t('settings.dispatch.installSourceRecord', { defaultValue: '来源记录' })}</span>
+                  <code>~/.agents/.skill-lock.json</code>
+                </div>
+              </Details>
+              <div className="dispatch-actions">
+                <button
+                  type="button"
+                  className="dispatch-actions__primary"
+                  data-testid="dispatch-install-apply"
+                  disabled={installing}
+                  onClick={() => void installTool()}
+                >
+                  {installing
+                    ? t('settings.dispatch.installWorking', { defaultValue: '正在从 GitHub 安装…' })
+                    : t('settings.dispatch.installApply', { defaultValue: '确认安装' })}
+                </button>
+                <button
+                  type="button"
+                  data-testid="dispatch-install-cancel"
+                  disabled={installing}
+                  onClick={() => setInstallOpen(false)}
+                >
+                  {t('settings.dispatch.cancel', { defaultValue: '取消' })}
+                </button>
+              </div>
+            </div>
+          )}
+        </SettingGroup>
       )}
 
       <SettingGroup label={t('settings.dispatch.treeTitle', { defaultValue: '谁可以把任务派给谁' })}>
@@ -398,6 +519,17 @@ export function DispatchSection() {
                 >
                   <span className="dispatch-worker__arrow" aria-hidden="true">→</span>
                   <span className="dispatch-worker__name">{connection.displayName}</span>
+                  {connection.sharedWith.length > 0 && (
+                    <span
+                      className="dispatch-worker__shared"
+                      data-testid={`dispatch-shared-${agent.agentId}-${connection.workerId}`}
+                    >
+                      {t('settings.dispatch.sharedWith', {
+                        agents: connection.sharedWith.join(t('settings.dispatch.listSeparator', { defaultValue: '、' })),
+                        defaultValue: '与 {{agents}} 共用',
+                      })}
+                    </span>
+                  )}
                   <button
                     type="button"
                     data-testid={`dispatch-disconnect-${agent.agentId}-${connection.workerId}`}
@@ -411,10 +543,16 @@ export function DispatchSection() {
             </div>
 
             <Details label={t('settings.dispatch.details', { defaultValue: '详情' })} testId={`dispatch-agent-details-${agent.agentId}`}>
-              <div className="dispatch-details__row">
-                <span>{t('settings.dispatch.skillDirectory', { defaultValue: '写入位置' })}</span>
-                <code>{agent.skillsDir}</code>
-              </div>
+              {agent.readDirs.map((dir) => (
+                <div className="dispatch-details__row" key={dir.path}>
+                  <span>
+                    {dir.shared
+                      ? t('settings.dispatch.sharedDirectory', { defaultValue: '共用目录' })
+                      : t('settings.dispatch.readDirs', { defaultValue: '读取目录' })}
+                  </span>
+                  <code>{dir.path}</code>
+                </div>
+              ))}
             </Details>
 
             <div className="dispatch-actions">
@@ -451,7 +589,7 @@ export function DispatchSection() {
                     key={workerId}
                     className="dispatch-picker__worker"
                     data-testid={`dispatch-add-worker-${agent.agentId}-${workerId}`}
-                    disabled={busy || !tree.skillsReady}
+                    disabled={busy || !tree.toolInstalled}
                     onClick={() => void beginConnect(agent.agentId, workerId)}
                   >
                     {workerName(workerId)}
@@ -496,11 +634,18 @@ export function DispatchSection() {
           </ul>
         </Details>
       )}
-      {kept.length > 0 && (
+      {kept.some((entry) => entry.action === 'keep_shared') && (
+        <div className="dispatch-warning" data-testid="dispatch-shared-kept-result" role="status">
+          {t('settings.dispatch.keptSharedHint', {
+            defaultValue: '这个工人放在多个 Agent 共用的 Skill 文件夹里，断开不会删除它，其他 Agent 仍可使用。如需彻底停用，请到 Skill 页面卸载。',
+          })}
+        </div>
+      )}
+      {kept.some((entry) => entry.action === 'keep_modified') && (
         <div className="dispatch-warning" data-testid="dispatch-kept-warning" role="status">
-          <div>{t('settings.dispatch.keptHint', { defaultValue: '以下内容与随包版本不同（你自己改过），已保留：' })}</div>
+          <div>{t('settings.dispatch.keptHint', { defaultValue: '以下内容与已安装版本不同（你自己改过），已保留：' })}</div>
           <ul className="dispatch-details__list">
-            {kept.map((removal) => (
+            {kept.filter((entry) => entry.action === 'keep_modified').map((removal) => (
               <li key={removal.targetPath} data-testid="dispatch-kept-item">
                 <span>{removal.skillId}</span>
                 <code>{removal.targetPath}</code>

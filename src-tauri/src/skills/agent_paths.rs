@@ -62,6 +62,10 @@ pub fn doubao_skill_dirs_for(home: &Path) -> Vec<PathBuf> {
     dedupe_paths(dirs)
 }
 
+/// Legacy per-Agent path table for settings/MCP files and the legacy scanner.
+/// The verified "which Skill directories does this Agent read" table used by
+/// the Handoff page and Skill Manager v2 is
+/// [`crate::skills::v2::agent_meta::agent_read_skill_dirs`].
 pub fn paths_for_agent(agent: &str) -> SkillPaths {
     let h = home();
     match agent {

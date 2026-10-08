@@ -20,10 +20,20 @@ export interface DispatchWorkerStatus {
   credentialFilePresent: boolean | null
 }
 
+export interface DispatchReadDir {
+  path: string
+  /** The shared ~/.agents/skills root, read by several Agents. */
+  shared: boolean
+}
+
 export interface DispatchConnection {
   workerId: string
   displayName: string
   skillId: string
+  /** The read directory that contains the worker Skill. */
+  dir: string
+  /** Other Agents that see the same worker through a shared directory. */
+  sharedWith: string[]
 }
 
 export interface DispatchAgentNode {
@@ -31,7 +41,7 @@ export interface DispatchAgentNode {
   displayName: string
   /** Claude Code and Codex are verified; every other dispatcher shows a hint. */
   verified: boolean
-  skillsDir: string
+  readDirs: DispatchReadDir[]
   connections: DispatchConnection[]
   addableWorkers: string[]
 }
@@ -40,7 +50,14 @@ export interface DispatchTree {
   node: DispatchNodeStatus
   agents: DispatchAgentNode[]
   workers: DispatchWorkerStatus[]
-  skillsReady: boolean
+  /** The hyNous/agent-dispatch Skills are installed under ~/.agents/skills. */
+  toolInstalled: boolean
+}
+
+export interface DispatchInstallResult {
+  toolInstalled: boolean
+  /** ~/.agents/.skill-lock.json records the GitHub source. */
+  sourceRecorded: boolean
 }
 
 export interface DispatchPlanFile {
@@ -69,8 +86,13 @@ export interface DispatchConnectResult {
 export interface DispatchRemoval {
   skillId: string
   targetPath: string
-  /** remove = bundled copy, remove_link = link only, keep_modified = user-edited copy stays */
-  action: 'remove' | 'remove_link' | 'keep_modified'
+  /**
+   * remove = installed copy, remove_link = link only, keep_modified = user-edited copy stays,
+   * keep_shared = the one copy in the shared Skill folder stays (other Agents use it)
+   */
+  action: 'remove' | 'remove_link' | 'keep_modified' | 'keep_shared'
+  /** Other Agents that share this directory and are affected too. */
+  sharedWith: string[]
 }
 
 export interface DispatchDisconnectPlan {
@@ -80,6 +102,8 @@ export interface DispatchDisconnectPlan {
   workerDisplayName: string
   removals: DispatchRemoval[]
   kept: DispatchRemoval[]
+  /** Other Agents affected because a removal happens in a shared directory. */
+  affectedAgents: string[]
   canApply: boolean
 }
 
@@ -92,7 +116,7 @@ const emptyTree: DispatchTree = {
   node: { available: false, programPath: null, version: null },
   agents: [],
   workers: [],
-  skillsReady: false,
+  toolInstalled: false,
 }
 
 const unavailable = () => Promise.reject(new Error('Dispatch setup is unavailable in browser preview'))
@@ -101,6 +125,10 @@ export const dispatchApi = {
   tree: () => isTauriRuntime()
     ? invoke<DispatchTree>('dispatch_tree')
     : Promise.resolve(emptyTree),
+
+  install: (confirm: boolean) => isTauriRuntime()
+    ? invoke<DispatchInstallResult>('dispatch_install_tool', { confirm })
+    : unavailable(),
 
   connectPlan: (agentId: string, workerId: string) => isTauriRuntime()
     ? invoke<DispatchConnectPlan>('dispatch_connect_plan', { agentId, workerId })

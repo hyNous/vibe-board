@@ -66,6 +66,9 @@ function distributionChangeReason(t: TFunction, reason?: string | null) {
   if (reason === 'Skipped by user decision.') {
     return t('skills.distributionReason.skippedByUser', { defaultValue: reason })
   }
+  if (reason.startsWith('Already effective through the shared')) {
+    return t('skills.distributionReason.sharedDirectory', { defaultValue: reason })
+  }
   return reason
 }
 
@@ -358,7 +361,7 @@ export function DistributeDialog({
             <div key={i} className="sm2-distribute__change">
               <div className="sm2-distribute__change-main">
                 <span className="sm2-distribute__change-action">
-                  {c.action === 'create' ? '新加' : c.action === 'reuse' ? '沿用' : c.action === 'convert' ? '换方式' : c.action === 'reinstall' ? '重新安装' : c.action}
+                  {c.action === 'create' ? '新加' : c.action === 'reuse' ? '沿用' : c.action === 'convert' ? '换方式' : c.action === 'reinstall' ? '重新安装' : c.action === 'shared' ? '已生效（共用目录）' : c.action}
                 </span>
                 <strong>{skillNameById.get(c.skillId) ?? c.skillId} → {agentNameById.get(c.agentId) ?? c.agentId}</strong>
                 {c.action === 'create' && <span className="sm2__tag sm2__tag--ok">{skillModeLabel(t, c.actualMode)}</span>}

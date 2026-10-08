@@ -53,6 +53,23 @@
   min-width: 0;
 }
 
+.dispatch-worker__shared {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(0, 140, 141, 0.1);
+  color: var(--settings-status-active, #008c8d);
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.dispatch-install__desc {
+  margin: 0 0 10px;
+  color: var(--settings-text-secondary);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
 .dispatch-worker button {
   min-height: 26px;
   padding: 0 10px;

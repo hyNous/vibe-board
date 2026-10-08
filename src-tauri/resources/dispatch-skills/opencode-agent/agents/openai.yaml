@@ -1,6 +1,0 @@
-interface:
-  display_name: "OpenCode Agent"
-  short_description: "Delegate autonomous development work to OpenCode"
-  default_prompt: "Use $opencode-agent to give OpenCode the desired outcome and let it explore, implement, and verify autonomously."
-policy:
-  allow_implicit_invocation: false

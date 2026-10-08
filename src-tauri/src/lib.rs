@@ -4991,6 +4991,7 @@ pub fn run() {
             agents::programs::update_custom_agent,
             agents::programs::remove_custom_agent,
             commands::dispatch::dispatch_tree,
+            commands::dispatch::dispatch_install_tool,
             commands::dispatch::dispatch_connect_plan,
             commands::dispatch::dispatch_connect_apply,
             commands::dispatch::dispatch_disconnect_plan,

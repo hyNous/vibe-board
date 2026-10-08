@@ -441,6 +441,10 @@ fn git_tree_oid(dir: &Path) -> Option<[u8; 20]> {
             });
         } else if ft.is_file() {
             let bytes = fs::read(&path).ok()?;
+            // Git hashes the LF blob even when `core.autocrlf=true` checked the
+            // file out with CRLF, and `skillFolderHash` comes from that blob.
+            // Comparing the working copy must apply the same rule.
+            let bytes = normalize_git_text(bytes);
             let mode = if file_is_executable(&entry) {
                 "100755"
             } else {
@@ -469,6 +473,27 @@ struct GitTreeEntry {
     mode: &'static str,
     name: String,
     oid: [u8; 20],
+}
+
+/// Git treats files without NUL bytes as text and stores them with LF line
+/// endings; a CRLF working copy (Windows `core.autocrlf=true`) must hash like
+/// its LF blob. Binary files keep their exact bytes.
+fn normalize_git_text(bytes: Vec<u8>) -> Vec<u8> {
+    if bytes.contains(&0) {
+        return bytes;
+    }
+    let mut normalized = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] == b'\r' && bytes.get(index + 1) == Some(&b'\n') {
+            normalized.push(b'\n');
+            index += 2;
+        } else {
+            normalized.push(bytes[index]);
+            index += 1;
+        }
+    }
+    normalized
 }
 
 fn git_tree_sort_key(entry: &GitTreeEntry) -> Vec<u8> {
@@ -824,6 +849,49 @@ mod tests {
 
         fs::write(dir.join("SKILL.md"), "two").unwrap();
         assert_ne!(git_tree_hash(&dir), first);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn git_tree_hash_treats_crlf_as_lf_for_text_files() {
+        let lf = temp_dir("lf");
+        fs::write(lf.join("SKILL.md"), "---\nname: alpha\n---\nbody\n").unwrap();
+        let crlf = temp_dir("crlf");
+        fs::write(
+            crlf.join("SKILL.md"),
+            "---\r\nname: alpha\r\n---\r\nbody\r\n",
+        )
+        .unwrap();
+
+        assert_eq!(
+            git_tree_hash(&lf),
+            git_tree_hash(&crlf),
+            "a CRLF checkout must hash like the LF blob git stores"
+        );
+        let _ = fs::remove_dir_all(lf);
+        let _ = fs::remove_dir_all(crlf);
+    }
+
+    #[test]
+    fn git_tree_hash_keeps_binary_bytes_and_detects_real_edits() {
+        let dir = temp_dir("binary");
+        fs::write(dir.join("blob.bin"), b"a\r\nb\0c").unwrap();
+        let before = git_tree_hash(&dir);
+        fs::write(dir.join("blob.bin"), b"a\nb\0c").unwrap();
+        assert_ne!(
+            git_tree_hash(&dir),
+            before,
+            "binary files are never line-ending normalized"
+        );
+
+        fs::write(dir.join("SKILL.md"), "one\n").unwrap();
+        let text = git_tree_hash(&dir);
+        fs::write(dir.join("SKILL.md"), "two\n").unwrap();
+        assert_ne!(
+            git_tree_hash(&dir),
+            text,
+            "a real content edit still changes the hash"
+        );
         let _ = fs::remove_dir_all(&dir);
     }
 

@@ -841,6 +841,70 @@ fn distribute_rejects_shared_agents_directory_as_target() {
 }
 
 #[test]
+fn shared_directory_agents_are_effective_without_a_copy() {
+    let (_home, svc, _lock) = fresh_service("distribute-shared-effective");
+    add_center_test_skill(&svc, "shared-effective", "shared-effective");
+    // Already present in the shared root: every Agent that reads it, including
+    // Codex and OpenCode, is effective without a per-Agent copy.
+    write_skill(
+        &svc.home.join(".agents"),
+        "skills/shared-effective",
+        "shared-effective",
+        Some("already shared"),
+    );
+
+    let preview = svc
+        .preview_distribute_skill(
+            vec!["shared-effective".to_string()],
+            vec![
+                "codex".to_string(),
+                "opencode".to_string(),
+                "claude-code".to_string(),
+            ],
+            "copy".to_string(),
+        )
+        .unwrap();
+    assert!(preview.blockers.is_empty(), "{:?}", preview.blockers);
+
+    let change_for = |agent: &str| {
+        preview
+            .changes
+            .iter()
+            .find(|change| change.agent_id == agent)
+            .unwrap_or_else(|| panic!("{agent} change"))
+    };
+    for agent in ["codex", "opencode"] {
+        let change = change_for(agent);
+        assert_eq!(change.action, "shared", "{agent}");
+        assert!(
+            Path::new(&change.target_path).starts_with(svc.home.join(".agents")),
+            "{agent} must point at the shared root"
+        );
+    }
+    assert_eq!(change_for("claude-code").action, "create");
+
+    let executed = svc
+        .execute_distribute_skill(preview, ClaimOrigin::Direct)
+        .unwrap();
+    assert!(executed
+        .changes
+        .iter()
+        .any(|change| change.action == "shared"));
+    let detail = svc.get_skill_detail("shared-effective").unwrap();
+    assert!(
+        detail
+            .targets
+            .iter()
+            .all(|target| target.agent_id != "codex" && target.agent_id != "opencode"),
+        "shared readers must not gain a duplicate target"
+    );
+    assert!(svc
+        .home
+        .join(".claude/skills/shared-effective/SKILL.md")
+        .is_file());
+}
+
+#[test]
 fn reuse_target_appends_claim_without_dup_files() {
     let (_home, svc, _lock) = fresh_service("reuse");
     let src = write_skill(
@@ -6133,6 +6197,52 @@ fn periodic_check_skips_locally_modified_skill_and_reports_it() {
         lock_entry_json(&svc.home, "alpha")["updatedAt"],
         "2026-01-01T00:00:00Z"
     );
+}
+
+#[test]
+fn crlf_checkout_is_not_reported_as_locally_modified() {
+    let (_home, svc, _lock) = fresh_service("update-crlf");
+    let center = svc.center_path().unwrap();
+    let alpha = seed_center_skill(&center, "alpha", "v1");
+    svc.scan_center_into_db().unwrap();
+    // npx recorded the LF Git tree hash; git then checked the files out with
+    // CRLF because the machine runs with core.autocrlf=true.
+    write_update_skill_lock(&svc.home, &[("alpha", &fsutil::git_tree_hash(&alpha))]);
+    for file in ["SKILL.md", "reference.md"] {
+        let content = fs::read_to_string(alpha.join(file)).unwrap();
+        fs::write(alpha.join(file), content.replace('\n', "\r\n")).unwrap();
+    }
+
+    let stub = svc.home.join("stub-repo");
+    write_stub_skill(&stub, "alpha", "v1");
+    set_skill_update_repo_stub(Some(stub.clone()));
+    let report = svc.check_all_skill_updates().unwrap();
+    set_skill_update_repo_stub(None);
+    let entry = report
+        .entries
+        .iter()
+        .find(|entry| entry.skill_id == "alpha")
+        .unwrap();
+    assert!(
+        !entry.locally_modified,
+        "CRLF must compare equal to the LF lock hash"
+    );
+    assert!(
+        !entry.update_available,
+        "CRLF must compare equal to the LF source checkout"
+    );
+
+    // A real content change is still reported as locally modified.
+    fs::write(alpha.join("reference.md"), "truly edited\r\n").unwrap();
+    set_skill_update_repo_stub(Some(stub));
+    let report = svc.check_all_skill_updates().unwrap();
+    set_skill_update_repo_stub(None);
+    let entry = report
+        .entries
+        .iter()
+        .find(|entry| entry.skill_id == "alpha")
+        .unwrap();
+    assert!(entry.locally_modified, "a real edit must still be detected");
 }
 
 #[test]

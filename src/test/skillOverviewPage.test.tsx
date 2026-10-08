@@ -262,12 +262,12 @@ describe('SkillOverviewPage', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '检查全部更新' }))
     expect(await screen.findByText('1 个可更新')).toBeInTheDocument()
-    expect(screen.getAllByText('你改过这个 Skill，更新会覆盖你的修改。').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('这个 Skill 和安装时记录的版本对不上，可能被改过，更新会覆盖本地内容。').length).toBeGreaterThan(0)
 
     fireEvent.click(screen.getByRole('button', { name: '更新' }))
 
     const dialog = await screen.findByRole('dialog')
-    expect(dialog).toHaveTextContent('你改过这个 Skill，更新会覆盖你的修改。')
+    expect(dialog).toHaveTextContent('这个 Skill 和安装时记录的版本对不上，可能被改过，更新会覆盖本地内容。')
     expect(dialog).toHaveTextContent('会用 GitHub 上的新版本替换本地文件')
     expect(updateSpy).not.toHaveBeenCalled()
 
@@ -335,7 +335,7 @@ describe('SkillOverviewPage', () => {
     render(<SkillOverviewPage />)
 
     expect(screen.getByText('已自动更新到新版本')).toBeInTheDocument()
-    expect(screen.getByText('已跳过：你改过这个 Skill，自动更新不会覆盖你的修改。')).toBeInTheDocument()
+    expect(screen.getByText('已跳过：这个 Skill 和安装时记录的版本对不上，可能被改过，自动更新不会覆盖它。')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '更新' })).toBeInTheDocument()
   })
 

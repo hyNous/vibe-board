@@ -1400,7 +1400,7 @@ function SourceTab({ detail, onUpdated }: { detail: SkillDetail; onUpdated?: () 
           )}
           {updateEntry?.locallyModified && (
             <small className="sm2__skill-source-sync-error">
-              {t('skills.updates.modifiedNote', { defaultValue: '你改过这个 Skill，更新会覆盖你的修改。' })}
+              {t('skills.updates.modifiedNote', { defaultValue: '这个 Skill 和安装时记录的版本对不上，可能被改过，更新会覆盖本地内容。' })}
             </small>
           )}
           {updateEntry?.errorDetail && (
@@ -1450,7 +1450,7 @@ function SourceTab({ detail, onUpdated }: { detail: SkillDetail; onUpdated?: () 
                 </p>
                 {updateEntry.locallyModified && (
                   <p className="vb-skills-sync-preview__warning" role="alert">
-                    {t('skills.updates.modifiedNote', { defaultValue: '你改过这个 Skill，更新会覆盖你的修改。' })}
+                    {t('skills.updates.modifiedNote', { defaultValue: '这个 Skill 和安装时记录的版本对不上，可能被改过，更新会覆盖本地内容。' })}
                   </p>
                 )}
                 {updateEntry.changes && <p>{changeSummaryText(t, updateEntry.changes)}</p>}

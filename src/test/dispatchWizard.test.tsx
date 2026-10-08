@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within, cleanup } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within, cleanup } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi, beforeAll } from 'vitest'
 import type {
   DispatchAgentNode,
@@ -14,6 +14,7 @@ import type {
 
 const dispatchMocks = vi.hoisted(() => ({
   tree: vi.fn(),
+  install: vi.fn(),
   connectPlan: vi.fn(),
   connectApply: vi.fn(),
   disconnectPlan: vi.fn(),
@@ -50,8 +51,20 @@ function worker(overrides: Partial<DispatchWorkerStatus> = {}): DispatchWorkerSt
   }
 }
 
-function connection(workerId: string, displayName: string, skillId: string): DispatchConnection {
-  return { workerId, displayName, skillId }
+function connection(
+  workerId: string,
+  displayName: string,
+  skillId: string,
+  overrides: Partial<DispatchConnection> = {},
+): DispatchConnection {
+  return {
+    workerId,
+    displayName,
+    skillId,
+    dir: `/home/tester/.claude/skills/${skillId}`,
+    sharedWith: [],
+    ...overrides,
+  }
 }
 
 function agentNode(overrides: Partial<DispatchAgentNode> = {}): DispatchAgentNode {
@@ -59,7 +72,7 @@ function agentNode(overrides: Partial<DispatchAgentNode> = {}): DispatchAgentNod
     agentId: 'claude-code',
     displayName: 'Claude Code',
     verified: true,
-    skillsDir: '/home/tester/.claude/skills',
+    readDirs: [{ path: '/home/tester/.claude/skills', shared: false }],
     connections: [],
     addableWorkers: ['opencode', 'antigravity'],
     ...overrides,
@@ -69,7 +82,7 @@ function agentNode(overrides: Partial<DispatchAgentNode> = {}): DispatchAgentNod
 function tree(overrides: Partial<DispatchTree> = {}): DispatchTree {
   return {
     node: { available: true, programPath: '/usr/local/bin/node', version: 'v20.11.0' },
-    skillsReady: true,
+    toolInstalled: true,
     workers: [
       worker(),
       worker({
@@ -82,8 +95,20 @@ function tree(overrides: Partial<DispatchTree> = {}): DispatchTree {
     ],
     agents: [
       agentNode(),
-      agentNode({ agentId: 'codex', displayName: 'Codex', skillsDir: '/home/tester/.codex/skills' }),
-      agentNode({ agentId: 'gemini', displayName: 'Gemini CLI', verified: false, skillsDir: '/home/tester/.gemini/skills' }),
+      agentNode({
+        agentId: 'codex',
+        displayName: 'Codex',
+        readDirs: [
+          { path: '/home/tester/.agents/skills', shared: true },
+          { path: '/home/tester/.codex/skills', shared: false },
+        ],
+      }),
+      agentNode({
+        agentId: 'gemini',
+        displayName: 'Gemini CLI',
+        verified: false,
+        readDirs: [{ path: '/home/tester/.gemini/skills', shared: false }],
+      }),
     ],
     ...overrides,
   }
@@ -97,7 +122,7 @@ function planFile(
   return {
     skillId,
     relativePath,
-    sourcePath: `/resources/dispatch-skills/${skillId}/${relativePath}`,
+    sourcePath: `/home/tester/.agents/skills/${skillId}/${relativePath}`,
     targetPath: `/home/tester/.claude/skills/${skillId}/${relativePath}`,
     change,
   }
@@ -127,10 +152,21 @@ function disconnectPlan(overrides: Partial<DispatchDisconnectPlan> = {}): Dispat
     workerId: 'opencode',
     workerDisplayName: 'OpenCode',
     removals: [
-      { skillId: 'opencode-agent', targetPath: '/home/tester/.claude/skills/opencode-agent', action: 'remove' },
-      { skillId: 'external-agent-core', targetPath: '/home/tester/.claude/skills/external-agent-core', action: 'remove' },
+      {
+        skillId: 'opencode-agent',
+        targetPath: '/home/tester/.claude/skills/opencode-agent',
+        action: 'remove',
+        sharedWith: [],
+      },
+      {
+        skillId: 'external-agent-core',
+        targetPath: '/home/tester/.claude/skills/external-agent-core',
+        action: 'remove',
+        sharedWith: [],
+      },
     ],
     kept: [],
+    affectedAgents: [],
     canApply: true,
     ...overrides,
   }
@@ -155,6 +191,7 @@ describe('dispatch relationship tree', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     dispatchMocks.tree.mockResolvedValue(tree())
+    dispatchMocks.install.mockResolvedValue({ toolInstalled: true, sourceRecorded: true })
     dispatchMocks.connectPlan.mockResolvedValue(connectPlan())
     dispatchMocks.connectApply.mockResolvedValue({ writtenFiles: connectPlan().files } as DispatchConnectResult)
     dispatchMocks.disconnectPlan.mockResolvedValue(disconnectPlan())
@@ -175,8 +212,17 @@ describe('dispatch relationship tree', () => {
           connections: [connection('opencode', 'OpenCode', 'opencode-agent')],
           addableWorkers: ['antigravity'],
         }),
-        agentNode({ agentId: 'codex', displayName: 'Codex', skillsDir: '/home/tester/.codex/skills' }),
-        agentNode({ agentId: 'gemini', displayName: 'Gemini CLI', verified: false, skillsDir: '/home/tester/.gemini/skills' }),
+        agentNode({
+          agentId: 'codex',
+          displayName: 'Codex',
+          readDirs: [{ path: '/home/tester/.agents/skills', shared: true }],
+        }),
+        agentNode({
+          agentId: 'gemini',
+          displayName: 'Gemini CLI',
+          verified: false,
+          readDirs: [{ path: '/home/tester/.gemini/skills', shared: false }],
+        }),
       ],
     }))
     await renderSection()
@@ -195,6 +241,34 @@ describe('dispatch relationship tree', () => {
       .toHaveTextContent('未验证')
     expect(within(screen.getByTestId('dispatch-agent-gemini')).getByTestId('dispatch-add-gemini'))
       .toBeEnabled()
+  })
+
+  it('labels a worker seen through the shared folder and warns before disconnecting', async () => {
+    dispatchMocks.tree.mockResolvedValue(tree({
+      agents: [agentNode({
+        connections: [connection('opencode', 'OpenCode', 'opencode-agent', { sharedWith: ['Codex'] })],
+        addableWorkers: ['antigravity'],
+      })],
+    }))
+    dispatchMocks.disconnectPlan.mockResolvedValue(disconnectPlan({
+      removals: [{
+        skillId: 'opencode-agent',
+        targetPath: '/home/tester/.agents/skills/opencode-agent',
+        action: 'remove',
+        sharedWith: ['Codex'],
+      }],
+      affectedAgents: ['Codex'],
+    }))
+    await renderSection()
+
+    expect(await screen.findByTestId('dispatch-shared-claude-code-opencode'))
+      .toHaveTextContent('与 Codex 共用')
+
+    fireEvent.click(screen.getByTestId('dispatch-disconnect-claude-code-opencode'))
+
+    const warning = await screen.findByTestId('dispatch-shared-warning')
+    expect(warning).toHaveTextContent('Codex')
+    expect(warning).toHaveTextContent('共用目录')
   })
 
   it('offers only detected, unconnected workers and points other tools at external-agent-setup', async () => {
@@ -301,12 +375,48 @@ describe('dispatch relationship tree', () => {
     expect(dispatchMocks.connectApply).not.toHaveBeenCalled()
   })
 
-  it('explains a missing bundled payload instead of offering workers', async () => {
-    dispatchMocks.tree.mockResolvedValue(tree({ skillsReady: false }))
+  it('explains the GitHub download and installs only after confirmation', async () => {
+    dispatchMocks.tree
+      .mockResolvedValueOnce(tree({
+        toolInstalled: false,
+        workers: [],
+        agents: [agentNode({ addableWorkers: [] })],
+      }))
+      .mockResolvedValue(tree())
     await renderSection()
 
-    expect(await screen.findByTestId('dispatch-skills-missing')).toBeInTheDocument()
+    expect(await screen.findByTestId('dispatch-install-desc')).toHaveTextContent('GitHub')
+    expect(screen.getByTestId('dispatch-install-start')).toHaveTextContent('从 GitHub 安装（hyNous/agent-dispatch）')
     expect(screen.getByTestId('dispatch-add-claude-code')).toBeDisabled()
+    expect(dispatchMocks.install).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByTestId('dispatch-install-start'))
+    const confirm = screen.getByTestId('dispatch-install-confirm')
+    expect(confirm).toHaveTextContent('访问 GitHub')
+    expect(dispatchMocks.install).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByTestId('dispatch-install-details'))
+    const details = screen.getByTestId('dispatch-install-details-body')
+    expect(details).toHaveTextContent('~/.agents/skills')
+    expect(details).toHaveTextContent('.skill-lock.json')
+
+    fireEvent.click(screen.getByTestId('dispatch-install-apply'))
+
+    expect(await screen.findByTestId('dispatch-notice')).toHaveTextContent('派活工具已安装。')
+    expect(dispatchMocks.install).toHaveBeenCalledWith(true)
+    expect(screen.queryByTestId('dispatch-install-confirm')).not.toBeInTheDocument()
+    await waitFor(() => expect(screen.getByTestId('dispatch-add-claude-code')).toBeEnabled())
+  })
+
+  it('cancelling the GitHub install writes nothing', async () => {
+    dispatchMocks.tree.mockResolvedValue(tree({ toolInstalled: false, workers: [] }))
+    await renderSection()
+
+    fireEvent.click(await screen.findByTestId('dispatch-install-start'))
+    fireEvent.click(screen.getByTestId('dispatch-install-cancel'))
+
+    expect(screen.queryByTestId('dispatch-install-confirm')).not.toBeInTheDocument()
+    expect(dispatchMocks.install).not.toHaveBeenCalled()
   })
 
   it('disconnects only after confirmation and reports what was kept', async () => {
@@ -321,11 +431,13 @@ describe('dispatch relationship tree', () => {
         skillId: 'opencode-agent',
         targetPath: '/home/tester/.claude/skills/opencode-agent',
         action: 'remove',
+        sharedWith: [],
       }],
       kept: [{
         skillId: 'external-agent-core',
         targetPath: '/home/tester/.claude/skills/external-agent-core',
         action: 'keep_modified',
+        sharedWith: [],
       }],
     } as DispatchDisconnectResult)
     await renderSection()
@@ -346,6 +458,36 @@ describe('dispatch relationship tree', () => {
     expect(await screen.findByTestId('dispatch-notice')).toHaveTextContent(
       '已断开：Claude Code 不能再把任务派给 OpenCode。',
     )
+  })
+
+  it('explains that the shared copy stays when an Agent reading the shared folder disconnects', async () => {
+    dispatchMocks.tree.mockResolvedValue(tree({
+      agents: [agentNode({
+        connections: [connection('opencode', 'OpenCode', 'opencode-agent')],
+        addableWorkers: ['antigravity'],
+      })],
+    }))
+    const sharedKeep = {
+      skillId: 'opencode-agent',
+      targetPath: '/home/tester/.agents/skills/opencode-agent',
+      action: 'keep_shared' as const,
+      sharedWith: ['OpenCode'],
+    }
+    dispatchMocks.disconnectPlan.mockResolvedValue(disconnectPlan({ removals: [], kept: [sharedKeep] }))
+    dispatchMocks.disconnectApply.mockResolvedValue({ removed: [], kept: [sharedKeep] } as DispatchDisconnectResult)
+    await renderSection()
+
+    fireEvent.click(await screen.findByTestId('dispatch-disconnect-claude-code-opencode'))
+
+    // Before confirming, the user learns the shared copy will not be deleted.
+    expect(await screen.findByTestId('dispatch-shared-kept')).toHaveTextContent('断开不会删除它')
+    expect(screen.queryByTestId('dispatch-kept-warning')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByTestId('dispatch-disconnect-apply'))
+
+    expect(await screen.findByTestId('dispatch-shared-kept-result')).toHaveTextContent('请到 Skill 页面卸载')
+    // The "you edited it" wording is reserved for user-modified copies.
+    expect(screen.queryByTestId('dispatch-kept-warning')).not.toBeInTheDocument()
   })
 
   it('warns before replacing a worker copy the user edited', async () => {
