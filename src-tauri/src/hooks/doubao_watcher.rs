@@ -1,23 +1,36 @@
+#[cfg(any(target_os = "macos", test))]
 use std::collections::{HashMap, HashSet};
+#[cfg(target_os = "macos")]
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+#[cfg(any(target_os = "macos", test))]
 use std::time::{Duration, Instant, SystemTime};
 
-use super::session_store::{SessionPhase, SessionStore};
+#[cfg(target_os = "macos")]
+use super::session_store::SessionPhase;
+use super::session_store::SessionStore;
+#[cfg(any(target_os = "macos", test))]
 use crate::terminal::process_tree::ProcessInfo;
 
+#[cfg(target_os = "macos")]
 const POLL_INTERVAL: Duration = Duration::from_secs(2);
+#[cfg(any(target_os = "macos", test))]
 const CORRELATED_STORAGE_WINDOW: Duration = Duration::from_secs(6);
+#[cfg(target_os = "macos")]
 const ACTIVE_GRACE: Duration = Duration::from_secs(20);
+#[cfg(target_os = "macos")]
 const IDLE_SESSION_TTL: Duration = Duration::from_secs(2 * 60);
+#[cfg(target_os = "macos")]
 const FINISHED_GRACE: Duration = Duration::from_secs(8);
 
+#[cfg(any(target_os = "macos", test))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct HelperProcess {
     pid: u32,
     main_pid: u32,
 }
 
+#[cfg(target_os = "macos")]
 #[derive(Debug)]
 struct WatchedSession {
     session_id: String,
@@ -25,6 +38,7 @@ struct WatchedSession {
     finished_at: Option<Instant>,
 }
 
+#[cfg(target_os = "macos")]
 #[derive(Default)]
 struct WatchState {
     initialized: bool,
@@ -164,6 +178,7 @@ fn poll(state: &mut WatchState, session_store: &SessionStore) {
     state.initialized = true;
 }
 
+#[cfg(target_os = "macos")]
 fn create_session(session_store: &SessionStore, main_pid: u32, now: Instant) -> WatchedSession {
     let session_id = format!("doubao-app-{main_pid}");
     session_store.get_or_create_session(&session_id, "doubao", "Doubao", "", "Doubao");
@@ -182,6 +197,7 @@ fn create_session(session_store: &SessionStore, main_pid: u32, now: Instant) -> 
     }
 }
 
+#[cfg(target_os = "macos")]
 fn set_session_phase(
     session_store: &SessionStore,
     session_id: &str,
@@ -205,6 +221,7 @@ fn set_session_phase(
     });
 }
 
+#[cfg(any(target_os = "macos", test))]
 fn doubao_main_pids(tree: &HashMap<u32, ProcessInfo>) -> HashSet<u32> {
     tree.values()
         .filter(|process| is_doubao_main(&process.command))
@@ -212,6 +229,7 @@ fn doubao_main_pids(tree: &HashMap<u32, ProcessInfo>) -> HashSet<u32> {
         .collect()
 }
 
+#[cfg(any(target_os = "macos", test))]
 fn doubao_helpers(tree: &HashMap<u32, ProcessInfo>) -> Vec<HelperProcess> {
     let main_pids = doubao_main_pids(tree);
 
@@ -225,14 +243,17 @@ fn doubao_helpers(tree: &HashMap<u32, ProcessInfo>) -> Vec<HelperProcess> {
         .collect()
 }
 
+#[cfg(any(target_os = "macos", test))]
 fn is_doubao_main(command: &str) -> bool {
     command.ends_with("/Doubao.app/Contents/MacOS/Doubao")
 }
 
+#[cfg(any(target_os = "macos", test))]
 fn is_doubao_command_helper(command: &str) -> bool {
     command.ends_with("/Doubao.app/Contents/Helpers/command_helper")
 }
 
+#[cfg(target_os = "macos")]
 fn doubao_state_dir(origin: &str) -> Option<PathBuf> {
     Some(
         dirs::home_dir()?
@@ -241,6 +262,7 @@ fn doubao_state_dir(origin: &str) -> Option<PathBuf> {
     )
 }
 
+#[cfg(target_os = "macos")]
 fn latest_data_mtime(path: &Path) -> Option<SystemTime> {
     std::fs::read_dir(path)
         .ok()?
@@ -258,10 +280,12 @@ fn latest_data_mtime(path: &Path) -> Option<SystemTime> {
         .max()
 }
 
+#[cfg(any(target_os = "macos", test))]
 fn is_newer(current: Option<SystemTime>, previous: Option<SystemTime>) -> bool {
     matches!((current, previous), (Some(current), Some(previous)) if current > previous)
 }
 
+#[cfg(any(target_os = "macos", test))]
 fn signals_are_correlated(chat: Option<Instant>, agent: Option<Instant>, now: Instant) -> bool {
     [chat, agent].into_iter().all(|signal| {
         signal.is_some_and(|signal| now.duration_since(signal) <= CORRELATED_STORAGE_WINDOW)

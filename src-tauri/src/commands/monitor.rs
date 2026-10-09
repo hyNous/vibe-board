@@ -35,7 +35,7 @@ pub async fn get_monitor_sessions(
         .map(session_summary)
         .collect();
 
-    sessions.sort_by(|a, b| b.started_at.cmp(&a.started_at));
+    sessions.sort_by_key(|a| std::cmp::Reverse(a.started_at));
     Ok(sessions)
 }
 

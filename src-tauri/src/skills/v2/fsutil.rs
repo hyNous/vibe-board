@@ -216,7 +216,7 @@ pub fn open_path(target: &str) -> Result<(), String> {
     };
     #[cfg(target_os = "windows")]
     {
-        return open_path_windows(target);
+        open_path_windows(target)
     }
     #[cfg(all(unix, not(target_os = "macos")))]
     let mut cmd = {

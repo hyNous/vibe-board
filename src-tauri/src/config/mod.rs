@@ -2,7 +2,7 @@
 // Platform-appropriate config path with auto-save and Tauri event emission
 
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 use tauri::{AppHandle, Emitter};
 
@@ -440,7 +440,7 @@ impl ConfigStore {
         base.join("vibeboard").join("config.json")
     }
 
-    fn legacy_config_paths(path: &PathBuf) -> Vec<PathBuf> {
+    fn legacy_config_paths(path: &Path) -> Vec<PathBuf> {
         let Some(base) = path.parent().and_then(|parent| parent.parent()) else {
             return Vec::new();
         };

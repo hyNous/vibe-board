@@ -2642,6 +2642,7 @@ fn fallback_terminal_app_name(terminal: &str) -> &'static str {
     }
 }
 
+#[cfg(target_os = "macos")]
 fn osascript_ok(script: &str) -> bool {
     std::process::Command::new("osascript")
         .args(["-e", script])
@@ -2658,7 +2659,7 @@ pub(crate) fn find_binary(name: &str) -> Option<String> {
     let home = dirs::home_dir()
         .map(|path| path.display().to_string())
         .unwrap_or_default();
-    [
+    let found = [
         format!("/opt/homebrew/bin/{name}"),
         format!("/usr/local/bin/{name}"),
         format!("/usr/bin/{name}"),
@@ -2669,10 +2670,15 @@ pub(crate) fn find_binary(name: &str) -> Option<String> {
         format!("{home}/Applications/Kaku.app/Contents/MacOS/{name}"),
     ]
     .into_iter()
-    .find(|path| std::path::Path::new(path).exists())
-    .or_else(|| {
-        #[cfg(not(target_os = "windows"))]
-        {
+    .find(|path| std::path::Path::new(path).exists());
+
+    #[cfg(target_os = "windows")]
+    {
+        found
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        found.or_else(|| {
             std::process::Command::new("which")
                 .arg(name)
                 .output()
@@ -2681,19 +2687,15 @@ pub(crate) fn find_binary(name: &str) -> Option<String> {
                 .and_then(|output| String::from_utf8(output.stdout).ok())
                 .map(|path| path.trim().to_string())
                 .filter(|path| !path.is_empty())
-        }
-        #[cfg(target_os = "windows")]
-        {
-            None
-        }
-    })
+        })
+    }
 }
 
 pub(crate) fn launch_in_terminal(terminal: &str, cwd: &str, command: &str) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
         let _ = terminal;
-        return launch_in_windows_terminal(cwd, command);
+        launch_in_windows_terminal(cwd, command)
     }
 
     #[cfg(target_os = "macos")]
@@ -2783,21 +2785,9 @@ pub(crate) fn shell_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', "'\\''"))
 }
 
+#[cfg(target_os = "macos")]
 fn applescript_escape(value: &str) -> String {
     value.replace('\\', "\\\\").replace('"', "\\\"")
-}
-
-fn applescript_string_literal(value: &str) -> String {
-    let normalized = value.replace("\r\n", "\n").replace('\r', "\n");
-    let parts = normalized
-        .split('\n')
-        .map(|part| format!("\"{}\"", applescript_escape(part)))
-        .collect::<Vec<_>>();
-    if parts.is_empty() {
-        "\"\"".to_string()
-    } else {
-        parts.join(" & linefeed & ")
-    }
 }
 
 #[tauri::command]
@@ -4950,10 +4940,10 @@ pub async fn activate_session_host(
         if session.pid.is_some_and(activate_session_process_window) {
             return Ok(true);
         }
-        return Err(format!(
+        Err(format!(
             "Failed to activate the desktop window for {}",
             session.agent_type
-        ));
+        ))
     }
 
     #[cfg(target_os = "macos")]

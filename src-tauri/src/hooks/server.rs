@@ -170,6 +170,13 @@ struct HookConnectionContext {
     task_db: Arc<ControlTowerDatabase>,
 }
 
+struct NotificationPayload<'a> {
+    session_id: &'a str,
+    message: &'a str,
+    status: &'a Option<String>,
+    raw: &'a serde_json::Value,
+}
+
 impl HookServer {
     pub fn new(
         session_store: Arc<SessionStore>,
@@ -1519,12 +1526,14 @@ impl HookServer {
             } => {
                 Self::process_notification(
                     store,
-                    session_id,
-                    message,
-                    status,
+                    NotificationPayload {
+                        session_id,
+                        message,
+                        status,
+                        raw: _raw,
+                    },
                     sound,
                     app,
-                    _raw,
                     done_cleanup_secs,
                 );
             }
@@ -1793,14 +1802,17 @@ impl HookServer {
 
     fn process_notification(
         store: &SessionStore,
-        session_id: &str,
-        message: &str,
-        status: &Option<String>,
+        payload: NotificationPayload<'_>,
         sound: &Arc<std::sync::Mutex<Option<Arc<SoundEngine>>>>,
         app: &Arc<std::sync::Mutex<Option<tauri::AppHandle>>>,
-        raw: &serde_json::Value,
         done_cleanup_secs: u64,
     ) {
+        let NotificationPayload {
+            session_id,
+            message,
+            status,
+            raw,
+        } = payload;
         let lower = message.to_lowercase();
         let notification_type = raw
             .get("notification_type")

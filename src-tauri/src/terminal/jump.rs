@@ -1165,8 +1165,6 @@ fn windows_terminal_command_candidates(
         vec!["powershell", "pwsh", "wt", "cmd"]
     } else if lower.contains("cmd") || lower.contains("command prompt") {
         vec!["cmd", "wt", "powershell", "pwsh"]
-    } else if lower.contains("windows terminal") || lower == "wt" || lower == "wt.exe" {
-        vec!["wt", "cmd", "powershell", "pwsh"]
     } else {
         vec!["wt", "cmd", "powershell", "pwsh"]
     };

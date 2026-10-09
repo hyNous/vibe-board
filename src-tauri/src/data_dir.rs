@@ -337,9 +337,8 @@ pub fn copy_legacy_webview_local_storage(
                 )
             })?;
         }
-        copy_dir_all(&source, &staging).map_err(|error| {
+        copy_dir_all(&source, &staging).inspect_err(|_| {
             let _ = std::fs::remove_dir_all(&staging);
-            error
         })?;
         if let Err(error) = std::fs::rename(&staging, &destination) {
             let _ = std::fs::remove_dir_all(&staging);

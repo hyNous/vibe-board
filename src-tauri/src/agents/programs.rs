@@ -903,7 +903,7 @@ fn open_target(target: &str) -> Result<(), String> {
 
     #[cfg(target_os = "windows")]
     {
-        return open_target_windows(target);
+        open_target_windows(target)
     }
 
     #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
@@ -969,7 +969,7 @@ fn is_url(target: &str) -> bool {
 fn launch_binary(path: &Path) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
-        return open_target(&path.display().to_string());
+        open_target(&path.display().to_string())
     }
 
     #[cfg(not(target_os = "windows"))]

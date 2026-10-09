@@ -411,14 +411,14 @@ fn bridge_candidate_is_fresh(bridge: &Path) -> bool {
 fn bridge_candidate_can_run(bridge: &Path) -> bool {
     #[cfg(target_os = "windows")]
     {
-        return crate::platform::process::background_command(bridge)
+        crate::platform::process::background_command(bridge)
             .arg("--version")
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
             .status()
             .map(|status| status.success())
-            .unwrap_or(false);
+            .unwrap_or(false)
     }
 
     #[cfg(not(target_os = "windows"))]

@@ -127,10 +127,9 @@ fn is_terminal_frontmost() -> bool {
             return false;
         };
         let tree = process_tree::build_tree();
-        return tree
-            .get(&frontmost_pid)
+        tree.get(&frontmost_pid)
             .map(|info| registry::is_terminal(&info.command))
-            .unwrap_or(false);
+            .unwrap_or(false)
     }
 
     #[cfg(not(target_os = "windows"))]
@@ -160,7 +159,7 @@ fn is_bundle_frontmost(expected_bundle_id: &str) -> bool {
     #[cfg(target_os = "windows")]
     {
         let _ = expected_bundle_id;
-        return false;
+        false
     }
 
     #[cfg(not(target_os = "windows"))]
@@ -199,7 +198,7 @@ fn is_agent_terminal_frontmost(
         let Some(frontmost_pid) = foreground_process_id() else {
             return false;
         };
-        return terminal_pid_matches_frontmost(terminal_pid, frontmost_pid, tree);
+        terminal_pid_matches_frontmost(terminal_pid, frontmost_pid, tree)
     }
 
     #[cfg(not(target_os = "windows"))]
@@ -529,7 +528,7 @@ fn flatten_zellij_panes(json: &serde_json::Value) -> Vec<&serde_json::Value> {
 pub fn is_any_terminal_visible() -> bool {
     #[cfg(target_os = "windows")]
     {
-        return is_terminal_frontmost();
+        is_terminal_frontmost()
     }
 
     #[cfg(not(target_os = "windows"))]

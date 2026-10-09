@@ -277,7 +277,7 @@ impl UsageHistoryService {
         on_progress: &dyn Fn(&UsageHistoryScanStatus),
     ) {
         let total = self.scan_status().files_total;
-        if files_scanned % PROGRESS_FILE_STEP != 0 && files_scanned != total {
+        if !files_scanned.is_multiple_of(PROGRESS_FILE_STEP) && files_scanned != total {
             return;
         }
         self.update_status(|status| {

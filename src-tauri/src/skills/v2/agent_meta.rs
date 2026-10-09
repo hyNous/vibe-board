@@ -572,10 +572,12 @@ pub fn agent_program_detected(agent: &str, installed: bool) -> bool {
     value
 }
 
+#[cfg(any(not(target_os = "windows"), test))]
 fn directory_has_valid_skill(path: &Path, recursive: bool) -> bool {
     directory_has_valid_skill_inner(path, recursive, 0)
 }
 
+#[cfg(any(not(target_os = "windows"), test))]
 fn directory_has_valid_skill_inner(path: &Path, recursive: bool, depth: usize) -> bool {
     if depth > 8 {
         return false;

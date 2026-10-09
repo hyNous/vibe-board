@@ -383,7 +383,7 @@ fn open_system_target(target: &str) -> Result<(), String> {
 
     #[cfg(target_os = "windows")]
     {
-        return open_system_target_windows(&target);
+        open_system_target_windows(&target)
     }
 
     #[cfg(all(unix, not(target_os = "macos")))]
@@ -3589,7 +3589,6 @@ fn reposition_notch_to_display(
             .map(|size| size.height as f64 / current_scale)
             .unwrap_or(52.0);
         position_notch_window(
-            app,
             &window,
             &monitor,
             width,
@@ -3605,7 +3604,6 @@ fn reposition_notch_to_display(
 }
 
 fn position_notch_window(
-    _app: &tauri::AppHandle,
     window: &tauri::WebviewWindow,
     monitor: &tauri::Monitor,
     width: f64,

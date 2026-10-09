@@ -184,8 +184,10 @@ fn parent_process_id() -> u32 {
                 return 0;
             }
 
-            let mut entry = PROCESSENTRY32W::default();
-            entry.dwSize = std::mem::size_of::<PROCESSENTRY32W>() as u32;
+            let mut entry = PROCESSENTRY32W {
+                dwSize: std::mem::size_of::<PROCESSENTRY32W>() as u32,
+                ..Default::default()
+            };
 
             if Process32FirstW(snapshot, &mut entry) != 0 {
                 loop {

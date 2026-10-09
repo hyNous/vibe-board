@@ -127,8 +127,10 @@ fn codex_window_minimized() -> Option<bool> {
     unsafe {
         let snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
         if snapshot != windows_sys::Win32::Foundation::INVALID_HANDLE_VALUE {
-            let mut entry = PROCESSENTRY32W::default();
-            entry.dwSize = std::mem::size_of::<PROCESSENTRY32W>() as u32;
+            let mut entry = PROCESSENTRY32W {
+                dwSize: std::mem::size_of::<PROCESSENTRY32W>() as u32,
+                ..Default::default()
+            };
             if Process32FirstW(snapshot, &mut entry) != 0 {
                 loop {
                     let name = process_name(&entry);

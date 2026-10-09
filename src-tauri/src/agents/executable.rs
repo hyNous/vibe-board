@@ -139,10 +139,10 @@ fn find_binary_exact(binary: &str) -> Option<PathBuf> {
         if let Some(path) = which_all(binary).into_iter().next() {
             return Some(path);
         }
-        return candidate_dirs()
+        candidate_dirs()
             .into_iter()
             .map(|dir| dir.join(binary))
-            .find(|path| path.is_file());
+            .find(|path| path.is_file())
     }
     #[cfg(not(target_os = "windows"))]
     {
@@ -248,7 +248,7 @@ fn windows_codex_bundled_cli_candidates_in(local_app_data: &Path) -> Vec<PathBuf
                 Some((modified, entry.path()))
             })
             .collect::<Vec<_>>();
-        version_dirs.sort_by(|a, b| b.0.cmp(&a.0));
+        version_dirs.sort_by_key(|a| std::cmp::Reverse(a.0));
         for (_, dir) in version_dirs {
             candidates.push(dir.join("codex.exe"));
             candidates.push(dir.join("codex.cmd"));
@@ -418,6 +418,9 @@ fn login_shell_path() -> Option<Vec<PathBuf>> {
 }
 
 fn candidate_dirs() -> Vec<PathBuf> {
+    #[cfg(target_os = "windows")]
+    let dirs = candidate_dirs_without_login_shell();
+    #[cfg(not(target_os = "windows"))]
     let mut dirs = candidate_dirs_without_login_shell();
     #[cfg(not(target_os = "windows"))]
     if let Some(shell_paths) = login_shell_path() {
