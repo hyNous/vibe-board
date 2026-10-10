@@ -1928,7 +1928,8 @@ mod tests {
         assert!(paths.iter().any(|path| path == "/usr/bin/cursor"));
         assert!(paths
             .iter()
-            .any(|path| path.ends_with("/.local/share/applications/cursor.desktop")));
+            .any(|path| std::path::Path::new(path)
+                .ends_with(".local/share/applications/cursor.desktop")));
     }
 
     #[test]

@@ -522,7 +522,9 @@ pub fn agent_installed(home: &std::path::Path, agent: &str) -> bool {
             .any(|path| crate::agents::hook_manager::has_agentbro_hooks(&path));
     }
 
-    for dir in agent_skill_dirs(home, agent) {
+    // A directory shared with other Agents (e.g. ~/.agents/skills) says nothing
+    // about whether this particular Agent is installed.
+    for dir in agent_owned_skill_dirs(home, agent) {
         if dir.exists() {
             return true;
         }

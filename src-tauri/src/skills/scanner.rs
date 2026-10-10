@@ -196,7 +196,7 @@ fn discover_in_dir(
 }
 
 fn is_project_skill_dir(path: &Path) -> bool {
-    let text = path.display().to_string();
+    let text = path.display().to_string().replace('\\', "/");
     text.contains("/.skills/")
         || text.ends_with("/.skills")
         || text.contains("/.agents/skills/")
@@ -248,7 +248,7 @@ fn project_path_for(root: &Path, dir_path: &Path) -> PathBuf {
 }
 
 fn discover_source_kind(dir_path: &Path) -> String {
-    let text = dir_path.display().to_string();
+    let text = dir_path.display().to_string().replace('\\', "/");
     let prefix = if is_obsidian_vault_skill(dir_path) {
         "obsidian/"
     } else {

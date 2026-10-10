@@ -323,7 +323,12 @@ mod tests {
             Some("1.2.3")
         );
         assert!(matches!(skill.skill_type, SkillType::Skill));
-        assert!(matches!(skill.agents[0].install_mode, InstallMode::Symlink));
+        // Windows never creates symlinks; the installer copies instead.
+        if cfg!(unix) {
+            assert!(matches!(skill.agents[0].install_mode, InstallMode::Symlink));
+        } else {
+            assert!(matches!(skill.agents[0].install_mode, InstallMode::Direct));
+        }
 
         installer::toggle_skill("fixture-skill", "claude-code", false).expect("disable skill");
         let settings =
@@ -365,12 +370,18 @@ mod tests {
         assert!(matches!(skill.skill_type, SkillType::Skill));
         assert_eq!(skill.agents[0].agent, "central");
         assert!(
-            skill.file_path.contains(".agents/skills/central-dir"),
+            skill
+                .file_path
+                .replace('\\', "/")
+                .contains(".agents/skills/central-dir"),
             "central scan should point at canonical ~/.agents skill path"
         );
         assert!(
             scanned.iter().any(|skill| skill.id == "legacy-fixture"
-                && skill.file_path.contains(".agentbro/skills/legacy-dir")),
+                && skill
+                    .file_path
+                    .replace('\\', "/")
+                    .contains(".agentbro/skills/legacy-dir")),
             "central scan should retain compatibility with legacy AgentBro skill path"
         );
     }
@@ -410,13 +421,27 @@ mod tests {
         assert!(
             discovered
                 .iter()
-                .any(|skill| skill.dir_path == project_skill.display().to_string()),
+                .any(|skill| Path::new(&skill.dir_path) == project_skill),
             "enabled scan roots should discover project skills"
+        );
+        let source_kind = |dir: &Path| {
+            discovered
+                .iter()
+                .find(|skill| Path::new(&skill.dir_path) == dir)
+                .map(|skill| skill.source_kind.clone())
+        };
+        assert_eq!(
+            source_kind(&project_skill).as_deref(),
+            Some(".agents/skills")
+        );
+        assert_eq!(
+            source_kind(&vault_skill).as_deref(),
+            Some("obsidian/.skills")
         );
         assert!(
             registry::list_discovered_skills()
                 .iter()
-                .any(|skill| skill.dir_path == project_skill.display().to_string()),
+                .any(|skill| Path::new(&skill.dir_path) == project_skill),
             "discovered skills should be cached for later navigation"
         );
 
@@ -430,7 +455,7 @@ mod tests {
         assert!(
             vault_skills
                 .iter()
-                .any(|skill| skill.dir_path == vault_skill.display().to_string()),
+                .any(|skill| Path::new(&skill.dir_path) == vault_skill),
             "vault skills should be discoverable from the vault view"
         );
 
@@ -475,7 +500,7 @@ mod tests {
 
         let backup = home.path.join("backup.zip");
         sync::export_backup(backup.to_str().expect("backup path")).expect("export backup");
-        fs::remove_dir_all(home.path.join(".agentbro")).expect("clear metadata");
+        fs::remove_dir_all(home.path.join(".vibeboard")).expect("clear metadata");
         fs::remove_dir_all(home.path.join(".agents")).expect("clear central skills");
         sync::import_backup(backup.to_str().expect("backup path")).expect("import backup");
 
@@ -489,8 +514,10 @@ mod tests {
     fn scans_and_manages_zcode_native_config() {
         let _guard = lock_home();
         let home = TempHome::new("zcode-config");
+        // ZCode keys its config by the scanned skill path, so build it from
+        // components to match the native separators the scanner reports.
         let skill = write_skill(
-            &home.path.join(".zcode/skills"),
+            &home.path.join(".zcode").join("skills"),
             "fixture-dir",
             "fixture-skill",
         );
@@ -544,7 +571,7 @@ mod tests {
         )
         .expect("write local shared skill");
 
-        let pending = home.path.join(".agentbro/sync/pending-pull");
+        let pending = home.path.join(".vibeboard/sync/pending-pull");
         fs::create_dir_all(pending.join("skills/shared")).expect("create pending shared skill");
         let remote_meta = registry::Metadata {
             packs: vec![SkillPack {

@@ -1062,14 +1062,19 @@ mod tests {
 
     #[test]
     fn config_dir_env_accepts_absolute_path() {
+        let absolute = if cfg!(windows) {
+            r"C:\custom\claude"
+        } else {
+            "/custom/claude"
+        };
         let dir = config_dir_from_env(|key| {
             if key == "CLAUDE_CONFIG_DIR" {
-                Some("/custom/claude".to_string())
+                Some(absolute.to_string())
             } else {
                 None
             }
         });
-        assert_eq!(dir, Some(PathBuf::from("/custom/claude")));
+        assert_eq!(dir, Some(PathBuf::from(absolute)));
     }
 
     #[test]

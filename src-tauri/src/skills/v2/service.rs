@@ -2724,7 +2724,8 @@ impl Service {
                         let mode_matches =
                             center_import_mode_matches(&input, &row.center_path, &dir);
                         if mode_matches {
-                            let content_matches = if input.import_mode.as_deref() == Some("link") {
+                            let content_matches = if effective_center_import_mode(&input) == "link"
+                            {
                                 true
                             } else {
                                 let source_hash =
@@ -7122,13 +7123,22 @@ fn source_uri_for_candidate(input: &AddCenterSkillInput, candidate_dir: &Path) -
     }
 }
 
+/// Windows cannot create symlinks, so a link import was written as a copy there
+/// and has to be compared like one.
+fn effective_center_import_mode(input: &AddCenterSkillInput) -> &str {
+    match input.import_mode.as_deref().unwrap_or("copy") {
+        "link" if !cfg!(unix) => "copy",
+        mode => mode,
+    }
+}
+
 fn center_import_mode_matches(
     input: &AddCenterSkillInput,
     center_path: &str,
     source_dir: &Path,
 ) -> bool {
     let center = Path::new(center_path);
-    match input.import_mode.as_deref().unwrap_or("copy") {
+    match effective_center_import_mode(input) {
         "link" => center.is_symlink() && paths_equal(center, source_dir),
         "copy" => !center.is_symlink(),
         _ => false,

@@ -14,6 +14,19 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+/// Windows accepts both `/` and `\` as separators, so paths built from
+/// `join("a/b")` must be compared by component, not as strings.
+#[track_caller]
+fn assert_same_path(actual: impl AsRef<Path>, expected: impl AsRef<Path>) {
+    assert_eq!(actual.as_ref(), expected.as_ref());
+}
+
+fn contains_path(paths: &[String], expected: impl AsRef<Path>) -> bool {
+    paths
+        .iter()
+        .any(|path| Path::new(path) == expected.as_ref())
+}
+
 /// Reuse the shared HOME lock from `skills` so v2 tests serialize against the
 /// legacy skill tests and `cargo test` is deterministic under parallelism.
 fn lock_home() -> std::sync::MutexGuard<'static, ()> {
@@ -394,6 +407,59 @@ fn add_center_skill_creates_and_updates() {
     );
 }
 
+#[cfg(windows)]
+#[test]
+fn add_center_skill_link_falls_back_to_copy_on_windows() {
+    let (_home, svc, _lock) = fresh_service("add-link-windows");
+    let src = write_skill(
+        &svc.home.join("dev-skills"),
+        "live-review",
+        "live-review",
+        Some("v1"),
+    );
+    let link_input = || AddCenterSkillInput {
+        source_path: src.display().to_string(),
+        source_type: "local_folder".to_string(),
+        source_uri: Some(src.display().to_string()),
+        imported_from_agent: None,
+        imported_from_path: None,
+        multi: None,
+        import_mode: Some("link".to_string()),
+    };
+
+    let result = svc.execute_add_center_skill(link_input(), vec![]).unwrap();
+
+    assert_eq!(result.skill_ids, vec!["live-review".to_string()]);
+    let center_skill = fsutil::default_center_path().join("live-review");
+    assert!(center_skill.is_dir());
+    assert!(!center_skill.is_symlink());
+    assert_eq!(
+        fs::read_to_string(center_skill.join("SKILL.md")).unwrap(),
+        fs::read_to_string(src.join("SKILL.md")).unwrap()
+    );
+    let unchanged = svc.preview_add_center_skill(link_input()).unwrap();
+    assert_eq!(unchanged.unchanged_count, 1);
+    assert!(unchanged.candidates.is_empty());
+
+    fs::write(
+        src.join("SKILL.md"),
+        "---
+name: live-review
+description: linked source
+---
+# updated
+",
+    )
+    .unwrap();
+    let center_doc = fs::read_to_string(center_skill.join("SKILL.md")).unwrap();
+    assert!(!center_doc.contains("# updated"));
+    let changed = svc.preview_add_center_skill(link_input()).unwrap();
+    assert_eq!(changed.unchanged_count, 0);
+    assert_eq!(changed.candidates.len(), 1);
+    assert_eq!(changed.candidates[0].action, "update");
+}
+
+#[cfg(unix)]
 #[test]
 fn add_center_skill_can_link_to_local_source() {
     let (_home, svc, _lock) = fresh_service("add-link");
@@ -3122,7 +3188,9 @@ fn delete_center_skill_preview_lists_targets() {
     assert_eq!(preview.affected_targets.len(), 1);
 
     let target_path = PathBuf::from(&preview.affected_targets[0].target_path);
-    assert!(target_path.is_symlink());
+    // Windows distributes link requests as standalone copies.
+    assert_eq!(target_path.is_symlink(), cfg!(unix));
+    assert!(target_path.join("SKILL.md").exists());
 
     // default action keeps Agent installs by turning links into standalone copies.
     svc.execute_delete_center_skill("release-checklist", false)
@@ -3135,7 +3203,8 @@ fn delete_center_skill_preview_lists_targets() {
         svc.list_unmanaged()
             .unwrap()
             .iter()
-            .filter(|item| item.path == target_path.display().to_string())
+            .filter(|item| item.agent_id.as_deref() == Some("claude-code")
+                && Path::new(&item.path) == target_path)
             .count(),
         1
     );
@@ -3172,7 +3241,9 @@ fn delete_center_skill_can_remove_agent_installs() {
         .preview_delete_center_skill("release-checklist")
         .unwrap();
     let target_path = PathBuf::from(&preview.affected_targets[0].target_path);
-    assert!(target_path.is_symlink());
+    // Windows distributes link requests as standalone copies.
+    assert_eq!(target_path.is_symlink(), cfg!(unix));
+    assert!(target_path.join("SKILL.md").exists());
 
     svc.execute_delete_center_skill("release-checklist", true)
         .unwrap();
@@ -4939,14 +5010,27 @@ fn diagnosis_flags_broken_link_and_unmanaged() {
     let issues = crate::skills::v2::diagnosis::run(&svc).unwrap();
     let types: Vec<_> = issues.iter().map(|i| i.issue_type.clone()).collect();
     assert!(
-        types
-            .iter()
-            .any(|t| t == "broken_link" || t == "target_missing"),
+        types.iter().any(|t| t == "agent_unmanaged"),
         "found: {:?}",
         types
     );
+    if !cfg!(unix) {
+        // Windows distributes link requests as copies, so removing the center
+        // directory leaves a working copy behind instead of a broken link.
+        assert!(Path::new(&target_path).join("SKILL.md").is_file());
+        assert!(
+            !types
+                .iter()
+                .any(|t| t == "broken_link" || t == "target_missing"),
+            "found: {:?}",
+            types
+        );
+        return;
+    }
     assert!(
-        types.iter().any(|t| t == "agent_unmanaged"),
+        types
+            .iter()
+            .any(|t| t == "broken_link" || t == "target_missing"),
         "found: {:?}",
         types
     );
@@ -5019,12 +5103,12 @@ fn doubao_scans_builtin_skills_as_read_only_and_keeps_user_skills_manageable() {
         .collect::<Vec<_>>();
     let user_item = items
         .iter()
-        .find(|item| item.path == user_skill.display().to_string())
+        .find(|item| Path::new(&item.path) == user_skill)
         .expect("user skill");
     assert!(!user_item.read_only);
     let builtin_item = items
         .iter()
-        .find(|item| item.path == builtin_skill.display().to_string())
+        .find(|item| Path::new(&item.path) == builtin_skill)
         .expect("builtin skill");
     assert!(builtin_item.read_only);
     assert_eq!(builtin_item.reason, "agent_builtin_read_only");
@@ -5035,9 +5119,9 @@ fn doubao_scans_builtin_skills_as_read_only_and_keeps_user_skills_manageable() {
         .into_iter()
         .find(|agent| agent.id == "doubao")
         .expect("doubao summary");
-    assert_eq!(
-        summary.skills_dir,
-        Some(svc.home.join("Doubao/skills").display().to_string())
+    assert_same_path(
+        summary.skills_dir.as_deref().expect("skills dir"),
+        svc.home.join("Doubao/skills"),
     );
     assert_eq!(summary.unmanaged_skill_count, 1);
     assert_eq!(summary.read_only_skill_count, 1);
@@ -5051,7 +5135,7 @@ fn doubao_scans_builtin_skills_as_read_only_and_keeps_user_skills_manageable() {
     assert_eq!(inventory.unmanaged_count, 1);
     assert_eq!(inventory.read_only_count, 1);
     assert!(inventory.items.iter().any(|item| {
-        item.path == builtin_skill.display().to_string()
+        Path::new(&item.path) == builtin_skill
             && item.read_only
             && !item.can_import
             && item.status == "builtin_read_only"
@@ -5096,10 +5180,10 @@ fn antigravity_agent_detail_uses_official_customization_paths() {
 
     let detail = svc.get_agent_detail("antigravity").unwrap();
 
-    assert_eq!(detail.skills_dir, Some(skills_dir.display().to_string()));
-    assert_eq!(
-        detail.config_path,
-        Some(config_dir.join("hooks.json").display().to_string())
+    assert_same_path(detail.skills_dir.expect("skills dir"), &skills_dir);
+    assert_same_path(
+        detail.config_path.expect("config path"),
+        config_dir.join("hooks.json"),
     );
 }
 
@@ -5402,9 +5486,9 @@ fn kimi_does_not_claim_agentbro_center_skills() {
         .expect("kimi inventory");
 
     assert!(!kimi.installed);
-    assert_eq!(
-        kimi.skills_dir,
-        Some(svc.home.join(".kimi-code/skills").display().to_string())
+    assert_same_path(
+        kimi.skills_dir.as_deref().expect("skills dir"),
+        svc.home.join(".kimi-code/skills"),
     );
     assert_eq!(kimi.unmanaged_count, 0);
     assert!(kimi.items.is_empty());
@@ -5457,15 +5541,15 @@ fn shared_agents_skills_dir_is_scanned_as_own_target() {
         .expect(".agents inventory");
 
     assert!(shared.installed);
-    assert_eq!(
-        shared.skills_dir,
-        Some(svc.home.join(".agents/skills").display().to_string())
+    assert_same_path(
+        shared.skills_dir.as_deref().expect("skills dir"),
+        svc.home.join(".agents/skills"),
     );
     assert_eq!(shared.unmanaged_count, 1);
     assert_eq!(shared.importable_count, 1);
-    assert_eq!(
-        shared.items[0].path,
-        svc.home.join(".agents/skills/shared").display().to_string()
+    assert_same_path(
+        &shared.items[0].path,
+        svc.home.join(".agents/skills/shared"),
     );
     assert_eq!(
         shared.items[0].reason.as_deref(),
@@ -5586,29 +5670,21 @@ fn openclaw_scans_configured_workspace_skills() {
         .collect::<Vec<_>>();
     let workspace_skill_path = svc
         .home
-        .join("custom-openclaw-workspace/skills/workspace-one")
-        .display()
-        .to_string();
-    let managed_skill_path = svc
-        .home
-        .join(".openclaw/skills/managed-one")
-        .display()
-        .to_string();
+        .join("custom-openclaw-workspace/skills/workspace-one");
+    let managed_skill_path = svc.home.join(".openclaw/skills/managed-one");
     let nested_skill_path = svc
         .home
-        .join("custom-openclaw-workspace/skills/content/nested-one")
-        .display()
-        .to_string();
+        .join("custom-openclaw-workspace/skills/content/nested-one");
 
     assert!(openclaw.installed);
-    assert_eq!(
-        openclaw.skills_dir,
-        Some(workspace_skills.display().to_string())
+    assert_same_path(
+        openclaw.skills_dir.as_deref().expect("skills dir"),
+        &workspace_skills,
     );
     assert!(openclaw.unmanaged_count >= 3);
-    assert!(paths.contains(&workspace_skill_path));
-    assert!(paths.contains(&managed_skill_path));
-    assert!(paths.contains(&nested_skill_path));
+    assert!(contains_path(&paths, &workspace_skill_path));
+    assert!(contains_path(&paths, &managed_skill_path));
+    assert!(contains_path(&paths, &nested_skill_path));
 }
 
 // ── Snapshot ─────────────────────────────────────────────────────
@@ -5737,7 +5813,7 @@ fn project_inventory_scans_kimi_code_resources() {
     assert!(kimi
         .config_paths
         .iter()
-        .any(|path| path.ends_with(".kimi-code/agents")));
+        .any(|path| Path::new(path).ends_with(".kimi-code/agents")));
 }
 
 #[test]
@@ -5813,11 +5889,7 @@ fn installs_center_skill_to_project_and_rescans() {
 #[test]
 fn settings_round_trip() {
     let (_home, svc, _lock) = fresh_service("settings");
-    assert!(svc
-        .settings()
-        .unwrap()
-        .center_path
-        .ends_with(".agentbro/skills"));
+    assert!(Path::new(&svc.settings().unwrap().center_path).ends_with(".agentbro/skills"));
     let updated = svc
         .update_settings(SettingsUpdate {
             center_path: None,
@@ -5847,10 +5919,7 @@ fn settings_round_trip() {
             periodic_skill_update_check: None,
         })
         .unwrap();
-    assert_eq!(
-        unchanged.center_path,
-        svc.home.join(".agentbro/skills").display().to_string()
-    );
+    assert_same_path(&unchanged.center_path, svc.home.join(".agentbro/skills"));
 }
 
 #[test]
@@ -5871,10 +5940,7 @@ fn settings_migrate_existing_custom_center_into_fixed_agentbro_center() {
 
     let migrated = svc.settings().unwrap();
 
-    assert_eq!(
-        migrated.center_path,
-        svc.home.join(".agentbro/skills").display().to_string()
-    );
+    assert_same_path(&migrated.center_path, svc.home.join(".agentbro/skills"));
     assert!(svc
         .home
         .join(".agentbro/skills/legacy-skill/SKILL.md")

@@ -443,7 +443,12 @@ fn collect_skill_previews(
             .unwrap_or_default()
             .to_string_lossy()
             .to_string();
-        let source_path = dir.strip_prefix(root).unwrap_or(dir).display().to_string();
+        let source_path = dir
+            .strip_prefix(root)
+            .unwrap_or(dir)
+            .display()
+            .to_string()
+            .replace('\\', "/");
         previews.push(GitHubSkillPreview {
             source_path,
             name: frontmatter
