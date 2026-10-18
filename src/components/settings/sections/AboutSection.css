@@ -1,0 +1,145 @@
+/* Vibe Board — 关于页（M16b「岛的延伸」）
+ * 版本号与检查更新放进页面正中一颗放大的岛形胶囊；链接和诊断包都在下方一行。 */
+
+.about-settings {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+  padding-top: 12vh;
+  color: var(--vb-text);
+  text-align: center;
+}
+
+.about-settings__island {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 14px 14px 14px 18px;
+  border: 1px solid var(--vb-line);
+  border-radius: 999px;
+  background: var(--vb-s1);
+  text-align: left;
+  animation: about-settings-grow .6s var(--vb-ease) both;
+}
+
+@keyframes about-settings-grow {
+  from { clip-path: inset(0 42% round 999px); }
+  to { clip-path: inset(0 0 round 999px); }
+}
+
+.about-settings__mark {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 56px;
+  height: 56px;
+  border: 1px solid var(--vb-line);
+  border-radius: 20px;
+  background: var(--vb-black);
+}
+
+.about-settings__mark img {
+  width: 40px;
+  height: 40px;
+}
+
+.about-settings__text {
+  display: flex;
+  flex-direction: column;
+  min-width: 300px;
+}
+
+.about-settings__text b {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--vb-text);
+}
+
+.about-settings__text span {
+  display: inline-flex;
+  align-items: center;
+  font-size: 14px;
+  color: var(--vb-text-2);
+}
+
+/* 有新版本时，状态这一行跟着反白成需要你注意的样子 */
+.about-settings__island--found .about-settings__text span { color: var(--vb-text); }
+
+.about-settings__spin {
+  width: 14px;
+  height: 14px;
+  margin-right: 6px;
+  border: 2px solid var(--vb-s3);
+  border-top-color: var(--vb-text);
+  border-radius: 50%;
+  animation: about-settings-spin .8s linear infinite;
+}
+
+@keyframes about-settings-spin {
+  to { transform: rotate(360deg); }
+}
+
+.about-settings__check {
+  flex: none;
+  padding: 9px 18px;
+  font-size: 14px;
+}
+
+.about-settings__line {
+  margin: 22px 0 0;
+  font-size: 14px;
+  color: var(--vb-text-2);
+}
+
+.about-settings__links {
+  display: flex;
+  gap: 28px;
+  margin-top: 30px;
+}
+
+.about-settings__link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--vb-text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.about-settings__link:hover { text-decoration: underline; text-underline-offset: 3px; }
+.about-settings__link:disabled { opacity: .5; pointer-events: none; }
+
+.about-settings__arrow {
+  width: 14px;
+  height: 14px;
+}
+
+.about-settings__note {
+  margin: 18vh 0 0;
+  font-size: 13px;
+  line-height: 1.8;
+  color: var(--vb-text-2);
+}
+
+.about-settings__error {
+  margin-top: 12px;
+}
+
+.about-settings__error .setting-details {
+  margin: 0;
+}
+
+.about-settings__error .setting-details__toggle {
+  color: var(--vb-hot);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .about-settings__island { animation: none; }
+  .about-settings__spin { animation: none; }
+}

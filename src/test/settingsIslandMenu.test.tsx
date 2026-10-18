@@ -174,21 +174,21 @@ describe('settings island menu', () => {
     expect(screen.queryByRole('button', { name: 'settings.welcomeContinue' })).not.toBeInTheDocument()
   })
 
-  it('uses the appearance page tabs instead of top tabs', async () => {
+  it('uses the appearance page group switcher instead of top tabs', async () => {
     const { container } = render(<SettingsApp onClose={vi.fn()} />)
 
     fireEvent.click(screen.getByRole('button', { name: '外观' }))
 
-    await waitFor(() => expect(screen.getByRole('button', { name: /Overview/ })).toHaveClass('active'))
-    const islandTabs = Array.from(container.querySelectorAll('.island-view-tabs button'))
+    await waitFor(() => expect(screen.getByRole('radio', { name: 'Overview' })).toHaveAttribute('aria-checked', 'true'))
+    const islandTabs = Array.from(container.querySelectorAll('.island-look__tabs .vb-seg__item'))
       .map((button) => button.textContent?.trim())
-    expect(islandTabs).toEqual(['Overview', 'Display', 'Behavior', 'Advanced'])
+    expect(islandTabs).toEqual(['Overview', 'Position and size', 'Collapse and hide', 'Advanced'])
     expect(container.querySelector('.island-tabs')).not.toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: /Display/ }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Position and size' }))
 
-    await waitFor(() => expect(screen.getByRole('button', { name: /Display/ })).toHaveClass('active'))
-    // 灵动岛效果只在总览页提供单一入口，Display 页不再重复配色卡与效果单选项。
+    await waitFor(() => expect(screen.getByRole('radio', { name: 'Position and size' })).toHaveAttribute('aria-checked', 'true'))
+    // 灵动岛效果只在总览页提供单一入口，位置与尺寸页不再重复配色卡与效果单选项。
     expect(screen.queryByText('settings.colorTheme')).not.toBeInTheDocument()
     expect(container.querySelector('.pet-picker-block')).toBeNull()
     expect(screen.queryByText('settings.activeTheme')).not.toBeInTheDocument()
@@ -202,11 +202,11 @@ describe('settings island menu', () => {
     render(<SettingsApp onClose={vi.fn()} />)
 
     fireEvent.click(screen.getByRole('button', { name: '外观' }))
-    await waitFor(() => expect(screen.getByRole('button', { name: /Overview/ })).toHaveClass('active'))
+    await waitFor(() => expect(screen.getByRole('radio', { name: 'Overview' })).toHaveAttribute('aria-checked', 'true'))
 
-    for (const tab of ['Overview', 'Display', 'Behavior', 'Advanced']) {
-      fireEvent.click(screen.getByRole('button', { name: new RegExp(tab) }))
-      await waitFor(() => expect(screen.getByRole('button', { name: new RegExp(tab) })).toHaveClass('active'))
+    for (const tab of ['Overview', 'Position and size', 'Collapse and hide', 'Advanced']) {
+      fireEvent.click(screen.getByRole('radio', { name: tab }))
+      await waitFor(() => expect(screen.getByRole('radio', { name: tab })).toHaveAttribute('aria-checked', 'true'))
       expect(screen.queryByText('Hook Doctor')).not.toBeInTheDocument()
       expect(screen.queryByText('settings.detectedTools')).not.toBeInTheDocument()
       expect(screen.queryByText('自定义 Hook 配置')).not.toBeInTheDocument()
@@ -222,7 +222,7 @@ describe('settings island menu', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '外观' }))
 
-    await waitFor(() => expect(screen.getByRole('button', { name: /Overview/ })).toHaveClass('active'))
+    await waitFor(() => expect(screen.getByRole('radio', { name: 'Overview' })).toHaveAttribute('aria-checked', 'true'))
     expect(screen.queryByText('settings.sshDescription')).not.toBeInTheDocument()
   })
 
@@ -230,7 +230,7 @@ describe('settings island menu', () => {
     render(<SettingsApp onClose={vi.fn()} />)
 
     fireEvent.click(screen.getByRole('button', { name: '外观' }))
-    fireEvent.click(await screen.findByRole('button', { name: /Advanced/ }))
+    fireEvent.click(await screen.findByRole('radio', { name: 'Advanced' }))
 
     await waitFor(() => expect(screen.getByText('Visual Signals')).toBeInTheDocument())
     expect(screen.getByText('settings.agentActivity')).toBeInTheDocument()
@@ -277,16 +277,25 @@ describe('settings island menu', () => {
     await waitFor(() => expect(midnight).toHaveAttribute('aria-checked', 'true'))
   })
 
-  it('removes the large island preview while keeping both effect choices', async () => {
-    render(<SettingsApp onClose={vi.fn()} />)
+  it('shows the live island preview above both effect choices', async () => {
+    useThemeStore.setState({ colorTheme: 'midnight' })
+    const { container } = render(<SettingsApp onClose={vi.fn()} />)
 
     fireEvent.click(screen.getByRole('button', { name: '外观' }))
 
     expect(await screen.findByRole('radio', { name: /纯黑/ })).toBeInTheDocument()
     expect(screen.getByRole('radio', { name: /磨砂玻璃/ })).toBeInTheDocument()
-    expect(screen.getByText(/选择一种外观效果/)).toBeInTheDocument()
-    expect(document.querySelector('.island-effect-picker')).not.toBeNull()
-    expect(document.querySelector('.island-effect-preview')).toBeNull()
+    expect(container.querySelector('.island-look__stage')).not.toBeNull()
+    expect(container.querySelector('.island-look__choices')).not.toBeNull()
+
+    // 预览跟着外观效果变：纯黑不透明，磨砂玻璃是半透明浅色。
+    expect(container.querySelector('.island-look__island')).not.toHaveClass('island-look__island--glass')
+    fireEvent.click(screen.getByRole('radio', { name: /磨砂玻璃/ }))
+    await waitFor(() => expect(container.querySelector('.island-look__island')).toHaveClass('island-look__island--glass'))
+
+    // 预览也分空闲与运行中：没有正在跑的 Agent 时如实说出来。
+    fireEvent.click(screen.getByRole('radio', { name: '运行中' }))
+    expect(await screen.findByText('现在没有 Agent 在运行')).toBeInTheDocument()
   })
 
   it('opens the user-level Skills overview with honest effect categories', async () => {
@@ -321,7 +330,7 @@ describe('settings island menu', () => {
     fireEvent.click(screen.getByRole('button', { name: '外观' }))
 
     await waitFor(() => expect(screen.getByText('settings.tipsEnabled')).toBeInTheDocument())
-    const tipsRow = screen.getByText('settings.tipsEnabled').closest('.setting-row')
+    const tipsRow = screen.getByText('settings.tipsEnabled').closest('.island-look__row')
     fireEvent.click(tipsRow!.querySelector('[role="switch"]')!)
 
     expect(tauriMocks.setIslandFeatureFlags).toHaveBeenCalledWith(expect.objectContaining({
@@ -330,7 +339,7 @@ describe('settings island menu', () => {
     }))
   })
 
-  it('uses interaction mode cards as presets and marks manual changes as custom', async () => {
+  it('uses the visibility segmented control as presets and marks manual changes as custom', async () => {
     useConfigStore.setState({
       interactionMode: 'persistent',
       smartSuppression: true,
@@ -342,7 +351,7 @@ describe('settings island menu', () => {
     render(<SettingsApp onClose={vi.fn()} />)
 
     fireEvent.click(screen.getByRole('button', { name: '外观' }))
-    fireEvent.click(await screen.findByText('Quiet Assistant'))
+    fireEvent.click(await screen.findByRole('radio', { name: 'Quiet Assistant' }))
 
     expect(useConfigStore.getState()).toEqual(expect.objectContaining({
       interactionMode: 'minimal',
@@ -353,8 +362,8 @@ describe('settings island menu', () => {
     }))
     expect(screen.queryByText('Custom visibility')).not.toBeInTheDocument()
 
-    const autoHideRow = screen.getByText('settings.autoHideNoSessions').closest('.setting-row')
-    fireEvent.click(autoHideRow!.querySelector('[role="switch"]')!)
+    const suppressRow = screen.getByText('settings.smartSuppression').closest('.island-look__row')
+    fireEvent.click(suppressRow!.querySelector('[role="switch"]')!)
 
     // The whole settings app re-renders here; allow for a busy parallel test run.
     await waitFor(() => expect(screen.getByText('Custom visibility')).toBeInTheDocument(), { timeout: 3_000 })
@@ -377,7 +386,7 @@ describe('settings island menu', () => {
     render(<SettingsApp onClose={vi.fn()} />)
 
     fireEvent.click(screen.getByRole('button', { name: '外观' }))
-    fireEvent.click(await screen.findByRole('button', { name: /Display/ }))
+    fireEvent.click(await screen.findByRole('radio', { name: 'Position and size' }))
 
     await waitFor(() => {
       expect(screen.getByText('settings.mainDisplay · Color LCD (1728x1117)')).toBeInTheDocument()
@@ -390,10 +399,10 @@ describe('settings island menu', () => {
     const { container } = render(<SettingsApp onClose={vi.fn()} />)
 
     fireEvent.click(screen.getByRole('button', { name: '外观' }))
-    fireEvent.click(await screen.findByRole('button', { name: /Display/ }))
+    fireEvent.click(await screen.findByRole('radio', { name: 'Position and size' }))
 
     await waitFor(() => expect(screen.getByText('settings.customNotchHeight')).toBeInTheDocument())
-    const customRow = screen.getByText('settings.customNotchHeight').closest('.setting-row')
+    const customRow = screen.getByText('settings.customNotchHeight').closest('.island-look__row')
     const slider = customRow!.querySelector<HTMLInputElement>('input[type="range"]')!
     fireEvent.change(slider, { target: { value: '55' } })
 
@@ -409,10 +418,10 @@ describe('settings island menu', () => {
     render(<SettingsApp onClose={vi.fn()} />)
 
     fireEvent.click(screen.getByRole('button', { name: '外观' }))
-    fireEvent.click(await screen.findByRole('button', { name: /Display/ }))
+    fireEvent.click(await screen.findByRole('radio', { name: 'Position and size' }))
 
     await waitFor(() => expect(screen.getByText('settings.completionCardHeight')).toBeInTheDocument())
-    const row = screen.getByText('settings.completionCardHeight').closest('.setting-row')
+    const row = screen.getByText('settings.completionCardHeight').closest('.island-look__row')
     const slider = row!.querySelector<HTMLInputElement>('input[type="range"]')!
     expect(slider).toHaveAttribute('max', '420')
 
@@ -428,10 +437,10 @@ describe('settings island menu', () => {
     render(<SettingsApp onClose={vi.fn()} />)
 
     fireEvent.click(screen.getByRole('button', { name: '外观' }))
-    fireEvent.click(await screen.findByRole('button', { name: /Display/ }))
+    fireEvent.click(await screen.findByRole('radio', { name: 'Position and size' }))
 
     await waitFor(() => expect(screen.getByText('Side Island Size')).toBeInTheDocument())
-    const row = screen.getByText('Side Island Size').closest('.setting-row')!
+    const row = screen.getByText('Side Island Size').closest('.island-look__row')!
     expect(row).toHaveTextContent('Narrow')
 
     fireEvent.click(row.querySelector('.glass-dropdown__trigger')!)
@@ -456,11 +465,10 @@ describe('settings island menu', () => {
     expect(screen.queryByText('Deny current permission')).not.toBeInTheDocument()
     expect(screen.queryByText('Skip current question')).not.toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: /Show advanced shortcuts/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Show more shortcuts/ }))
     await waitFor(() => expect(screen.getByText('Expand Panel')).toBeInTheDocument())
-    const row = screen.getByText('Expand Panel').closest('.shortcuts-row')!
-    const editButtons = row.querySelectorAll('.shortcuts-row__edit')
-    fireEvent.click(editButtons[editButtons.length - 1]!)
+    const row = screen.getByText('Expand Panel').closest('.shortcut-row')!
+    fireEvent.click(row.querySelector('.shortcut-row__edit')!)
     fireEvent.keyDown(window, { key: 'k', metaKey: isApplePlatform(), ctrlKey: !isApplePlatform(), shiftKey: true })
 
     const expectedShortcut = isApplePlatform() ? '⌘+⇧+K' : 'Ctrl+Shift+K'
@@ -468,10 +476,10 @@ describe('settings island menu', () => {
     expect(useConfigStore.getState().shortcuts.find((shortcut) => shortcut.action === 'expand-panel')?.keys).toBe(expectedShortcut)
     for (const part of expectedParts) expect(row).toHaveTextContent(part)
 
-    fireEvent.click(row.querySelector('.shortcuts-row__clear')!)
+    fireEvent.click(row.querySelector('.shortcut-row__clear')!)
 
     expect(useConfigStore.getState().shortcuts.find((shortcut) => shortcut.action === 'expand-panel')?.keys).toBe('')
-    expect(row).toHaveTextContent('Off')
+    expect(row).toHaveTextContent('Not set')
   })
 
   it('rolls back a failed global toggle shortcut registration', async () => {
@@ -598,17 +606,18 @@ describe('settings island menu', () => {
     expect(await screen.findByTestId('dispatch-empty-agents')).toBeInTheDocument()
   })
 
-  it('keeps the app version out of the About default view and shows it in the details', async () => {
+  it('shows the version and update state inside the enlarged island pill', async () => {
     render(<SettingsApp onClose={vi.fn()} />)
 
     fireEvent.click(screen.getByRole('button', { name: '关于' }))
 
-    const versionDetails = await screen.findByTestId('about-version-details')
-    expect(screen.queryByText(/^Version /)).not.toBeInTheDocument()
-    expect(screen.queryByText(/^v?\d+\.\d+\.\d+$/)).not.toBeInTheDocument()
-
-    fireEvent.click(versionDetails)
-    expect(screen.getByTestId('about-version-details-body')).toHaveTextContent('Vibe Board 版本')
+    const island = await screen.findByText(/^Vibe Board \d+\.\d+\.\d+$/)
+    expect(island).toBeInTheDocument()
+    expect(screen.getByTestId('about-update-status')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '检查更新' })).toBeInTheDocument()
+    expect(screen.getByTestId('about-export-diagnostics')).toBeInTheDocument()
+    expect(screen.queryByText('settings.autoInstallUpdate')).not.toBeInTheDocument()
+    expect(screen.queryByText('settings.autoCheckUpdate')).not.toBeInTheDocument()
   })
 
   it('reopens the first-run wizard from the tutorial entry', async () => {

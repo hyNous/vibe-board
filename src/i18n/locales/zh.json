@@ -141,17 +141,32 @@
       "desc": "选择灵动岛长什么样、停在哪里、什么时候出现。",
       "tabs": {
         "overview": "总览",
-        "display": "显示",
-        "behavior": "行为",
+        "display": "位置与尺寸",
+        "behavior": "收起与隐藏",
         "advanced": "高级"
       },
       "section": {
-        "displayPlacement": "显示器位置",
-        "expand": "展开",
-        "hide": "隐藏与收起",
-        "sessionHandling": "会话处理",
-        "visualSignals": "视觉信号"
+        "displayPlacement": "位置",
+        "expand": "动画",
+        "hide": "收起与隐藏",
+        "sessionHandling": "会话",
+        "visualSignals": "额外信号"
       },
+      "groups": {
+        "look": "外观",
+        "content": "显示内容",
+        "size": "尺寸"
+      },
+      "preview": {
+        "label": "灵动岛预览",
+        "idle": "空闲",
+        "run": "运行中",
+        "noAgents": "现在没有 Agent 在运行"
+      },
+      "appearWhen": "什么时候出现",
+      "resetAction": "恢复默认",
+      "resetDone": "灵动岛设置已恢复默认",
+      "positionResetDone": "灵动岛已回到正中间",
       "overview": {
         "quietAssistant": "安静助手",
         "quietAssistantDesc": "Agent 执行时隐藏，只在出错和完成时出现。",
@@ -204,6 +219,7 @@
     "cancel": "取消",
     "edit": "编辑",
     "shortcutClear": "清除",
+    "shortcutSet": "设置",
     "shortcutOff": "未设置",
     "showAdvancedShortcuts": "显示更多快捷键",
     "hideAdvancedShortcuts": "收起更多快捷键",
@@ -382,11 +398,13 @@
     "logoMeaningTitle": "连接人和 Agent 的工作台",
     "logoMeaningDesc": "Vibe Board 的 VB 标志代表 Vibe Board 本身：深色底板像一个始终在身边的工作台，渐变色方块代表正在流动的任务、状态和灵感。",
     "dispatch": {
-      "title": "派发关系树",
+      "title": "派活关系",
       "desc": "让一个 Agent 把任务派给另一个 Agent。派活工具只装一次，能读到它的 Agent 就都能派活。点「＋ 添加工人」建立关系，点「断开」解除关系；装好之后派活由主 Agent 直接完成，不经过 Vibe Board。",
       "loading": "正在读取本机 Agent…",
       "emptyAgents": "没有检测到已安装的 Agent。",
       "treeTitle": "谁可以派给谁",
+      "toolChip": "派活工具 agent-dispatch",
+      "preNode": "Node.js",
       "noConnections": "{{agent}} 还没有可以派活的工人。",
       "addWorker": "＋ 添加工人",
       "noAddableWorkers": "本机检测到的工人都已经连上了。",
@@ -516,6 +534,9 @@
     "panelMaxWidth": "展开面板宽度",
     "agentConnection": "接入的 Agent",
     "agentConnectionDesc": "选择哪些 Agent 会把任务状态同步到看板。",
+    "agentConnectedCount": "{{count}} 个 Agent 已接入",
+    "agentConnectedDesc": "它们开新会话时会通知灵动岛",
+    "quitHint": "灵动岛和托盘图标都会关掉",
     "autoLaunchAgents": "{{count}} 个 Agent 会在会话开始时自动打开看板",
     "notConfigured": "还没有接入任何 Agent",
     "configure": "选择要接入的 Agent",
@@ -524,6 +545,7 @@
     "details": "详情",
     "wizardOpenFailed": "向导没能打开，请稍后再试。",
     "aboutDesc": "关于 Vibe Board 本身：更新、反馈渠道和排查问题用的诊断包。",
+    "aboutDiagnosticsNote": "诊断包不含你的代码和对话内容",
     "versionDetails": "版本详情",
     "appVersion": "Vibe Board 版本",
     "usageNetworkToggle": "允许查询 {{name}} 的剩余额度",

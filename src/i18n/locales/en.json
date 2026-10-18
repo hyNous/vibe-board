@@ -141,17 +141,32 @@
       "desc": "Choose how the island looks, where it sits, and when it appears.",
       "tabs": {
         "overview": "Overview",
-        "display": "Display",
-        "behavior": "Behavior",
+        "display": "Position and size",
+        "behavior": "Collapse and hide",
         "advanced": "Advanced"
       },
       "section": {
-        "displayPlacement": "Display Placement",
-        "expand": "Expand",
-        "hide": "Hide and Collapse",
-        "sessionHandling": "Session Handling",
-        "visualSignals": "Visual Signals"
+        "displayPlacement": "Position",
+        "expand": "Animation",
+        "hide": "Collapse and hide",
+        "sessionHandling": "Sessions",
+        "visualSignals": "Extra signals"
       },
+      "groups": {
+        "look": "Look",
+        "content": "What it shows",
+        "size": "Size"
+      },
+      "preview": {
+        "label": "Island preview",
+        "idle": "Idle",
+        "run": "Running",
+        "noAgents": "No Agent is running right now"
+      },
+      "appearWhen": "When it appears",
+      "resetAction": "Restore defaults",
+      "resetDone": "Island settings restored to defaults",
+      "positionResetDone": "Island moved back to the center",
       "overview": {
         "quietAssistant": "Quiet Assistant",
         "quietAssistantDesc": "Hidden while Agents work; appears when something fails or finishes.",
@@ -204,6 +219,7 @@
     "cancel": "Cancel",
     "edit": "Edit",
     "shortcutClear": "Clear",
+    "shortcutSet": "Set",
     "shortcutOff": "Not set",
     "showAdvancedShortcuts": "Show more shortcuts",
     "hideAdvancedShortcuts": "Hide more shortcuts",
@@ -382,11 +398,13 @@
     "logoMeaningTitle": "A workboard for people and agents",
     "logoMeaningDesc": "The VB mark represents Vibe Board itself: the dark board is an always-at-hand workspace, while the gradient tile represents tasks, status, and ideas in motion.",
     "dispatch": {
-      "title": "Dispatch tree",
+      "title": "Handoff relationships",
       "desc": "Let one Agent hand tasks to another. The handoff tool is installed once and every Agent that reads it can use it. Use “＋ Add worker” to connect them and “Disconnect” to undo; after that your main Agent dispatches on its own and Vibe Board is not in the loop.",
       "loading": "Reading local Agents…",
       "emptyAgents": "No installed Agent was detected.",
       "treeTitle": "Who can hand tasks to whom",
+      "toolChip": "Handoff tool agent-dispatch",
+      "preNode": "Node.js",
       "noConnections": "{{agent}} has no worker yet.",
       "addWorker": "＋ Add worker",
       "noAddableWorkers": "Every worker detected on this machine is already connected.",
@@ -516,6 +534,9 @@
     "panelMaxWidth": "Expanded Panel Width",
     "agentConnection": "Connected Agents",
     "agentConnectionDesc": "Choose which Agents report their task status to the board.",
+    "agentConnectedCount": "{{count}} Agents connected",
+    "agentConnectedDesc": "They notify the island when a new session starts",
+    "quitHint": "The island and the tray icon both close",
     "autoLaunchAgents": "{{count}} Agent(s) open the board when a session starts",
     "notConfigured": "No Agent connected yet",
     "configure": "Choose Agents",
@@ -524,6 +545,7 @@
     "details": "Details",
     "wizardOpenFailed": "The wizard could not open. Please try again later.",
     "aboutDesc": "About Vibe Board itself: updates, feedback, and a diagnostics bundle for troubleshooting.",
+    "aboutDiagnosticsNote": "The diagnostics bundle leaves out your code and conversations",
     "versionDetails": "Version details",
     "appVersion": "Vibe Board version",
     "usageNetworkToggle": "Allow checking remaining quota for {{name}}",

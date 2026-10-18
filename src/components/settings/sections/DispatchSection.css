@@ -1,245 +1,391 @@
-.dispatch-node {
-  padding: 12px;
-  border: 1px solid var(--settings-card-border);
-  border-radius: 10px;
-  background: var(--settings-card-background, #fbfbfd);
+/* Vibe Board — 派活关系页（M16b「岛的延伸」）
+ * 每个主 Agent 一张面板：左边是它自己，右边是工人胶囊，用细线连起来。
+ * 配色只用 settings-island.css 的变量：黑白两极加一组灰，彩色只有品牌渐变、运行中亮蓝和珊瑚红。 */
+
+.dispatch-settings {
+  min-width: 0;
+  color: var(--vb-text);
 }
 
-.dispatch-node + .dispatch-node {
-  margin-top: 10px;
+/* ── 页头 ── */
+.dispatch-settings__head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 0 0 20px;
 }
 
-.dispatch-node__head {
+.dispatch-settings__head h1 {
+  margin: 0;
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: .01em;
+  color: var(--vb-text);
+}
+
+.dispatch-settings__head p {
+  max-width: 46em;
+  margin: 6px 0 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--vb-text-2);
+}
+
+.dispatch-settings__group-title {
+  margin: 26px 0 10px 22px;
+  font-size: 13px;
+  color: var(--vb-text-2);
+}
+
+/* ── 前置条件胶囊 ── */
+.dispatch-pre {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding-bottom: 14px;
+}
+
+.dispatch-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: var(--vb-s1);
+  font-size: 13px;
+  color: var(--vb-text-2);
+}
+
+.dispatch-chip__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--vb-live);
+}
+
+.dispatch-chip__dot--off { background: var(--vb-hot); }
+
+/* ── 提示与状态 ── */
+.dispatch-panel {
+  padding: 4px 22px;
+  border-radius: var(--vb-r-panel);
+  background: var(--vb-s1);
+}
+
+.dispatch-empty {
+  padding: 20px 22px;
+  border-radius: var(--vb-r-panel);
+  background: var(--vb-s1);
+  font-size: 13px;
+  color: var(--vb-text-2);
+  text-align: center;
+}
+
+.dispatch-error {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 12px 18px;
+  border-radius: 18px;
+  background: var(--vb-s1);
+  font-size: 13px;
+  color: var(--vb-hot);
+  word-break: break-word;
+}
+
+/* 需要注意的事（覆盖文件、共用目录）：灰面板 + 珊瑚红的点，文字保持白色 */
+.dispatch-warning {
+  position: relative;
+  margin: 12px 0;
+  padding: 12px 18px 12px 34px;
+  border-radius: 18px;
+  background: var(--vb-s2);
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--vb-text);
+}
+
+.dispatch-warning::before {
+  content: "";
+  position: absolute;
+  left: 18px;
+  top: 19px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--vb-hot);
+}
+
+.dispatch-success {
+  margin: 12px 0;
+  padding: 12px 18px;
+  border-radius: 18px;
+  background: var(--vb-s2);
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--vb-text);
+  font-weight: 600;
+}
+
+.dispatch-install__desc {
+  margin: 14px 0 4px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--vb-text-2);
+}
+
+/* ── 关系树：主 Agent 一张面板 ── */
+.dispatch-boss {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  align-items: center;
+  gap: 0;
+  padding: 20px 22px;
+  border-radius: var(--vb-r-panel);
+  background: var(--vb-s1);
+}
+
+.dispatch-boss + .dispatch-boss {
+  margin-top: 12px;
+}
+
+.dispatch-boss__node {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+}
+
+.dispatch-boss__head {
   display: flex;
   align-items: center;
   gap: 10px;
-}
-
-.dispatch-node__name {
-  flex: 1;
   min-width: 0;
-  font-size: 13px;
-  color: var(--settings-text-primary);
 }
 
-.dispatch-node__workers {
+.dispatch-boss__name {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--vb-text);
+}
+
+.dispatch-boss__share {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--vb-text-2);
+}
+
+.dispatch-boss__workers {
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  margin: 8px 0 0 40px;
+  align-items: flex-start;
+  gap: 14px;
+  min-width: 0;
+  padding-left: 44px;
 }
 
-.dispatch-node__empty {
-  margin: 0;
-  color: var(--settings-text-tertiary);
-  font-size: 11px;
-  line-height: 1.5;
+.dispatch-boss__list {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
 }
+
+/* 从主 Agent 拉出来的细线：一条横线，多个工人时再加一条竖线 */
+.dispatch-boss__list::before {
+  content: "";
+  position: absolute;
+  left: -44px;
+  top: 22px;
+  width: 22px;
+  height: 1.5px;
+  background: var(--vb-s3);
+}
+
+.dispatch-boss__list::after {
+  content: "";
+  position: absolute;
+  left: -22px;
+  top: 22px;
+  bottom: 22px;
+  width: 1.5px;
+  background: var(--vb-s3);
+}
+
+.dispatch-boss__list--single::after { display: none; }
 
 .dispatch-worker {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  color: var(--settings-text-primary);
+  gap: 14px;
+  width: 100%;
+  min-height: 44px;
+  padding: 6px 6px 6px 16px;
+  border-radius: 999px;
+  background: var(--vb-s2);
+  font-size: 14px;
+  color: var(--vb-text);
 }
 
-.dispatch-worker__arrow {
-  color: var(--settings-text-tertiary);
+.dispatch-worker::before {
+  content: "";
+  position: absolute;
+  left: -22px;
+  top: 50%;
+  width: 22px;
+  height: 1.5px;
+  background: var(--vb-s3);
 }
 
 .dispatch-worker__name {
   flex: 1;
   min-width: 0;
-}
-
-.dispatch-worker__shared {
-  padding: 1px 7px;
-  border-radius: 999px;
-  background: rgba(0, 140, 141, 0.1);
-  color: var(--settings-status-active, #008c8d);
-  font-size: 10px;
   font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.dispatch-install__desc {
-  margin: 0 0 10px;
-  color: var(--settings-text-secondary);
-  font-size: 11px;
-  line-height: 1.6;
+/* 还没有工人：只有一条虚线，不抢眼 */
+.dispatch-worker--empty {
+  background: none;
+  border: 1.5px dashed var(--vb-s3);
+  color: var(--vb-text-3);
+  font-weight: 400;
 }
 
-.dispatch-worker button {
-  min-height: 26px;
-  padding: 0 10px;
-  border: 1px solid var(--settings-card-border);
-  border-radius: 7px;
-  background: #ffffff;
-  color: var(--settings-text-secondary);
-  cursor: pointer;
-  font: inherit;
-  font-size: 11px;
+.dispatch-worker--empty .dispatch-worker__name { font-weight: 400; }
+
+.dispatch-boss__add {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .dispatch-badge {
-  padding: 2px 8px;
+  flex: none;
+  padding: 2px 10px;
   border-radius: 999px;
-  font-size: 10px;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .dispatch-badge--muted {
-  background: rgba(142, 142, 147, 0.14);
-  color: var(--settings-text-tertiary);
+  background: var(--vb-s3);
+  color: var(--vb-text-2);
 }
 
-.dispatch-warning {
-  padding: 9px 11px;
-  border: 1px solid rgba(255, 117, 0, 0.35);
-  border-radius: 9px;
-  background: rgba(255, 117, 0, 0.08);
-  color: var(--settings-text-primary);
-  font-size: 11px;
-  line-height: 1.5;
-}
-
-.dispatch-success {
-  padding: 9px 11px;
-  border: 1px solid rgba(0, 140, 141, 0.3);
-  border-radius: 9px;
-  background: rgba(0, 140, 141, 0.08);
-  color: var(--settings-text-primary);
-  font-size: 11px;
-  line-height: 1.5;
-}
-
+/* ── 断开与确认 ── */
 .dispatch-actions {
   display: flex;
-  gap: 8px;
   flex-wrap: wrap;
+  gap: 8px;
   margin-top: 10px;
 }
 
-.dispatch-actions button,
-.dispatch-rules button {
-  min-height: 30px;
-  padding: 0 14px;
-  border: 1px solid var(--settings-card-border);
-  border-radius: 8px;
-  background: #ffffff;
-  color: var(--settings-text-primary);
-  cursor: pointer;
-  font: inherit;
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.dispatch-actions button:disabled,
-.dispatch-worker button:disabled,
-.dispatch-picker__worker:disabled {
-  cursor: default;
-  opacity: 0.5;
-}
-
-.dispatch-actions__primary:not(:disabled) {
-  border-color: transparent;
-  background: var(--settings-accent-gradient);
-  color: #ffffff;
+.dispatch-actions .vb-btn {
+  padding: 8px 14px;
 }
 
 .dispatch-confirm {
-  margin-top: 10px;
-  padding: 10px 12px;
-  border: 1px solid var(--settings-card-border);
-  border-radius: 9px;
-  background: #ffffff;
+  grid-column: 1 / -1;
+  margin-top: 16px;
+  padding: 16px 18px;
+  border-radius: 18px;
+  background: var(--vb-s2);
 }
 
 .dispatch-confirm__sentence {
   margin: 0 0 6px;
-  color: var(--settings-text-primary);
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.6;
+  color: var(--vb-text);
 }
 
+.dispatch-confirm .dispatch-warning { margin: 12px 0; }
+
+/* ── 添加工人：页内展开的工人列表 ── */
 .dispatch-picker {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-top: 10px;
-  padding: 10px 12px;
-  border: 1px dashed var(--settings-card-border);
-  border-radius: 9px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin-top: 4px;
+  padding: 14px 16px;
+  border: 1px dashed var(--vb-s3);
+  border-radius: 18px;
+}
+
+.dispatch-picker__worker {
+  padding: 8px 16px;
 }
 
 .dispatch-picker__empty {
   margin: 0;
-  color: var(--settings-text-tertiary);
-  font-size: 11px;
-}
-
-.dispatch-picker__worker {
-  align-self: flex-start;
-  min-height: 30px;
-  padding: 0 14px;
-  border: 1px solid var(--settings-card-border);
-  border-radius: 8px;
-  background: #ffffff;
-  color: var(--settings-text-primary);
-  cursor: pointer;
-  font: inherit;
-  font-size: 11px;
-  font-weight: 700;
+  font-size: 13px;
+  color: var(--vb-text-2);
 }
 
 .dispatch-picker__other {
-  padding-top: 6px;
-  border-top: 1px solid var(--settings-separator);
+  flex: 1 1 100%;
+  padding-top: 8px;
+  border-top: 1px solid var(--vb-line);
 }
 
 .dispatch-picker__other strong {
   display: block;
   margin-bottom: 2px;
-  font-size: 11px;
-  color: var(--settings-text-primary);
+  font-size: 13px;
+  color: var(--vb-text);
 }
 
 .dispatch-picker__other p {
   margin: 0;
-  color: var(--settings-text-secondary);
-  font-size: 11px;
+  font-size: 13px;
   line-height: 1.5;
+  color: var(--vb-text-2);
 }
 
+/* ── 详情折叠：胶囊里的文字按钮 ── */
 .dispatch-details {
-  margin-top: 8px;
+  margin-top: 10px;
 }
 
 .dispatch-details__toggle {
-  padding: 0;
+  padding: 4px 12px;
   border: 0;
-  background: none;
-  color: var(--settings-status-active, #008c8d);
-  cursor: pointer;
+  border-radius: 999px;
+  background: var(--vb-s2);
+  color: var(--vb-text-2);
   font: inherit;
-  font-size: 11px;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
 }
 
+.dispatch-details__toggle:hover { color: var(--vb-text); }
+
 .dispatch-details__body {
-  margin-top: 6px;
-  padding: 8px 10px;
-  border: 1px solid var(--settings-card-border);
-  border-radius: 8px;
-  background: #ffffff;
+  margin-top: 8px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--vb-s2);
 }
 
 .dispatch-details__count {
   margin-bottom: 6px;
-  color: var(--settings-text-secondary);
-  font-size: 11px;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--vb-text-2);
 }
 
 .dispatch-details__row {
@@ -247,28 +393,29 @@
   align-items: baseline;
   justify-content: space-between;
   gap: 10px;
-  padding: 2px 0;
-  font-size: 11px;
+  padding: 3px 0;
+  font-size: 12px;
 }
 
 .dispatch-details__row span {
   flex: 0 0 auto;
-  color: var(--settings-text-tertiary);
+  color: var(--vb-text-3);
 }
 
 .dispatch-details__row code,
 .dispatch-details__list code {
   overflow: hidden;
-  color: var(--settings-text-secondary);
-  font-size: 10px;
+  color: var(--vb-text-2);
+  font-family: var(--vb-font-mono);
+  font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .dispatch-details__worker {
   margin-top: 8px;
-  padding-top: 6px;
-  border-top: 1px solid var(--settings-separator);
+  padding-top: 8px;
+  border-top: 1px solid var(--vb-line);
 }
 
 .dispatch-details__list {
@@ -282,55 +429,72 @@
   align-items: baseline;
   gap: 8px;
   padding: 2px 0;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .dispatch-details__list li span {
   flex: 0 0 auto;
-  color: var(--settings-text-tertiary);
+  color: var(--vb-text-3);
 }
 
 .dispatch-change {
   flex: 0 0 auto;
   margin-left: auto;
-  font-size: 10px;
-  opacity: 0.75;
+  font-size: 11px;
+  color: var(--vb-text-3);
 }
 
+/* 会覆盖你自己改过的文件：只有这一处文字用珊瑚红 */
 .dispatch-change--overwrite {
-  color: var(--color-warning, #ff9500);
+  color: var(--vb-hot);
   font-weight: 600;
-  opacity: 1;
 }
 
+/* ── 派发规则示例 ── */
 .dispatch-rules {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
+  padding: 12px 0 16px;
 }
 
 .dispatch-rules p {
   margin: 0;
-  color: var(--settings-text-secondary);
-  font-size: 11px;
+  font-size: 13px;
   line-height: 1.6;
+  color: var(--vb-text-2);
+}
+
+.dispatch-rules__code {
+  position: relative;
+  padding: 16px 20px;
+  border-radius: 18px;
+  background: var(--vb-s2);
 }
 
 .dispatch-rules__example {
   max-height: 180px;
   margin: 0;
-  padding: 10px 12px;
+  padding-right: 112px;
   overflow: auto;
-  border: 1px solid var(--settings-card-border);
-  border-radius: 9px;
-  background: #fbfbfd;
-  color: var(--settings-text-primary);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 10px;
-  line-height: 1.6;
+  color: var(--vb-text-2);
+  font-family: var(--vb-font-mono);
+  font-size: 12px;
+  line-height: 1.8;
   white-space: pre-wrap;
 }
 
-.dispatch-rules button {
-  align-self: flex-start;
+.dispatch-rules__code .vb-btn {
+  position: absolute;
+  right: 14px;
+  top: 14px;
+}
+
+@media (max-width: 980px) {
+  .dispatch-boss { grid-template-columns: 1fr; }
+  .dispatch-boss__workers { margin-top: 14px; padding-left: 0; }
+  .dispatch-boss__list::before,
+  .dispatch-boss__list::after,
+  .dispatch-worker::before { display: none; }
+  .dispatch-worker { padding-left: 16px; }
 }

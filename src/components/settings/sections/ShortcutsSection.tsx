@@ -3,11 +3,9 @@ import { useTranslation } from 'react-i18next'
 import { useConfigStore } from '../../../stores/configStore'
 import { formatShortcutKeyEvent, isRecordableShortcutEvent, shortcutDisplayParts } from '../../../utils/keyboardShortcuts'
 import { registerGlobalShortcut } from '../../../services/tauriApi'
-import { SettingSection } from '../SettingSection'
-import { SettingGroup } from '../SettingGroup'
-import { SettingRow } from '../SettingRow'
 import { SettingDetails } from '../SettingDetails'
 import { GlassInput } from '../../shared'
+import './ShortcutsSection.css'
 
 const PRIMARY_SHORTCUT_ACTIONS = new Set(['toggle-panel', 'collapse-panel', 'open-settings'])
 
@@ -51,32 +49,41 @@ function ShortcutRow({ action, label, keys }: { action: string; label: string; k
     }
   }, [recording, handleKeyDown])
 
+  const hasKeys = Boolean(keys.trim())
+
   return (
-    <div className="shortcuts-row">
-      <span className="shortcuts-row__action">{label}</span>
-      <span className="shortcuts-row__meta">
+    <div className="shortcut-row">
+      <div className="shortcut-row__info">
+        <div className="shortcut-row__label">{label}</div>
+        {recording && conflict && (
+          <div className="shortcut-row__conflict" role="status">{conflict}</div>
+        )}
+      </div>
+      <div className="shortcut-row__meta">
         {recording ? (
-          <span className="shortcuts-row__recording">
-            {conflict ? <span className="shortcuts-row__conflict">{conflict}</span> : t('settings.pressKeys')}
-          </span>
+          <span className="shortcut-row__rec">{t('settings.pressKeys')}</span>
         ) : (
-          <span className="shortcuts-row__keys">
-            {keys.trim()
+          <span className="shortcut-row__keys">
+            {hasKeys
               ? shortcutDisplayParts(keys).map((k, i) => (<kbd key={i}>{k}</kbd>))
-              : <span className="shortcuts-row__off">{t('settings.shortcutOff', { defaultValue: 'Off' })}</span>}
+              : <span className="shortcut-row__off">{t('settings.shortcutOff', { defaultValue: 'Not set' })}</span>}
           </span>
         )}
-        <span className="shortcuts-row__actions">
-          {!recording && keys.trim() && (
-            <button className="shortcuts-row__edit shortcuts-row__clear" onClick={() => updateShortcut(action, '')}>
+        <span className="shortcut-row__actions">
+          <button type="button" className="vb-btn shortcut-row__edit" onClick={() => setRecording(!recording)}>
+            {recording
+              ? t('settings.cancel')
+              : hasKeys
+                ? t('settings.edit')
+                : t('settings.shortcutSet', { defaultValue: 'Set' })}
+          </button>
+          {!recording && hasKeys && (
+            <button type="button" className="vb-btn shortcut-row__clear" onClick={() => updateShortcut(action, '')}>
               {t('settings.shortcutClear', { defaultValue: 'Clear' })}
             </button>
           )}
-          <button className="shortcuts-row__edit" onClick={() => setRecording(!recording)}>
-            {recording ? t('settings.cancel') : t('settings.edit')}
-          </button>
         </span>
-      </span>
+      </div>
     </div>
   )
 }
@@ -129,74 +136,90 @@ export function ShortcutsSection() {
   }
 
   return (
-    <SettingSection
-      title={t('settings.shortcutsTitle', { defaultValue: '快捷键' })}
-      description={t('settings.shortcutsDesc', { defaultValue: '给常用操作配上键盘组合键，不用鼠标也能操作灵动岛。' })}
-    >
-      <SettingGroup label={t('settings.globalShortcuts', { defaultValue: '全局快捷键（在任何窗口都生效）' })}>
-        <SettingRow
-          label={t('settings.globalShortcut', { defaultValue: '显示或隐藏灵动岛' })}
-          description={t('settings.globalShortcutDesc', { defaultValue: '在任意窗口按下这个组合键，就能让灵动岛出现或收起。' })}
-        >
-          <div className="shortcut-global-control">
-            <GlassInput
-              className="shortcut-global-control__input"
-              value={shortcutDraft}
-              onChange={(e) => setShortcutDraft(e.target.value)}
-              onBlur={commitIslandShortcut}
-              onKeyDown={(e) => commitOnEnter(e, commitIslandShortcut)}
-              placeholder="CommandOrControl+Shift+I"
-            />
+    <section className="shortcuts-page">
+      <header className="shortcuts-page__head">
+        <div>
+          <h1>{t('settings.shortcutsTitle', { defaultValue: '快捷键' })}</h1>
+          <p>{t('settings.shortcutsDesc', { defaultValue: '给常用操作配上键盘组合，不用鼠标也能操作灵动岛。' })}</p>
+        </div>
+      </header>
+
+      <div className="shortcuts-page__group-title">
+        {t('settings.globalShortcuts', { defaultValue: '全局快捷键（在任何窗口都生效）' })}
+      </div>
+      <div className="shortcuts-page__panel">
+        <div className="shortcut-row">
+          <div className="shortcut-row__info">
+            <div className="shortcut-row__label">{t('settings.globalShortcut', { defaultValue: '显示或隐藏灵动岛' })}</div>
+            <div className="shortcut-row__description">
+              {t('settings.globalShortcutDesc', { defaultValue: '在任意窗口按下这个组合键，就能让灵动岛出现或收起。' })}
+            </div>
           </div>
-        </SettingRow>
+          <div className="shortcut-row__meta">
+            <div className="shortcut-global-control">
+              <GlassInput
+                className="shortcut-global-control__input"
+                value={shortcutDraft}
+                onChange={(e) => setShortcutDraft(e.target.value)}
+                onBlur={commitIslandShortcut}
+                onKeyDown={(e) => commitOnEnter(e, commitIslandShortcut)}
+                placeholder="CommandOrControl+Shift+I"
+              />
+            </div>
+          </div>
+        </div>
         {shortcutError && (
-          <div className="shortcut-status shortcut-status--error" role="alert">
+          <div className="shortcut-page__error" role="alert">
             <div>{t('settings.shortcutApplyFailed', { defaultValue: '这个组合键没能生效，可能已被系统或其它软件占用。' })}</div>
             <SettingDetails testId="shortcut-error-details">{shortcutError}</SettingDetails>
           </div>
         )}
-      </SettingGroup>
-      <SettingGroup label={t('settings.inWindowShortcuts', { defaultValue: '面板内快捷键' })}>
-        <div className="shortcuts-table">
-          {primaryShortcuts.map((s) => (
-            <ShortcutRow
-              key={s.action}
-              action={s.action}
-              label={t(`settings.shortcutActions.${s.action}`, { defaultValue: s.label })}
-              keys={s.keys}
-            />
-          ))}
-        </div>
-        <div className="shortcuts-advanced">
-          <button
-            className="shortcuts-advanced__toggle"
-            onClick={() => setShowAdvancedShortcuts((value) => !value)}
-            type="button"
-          >
-            <span>{showAdvancedShortcuts
-              ? t('settings.hideAdvancedShortcuts', { defaultValue: 'Hide advanced shortcuts' })
-              : t('settings.showAdvancedShortcuts', { defaultValue: 'Show advanced shortcuts' })}</span>
-            <span className="shortcuts-advanced__count">
-              {t('settings.enabledAdvancedShortcuts', {
-                defaultValue: '{{count}} enabled',
-                count: enabledAdvancedShortcutCount,
-              })}
-            </span>
-          </button>
-          {showAdvancedShortcuts && (
-            <div className="shortcuts-table shortcuts-table--advanced">
-              {advancedShortcuts.map((s) => (
-                <ShortcutRow
-                  key={s.action}
-                  action={s.action}
-                  label={t(`settings.shortcutActions.${s.action}`, { defaultValue: s.label })}
-                  keys={s.keys}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-      </SettingGroup>
-    </SettingSection>
+      </div>
+
+      <div className="shortcuts-page__group-title">
+        {t('settings.inWindowShortcuts', { defaultValue: '面板内快捷键' })}
+      </div>
+      <div className="shortcuts-page__panel">
+        {primaryShortcuts.map((s) => (
+          <ShortcutRow
+            key={s.action}
+            action={s.action}
+            label={t(`settings.shortcutActions.${s.action}`, { defaultValue: s.label })}
+            keys={s.keys}
+          />
+        ))}
+      </div>
+
+      <div className="shortcuts-page__advanced">
+        <button
+          className="vb-btn"
+          onClick={() => setShowAdvancedShortcuts((value) => !value)}
+          type="button"
+          aria-expanded={showAdvancedShortcuts}
+        >
+          <span>{showAdvancedShortcuts
+            ? t('settings.hideAdvancedShortcuts', { defaultValue: 'Hide more shortcuts' })
+            : t('settings.showAdvancedShortcuts', { defaultValue: 'Show more shortcuts' })}</span>
+          <span className="shortcuts-page__advanced-count">
+            {t('settings.enabledAdvancedShortcuts', {
+              defaultValue: '{{count}} enabled',
+              count: enabledAdvancedShortcutCount,
+            })}
+          </span>
+        </button>
+        {showAdvancedShortcuts && (
+          <div className="shortcuts-page__panel shortcuts-page__panel--advanced">
+            {advancedShortcuts.map((s) => (
+              <ShortcutRow
+                key={s.action}
+                action={s.action}
+                label={t(`settings.shortcutActions.${s.action}`, { defaultValue: s.label })}
+                keys={s.keys}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    </section>
   )
 }

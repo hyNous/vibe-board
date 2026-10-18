@@ -11,8 +11,6 @@ import {
   type DispatchRemoval,
   type DispatchTree,
 } from '../../../services/dispatchApi'
-import { SettingSection } from '../SettingSection'
-import { SettingGroup } from '../SettingGroup'
 import { PlatformIcon } from '../../platform/PlatformIcon'
 import './DispatchSection.css'
 
@@ -229,6 +227,17 @@ export function DispatchSection() {
   const workerName = (workerId: string) =>
     tree?.workers.find((worker) => worker.id === workerId)?.displayName ?? workerId
 
+  // 「与 X 共用」标在主 Agent 上：说明这个工人装在哪个共用目录里、还有谁会一起受影响。
+  const sharedNotes = (agent: DispatchAgentNode) => agent.connections
+    .filter((connection) => connection.sharedWith.length > 0)
+    .map((connection) => ({
+      workerId: connection.workerId,
+      text: t('settings.dispatch.sharedWith', {
+        agents: connection.sharedWith.join(t('settings.dispatch.listSeparator', { defaultValue: '、' })),
+        defaultValue: '与 {{agents}} 共用',
+      }),
+    }))
+
   const renderRemovalList = (removals: DispatchRemoval[], testId: string) => (
     <ul className="dispatch-details__list" data-testid={testId}>
       {removals.map((removal) => (
@@ -295,7 +304,7 @@ export function DispatchSection() {
           <div className="dispatch-actions">
             <button
               type="button"
-              className="dispatch-actions__primary"
+              className="vb-btn vb-btn--primary"
               data-testid="dispatch-confirm-apply"
               disabled={busy || !plan.canApply}
               onClick={() => void confirmConnect(plan)}
@@ -306,6 +315,7 @@ export function DispatchSection() {
             </button>
             <button
               type="button"
+              className="vb-btn"
               data-testid="dispatch-confirm-cancel"
               disabled={busy}
               onClick={() => setPending(null)}
@@ -371,7 +381,7 @@ export function DispatchSection() {
         <div className="dispatch-actions">
           <button
             type="button"
-            className="dispatch-actions__primary"
+            className="vb-btn vb-btn--danger"
             data-testid="dispatch-disconnect-apply"
             disabled={busy || !plan.canApply}
             onClick={() => void confirmDisconnect(plan)}
@@ -382,6 +392,7 @@ export function DispatchSection() {
           </button>
           <button
             type="button"
+            className="vb-btn"
             data-testid="dispatch-disconnect-cancel"
             disabled={busy}
             onClick={() => setPending(null)}
@@ -394,20 +405,48 @@ export function DispatchSection() {
   }
 
   return (
-    <SettingSection
-      title={t('settings.dispatch.title', { defaultValue: '让 Agent 互相派活' })}
-      description={t('settings.dispatch.desc', {
-        defaultValue: '让一个 Agent 把任务派给另一个 Agent。点「＋ 添加工人」建立关系，点「断开」解除关系；装好之后派活由主 Agent 直接完成，不经过 Vibe Board。',
-      })}
-    >
+    <section className="dispatch-settings">
+      <header className="dispatch-settings__head">
+        <div>
+          <h1>{t('settings.dispatch.title', { defaultValue: '让 Agent 互相派活' })}</h1>
+          <p>
+            {t('settings.dispatch.desc', {
+              defaultValue: '让一个 Agent 把任务派给另一个 Agent。点「＋ 添加工人」建立关系，点「断开」解除关系；装好之后派活由主 Agent 直接完成，不经过 Vibe Board。',
+            })}
+          </p>
+        </div>
+      </header>
+
       {loading && (
-        <div className="hook-empty" data-testid="dispatch-loading">
+        <div className="dispatch-empty" data-testid="dispatch-loading">
           {t('settings.dispatch.loading', { defaultValue: '正在读取本机 Agent…' })}
         </div>
       )}
       {error && (
-        <div className="hook-error-card" role="alert" data-testid="dispatch-error">
+        <div className="dispatch-error" role="alert" data-testid="dispatch-error">
           {error}
+        </div>
+      )}
+
+      {tree && (
+        <div className="dispatch-pre">
+          <span className="dispatch-chip">
+            <i
+              className={`dispatch-chip__dot${tree.node.available ? ' dispatch-chip__dot--on' : ' dispatch-chip__dot--off'}`}
+              aria-hidden="true"
+            />
+            {t('settings.dispatch.preNode', { defaultValue: 'Node.js' })}
+            {tree.node.available
+              ? (tree.node.version ? ` ${tree.node.version}` : '')
+              : ` · ${t('settings.dispatch.unavailable', { defaultValue: '不可用' })}`}
+          </span>
+          <span className="dispatch-chip">
+            <i
+              className={`dispatch-chip__dot${tree.toolInstalled ? ' dispatch-chip__dot--on' : ' dispatch-chip__dot--off'}`}
+              aria-hidden="true"
+            />
+            {t('settings.dispatch.toolChip', { defaultValue: '派活工具 agent-dispatch' })}
+          </span>
         </div>
       )}
 
@@ -420,197 +459,210 @@ export function DispatchSection() {
       )}
 
       {tree && !tree.toolInstalled && (
-        <SettingGroup label={t('settings.dispatch.installTitle', { defaultValue: '先安装派活工具' })}>
-          <p className="dispatch-install__desc" data-testid="dispatch-install-desc">
-            {t('settings.dispatch.installDesc', {
-              defaultValue: '这套工具不在 Vibe Board 安装包里，只在你确认后从 GitHub 下载安装一次，之后没有 Vibe Board 也能单独使用。',
-            })}
-          </p>
-          {!installOpen ? (
-            <div className="dispatch-actions">
-              <button
-                type="button"
-                className="dispatch-actions__primary"
-                data-testid="dispatch-install-start"
-                disabled={busy || installing || !tree.node.available}
-                onClick={() => {
-                  setError('')
-                  setInstallOpen(true)
-                }}
-              >
-                {t('settings.dispatch.installButton', { defaultValue: '从 GitHub 安装（hyNous/agent-dispatch）' })}
-              </button>
-            </div>
-          ) : (
-            <div className="dispatch-confirm" data-testid="dispatch-install-confirm">
-              <p className="dispatch-confirm__sentence">
-                {t('settings.dispatch.installConfirmDesc', {
-                  defaultValue: '会访问 GitHub 下载 hyNous/agent-dispatch，安装到本机用户目录，并留下来源记录，之后 Vibe Board 的 Skill 更新检查可以接手。确定现在安装吗？',
-                })}
-              </p>
-              <Details label={t('settings.dispatch.details', { defaultValue: '详情' })} testId="dispatch-install-details">
-                <div className="dispatch-details__row">
-                  <span>{t('settings.dispatch.installTarget', { defaultValue: '安装目录' })}</span>
-                  <code>~/.agents/skills</code>
-                </div>
-                <div className="dispatch-details__row">
-                  <span>{t('settings.dispatch.installSourceRecord', { defaultValue: '来源记录' })}</span>
-                  <code>~/.agents/.skill-lock.json</code>
-                </div>
-              </Details>
+        <div className="dispatch-block">
+          <div className="dispatch-settings__group-title">
+            {t('settings.dispatch.installTitle', { defaultValue: '先安装派活工具' })}
+          </div>
+          <div className="dispatch-panel">
+            <p className="dispatch-install__desc" data-testid="dispatch-install-desc">
+              {t('settings.dispatch.installDesc', {
+                defaultValue: '这套工具不在 Vibe Board 安装包里，只在你确认后从 GitHub 下载安装一次，之后没有 Vibe Board 也能单独使用。',
+              })}
+            </p>
+            {!installOpen ? (
               <div className="dispatch-actions">
                 <button
                   type="button"
-                  className="dispatch-actions__primary"
-                  data-testid="dispatch-install-apply"
-                  disabled={installing}
-                  onClick={() => void installTool()}
+                  className="vb-btn vb-btn--primary"
+                  data-testid="dispatch-install-start"
+                  disabled={busy || installing || !tree.node.available}
+                  onClick={() => {
+                    setError('')
+                    setInstallOpen(true)
+                  }}
                 >
-                  {installing
-                    ? t('settings.dispatch.installWorking', { defaultValue: '正在从 GitHub 安装…' })
-                    : t('settings.dispatch.installApply', { defaultValue: '确认安装' })}
-                </button>
-                <button
-                  type="button"
-                  data-testid="dispatch-install-cancel"
-                  disabled={installing}
-                  onClick={() => setInstallOpen(false)}
-                >
-                  {t('settings.dispatch.cancel', { defaultValue: '取消' })}
+                  {t('settings.dispatch.installButton', { defaultValue: '从 GitHub 安装（hyNous/agent-dispatch）' })}
                 </button>
               </div>
-            </div>
-          )}
-        </SettingGroup>
+            ) : (
+              <div className="dispatch-confirm" data-testid="dispatch-install-confirm">
+                <p className="dispatch-confirm__sentence">
+                  {t('settings.dispatch.installConfirmDesc', {
+                    defaultValue: '会访问 GitHub 下载 hyNous/agent-dispatch，安装到本机用户目录，并留下来源记录，之后 Vibe Board 的 Skill 更新检查可以接手。确定现在安装吗？',
+                  })}
+                </p>
+                <Details label={t('settings.dispatch.details', { defaultValue: '详情' })} testId="dispatch-install-details">
+                  <div className="dispatch-details__row">
+                    <span>{t('settings.dispatch.installTarget', { defaultValue: '安装目录' })}</span>
+                    <code>~/.agents/skills</code>
+                  </div>
+                  <div className="dispatch-details__row">
+                    <span>{t('settings.dispatch.installSourceRecord', { defaultValue: '来源记录' })}</span>
+                    <code>~/.agents/.skill-lock.json</code>
+                  </div>
+                </Details>
+                <div className="dispatch-actions">
+                  <button
+                    type="button"
+                    className="vb-btn vb-btn--primary"
+                    data-testid="dispatch-install-apply"
+                    disabled={installing}
+                    onClick={() => void installTool()}
+                  >
+                    {installing
+                      ? t('settings.dispatch.installWorking', { defaultValue: '正在从 GitHub 安装…' })
+                      : t('settings.dispatch.installApply', { defaultValue: '确认安装' })}
+                  </button>
+                  <button
+                    type="button"
+                    className="vb-btn"
+                    data-testid="dispatch-install-cancel"
+                    disabled={installing}
+                    onClick={() => setInstallOpen(false)}
+                  >
+                    {t('settings.dispatch.cancel', { defaultValue: '取消' })}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
       )}
 
-      <SettingGroup label={t('settings.dispatch.treeTitle', { defaultValue: '谁可以把任务派给谁' })}>
+      <div className="dispatch-block">
+        <div className="dispatch-settings__group-title">
+          {t('settings.dispatch.treeTitle', { defaultValue: '谁可以把任务派给谁' })}
+        </div>
         {tree && tree.agents.length === 0 && (
-          <div className="hook-empty" data-testid="dispatch-empty-agents">
+          <div className="dispatch-empty" data-testid="dispatch-empty-agents">
             {t('settings.dispatch.emptyAgents', { defaultValue: '没有检测到已安装的 Agent。' })}
           </div>
         )}
         {tree?.agents.map((agent) => (
-          <div className="dispatch-node" key={agent.agentId} data-testid={`dispatch-agent-${agent.agentId}`}>
-            <div className="dispatch-node__head">
-              <PlatformIcon agentId={agent.agentId} displayName={agent.displayName} size={30} />
-              <strong className="dispatch-node__name">{agent.displayName}</strong>
-              {!agent.verified && (
-                <span className="dispatch-badge dispatch-badge--muted" data-testid={`dispatch-unverified-${agent.agentId}`}>
-                  {t('settings.dispatch.unverified', { defaultValue: '未验证' })}
+          <div className="dispatch-boss" key={agent.agentId} data-testid={`dispatch-agent-${agent.agentId}`}>
+            <div className="dispatch-boss__node">
+              <span className="dispatch-boss__head">
+                <PlatformIcon agentId={agent.agentId} displayName={agent.displayName} size={30} />
+                <strong className="dispatch-boss__name">{agent.displayName}</strong>
+                {!agent.verified && (
+                  <span className="dispatch-badge dispatch-badge--muted" data-testid={`dispatch-unverified-${agent.agentId}`}>
+                    {t('settings.dispatch.unverified', { defaultValue: '未验证' })}
+                  </span>
+                )}
+              </span>
+              {sharedNotes(agent).map((note) => (
+                <span
+                  className="dispatch-boss__share"
+                  key={note.workerId}
+                  data-testid={`dispatch-shared-${agent.agentId}-${note.workerId}`}
+                >
+                  {note.text}
                 </span>
-              )}
+              ))}
+              <Details label={t('settings.dispatch.details', { defaultValue: '详情' })} testId={`dispatch-agent-details-${agent.agentId}`}>
+                {agent.readDirs.map((dir) => (
+                  <div className="dispatch-details__row" key={dir.path}>
+                    <span>
+                      {dir.shared
+                        ? t('settings.dispatch.sharedDirectory', { defaultValue: '共用目录' })
+                        : t('settings.dispatch.readDirs', { defaultValue: '读取目录' })}
+                    </span>
+                    <code>{dir.path}</code>
+                  </div>
+                ))}
+              </Details>
             </div>
 
-            <div className="dispatch-node__workers">
-              {agent.connections.length === 0 && (
-                <p className="dispatch-node__empty">
-                  {t('settings.dispatch.noConnections', {
-                    agent: agent.displayName,
-                    defaultValue: '{{agent}} 还没有可以派活的工人。',
-                  })}
-                </p>
-              )}
-              {agent.connections.map((connection) => (
-                <div
-                  className="dispatch-worker"
-                  key={connection.workerId}
-                  data-testid={`dispatch-connection-${agent.agentId}-${connection.workerId}`}
-                >
-                  <span className="dispatch-worker__arrow" aria-hidden="true">→</span>
-                  <span className="dispatch-worker__name">{connection.displayName}</span>
-                  {connection.sharedWith.length > 0 && (
-                    <span
-                      className="dispatch-worker__shared"
-                      data-testid={`dispatch-shared-${agent.agentId}-${connection.workerId}`}
-                    >
-                      {t('settings.dispatch.sharedWith', {
-                        agents: connection.sharedWith.join(t('settings.dispatch.listSeparator', { defaultValue: '、' })),
-                        defaultValue: '与 {{agents}} 共用',
+            <div className="dispatch-boss__workers">
+              <div className={`dispatch-boss__list${agent.connections.length <= 1 ? ' dispatch-boss__list--single' : ''}`}>
+                {agent.connections.length === 0 && (
+                  <div className="dispatch-worker dispatch-worker--empty">
+                    <span className="dispatch-worker__name">
+                      {t('settings.dispatch.noConnections', {
+                        agent: agent.displayName,
+                        defaultValue: '{{agent}} 还没有可以派活的工人。',
                       })}
                     </span>
-                  )}
-                  <button
-                    type="button"
-                    data-testid={`dispatch-disconnect-${agent.agentId}-${connection.workerId}`}
-                    disabled={busy}
-                    onClick={() => void beginDisconnect(agent, connection)}
-                  >
-                    {t('settings.dispatch.disconnect', { defaultValue: '断开' })}
-                  </button>
-                </div>
-              ))}
-            </div>
-
-            <Details label={t('settings.dispatch.details', { defaultValue: '详情' })} testId={`dispatch-agent-details-${agent.agentId}`}>
-              {agent.readDirs.map((dir) => (
-                <div className="dispatch-details__row" key={dir.path}>
-                  <span>
-                    {dir.shared
-                      ? t('settings.dispatch.sharedDirectory', { defaultValue: '共用目录' })
-                      : t('settings.dispatch.readDirs', { defaultValue: '读取目录' })}
-                  </span>
-                  <code>{dir.path}</code>
-                </div>
-              ))}
-            </Details>
-
-            <div className="dispatch-actions">
-              <button
-                type="button"
-                data-testid={`dispatch-add-${agent.agentId}`}
-                disabled={addDisabled}
-                aria-expanded={pickerAgent === agent.agentId}
-                onClick={() => {
-                  setPending(null)
-                  setPickerAgent(pickerAgent === agent.agentId ? null : agent.agentId)
-                }}
-              >
-                {t('settings.dispatch.addWorker', { defaultValue: '＋ 添加工人' })}
-              </button>
-            </div>
-
-            {pickerAgent === agent.agentId && tree && (
-              <div className="dispatch-picker" data-testid={`dispatch-picker-${agent.agentId}`}>
-                {agent.addableWorkers.length === 0 && (
-                  <p className="dispatch-picker__empty">
-                    {tree.workers.some((worker) => worker.detected)
-                      ? t('settings.dispatch.noAddableWorkers', {
-                        defaultValue: '本机检测到的工人都已经连上了。',
-                      })
-                      : t('settings.dispatch.noWorkersDetected', {
-                        defaultValue: '本机没有检测到 OpenCode 或 Antigravity。先安装其中之一，再回到这一页。',
-                      })}
-                  </p>
+                  </div>
                 )}
-                {agent.addableWorkers.map((workerId) => (
-                  <button
-                    type="button"
-                    key={workerId}
-                    className="dispatch-picker__worker"
-                    data-testid={`dispatch-add-worker-${agent.agentId}-${workerId}`}
-                    disabled={busy || !tree.toolInstalled}
-                    onClick={() => void beginConnect(agent.agentId, workerId)}
+                {agent.connections.map((connection) => (
+                  <div
+                    className="dispatch-worker"
+                    key={connection.workerId}
+                    data-testid={`dispatch-connection-${agent.agentId}-${connection.workerId}`}
                   >
-                    {workerName(workerId)}
-                  </button>
+                    <span className="dispatch-worker__name">{connection.displayName}</span>
+                    <button
+                      type="button"
+                      className="vb-btn vb-btn--danger"
+                      data-testid={`dispatch-disconnect-${agent.agentId}-${connection.workerId}`}
+                      disabled={busy}
+                      onClick={() => void beginDisconnect(agent, connection)}
+                    >
+                      {t('settings.dispatch.disconnect', { defaultValue: '断开' })}
+                    </button>
+                  </div>
                 ))}
-                <div className="dispatch-picker__other" data-testid={`dispatch-other-tools-${agent.agentId}`}>
-                  <strong>{t('settings.dispatch.otherTools', { defaultValue: '其他工具' })}</strong>
-                  <p>
-                    {t('settings.dispatch.otherToolsHint', {
-                      agent: agent.displayName,
-                      defaultValue: '在你的 {{agent}} 里运行 $external-agent-setup，它会按同一套规则生成新的具名工人。这里不提供配置表单。',
-                    })}
-                  </p>
-                </div>
               </div>
-            )}
+
+              <div className="dispatch-boss__add">
+                <button
+                  type="button"
+                  className="vb-btn"
+                  data-testid={`dispatch-add-${agent.agentId}`}
+                  disabled={addDisabled}
+                  aria-expanded={pickerAgent === agent.agentId}
+                  onClick={() => {
+                    setPending(null)
+                    setPickerAgent(pickerAgent === agent.agentId ? null : agent.agentId)
+                  }}
+                >
+                  {t('settings.dispatch.addWorker', { defaultValue: '＋ 添加工人' })}
+                </button>
+              </div>
+
+              {pickerAgent === agent.agentId && tree && (
+                <div className="dispatch-picker" data-testid={`dispatch-picker-${agent.agentId}`}>
+                  {agent.addableWorkers.length === 0 && (
+                    <p className="dispatch-picker__empty">
+                      {tree.workers.some((worker) => worker.detected)
+                        ? t('settings.dispatch.noAddableWorkers', {
+                          defaultValue: '本机检测到的工人都已经连上了。',
+                        })
+                        : t('settings.dispatch.noWorkersDetected', {
+                          defaultValue: '本机没有检测到 OpenCode 或 Antigravity。先安装其中之一，再回到这一页。',
+                        })}
+                    </p>
+                  )}
+                  {agent.addableWorkers.map((workerId) => (
+                    <button
+                      type="button"
+                      key={workerId}
+                      className="vb-btn dispatch-picker__worker"
+                      data-testid={`dispatch-add-worker-${agent.agentId}-${workerId}`}
+                      disabled={busy || !tree.toolInstalled}
+                      onClick={() => void beginConnect(agent.agentId, workerId)}
+                    >
+                      {workerName(workerId)}
+                    </button>
+                  ))}
+                  <div className="dispatch-picker__other" data-testid={`dispatch-other-tools-${agent.agentId}`}>
+                    <strong>{t('settings.dispatch.otherTools', { defaultValue: '其他工具' })}</strong>
+                    <p>
+                      {t('settings.dispatch.otherToolsHint', {
+                        agent: agent.displayName,
+                        defaultValue: '在你的 {{agent}} 里运行 $external-agent-setup，它会按同一套规则生成新的具名工人。这里不提供配置表单。',
+                      })}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
 
             {renderPending(agent)}
           </div>
         ))}
-      </SettingGroup>
+      </div>
 
       {notice && (
         <div className="dispatch-success" data-testid="dispatch-notice" role="status">
@@ -655,7 +707,11 @@ export function DispatchSection() {
         </div>
       )}
 
-      <SettingGroup label={t('settings.dispatch.detailsDetect', { defaultValue: '检测详情' })}>
+      <div className="dispatch-block">
+        <div className="dispatch-settings__group-title">
+          {t('settings.dispatch.detailsDetect', { defaultValue: '检测详情' })}
+        </div>
+        <div className="dispatch-panel">
         <Details label={t('settings.dispatch.details', { defaultValue: '详情' })} testId="dispatch-detection-details">
           {tree && (
             <>
@@ -708,9 +764,14 @@ export function DispatchSection() {
             </>
           )}
         </Details>
-      </SettingGroup>
+        </div>
+      </div>
 
-      <SettingGroup label={t('settings.dispatch.rulesTitle', { defaultValue: '派发规则需要你自己写' })}>
+      <div className="dispatch-block">
+        <div className="dispatch-settings__group-title">
+          {t('settings.dispatch.rulesTitle', { defaultValue: '派发规则需要你自己写' })}
+        </div>
+        <div className="dispatch-panel">
         <Details label={t('settings.dispatch.details', { defaultValue: '详情' })} testId="dispatch-rules-details">
           <div className="dispatch-rules">
             <p data-testid="dispatch-rules-desc">
@@ -718,17 +779,20 @@ export function DispatchSection() {
                 defaultValue: '这里只写入派发需要的文件，不写入你的全局指令文件（如 ~/.claude/CLAUDE.md、~/.codex/AGENTS.md、~/AGENTS.md），也不代写派发规则。何时派、派给谁，请自行写入全局指令文件。下面是示例文本，可复制后修改：',
               })}
             </p>
-            <pre className="dispatch-rules__example" data-testid="dispatch-rules-example">
-              {t('settings.dispatch.rulesExample')}
-            </pre>
-            <button type="button" data-testid="dispatch-copy-rules" onClick={() => void handleCopyRules()}>
-              {copied
-                ? t('settings.dispatch.copied', { defaultValue: '已复制' })
-                : t('settings.dispatch.copy', { defaultValue: '复制示例' })}
-            </button>
+            <div className="dispatch-rules__code">
+              <pre className="dispatch-rules__example" data-testid="dispatch-rules-example">
+                {t('settings.dispatch.rulesExample')}
+              </pre>
+              <button type="button" className="vb-btn" data-testid="dispatch-copy-rules" onClick={() => void handleCopyRules()}>
+                {copied
+                  ? t('settings.dispatch.copied', { defaultValue: '已复制' })
+                  : t('settings.dispatch.copy', { defaultValue: '复制示例' })}
+              </button>
+            </div>
           </div>
         </Details>
-      </SettingGroup>
-    </SettingSection>
+        </div>
+      </div>
+    </section>
   )
 }

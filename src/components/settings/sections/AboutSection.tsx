@@ -3,12 +3,10 @@ import { useTranslation } from 'react-i18next'
 import { open } from '@tauri-apps/plugin-shell'
 import { save } from '@tauri-apps/plugin-dialog'
 import { exportDiagnostics, getCurrentAppVersion } from '../../../services/tauriApi'
+import { useSettingsToast } from '../../../stores/settingsToastStore'
 import type { UpdateStatus } from '../../../hooks/useUpdater'
-import { SettingSection } from '../SettingSection'
-import { SettingGroup } from '../SettingGroup'
-import { SettingRow } from '../SettingRow'
 import { SettingDetails } from '../SettingDetails'
-import { GlassButton } from '../../shared'
+import './AboutSection.css'
 
 interface AboutSectionProps {
   updateStatus?: UpdateStatus
@@ -26,17 +24,9 @@ const REPOSITORY_URL = ((import.meta.env.VITE_VIBEBOARD_REPOSITORY_URL ?? import
 const REPO_ISSUES_URL = `${REPOSITORY_URL}/issues/new`
 const REPO_RELEASES_URL = `${REPOSITORY_URL}/releases`
 
-function RowIcon({ tone, children }: { tone: string; children: React.ReactNode }) {
-  return (
-    <span className="about-row-icon" style={{ background: tone }} aria-hidden="true">
-      {children}
-    </span>
-  )
-}
-
 function ExternalArrow() {
   return (
-    <svg aria-hidden="true" className="about-row-arrow" viewBox="0 0 16 16" fill="none">
+    <svg aria-hidden="true" className="about-settings__arrow" viewBox="0 0 16 16" fill="none">
       <path d="M5 11l6-6M6 5h5v5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   )
@@ -52,6 +42,7 @@ export function AboutSection({
   onCheckForUpdate,
 }: AboutSectionProps) {
   const { t } = useTranslation()
+  const showToast = useSettingsToast((state) => state.show)
   const [diagStatus, setDiagStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [appVersion, setAppVersion] = useState<string>('...')
 
@@ -89,12 +80,16 @@ export function AboutSection({
       }
       await exportDiagnostics(targetPath)
       setDiagStatus('saved')
+      showToast(t('settings.exportSaved', { defaultValue: '已保存！' }))
       setTimeout(() => setDiagStatus('idle'), 2000)
     } catch {
       setDiagStatus('error')
       setTimeout(() => setDiagStatus('idle'), 2000)
     }
   }
+
+  const busy = updateStatus === 'checking' || updateStatus === 'downloading'
+  const updateAvailable = updateStatus === 'available' || updateStatus === 'ready'
 
   const updateDescription = (() => {
     switch (updateStatus) {
@@ -123,94 +118,70 @@ export function AboutSection({
     }
   })()
 
+  const exportLabel = diagStatus === 'saved'
+    ? t('settings.exportSaved', { defaultValue: '已保存！' })
+    : diagStatus === 'error'
+      ? t('settings.exportFailed', { defaultValue: '导出失败' })
+      : t('settings.exportDiagnostics', { defaultValue: '导出诊断包' })
+
   return (
-    <SettingSection
-      title={t('settings.aboutTitle')}
-      description={t('settings.aboutDesc', { defaultValue: '关于 Vibe Board 本身：更新、反馈渠道和排查问题用的诊断包。' })}
-    >
-      <div className="about-header">
-        <img className="about-header__icon" src="/vibe-board-logo.png" alt="" aria-hidden="true" />
-        <div className="about-header__name">Vibe Board</div>
-        <div className="about-header__slogan">{t('notch.slogan')}</div>
-        <div className="about-header__version">
-          <SettingDetails testId="about-version-details" label={t('settings.versionDetails', { defaultValue: '版本详情' })}>
-            <div className="setting-details__row">
-              <span>{t('settings.appVersion', { defaultValue: 'Vibe Board 版本' })}</span>
-              <code>{appVersion}</code>
-            </div>
-          </SettingDetails>
+    <section className="about-settings">
+      <div className={`about-settings__island${updateAvailable ? ' about-settings__island--found' : ''}`}>
+        <span className="about-settings__mark">
+          <img src="/vibe-board-app-icon.png" alt="" aria-hidden="true" />
+        </span>
+        <div className="about-settings__text">
+          <b>{`Vibe Board ${appVersion}`}</b>
+          <span data-testid="about-update-status">
+            {updateStatus === 'checking' && <i className="about-settings__spin" aria-hidden="true" />}
+            {updateDescription}
+          </span>
         </div>
+        <button
+          type="button"
+          className={`vb-btn about-settings__check${updateAvailable ? ' vb-btn--primary' : ''}`}
+          disabled={busy}
+          onClick={() => onCheckForUpdate?.()}
+        >
+          {t('settings.checkForUpdates', { defaultValue: '检查更新' })}
+        </button>
       </div>
 
-      <SettingGroup>
-        <SettingRow label={t('settings.checkForUpdates')} description={updateDescription}>
-          <GlassButton
-            variant="secondary"
-            onClick={() => onCheckForUpdate?.()}
-            disabled={updateStatus === 'checking' || updateStatus === 'downloading'}
-          >
-            {updateStatus === 'checking' || updateStatus === 'downloading' ? '...' : t('settings.checkNow')}
-          </GlassButton>
-        </SettingRow>
-      </SettingGroup>
+      <p className="about-settings__line">{t('notch.slogan')}</p>
 
-      <SettingGroup>
-        {REPO_RELEASES_URL && <button type="button" className="about-link-row" onClick={() => openExternalLink(REPO_RELEASES_URL)}>
-          <RowIcon tone="#AF52DE">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2">
-              <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" />
-              <path d="m3.27 6.96 8.73 5.05 8.73-5.05M12 22.08V12" />
-            </svg>
-          </RowIcon>
-          <span className="about-link-row__label">{t('settings.releases')}</span>
-          <span className="about-link-row__value">GitHub</span>
-          <ExternalArrow />
-        </button>}
-        {REPO_ISSUES_URL && <button type="button" className="about-link-row" onClick={() => openExternalLink(REPO_ISSUES_URL)}>
-          <RowIcon tone="#FF9500">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2">
-              <path d="M8 2v3M16 2v3M5 8h14a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2Z" />
-              <path d="M9 13l2 2 4-4" />
-            </svg>
-          </RowIcon>
-          <span className="about-link-row__label">{t('settings.reportBug')}</span>
-          <span className="about-link-row__value">GitHub</span>
-          <ExternalArrow />
-        </button>}
-      </SettingGroup>
+      <div className="about-settings__links">
+        {REPO_RELEASES_URL && (
+          <button type="button" className="about-settings__link" onClick={() => openExternalLink(REPO_RELEASES_URL)}>
+            {t('settings.releases', { defaultValue: '发布版本' })}
+            <ExternalArrow />
+          </button>
+        )}
+        {REPO_ISSUES_URL && (
+          <button type="button" className="about-settings__link" onClick={() => openExternalLink(REPO_ISSUES_URL)}>
+            {t('settings.reportBug', { defaultValue: '报告 Bug' })}
+            <ExternalArrow />
+          </button>
+        )}
+        <button
+          type="button"
+          className="about-settings__link"
+          data-testid="about-export-diagnostics"
+          disabled={diagStatus === 'saving'}
+          onClick={() => void handleExportDiagnostics()}
+        >
+          {exportLabel}
+        </button>
+      </div>
 
-      <SettingGroup label={t('settings.logoMeaning', { defaultValue: 'Logo Meaning' })}>
-        <div className="about-logo-meaning">
-          <img src="/vibe-board-logo.png" alt="" aria-hidden="true" />
-          <div>
-            <strong>{t('settings.logoMeaningTitle', { defaultValue: 'A handshake between people and agents' })}</strong>
-            <span>{t('settings.logoMeaningDesc', { defaultValue: 'The center handshake represents collaboration between humans and AI agents. The outer A/B shape comes from Vibe Board and resembles two connected agent nodes.' })}</span>
-          </div>
+      <p className="about-settings__note">
+        {`${t('settings.aboutDiagnosticsNote', { defaultValue: '诊断包不含你的代码和对话内容' })} · Apache-2.0 · ${t('settings.copyright')}`}
+      </p>
+
+      {updateStatus === 'error' && updateError && (
+        <div className="about-settings__error" role="alert">
+          <SettingDetails testId="about-update-error-details">{updateError}</SettingDetails>
         </div>
-      </SettingGroup>
-
-      <SettingGroup>
-        <SettingRow label={t('settings.exportDiagnostics', { defaultValue: '导出诊断包' })} description={t('settings.exportDiagnosticsDesc', { defaultValue: '生成一份用于排查问题的压缩包，敏感信息会先脱敏。' })}>
-          <GlassButton
-            variant="secondary"
-            onClick={handleExportDiagnostics}
-            disabled={diagStatus === 'saving'}
-          >
-            {diagStatus === 'saved' ? t('settings.exportSaved', { defaultValue: 'Saved!' }) : diagStatus === 'error' ? t('settings.exportFailed', { defaultValue: 'Failed' }) : t('settings.export')}
-          </GlassButton>
-        </SettingRow>
-      </SettingGroup>
-
-      <SettingGroup label={t('settings.credits')}>
-        <div className="credits-list" style={{ padding: 'var(--space-sm) 0' }}>
-          <div>{t('settings.builtWith')}</div>
-          <div>{t('settings.designSystem')}</div>
-          <div style={{ marginTop: 'var(--space-sm)', color: '#aeaeb2' }}>
-            {t('settings.copyright')}
-          </div>
-        </div>
-      </SettingGroup>
-
-    </SettingSection>
+      )}
+    </section>
   )
 }

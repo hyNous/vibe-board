@@ -1,0 +1,112 @@
+/* Vibe Board — 通用页（M16b「岛的延伸」）
+ * 界面语言用分段控件，退出单独放在页底并用珊瑚红文字。 */
+
+.general-settings {
+  min-width: 0;
+  color: var(--vb-text);
+}
+
+.general-settings__head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 0 0 20px;
+}
+
+.general-settings__head h1 {
+  margin: 0;
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: .01em;
+  color: var(--vb-text);
+}
+
+.general-settings__head p {
+  max-width: 46em;
+  margin: 6px 0 0;
+  font-size: 14px;
+  color: var(--vb-text-2);
+}
+
+.general-settings__group-title {
+  margin: 26px 0 10px 22px;
+  font-size: 13px;
+  color: var(--vb-text-2);
+}
+
+.general-settings__panel {
+  padding: 4px 22px;
+  border-radius: var(--vb-r-panel);
+  background: var(--vb-s1);
+}
+
+.general-settings__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  min-height: 64px;
+  padding: 12px 0;
+}
+
+.general-settings__row + .general-settings__row {
+  border-top: 1px solid var(--vb-line);
+}
+
+.general-settings__row-info {
+  min-width: 0;
+}
+
+.general-settings__row-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--vb-text);
+}
+
+.general-settings__row-description {
+  margin-top: 2px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--vb-text-2);
+}
+
+.general-settings__row-control {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.general-settings__error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 12px;
+  padding: 12px 18px;
+  border-radius: 18px;
+  background: var(--vb-s2);
+  font-size: 13px;
+  color: var(--vb-text);
+}
+
+.general-settings__error .setting-details {
+  margin: 0;
+}
+
+.general-settings__error .setting-details__toggle {
+  color: var(--vb-text-3);
+}
+
+/* ── 退出：单独放在页底，只有文字是珊瑚红 ── */
+.general-settings__quit {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 40px;
+  padding-left: 4px;
+  font-size: 13px;
+  color: var(--vb-text-2);
+}
