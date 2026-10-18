@@ -86,6 +86,13 @@ function makeSharedUnmanaged(skillId: string, overrides: Partial<UnmanagedItemDt
   }
 }
 
+// 左侧 Agent 列表里某一行的检测状态文字；这一行不在列表里时返回 undefined。
+function rosterStatus(container: HTMLElement, name: string): string | undefined {
+  return Array.from(container.querySelectorAll('.sm2__rail .sm2-sidebar__subitem-label'))
+    .find((label) => label.firstChild?.textContent === name)
+    ?.querySelector('.sm2-sidebar__subitem-status')?.textContent ?? undefined
+}
+
 function makeSidebarAgent(id: string, displayName: string, counts: { managed?: number; unmanaged?: number } = {}): AgentSummary {
   return {
     id,
@@ -2637,7 +2644,8 @@ describe('Skill detail slider + agent page render without crashing', () => {
     expect(container.querySelector('.sm2__agent-picker')).toBeNull()
     expect(container.querySelector('.sm2__main--full')).not.toBeNull()
     // 内容区展示本机 Agent 检测总览，但仍是详情主画布。
-    expect(container.querySelector('.sm2-agent-inventory')).not.toBeNull()
+    // 检测总览卡片已删除，Agent 只在左侧列表里选。
+    expect(container.querySelector('.sm2-agent-inventory')).toBeNull()
     expect(screen.getAllByText('Claude Code').length).toBeGreaterThan(0)
   })
 
@@ -4968,7 +4976,8 @@ describe('Skill detail slider + agent page render without crashing', () => {
     const { container } = render(<AgentManagementPage />)
 
     // 没有程序信息时仍按本机真实状态显示「未检测到」，不伪装成已安装。
-    expect(await screen.findByTitle('Cursor · 未检测到')).toBeInTheDocument()
+    fireEvent.click(await screen.findByRole('button', { name: /其他 Agent/ }))
+    await waitFor(() => expect(rosterStatus(container, 'Cursor')).toBe('未检测到'))
     // 版本与安装 / 更新入口已从 Agent 视图移除。
     expect(container.querySelector('.sm2__agent-version-pill')).toBeNull()
     expect(container.querySelector('.sm2__agent-hero .sm2__btn--primary')).toBeNull()
@@ -5138,7 +5147,7 @@ describe('Skill detail slider + agent page render without crashing', () => {
       selectedAgentId: 'aider',
       selectedAgentDetail: aiderDetail,
       agents: [
-        { id: 'aider', displayName: 'Aider', iconKey: 'aider', enabled: true, skillsDir: '/Users/me/.aider/skills', version: null, latestVersion: null, installed: true, managedSkillCount: 0, unmanagedSkillCount: 0 } as AgentSummary,
+        { id: 'aider', displayName: 'Aider', iconKey: 'aider', enabled: true, skillsDir: '/Users/me/.aider/skills', version: null, latestVersion: null, installed: true, programInstalled: false, managedSkillCount: 0, unmanagedSkillCount: 0 } as AgentSummary,
       ],
       unmanaged: [],
     })
@@ -5159,12 +5168,12 @@ describe('Skill detail slider + agent page render without crashing', () => {
     ])
 
     const { AgentManagementPage } = await import('../components/skills-v2/AgentManagementPage')
-    render(<AgentManagementPage />)
+    const { container } = render(<AgentManagementPage />)
 
     // 只发现配置的 Agent 默认收在「＋」后面，点开后才显示。
-    await waitFor(() => expect(screen.queryByTitle('Aider · 仅发现配置')).not.toBeInTheDocument())
+    await waitFor(() => expect(rosterStatus(container, 'Aider')).toBeUndefined())
     fireEvent.click(screen.getByRole('button', { name: /其他 Agent/ }))
-    expect(screen.getByTitle('Aider · 仅发现配置')).toBeInTheDocument()
+    await waitFor(() => expect(rosterStatus(container, 'Aider')).toBe('仅发现配置'))
     expect(screen.queryByRole('button', { name: '卸载 Agent' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '安装此 Agent' })).not.toBeInTheDocument()
   })

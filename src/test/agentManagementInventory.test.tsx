@@ -122,7 +122,7 @@ describe('Agent management inventory', () => {
     })
   })
 
-  it('defaults to Agents whose program was detected and hides the rest behind +', async () => {
+  it('labels each Agent in the left list with its detection status and keeps undetected ones behind +', async () => {
     vi.spyOn(agentApi, 'list').mockResolvedValue([
       program('claude-code', 'Claude Code', 'installed'),
       program('codex', 'Codex', 'notInstalled'),
@@ -130,27 +130,30 @@ describe('Agent management inventory', () => {
       program('kiro', 'Kiro', 'unavailable'),
     ])
     vi.spyOn(skillApiV2, 'getAgentDetail').mockResolvedValue(detail('claude-code', 'Claude Code'))
+    // 真实数据里列表的「程序已安装」与程序检测出自同一次检测，这里保持一致。
+    useSkillStoreV2.setState({
+      agents: useSkillStoreV2.getState().agents.map((agent) => ({ ...agent, programInstalled: agent.id === 'claude-code' })),
+    })
 
-    render(<AgentManagementPage />)
+    const { container } = render(<AgentManagementPage />)
+    const statusOf = (name: string) => Array.from(container.querySelectorAll('.sm2__rail .sm2-sidebar__subitem-label'))
+      .find((label) => label.firstChild?.textContent === name)
+      ?.querySelector('.sm2-sidebar__subitem-status')?.textContent
 
-    // 程序检测到已安装：即使没有本机 skills 目录也默认显示。
-    expect(await screen.findByTitle('Claude Code · 已安装')).toBeInTheDocument()
-    expect(screen.getByText('程序已安装 1 / 5 · 仅发现配置 2')).toBeInTheDocument()
+    // 程序检测到已安装的 Agent 默认显示，并如实标注「已安装」。
+    await waitFor(() => expect(statusOf('Claude Code')).toBe('已安装'))
+    // 只找到配置、或没检测到程序的 Agent 默认收在「其他 Agent」后面。
+    expect(statusOf('Codex')).toBeUndefined()
 
-    // 仅发现配置（Codex / Kiro）与未检测到程序（Cursor / Gemini）默认收起。
-    await waitFor(() => expect(screen.queryByTitle('Codex · 仅发现配置')).not.toBeInTheDocument())
-    expect(screen.queryByTitle('Kiro · 仅发现配置')).not.toBeInTheDocument()
-    expect(screen.queryByTitle('Cursor · 未检测到')).not.toBeInTheDocument()
-    expect(screen.queryByTitle('Gemini CLI · 不可用')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /其他 Agent/ }))
 
-    // 页面左侧的 Agent 列表里也有一个「其他 Agent（没找到程序）」折叠组，
-    // 这里点的是内容区检测总览的「其他 Agent」卡片。
-    fireEvent.click(screen.getByTitle('显示未检测到程序的 Agent'))
-
-    expect(await screen.findByTitle('Codex · 仅发现配置')).toBeInTheDocument()
-    expect(screen.getByTitle('Kiro · 仅发现配置')).toBeInTheDocument()
-    expect(screen.getByTitle('Cursor · 未检测到')).toBeInTheDocument()
-    expect(screen.getByTitle('Gemini CLI · 不可用')).toBeInTheDocument()
+    // 只找到配置不能说成已安装；没检测到程序的照实写。
+    await waitFor(() => expect(statusOf('Codex')).toBe('仅发现配置'))
+    expect(statusOf('Kiro')).toBe('仅发现配置')
+    expect(statusOf('Cursor')).toBe('未检测到')
+    expect(statusOf('Gemini CLI')).toBe('不可用')
+    // 检测总览卡片已删除，Agent 只在左侧列表里选。
+    expect(container.querySelector('.sm2-agent-inventory')).toBeNull()
   })
 
   it('lists only program-detected Agents in the skill sidebar and reveals the rest from +', async () => {
@@ -174,19 +177,6 @@ describe('Agent management inventory', () => {
 
     expect(screen.getByText('Kiro')).toBeInTheDocument()
     expect(screen.getByText('Cursor')).toBeInTheDocument()
-  })
-
-  it('explains the page purpose without claiming online support', async () => {
-    vi.spyOn(agentApi, 'list').mockResolvedValue([])
-
-    render(<AgentManagementPage />)
-
-    expect(await screen.findByText(/检测到可执行程序/)).toBeInTheDocument()
-    expect(screen.getByText(/不是在线状态/)).toBeInTheDocument()
-    // 程序信息缺失时不过滤，避免把已安装的 Agent 误藏起来。
-    expect(screen.getByTitle('Codex · 仅发现配置')).toBeInTheDocument()
-    expect(screen.getByTitle('Claude Code · 未检测到')).toBeInTheDocument()
-    expect(screen.getByText('程序已安装 0 / 5 · 仅发现配置 2')).toBeInTheDocument()
   })
 
   it('keeps config-only details honest while still allowing a local rescan', async () => {

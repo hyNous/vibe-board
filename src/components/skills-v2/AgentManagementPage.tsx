@@ -40,15 +40,6 @@ const AGENT_DETECTION_LABELS = {
   undetected: '未检测到',
 } as const
 
-const AGENT_DETECTION_CLASSES = {
-  installed: 'installed',
-  updateAvailable: 'update-available',
-  configOnly: 'config-only',
-  notInstalled: 'not-installed',
-  unavailable: 'unavailable',
-  undetected: 'undetected',
-} as const
-
 type AgentDetectionStatus = keyof typeof AGENT_DETECTION_LABELS
 
 interface AgentInventoryEntry {
@@ -87,21 +78,14 @@ function agentDetection(
   return { status: program ? 'notInstalled' : 'undetected', installed: false }
 }
 
-function inventoryMetaLabel(agent: AgentInventoryEntry): string {
-  const skillCount = agent.managedSkillCount + agent.unmanagedSkillCount
-  if (agent.installed) {
-    return skillCount > 0 ? `Skills ${skillCount}` : '暂未发现 Skill'
-  }
-  if (agent.status === 'configOnly') {
-    return skillCount > 0 ? `发现 Skills ${skillCount}` : '仅发现配置'
-  }
-  if (agent.status === 'unavailable') {
-    return '本机未安装，且没有可用的安装方式'
-  }
-  if (agent.status === 'notInstalled') {
-    return '程序未安装'
-  }
-  return '未检测到本机程序'
+// 详情头部的一行程序信息：版本与程序位置，原来在检测总览卡片里。
+function programSummary(program: AgentProgramInfo | null): string | null {
+  if (!program) return null
+  const parts = [
+    program.installedVersion ? `v${program.installedVersion}` : null,
+    program.binaryPath || program.appPath,
+  ].filter(Boolean)
+  return parts.length > 0 ? parts.join(' · ') : null
 }
 
 function assertRuntimeEnvironment(expectedId: string, message: string) {
@@ -123,7 +107,6 @@ export function AgentManagementPage() {
   ), [agentUsageScores, state.agents])
   const detail = state.selectedAgentDetail?.id === SHARED_SKILLS_AGENT_ID ? null : state.selectedAgentDetail
   const [tab, setTab] = useState<DetailTab>('skills')
-  const [showOtherAgents, setShowOtherAgents] = useState(false)
   const [adopt, setAdopt] = useState<AdoptDialogState | null>(null)
   const [detailSkillId, setDetailSkillId] = useState<string | null>(null)
   const [detailFallback, setDetailFallback] = useState<SkillDetailFallback | null>(null)
@@ -165,11 +148,11 @@ export function AgentManagementPage() {
   const programInfoLoaded = Object.keys(programs).length > 0
   // 默认只显示检测到可执行程序（或应用）的 Agent；其余收在「+」后面。程序信息
   // 尚未取到时不做过滤，避免把已安装的 Agent 误藏起来。
+  const detectionLabelById = useMemo(
+    () => Object.fromEntries(inventory.map((agent) => [agent.id, AGENT_DETECTION_LABELS[agent.status]])),
+    [inventory],
+  )
   const detectedInventory = useMemo(() => inventory.filter((agent) => agent.installed), [inventory])
-  const hiddenInventory = useMemo(() => inventory.filter((agent) => !agent.installed), [inventory])
-  const visibleInventory = showOtherAgents || !programInfoLoaded ? inventory : detectedInventory
-  const installedProgramCount = detectedInventory.length
-  const configOnlyCount = inventory.filter((agent) => agent.status === 'configOnly').length
 
   const loadPrograms = useCallback(async () => {
     setProgramLoading(true)
@@ -517,66 +500,12 @@ export function AgentManagementPage() {
 
       <div className="sm2__agent-layout">
         <aside className="sm2__rail settings-scroll" aria-label={t('settings.skillAgents.installed', { defaultValue: '已安装的 Agent' })}>
-          <AgentRoster />
+          <AgentRoster statusById={detectionLabelById} />
         </aside>
         <div className="sm2__main sm2__main--full settings-scroll">
-        <section className="sm2-agent-inventory" aria-label="本机 Agent 检测总览">
-          <div className="sm2-agent-inventory__head">
-            <div>
-              <h3>本机 Agent</h3>
-              <p>
-                默认只列出检测到可执行程序（或应用）的 Agent。「仅发现配置」表示只找到本机配置或 Skills 目录，不代表程序已安装；
-                「未安装 / 不可用 / 未检测到」只代表本机没有检测到对应程序，不是在线状态。这些 Agent 收在「＋」后面，点开即可查看。
-              </p>
-            </div>
-            <span className="sm2-agent-inventory__count">
-              程序已安装 {installedProgramCount} / {inventory.length}
-              {configOnlyCount > 0 ? ` · 仅发现配置 ${configOnlyCount}` : ''}
-            </span>
-          </div>
-          <div className="sm2-agent-inventory__grid">
-            {visibleInventory.map((agent) => (
-              <button
-                key={agent.id}
-                type="button"
-                className={`sm2-agent-inventory__card${detail?.id === agent.id ? ' is--selected' : ''}`}
-                aria-pressed={detail?.id === agent.id}
-                title={`${agent.displayName} · ${AGENT_DETECTION_LABELS[agent.status]}`}
-                onClick={() => state.selectAgent(agent.id)}
-              >
-                <AgentIconBadge iconKey={agent.iconKey} title={agent.displayName} size={22} />
-                <span className="sm2-agent-inventory__copy">
-                  <span className="sm2-agent-inventory__name">{agent.displayName}</span>
-                  <span className="sm2-agent-inventory__meta">{inventoryMetaLabel(agent)}</span>
-                </span>
-                <span className={`sm2-agent-inventory__status sm2-agent-inventory__status--${AGENT_DETECTION_CLASSES[agent.status]}`}>
-                  {AGENT_DETECTION_LABELS[agent.status]}
-                </span>
-              </button>
-            ))}
-            {hiddenInventory.length > 0 && (
-              <button
-                type="button"
-                className={`sm2-agent-inventory__card sm2-agent-inventory__card--more${showOtherAgents ? ' is--selected' : ''}`}
-                aria-expanded={showOtherAgents}
-                title="显示未检测到程序的 Agent"
-                onClick={() => setShowOtherAgents((open) => !open)}
-              >
-                <span className="sm2-agent-inventory__more-mark" aria-hidden="true">＋</span>
-                <span className="sm2-agent-inventory__copy">
-                  <span className="sm2-agent-inventory__name">其他 Agent</span>
-                  <span className="sm2-agent-inventory__meta">{showOtherAgents ? '收起' : '未检测到程序或仅发现配置'}</span>
-                </span>
-                <span className="sm2-agent-inventory__status sm2-agent-inventory__status--unavailable">
-                  {hiddenInventory.length}
-                </span>
-              </button>
-            )}
-          </div>
-        </section>
         {!detail ? (
           <div className="sm2__empty">
-            {state.agentDetailLoading ? '加载 Agent 详情…' : '从上方选择一个 Agent 查看详情'}
+            {state.agentDetailLoading ? '加载 Agent 详情…' : '从左侧选择一个 Agent 查看详情'}
           </div>
         ) : (
           <AgentDetailView
@@ -1031,7 +960,7 @@ function AgentDetailView({
         <AgentIconBadge iconKey={detail.iconKey} size={38} />
         <div className="sm2__agent-hero-main">
           <div className="sm2__agent-hero-title">{detail.displayName}</div>
-          <div className="sm2__agent-hero-sub">生效中的 Skill 与接管状态</div>
+          <div className="sm2__agent-hero-sub">{programSummary(program) ?? '生效中的 Skill 与接管状态'}</div>
         </div>
         <div className="sm2__agent-summary-strip" aria-label="Agent Skill 摘要">
           <Stat value={detail.skills.length} label="生效中" />

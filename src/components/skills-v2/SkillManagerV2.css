@@ -5004,6 +5004,9 @@
   color: var(--vb-text-2);
 }
 .sm2-sidebar__subitem-label { min-width: 0; flex: 1; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 列表每行的检测状态（已安装 / 仅发现配置 …），原来在检测总览卡片里。 */
+.sm2-sidebar__subitem-status { display: block; overflow: hidden; text-overflow: ellipsis; font-size: 13px; font-weight: 400; line-height: 1.4; color: var(--vb-text-3); }
+.sm2-sidebar__subitem--active .sm2-sidebar__subitem-status { color: #4a4a50; }
 .sm2-sidebar__subitem-dot { width: 7px; height: 7px; flex: 0 0 7px; border-radius: 50%;  transition: opacity 0.12s ease;
   background: var(--vb-live);
 }
@@ -7188,148 +7191,22 @@
 }
 
 /* ── Agent 管理：本机 Agent 真实检测总览 ── */
-.sm2-agent-inventory {
-  display: grid;
-  gap: 10px;
-  margin-bottom: 14px;
-  padding: 14px 16px;
-  
-  
-  background: var(--vb-s1);
-  border-radius: var(--vb-r-panel);
-  border: 0;
-}
 
-.sm2-agent-inventory__head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
 
-.sm2-agent-inventory__head h3 {
-  margin: 0;
-  color: var(--vb-text);
-  font-size: 14px;
-  font-weight: 800;
-}
 
-.sm2-agent-inventory__head p {
-  margin: 4px 0 0;
-  max-width: 720px;
-  color: var(--vb-text-2);
-  font-size: 12px;
-  line-height: 1.6;
-}
 
-.sm2-agent-inventory__count {
-  flex: 0 0 auto;
-  padding: 3px 10px;
-  
-  border-radius: 999px;
-  
-  
-  font-size: 11.5px;
-  font-weight: 760;
-  white-space: nowrap;
-  border: 0;
-  background: var(--vb-s3);
-  color: var(--vb-text);
-}
 
-.sm2-agent-inventory__grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(212px, 1fr));
-  gap: 8px;
-}
 
-.sm2-agent-inventory__card {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  min-width: 0;
-  padding: 8px 10px;
-  
-  
-  
-  color: var(--vb-text);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
-  border-radius: 18px;
-  border: 0;
-  background: var(--vb-s1);
-}
 
-.sm2-agent-inventory__card:hover {
-  border-radius: 18px;
-  border: 0;
-  background: var(--vb-s2);
-}
 
-.sm2-agent-inventory__card.is--selected {
-  background: var(--vb-text);
-  color: #000;
-  border: 0;
-  box-shadow: none;
-}
 
-.sm2-agent-inventory__copy {
-  display: grid;
-  gap: 2px;
-  min-width: 0;
-  flex: 1;
-}
 
-.sm2-agent-inventory__name {
-  overflow: hidden;
-  font-size: 12.5px;
-  font-weight: 720;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 
-.sm2-agent-inventory__meta {
-  overflow: hidden;
-  color: var(--vb-text-2);
-  font-size: 11px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 
-.sm2-agent-inventory__status {
-  flex: 0 0 auto;
-  padding: 2px 7px;
-  border-radius: 999px;
-  
-  
-  font-size: 10.5px;
-  font-weight: 760;
-  white-space: nowrap;
-  background: var(--vb-s3);
-  color: var(--vb-text-2);
-}
 
-.sm2-agent-inventory__status--installed {
-  background: var(--vb-s3);
-  color: var(--vb-text-2);
-}
 
-.sm2-agent-inventory__status--update-available {
-  background: var(--vb-text);
-  color: #000;
-}
 
-.sm2-agent-inventory__status--config-only {
-  background: var(--vb-s3);
-  color: var(--vb-text-2);
-}
 
-.sm2-agent-inventory__status--unavailable,.sm2-agent-inventory__status--undetected {
-  background: var(--vb-s3);
-  color: var(--vb-text-2);
-}
 
 .sm2--agents .sm2__btn {
   min-height: 36px;
@@ -10602,19 +10479,7 @@
   color: var(--vb-text-2);
 }
 
-.sm2-agent-inventory__card--more {
-  border-style: dashed;
-  border-color: var(--vb-s3);
-  background: transparent;
-}
 
-.sm2-agent-inventory__more-mark {
-  width: 22px;
-  text-align: center;
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--vb-text-2);
-}
 
 .sm2-distribute__more-agents {
   margin: 0 0 8px;
@@ -10640,19 +10505,6 @@
 /* ── 「岛的延伸」：上面没有的原型控件 ── */
 .sm2__skill-source-card {
   border-radius: var(--vb-r-panel);
-}
-.sm2-agent-inventory__card.is--selected .sm2-agent-inventory__name {
-  color: #000;
-}
-.sm2-agent-inventory__card.is--selected .sm2-agent-inventory__meta {
-  color: #000;
-}
-.sm2-agent-inventory__card.is--selected .sm2__agent-badge {
-  color: #000;
-}
-.sm2-agent-inventory__card--more.is--selected {
-  background: var(--vb-text);
-  border-color: transparent;
 }
 .sm2__modal--adopt .sm2__modal-actions .sm2__btn--danger:hover:not(:disabled) {
   background: var(--vb-s3);

@@ -15,7 +15,12 @@ interface AgentDropTarget {
 
 // 已安装 Agent 列表：原名在设置侧栏里，M16c 挪进「按 Agent 看」页面内。
 // 选中逻辑、拖拽排序与持久化、按使用活跃度排序、其他 Agent 折叠组、添加自定义 Agent 全部保持不变。
-export function AgentRoster() {
+interface AgentRosterProps {
+  // 每个 Agent 的检测状态文字（已安装 / 仅发现配置 …），由所在页面算好传入。
+  statusById?: Record<string, string>
+}
+
+export function AgentRoster({ statusById }: AgentRosterProps = {}) {
   const { t } = useTranslation()
   const skillAgents = useSkillStoreV2((s) => s.agents)
   const skillSelectedAgentId = useSkillStoreV2((s) => s.selectedAgentId)
@@ -151,7 +156,10 @@ export function AgentRoster() {
                   }}
                 >
                   <AgentIconBadge iconKey={a.iconKey} title={a.displayName} size={20} />
-                  <span className="sm2-sidebar__subitem-label">{a.displayName}</span>
+                  <span className="sm2-sidebar__subitem-label">
+                    {a.displayName}
+                    {statusById?.[a.id] && <span className="sm2-sidebar__subitem-status">{statusById[a.id]}</span>}
+                  </span>
                   <span className="sm2-sidebar__subitem-dot" />
                 </button>
                 <span className="sm2-sidebar__drag-handle" aria-hidden="true" />
@@ -180,7 +188,10 @@ export function AgentRoster() {
                   onClick={() => selectAgent(a.id)}
                 >
                   <AgentIconBadge iconKey={a.iconKey} title={a.displayName} size={20} />
-                  <span className="sm2-sidebar__subitem-label">{a.displayName}</span>
+                  <span className="sm2-sidebar__subitem-label">
+                    {a.displayName}
+                    {statusById?.[a.id] && <span className="sm2-sidebar__subitem-status">{statusById[a.id]}</span>}
+                  </span>
                 </button>
               ))}
             </div>
