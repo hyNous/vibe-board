@@ -180,6 +180,7 @@
 
 .settings-island__item--active .settings-island__dot { background: #000; }
 
+/* 更新胶囊：只在有更新可装时出现，白底黑字（需要注意） */
 .settings-app--island .settings-update-pill {
   position: absolute;
   top: 22px;
@@ -187,17 +188,34 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  min-height: 32px;
+  margin: 0;
   padding: 7px 14px;
   border: 0;
   border-radius: 999px;
   background: var(--vb-text);
   color: #000;
+  cursor: pointer;
+  font-family: inherit;
   font-size: 13px;
   font-weight: 600;
   box-shadow: none;
+  animation: settings-update-pill-pop 0.25s ease-out;
+}
+
+.settings-app--island .settings-update-pill:hover { background: #fff; }
+
+.settings-app--island .settings-update-pill span[aria-hidden] {
+  font-size: 14px;
+  line-height: 1;
 }
 
 .settings-app--island .settings-update-pill em { font-style: normal; color: #4a4a50; }
+
+@keyframes settings-update-pill-pop {
+  from { transform: translateY(-4px) scale(0.94); opacity: 0; }
+  to { transform: translateY(0) scale(1); opacity: 1; }
+}
 
 /* ── 提示条：从岛下方掉出来 ── */
 .settings-toast {
@@ -428,6 +446,9 @@
 .settings-app--island .glass-btn--danger,
 .settings-app--island .glass-btn--danger:hover { background: var(--vb-s2); color: var(--vb-hot); }
 .settings-app--island .glass-btn--ghost { background: transparent; color: var(--vb-text-2); }
+
+/* 向导是全屏弹层，里面的按钮用原型里主按钮的尺寸 */
+.setup-wizard .glass-btn { padding: 9px 18px; font-size: 14px; }
 
 /* ── 分段控件：白色滑块 ── */
 .vb-seg {

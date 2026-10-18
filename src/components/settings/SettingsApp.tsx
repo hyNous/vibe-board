@@ -105,7 +105,7 @@ export function SettingsApp({ onClose }: SettingsAppProps) {
 
   if (isTauri() && setupConfigLoaded && !setupWizardCompleted) {
     return (
-      <div className="settings-app">
+      <div className="settings-app settings-app--island">
         {/* Finishing, skipping or closing the wizard marks it completed; the
             settings page then renders in place instead of closing the window. */}
         <SetupWizard onClose={() => {}} />

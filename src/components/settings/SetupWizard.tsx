@@ -340,7 +340,7 @@ export function SetupWizard({ onClose }: SetupWizardProps) {
       <div className="setup-wizard__panel">
         <button className="setup-wizard__close" type="button" onClick={() => void finishWithoutSetup()} aria-label={text('关闭', 'Close')}>×</button>
         <div className="setup-wizard__brand">
-          <span className="setup-wizard__brand-mark">AI</span>
+          <img className="setup-wizard__brand-mark" src="/vibe-board-app-icon.png" alt="" />
           <span>Vibe Board</span>
         </div>
         <div className="setup-wizard__progress" aria-label={text('设置进度', 'Setup progress')}>
