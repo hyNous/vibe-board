@@ -162,7 +162,7 @@ describe('settings island menu', () => {
 
     expect(screen.getByRole('heading', { name: 'Tasks' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '使用额度' }))
-    expect(await screen.findByRole('heading', { name: 'Usage' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '额度与用量' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '通用' }))
     await waitFor(() => expect(screen.getByText('settings.language')).toBeInTheDocument())
   })

@@ -162,7 +162,7 @@ export function SettingsApp({ onClose }: SettingsAppProps) {
             transition={{ duration: 0.15 }}
           >
             {activeSection === 'tasks' ? (
-              <AgentMonitorSection />
+              <AgentMonitorSection onOpenUsage={() => setActiveSection('usage')} />
             ) : activeSection === 'usage' ? (
               <UnifiedUsageSection />
             ) : activeSection === 'skills' ? (

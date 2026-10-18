@@ -1,6 +1,7 @@
 import { Fragment, useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { UsageProvidersPanel } from './UsageProvidersPanel'
+import { Segmented } from '../Segmented'
 import { SettingDetails } from '../SettingDetails'
 import {
   getUsageDashboard,
@@ -20,6 +21,9 @@ import './UnifiedUsageSection.css'
 
 type UsagePeriodId = 'today' | 'week' | 'month'
 
+// 额度低于这个百分比时，额度条转成珊瑚红。
+const LOW_QUOTA_PERCENT = 25
+
 const USAGE_PERIODS: Array<{ id: UsagePeriodId; labelKey: string; defaultLabel: string }> = [
   { id: 'today', labelKey: 'settings.usagePage.periodToday', defaultLabel: '今天' },
   { id: 'week', labelKey: 'settings.usagePage.periodWeek', defaultLabel: '本周' },
@@ -35,6 +39,16 @@ function readableError(error: unknown): string {
   return String(error)
 }
 
+function windowRemainingPercent(window: UsageRateWindow): number | undefined {
+  const raw = typeof window.remainingPercent === 'number' && Number.isFinite(window.remainingPercent)
+    ? window.remainingPercent
+    : typeof window.usedPercent === 'number' && Number.isFinite(window.usedPercent)
+      ? 100 - window.usedPercent
+      : undefined
+  if (raw === undefined) return undefined
+  return Math.max(0, Math.min(100, raw))
+}
+
 function windowRemainingLabel(window: UsageRateWindow): string {
   const remaining = window.remainingPercent ?? 100 - window.usedPercent
   if (!Number.isFinite(remaining)) return ''
@@ -44,6 +58,14 @@ function windowRemainingLabel(window: UsageRateWindow): string {
 function remainingText(snapshot: UsageSnapshot, unknown: string): string {
   const parts = snapshot.windows.map(windowRemainingLabel).filter(Boolean)
   return parts.length > 0 ? parts.join(' · ') : unknown
+}
+
+// 一条额度条只画一个百分比：取各窗口里最紧张的那个。
+function primaryRemaining(snapshot: UsageSnapshot): number | null {
+  const values = snapshot.windows
+    .map(windowRemainingPercent)
+    .filter((value): value is number => value !== undefined)
+  return values.length > 0 ? Math.min(...values) : null
 }
 
 function formatResetTime(resetsAt: string | null | undefined): string {
@@ -102,6 +124,13 @@ function stateLabel(t: Translate, snapshot: UsageSnapshot): string {
   }
 }
 
+// 状态点只用允许的颜色：黑白灰、运行中亮蓝、珊瑚红。
+function stateDotModifier(snapshot: UsageSnapshot): string {
+  if (snapshot.state === 'ok') return 'usage-quota__dot--ok'
+  if (snapshot.state === 'failed') return 'usage-quota__dot--failed'
+  return 'usage-quota__dot--idle'
+}
+
 function periodEntry(snapshot: UsageSnapshot, period: UsagePeriodId): UsagePeriod | null {
   return snapshot.history.periods.find((entry) => entry.id === period) ?? null
 }
@@ -120,12 +149,12 @@ function MetricValue({ value, unknown }: { value: number | null | undefined; unk
  * a price the cell stays empty: only token usage is shown, never a 0 amount.
  */
 function CostValue({ cost, label, noPrice }: { cost: UsageCost | null; label: string; noPrice: string }) {
-  if (!cost) return <span className="unified-usage__cost-none" title={noPrice} aria-label={noPrice}>—</span>
+  if (!cost) return <span className="usage-table__cost-none" title={noPrice} aria-label={noPrice}>—</span>
   return (
     <>
       {cost.complete ? '' : '≥ '}
       {formatUsageCost(cost.amount, cost.currency)}
-      <span className="unified-usage__cost-estimate" title={label}>
+      <span className="usage-table__cost-estimate" title={label}>
         {' '}
         {label}
       </span>
@@ -214,129 +243,150 @@ export function UnifiedUsageSection() {
 
   return (
     <section className="unified-usage">
-      <header className="agent-monitor__header">
+      <header className="unified-usage__head">
         <div>
-          <h2>{t('settings.usage', { defaultValue: 'Usage' })}</h2>
-          <p>{t('settings.usagePage.subtitle', { defaultValue: '看看每个工具还能用多少、最近用掉了多少。这里只做统计，不改动任何东西。' })}</p>
+          <h1 className="unified-usage__title">
+            {t('settings.usagePage.title', { defaultValue: '额度与用量' })}
+          </h1>
+          <p>
+            {t('settings.usagePage.subtitle', {
+              defaultValue: '看看每个工具还能用多少、最近用掉了多少。这里只做统计，不改动任何东西。',
+            })}
+          </p>
         </div>
-        <button
-          type="button"
-          className="agent-monitor__refresh"
-          disabled={loading}
-          onClick={() => {
-            void loadUsage()
-            void startScan()
-          }}
-        >
-          {loading
-            ? t('settings.refreshing', { defaultValue: '正在刷新…' })
-            : t('settings.refresh', { defaultValue: '刷新' })}
-        </button>
+        <div className="unified-usage__acts">
+          <button
+            type="button"
+            className="vb-btn"
+            disabled={loading}
+            onClick={() => {
+              void loadUsage()
+              void startScan()
+            }}
+          >
+            {loading
+              ? t('settings.refreshing', { defaultValue: '正在刷新…' })
+              : t('settings.refresh', { defaultValue: '刷新' })}
+          </button>
+        </div>
       </header>
 
       {error && (
         <div className="unified-usage__error" role="alert">
-          <div>{t('settings.usagePage.loadFailed', { defaultValue: '额度没能读取成功，请稍后点「刷新」重试。' })}</div>
+          <span>
+            {t('settings.usagePage.loadFailed', { defaultValue: '额度没能读取成功，请稍后点「刷新」重试。' })}
+          </span>
           <SettingDetails testId="usage-error-details">{error}</SettingDetails>
         </div>
       )}
 
-      <section className="unified-usage__provider-card" data-testid="usage-now">
-        <div className="unified-usage__provider-head">
-          <div>
-            <h3>{t('settings.usagePage.nowTitle', { defaultValue: '现在还能用多少' })}</h3>
-            <p>{t('settings.usagePage.nowDesc', { defaultValue: '每个工具的剩余额度、恢复时间，以及数据是什么时候取的。' })}</p>
-          </div>
+      <section className="unified-usage__block" data-testid="usage-now">
+        <div className="unified-usage__group-title">
+          <span>{t('settings.usagePage.nowTitle', { defaultValue: '现在还能用多少' })}</span>
           {loading && (
-            <span className="unified-usage__provider-loading">
+            <em className="unified-usage__querying">
               {providers.some((provider) => provider.networkSupported && provider.networkAuthorized)
                 ? t('settings.usageNetworkQuerying', { defaultValue: '正在查询…' })
                 : t('settings.detecting', { defaultValue: '正在检查…' })}
-            </span>
+            </em>
           )}
         </div>
-        {providers.length === 0 ? (
-          <div className="hook-empty">{t('settings.usagePage.noProviders', { defaultValue: '还没有可显示的数据。开启某个工具的查询后，这里会出现它的额度。' })}</div>
-        ) : (
-          <div className="unified-usage__provider-table-wrap">
-            <table className="unified-usage__provider-table">
-              <thead>
-                <tr>
-                  <th>{t('settings.usagePage.provider', { defaultValue: '工具' })}</th>
-                  <th>{t('settings.usagePage.remaining', { defaultValue: '剩余额度' })}</th>
-                  <th>{t('settings.usagePage.resetAt', { defaultValue: '恢复时间' })}</th>
-                  <th>{t('settings.usagePage.freshness', { defaultValue: '更新时间' })}</th>
-                  <th>{t('settings.usagePage.status', { defaultValue: '状态' })}</th>
-                </tr>
-              </thead>
+        <div className="unified-usage__panel">
+          {providers.length === 0 ? (
+            <div className="unified-usage__empty">
+              {t('settings.usagePage.noProviders', {
+                defaultValue: '还没有可显示的数据。开启某个工具的查询后，这里会出现它的额度。',
+              })}
+            </div>
+          ) : (
+            <table className="usage-quota">
               <tbody>
-                {providers.map((snapshot) => (
-                  <tr key={snapshot.provider}>
-                    <td>
-                      <strong>{snapshot.label}</strong>
-                      <SettingDetails testId={`usage-provider-details-${snapshot.provider}`}>
-                        <div className="setting-details__row">
-                          <span>{t('settings.usagePage.source', { defaultValue: '数据来源' })}</span>
-                          <code>{snapshot.source ?? unknown}</code>
-                        </div>
-                        {snapshot.detail && (
+                {providers.map((snapshot) => {
+                  const remaining = primaryRemaining(snapshot)
+                  const low = remaining !== null && remaining < LOW_QUOTA_PERCENT
+                  return (
+                    <tr className="usage-quota__row" key={snapshot.provider}>
+                      <td className="usage-quota__name">
+                        <b>{snapshot.label}</b>
+                        <span className="usage-quota__state">
+                          <i className={`usage-quota__dot ${stateDotModifier(snapshot)}`} aria-hidden="true" />
+                          <span>{stateLabel(t, snapshot)}</span>
+                        </span>
+                        <SettingDetails testId={`usage-provider-details-${snapshot.provider}`}>
                           <div className="setting-details__row">
-                            <span>{t('settings.usagePage.rawDetail', { defaultValue: '原始说明' })}</span>
-                            <code>{snapshot.detail}</code>
+                            <span>{t('settings.usagePage.source', { defaultValue: '数据来源' })}</span>
+                            <code>{snapshot.source ?? unknown}</code>
                           </div>
+                          {snapshot.detail && (
+                            <div className="setting-details__row">
+                              <span>{t('settings.usagePage.rawDetail', { defaultValue: '原始说明' })}</span>
+                              <code>{snapshot.detail}</code>
+                            </div>
+                          )}
+                        </SettingDetails>
+                      </td>
+                      <td className="usage-quota__meter">
+                        {remaining !== null && (
+                          <span className={`usage-quota__track${low ? ' usage-quota__track--low' : ''}`}>
+                            <span style={{ width: `${remaining}%` }} />
+                          </span>
                         )}
-                      </SettingDetails>
-                    </td>
-                    <td>{remainingText(snapshot, unknown)}</td>
-                    <td>{resetText(snapshot, unknown)}</td>
-                    <td>{formatFreshness(t, snapshot.fetchedAt)}</td>
-                    <td>
-                      <strong>{stateLabel(t, snapshot)}</strong>
-                    </td>
-                  </tr>
-                ))}
+                        <span className={remaining !== null ? 'usage-quota__windows' : 'usage-quota__na'}>
+                          {remainingText(snapshot, unknown)}
+                        </span>
+                      </td>
+                      <td className={`usage-quota__big${remaining === null ? ' usage-quota__big--dim' : ''}`}>
+                        {remaining !== null
+                          ? <>{Math.round(remaining)}<small>%</small></>
+                          : <span className="usage-quota__na">—</span>}
+                      </td>
+                      <td className="usage-quota__when">
+                        <span>{resetText(snapshot, unknown)}</span>
+                        <small>{formatFreshness(t, snapshot.fetchedAt)}</small>
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
-          </div>
-        )}
+          )}
+        </div>
       </section>
 
-      <section className="unified-usage__provider-card" data-testid="usage-cost">
-        <div className="unified-usage__provider-head">
-          <div>
-            <h3>{t('settings.usagePage.usageCostTitle', { defaultValue: '用量与花费' })}</h3>
-            <p>{t('settings.usagePage.usageCostDesc', { defaultValue: '按今天 / 本周 / 本月统计用掉的 token，并给出估算花费。' })}</p>
+      <UsageProvidersPanel />
+
+      <section className="unified-usage__block unified-usage__cost" data-testid="usage-cost">
+        <div className="unified-usage__tabs-row">
+          <div className="unified-usage__group-title">
+            <span>{t('settings.usagePage.usedTitle', { defaultValue: '用掉了多少' })}</span>
           </div>
-          <div className="unified-usage__cost-head">
+          <div className="unified-usage__cost-actions">
             {scan?.scanning && (
-              <span className="unified-usage__provider-loading" data-testid="usage-scan-progress">
+              <span className="unified-usage__querying" data-testid="usage-scan-progress">
                 {t('settings.usagePage.scanning', { defaultValue: '正在统计用量…' })}
               </span>
             )}
-            <div className="unified-usage__tabs unified-usage__tabs--inline" role="tablist" aria-label={t('settings.usagePage.usageCostTitle', { defaultValue: '用量与花费' })}>
-              {USAGE_PERIODS.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={period === item.id}
-                  className={period === item.id ? 'unified-usage__tab unified-usage__tab--active' : 'unified-usage__tab'}
-                  onClick={() => setPeriod(item.id)}
-                >
-                  {t(item.labelKey, { defaultValue: item.defaultLabel })}
-                </button>
-              ))}
-            </div>
+            <Segmented
+              value={period}
+              ariaLabel={t('settings.usagePage.usageCostTitle', { defaultValue: '用量与花费' })}
+              options={USAGE_PERIODS.map((item) => ({
+                value: item.id,
+                label: t(item.labelKey, { defaultValue: item.defaultLabel }),
+              }))}
+              onChange={setPeriod}
+            />
           </div>
         </div>
+
         {scan?.error && (
-          <div className="unified-usage__provider-error" data-testid="usage-scan-error">
-            <div>{t('settings.usagePage.scanFailed', { defaultValue: '用量统计没能完成，请稍后重试。' })}</div>
+          <div className="unified-usage__error" data-testid="usage-scan-error">
+            <span>{t('settings.usagePage.scanFailed', { defaultValue: '用量统计没能完成，请稍后重试。' })}</span>
             <SettingDetails testId="usage-scan-error-details">{scan.error}</SettingDetails>
           </div>
         )}
-        <div className="unified-usage__provider-table-wrap">
-          <table className="unified-usage__provider-table">
+
+        <div className="unified-usage__panel unified-usage__panel--table">
+          <table className="usage-table">
             <thead>
               <tr>
                 <th>{t('settings.usagePage.provider', { defaultValue: '工具' })}</th>
@@ -368,15 +418,15 @@ export function UnifiedUsageSection() {
                 return (
                   <Fragment key={snapshot.provider}>
                     <tr>
-                      <td>
-                        <strong>{snapshot.label}</strong>
+                      <td className="usage-table__provider">
+                        <b>{snapshot.label}</b>
                         {historyDetail && (
                           <SettingDetails testId={`usage-history-details-${snapshot.provider}`}>
                             <p>{historyDetail}</p>
                           </SettingDetails>
                         )}
                         {entry && entry.unpricedModels.length > 0 && (
-                          <span className="unified-usage__detail">
+                          <span className="usage-table__detail">
                             {t('settings.usagePage.unpricedModels', { defaultValue: '只统计 token（没有公开价格）' })}: {entry.unpricedModels.join(', ')}
                           </span>
                         )}
@@ -387,22 +437,26 @@ export function UnifiedUsageSection() {
                       <td><MetricValue value={tokens?.cacheRead} unknown={unknown} /></td>
                       <td><MetricValue value={tokens?.cacheCreate} unknown={unknown} /></td>
                       <td>{entry?.requests == null ? unknown : entry.requests}</td>
-                      <td><CostValue cost={entry?.cost ?? null} label={costLabel} noPrice={noPrice} /></td>
+                      <td className="usage-table__cost">
+                        <CostValue cost={entry?.cost ?? null} label={costLabel} noPrice={noPrice} />
+                      </td>
                     </tr>
                     {entry?.models.map((model) => (
                       <tr
                         key={`${snapshot.provider}:${model.model}`}
-                        className="unified-usage__model-row"
+                        className="usage-table__model-row"
                         data-testid={`usage-model-${model.model}`}
                       >
-                        <td><span className="unified-usage__model-name">{model.model}</span></td>
+                        <td><span className="usage-table__model-name">{model.model}</span></td>
                         <td><MetricValue value={tokenTotal(model.tokens)} unknown={unknown} /></td>
                         <td><MetricValue value={model.tokens.input} unknown={unknown} /></td>
                         <td><MetricValue value={model.tokens.output} unknown={unknown} /></td>
                         <td><MetricValue value={model.tokens.cacheRead} unknown={unknown} /></td>
                         <td><MetricValue value={model.tokens.cacheCreate} unknown={unknown} /></td>
                         <td>{model.requests}</td>
-                        <td><CostValue cost={model.cost} label={costLabel} noPrice={noPrice} /></td>
+                        <td className="usage-table__cost">
+                          <CostValue cost={model.cost} label={costLabel} noPrice={noPrice} />
+                        </td>
                       </tr>
                     ))}
                   </Fragment>
@@ -411,7 +465,8 @@ export function UnifiedUsageSection() {
             </tbody>
           </table>
         </div>
-        <p className="unified-usage__cost-note">
+
+        <p className="unified-usage__foot-note">
           <strong>{t('settings.usagePage.estimated', { defaultValue: '估算' })}</strong>
           <span>
             {t('settings.usagePage.costNote', {
@@ -423,8 +478,6 @@ export function UnifiedUsageSection() {
           </span>
         </p>
       </section>
-
-      <UsageProvidersPanel />
     </section>
   )
 }

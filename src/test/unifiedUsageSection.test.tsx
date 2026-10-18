@@ -246,11 +246,11 @@ describe('UnifiedUsageSection rendering', () => {
     const modelRow = within(cost).getByTestId('usage-model-gpt-5-codex')
     expect(within(modelRow).getByText('gpt-5-codex')).toBeInTheDocument()
 
-    fireEvent.click(within(cost).getByRole('tab', { name: '本周' }))
+    fireEvent.click(within(cost).getByRole('radio', { name: '本周' }))
     expect(within(cost).getByText('2.6K')).toBeInTheDocument()
     expect(within(cost).getByText(/\$2\.46/)).toBeInTheDocument()
 
-    fireEvent.click(within(cost).getByRole('tab', { name: '本月' }))
+    fireEvent.click(within(cost).getByRole('radio', { name: '本月' }))
     expect(within(cost).getByText('3.9K')).toBeInTheDocument()
   })
 

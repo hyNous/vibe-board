@@ -1,193 +1,481 @@
+/* Vibe Board — 使用额度（M16b「岛的延伸」）
+ * 额度用品牌渐变条画数量，告急或失误才用珊瑚红；其余只有黑白与一组灰。 */
+
 .unified-usage {
   min-width: 0;
+  color: var(--vb-text);
 }
 
-.unified-usage__tabs {
+/* ── 页头 ── */
+.unified-usage__head {
   display: flex;
-  gap: 4px;
-  margin-bottom: 12px;
-  padding: 4px;
-  overflow-x: auto;
-  border: 1px solid var(--settings-card-border);
-  border-radius: 9px;
-  background: #f2f2f7;
-}
-
-.unified-usage__tabs--inline {
-  margin-bottom: 0;
-  align-self: flex-start;
-}
-
-.unified-usage__detail {
-  display: block;
-  margin-top: 3px;
-  color: var(--settings-text-tertiary);
-  font-size: 10px;
-  font-weight: 400;
-  line-height: 1.35;
-  white-space: normal;
-}
-
-.unified-usage__detail--warning {
-  color: var(--settings-status-error);
-}
-
-.unified-usage__model-row td {
-  padding-top: 4px;
-  padding-bottom: 4px;
-  color: var(--settings-text-secondary);
-}
-
-.unified-usage__model-name {
-  display: block;
-  padding-left: 12px;
-  color: var(--settings-text-secondary);
-  font-size: 10px;
-  font-weight: 600;
-}
-
-.unified-usage__cost-estimate {
-  color: var(--settings-text-tertiary);
-  font-size: 9px;
-  font-weight: 500;
-  text-transform: lowercase;
-}
-
-.unified-usage__cost-head {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
   align-items: flex-end;
-}
-
-.unified-usage__tab {
-  min-height: 29px;
-  padding: 0 12px;
-  border: 0;
-  border-radius: 7px;
-  background: transparent;
-  color: var(--settings-text-secondary);
-  cursor: pointer;
-  font: inherit;
-  font-size: 11px;
-  font-weight: 750;
-  white-space: nowrap;
-}
-
-.unified-usage__tab--active {
-  background: #ffffff;
-  color: var(--settings-text-primary);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
-}
-
-.unified-usage__provider-card {
-  margin-bottom: 12px;
-  padding: 12px;
-  border: 1px solid var(--settings-card-border);
-  border-radius: 9px;
-  background: #fbfbfd;
-}
-
-.unified-usage__provider-head {
-  display: flex;
-  align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 10px;
+  gap: 24px;
+  padding: 0 0 20px;
 }
 
-.unified-usage__provider-head h3 {
-  margin: 0 0 3px;
+.unified-usage__title {
+  margin: 0;
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: .01em;
+  color: var(--vb-text);
+}
+
+.unified-usage__head p {
+  max-width: 46em;
+  margin: 6px 0 0;
+  font-size: 14px;
+  color: var(--vb-text-2);
+}
+
+.unified-usage__acts {
+  display: flex;
+  flex: none;
+  gap: 8px;
+}
+
+.unified-usage__acts .vb-btn {
+  padding: 9px 18px;
+  font-size: 14px;
+}
+
+/* ── 分组标题与面板 ── */
+.unified-usage__group-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 26px 0 10px 22px;
   font-size: 13px;
+  color: var(--vb-text-2);
 }
 
-.unified-usage__provider-head p {
-  margin: 0;
-  color: var(--settings-text-secondary);
-  font-size: 11px;
+.unified-usage__head + .unified-usage__block .unified-usage__group-title {
+  margin-top: 0;
 }
 
-.unified-usage__provider-loading {
-  color: var(--settings-text-secondary);
-  font-size: 11px;
-  white-space: nowrap;
-}
-
-.unified-usage__provider-error {
-  margin-bottom: 10px;
-  padding: 8px 10px;
-  border: 1px solid rgba(255, 59, 48, 0.28);
-  border-radius: 7px;
-  background: rgba(255, 59, 48, 0.06);
-  color: var(--settings-status-error);
-  font-size: 11px;
-}
-
-.unified-usage__provider-table-wrap {
-  overflow-x: auto;
-}
-
-.unified-usage__provider-table {
-  width: 100%;
-  min-width: 680px;
-  border-collapse: collapse;
-  font-size: 11px;
-}
-
-.unified-usage__provider-table th,
-.unified-usage__provider-table td {
-  padding: 7px 5px;
-  border-bottom: 1px solid var(--settings-separator);
-  text-align: left;
-  vertical-align: top;
-}
-
-.unified-usage__provider-table th {
-  color: var(--settings-text-secondary);
-  font-size: 10px;
-  text-transform: uppercase;
-}
-
-.unified-usage__provider-table td:last-child {
-  max-width: 290px;
-  color: var(--settings-text-secondary);
-  white-space: normal;
-}
-
-.unified-usage__provider-table tr:last-child td {
-  border-bottom: 0;
-}
-
-.unified-usage__cost-note,
-.unified-usage__error {
-  margin: 0;
-  padding: 10px 12px;
-  border: 1px solid var(--settings-card-border);
-  border-radius: 8px;
-  background: #fbfbfd;
-  color: var(--settings-text-secondary);
+.unified-usage__querying {
+  font-style: normal;
   font-size: 12px;
+  color: var(--vb-text-3);
+}
+
+.unified-usage__panel {
+  padding: 4px 22px 8px;
+  border-radius: var(--vb-r-panel);
+  background: var(--vb-s1);
+}
+
+.unified-usage__empty {
+  padding: 20px 0;
+  font-size: 13px;
+  color: var(--vb-text-3);
+  text-align: center;
+}
+
+.unified-usage__error {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 12px 18px;
+  border-radius: 18px;
+  background: var(--vb-s1);
+  font-size: 13px;
+  color: var(--vb-hot);
+}
+
+.unified-usage__error .setting-details {
+  margin: 0;
+}
+
+.unified-usage__error .setting-details__toggle {
+  color: var(--vb-text-3);
+}
+
+/* ── 现在还能用多少 ── */
+.usage-quota {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.usage-quota__row > td {
+  padding: 16px 0;
+  border-top: 1px solid var(--vb-line);
+  vertical-align: middle;
+}
+
+.usage-quota__row:first-child > td {
+  border-top: 0;
+}
+
+.usage-quota__name {
+  width: 190px;
+  padding-right: 22px;
+}
+
+.usage-quota__name b {
+  display: block;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--vb-text);
+}
+
+.usage-quota__state {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--vb-text-2);
+}
+
+.usage-quota__dot {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+
+.usage-quota__dot--ok { background: var(--vb-live); }
+.usage-quota__dot--failed { background: var(--vb-hot); }
+.usage-quota__dot--idle { background: var(--vb-text-3); }
+
+.usage-quota__meter {
+  padding-right: 22px;
+}
+
+.usage-quota__track {
+  display: block;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--vb-s2);
+  overflow: hidden;
+}
+
+.usage-quota__track > span {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: var(--vb-brand);
+}
+
+.usage-quota__track--low > span {
+  background: var(--vb-hot);
+}
+
+.usage-quota__windows,
+.usage-quota__na {
+  display: block;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--vb-text-3);
   line-height: 1.4;
 }
 
-.unified-usage__cost-note {
-  display: flex;
-  gap: 8px;
-  align-items: baseline;
+.usage-quota__na {
+  margin-top: 0;
+  font-size: 13px;
+  color: var(--vb-text-2);
 }
 
-.unified-usage__cost-note strong {
-  color: var(--settings-text-primary);
+.usage-quota__big {
+  width: 84px;
+  font-family: var(--vb-font-num);
+  font-size: 30px;
+  font-weight: 400;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--vb-text);
   white-space: nowrap;
 }
 
-.unified-usage__error {
-  margin-bottom: 10px;
-  border-color: rgba(255, 59, 48, 0.28);
-  background: rgba(255, 59, 48, 0.06);
-  color: var(--settings-status-error);
+.usage-quota__big small {
+  margin-left: 1px;
+  font-size: 15px;
+  color: var(--vb-text-2);
 }
 
-.unified-usage__cost-none {
-  opacity: 0.45;
+.usage-quota__big--dim {
+  font-family: var(--vb-font);
+}
+
+.usage-quota__when {
+  width: 240px;
+  padding-left: 22px;
+  font-size: 13px;
+  color: var(--vb-text-2);
+}
+
+.usage-quota__when > span {
+  display: block;
+}
+
+.usage-quota__when small {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--vb-text-3);
+}
+
+/* ── 用掉了多少 ── */
+.unified-usage__tabs-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 30px 0 14px;
+}
+
+.unified-usage__tabs-row .unified-usage__group-title {
+  margin: 0 0 0 22px;
+}
+
+.unified-usage__cost-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.unified-usage__panel--table {
+  padding: 4px 26px 8px;
+  overflow-x: auto;
+}
+
+.usage-table {
+  width: 100%;
+  min-width: 620px;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.usage-table th {
+  padding: 14px 0 10px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--vb-text-3);
+  text-align: right;
+}
+
+.usage-table th:first-child,
+.usage-table td:first-child {
+  text-align: left;
+}
+
+.usage-table td {
+  padding: 13px 0;
+  border-top: 1px solid var(--vb-line);
+  font-family: var(--vb-font-num);
+  font-size: 14px;
+  color: var(--vb-text);
+  text-align: right;
+}
+
+.usage-table td:first-child {
+  font-family: var(--vb-font);
+  font-weight: 600;
+}
+
+.usage-table__provider b {
+  display: block;
+}
+
+.usage-table__detail {
+  display: block;
+  margin-top: 3px;
+  font-family: var(--vb-font);
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--vb-text-3);
+  white-space: normal;
+}
+
+.usage-table__model-row td {
+  padding-top: 4px;
+  padding-bottom: 4px;
+  color: var(--vb-text-2);
+}
+
+.usage-table__model-name {
+  display: block;
+  padding-left: 12px;
+  font-family: var(--vb-font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--vb-text-2);
+}
+
+.usage-table__cost {
+  font-size: 16px;
+}
+
+.usage-table__cost-estimate {
+  font-family: var(--vb-font);
+  font-size: 9px;
+  font-weight: 500;
+  color: var(--vb-text-3);
+}
+
+.usage-table__cost-none {
+  opacity: .45;
+}
+
+.unified-usage__foot-note {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 10px 22px 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--vb-text-2);
+}
+
+.unified-usage__foot-note strong {
+  color: var(--vb-text);
+  white-space: nowrap;
+}
+
+/* ── 各工具的额度查询：授权确认沿用原型里的说明块 ── */
+.unified-usage .settings-card .usage-provider-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px 22px;
+  padding: 16px 0;
+  border-top: 1px solid var(--vb-line);
+}
+
+.unified-usage .settings-card .usage-provider-row__main {
+  min-width: 0;
+  flex: 1;
+}
+
+.unified-usage .settings-card .usage-provider-row__title span {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--vb-text);
+}
+
+.unified-usage .settings-card .usage-provider-row__title strong {
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--vb-s2);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--vb-text-2);
+}
+
+.unified-usage .settings-card .usage-provider-row__network-state {
+  font-size: 13px;
+  color: var(--vb-text-2);
+}
+
+.unified-usage .settings-card .usage-provider-row__path {
+  font-family: var(--vb-font-mono);
+  font-size: 11px;
+  color: var(--vb-text-3);
+}
+
+.unified-usage .settings-card .usage-provider-row__querying {
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 600;
+  color: var(--vb-text-2);
+}
+
+.unified-usage .settings-card .usage-provider-row__actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+}
+
+.unified-usage .settings-card .usage-provider-row__confirm {
+  flex-basis: 100%;
+  margin-top: 0;
+  padding: 16px 18px;
+  border: 0;
+  border-radius: 18px;
+  background: var(--vb-s2);
+}
+
+.unified-usage .settings-card .usage-provider-row__confirm-intro {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--vb-text);
+}
+
+.unified-usage .settings-card .usage-provider-row__confirm-list {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 16px;
+  margin: 12px 0 0;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.unified-usage .settings-card .usage-provider-row__confirm-list dt {
+  color: var(--vb-text-3);
+  font-weight: 600;
+}
+
+.unified-usage .settings-card .usage-provider-row__confirm-list dd {
+  margin: 0;
+  color: var(--vb-text);
+  word-break: break-all;
+}
+
+.unified-usage .settings-card .usage-provider-row__confirm-note {
+  margin: 12px 0 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--vb-text-2);
+}
+
+.unified-usage .settings-card .usage-provider-row__confirm-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+/* ── 页内共用的提示条与详情折页换到黑底 ── */
+.unified-usage .hook-error-card {
+  margin-bottom: 12px;
+  padding: 12px 18px;
+  border: 0;
+  border-radius: 18px;
+  background: var(--vb-s1);
+  color: var(--vb-hot);
+  box-shadow: none;
+  font-size: 13px;
+}
+
+.unified-usage .hook-notice-card {
+  margin-bottom: 12px;
+  padding: 12px 18px;
+  border: 0;
+  border-radius: 18px;
+  background: var(--vb-s1);
+  color: var(--vb-text-2);
+  box-shadow: none;
+  font-size: 13px;
+}
+
+.unified-usage .hook-empty {
+  padding: 16px 0;
+  color: var(--vb-text-3);
+}
+
+.unified-usage .setting-details__toggle {
+  color: var(--vb-text-3);
+}
+
+.unified-usage .setting-details__body {
+  border-color: var(--vb-line);
+  background: var(--vb-s2);
+  color: var(--vb-text-2);
 }

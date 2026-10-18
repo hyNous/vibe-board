@@ -216,39 +216,6 @@ export function UsageProvidersPanel() {
                       ? t('settings.usageNetworkAuthorized', { defaultValue: '已开启联网查询' })
                       : t('settings.usageNetworkNotAuthorized', { defaultValue: '未开启联网查询（默认关闭）' })}
                   </span>
-                  {confirming && (
-                    <div className="usage-provider-row__confirm" data-testid={`usage-network-confirm-${provider.provider}`}>
-                      <p className="usage-provider-row__confirm-intro">
-                        {t('settings.usageNetworkConfirmIntro', { defaultValue: '开启后，Vibe Board 会：' })}
-                      </p>
-                      <dl className="usage-provider-row__confirm-list">
-                        <dt>{t('settings.usageNetworkRequest', { defaultValue: '会做什么' })}</dt>
-                        <dd>{networkRequestSummary(provider)}</dd>
-                        <dt>{t('settings.usageNetworkCredential', { defaultValue: '会用到的登录信息' })}</dt>
-                        <dd className="usage-provider-row__path">
-                          {provider.networkCredential
-                            ?? t('settings.usageNetworkCredentialManaged', { defaultValue: '由这个工具自己保管，Vibe Board 不读取' })}
-                        </dd>
-                      </dl>
-                      <p className="usage-provider-row__confirm-note">
-                        {t('settings.usageNetworkConfirmNote', { defaultValue: '登录信息只用于这一次查询，不显示也不记录；你随时可以关掉。' })}
-                      </p>
-                      <div className="usage-provider-row__confirm-actions">
-                        <GlassButton
-                          variant="primary"
-                          onClick={() => void applyNetworkAuthorization(provider.provider, true)}
-                          disabled={busy}
-                        >
-                          {busy
-                            ? t('settings.detecting', { defaultValue: '正在检查…' })
-                            : t('settings.usageNetworkConfirmEnable', { defaultValue: '允许查询' })}
-                        </GlassButton>
-                        <GlassButton variant="ghost" onClick={() => setPendingAuthorization(null)} disabled={busy}>
-                          {t('settings.usageNetworkCancel', { defaultValue: '取消' })}
-                        </GlassButton>
-                      </div>
-                    </div>
-                  )}
                 </div>
               ) : provider.networkUnsupportedReason === 'unverified' ? (
                 <div className="usage-provider-row__path" data-testid={`usage-network-unsupported-${provider.provider}`}>
@@ -311,6 +278,39 @@ export function UsageProvidersPanel() {
                 </GlassButton>
               )}
             </div>
+            {confirming && (
+              <div className="usage-provider-row__confirm" data-testid={`usage-network-confirm-${provider.provider}`}>
+                <p className="usage-provider-row__confirm-intro">
+                  {t('settings.usageNetworkConfirmIntro', { defaultValue: '开启后，Vibe Board 会：' })}
+                </p>
+                <dl className="usage-provider-row__confirm-list">
+                  <dt>{t('settings.usageNetworkRequest', { defaultValue: '会做什么' })}</dt>
+                  <dd>{networkRequestSummary(provider)}</dd>
+                  <dt>{t('settings.usageNetworkCredential', { defaultValue: '会用到的登录信息' })}</dt>
+                  <dd className="usage-provider-row__path">
+                    {provider.networkCredential
+                      ?? t('settings.usageNetworkCredentialManaged', { defaultValue: '由这个工具自己保管，Vibe Board 不读取' })}
+                  </dd>
+                </dl>
+                <p className="usage-provider-row__confirm-note">
+                  {t('settings.usageNetworkConfirmNote', { defaultValue: '登录信息只用于这一次查询，不显示也不记录；你随时可以关掉。' })}
+                </p>
+                <div className="usage-provider-row__confirm-actions">
+                  <GlassButton
+                    variant="primary"
+                    onClick={() => void applyNetworkAuthorization(provider.provider, true)}
+                    disabled={busy}
+                  >
+                    {busy
+                      ? t('settings.detecting', { defaultValue: '正在检查…' })
+                      : t('settings.usageNetworkConfirmEnable', { defaultValue: '允许查询' })}
+                  </GlassButton>
+                  <GlassButton variant="ghost" onClick={() => setPendingAuthorization(null)} disabled={busy}>
+                    {t('settings.usageNetworkCancel', { defaultValue: '取消' })}
+                  </GlassButton>
+                </div>
+              </div>
+            )}
           </div>
         )
       })}
