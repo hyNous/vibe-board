@@ -54,7 +54,8 @@ impl UsageProvider for ClaudeUsageProvider {
     }
 
     fn authorize_command(&self) -> Option<(&'static str, &'static [&'static str])> {
-        Some(("claude", &["login"]))
+        // Claude Code 2.x moved sign-in under `claude auth login`.
+        Some(("claude", &["auth", "login"]))
     }
 
     fn read_credentials(&self) -> UsageCredential {

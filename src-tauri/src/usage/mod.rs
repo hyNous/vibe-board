@@ -957,7 +957,7 @@ mod tests {
         );
         assert_eq!(
             authorize_target("claude"),
-            Some(("claude", ["login"].as_slice()))
+            Some(("claude", ["auth", "login"].as_slice()))
         );
         assert_eq!(
             authorize_target("gemini"),
