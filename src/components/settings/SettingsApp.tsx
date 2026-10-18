@@ -4,6 +4,8 @@ import { useTranslation } from 'react-i18next'
 import { ask } from '@tauri-apps/plugin-dialog'
 import { motion, AnimatePresence } from 'framer-motion'
 import { SettingsSidebar } from './SettingsSidebar'
+import { SettingsIslandNav } from './SettingsIslandNav'
+import { SettingsToast } from './SettingsToast'
 import { UpdateDialog } from './UpdateDialog'
 import { GeneralSection } from './sections/GeneralSection'
 import { AppearanceSection } from './sections/AppearanceSection'
@@ -22,6 +24,7 @@ import { useSkillStoreV2 } from '../../stores/skillStoreV2'
 import { getConfig, isTauri } from '../../services/tauriApi'
 import type { IslandSettingsView } from '../../types/capability'
 import '../../styles/settings.css'
+import '../../styles/settings-island.css'
 
 const sections: Record<string, () => ReactNode> = {
   'general': GeneralSection,
@@ -45,8 +48,8 @@ export function SettingsApp({ onClose }: SettingsAppProps) {
   const SectionComponent = sections[activeSection] ?? GeneralSection
   const isSkillManager = activeSection === 'skill-manager-v2'
   const contentClassName = `settings-content settings-scroll${isSkillManager ? ' settings-content--skill-manager' : ''}`
-  // Guard both the in-app close button and the native close event while an
-  // update is downloading. The native handler applies tray/exit behavior.
+  // Guard the native close event while an update is downloading. The native
+  // handler applies tray/exit behavior.
   const downloadingRef = useRef(false)
   const closingRef = useRef(false)
   useEffect(() => {
@@ -61,13 +64,6 @@ export function SettingsApp({ onClose }: SettingsAppProps) {
       okLabel: t('update.closeAnyway'),
       cancelLabel: t('update.keepDownloading'),
     })
-  }
-
-  const handleCloseRequest = async () => {
-    if (await confirmCloseWhileDownloading()) {
-      closingRef.current = true
-      onClose()
-    }
   }
 
   useEffect(() => {
@@ -130,31 +126,9 @@ export function SettingsApp({ onClose }: SettingsAppProps) {
   }
 
   return (
-    <div className="settings-app">
-      <SettingsSidebar
-        activeSection={activeSection}
-        collapsed={sidebarCollapsed}
-        onCollapsedChange={setSidebarCollapsed}
-        onSelect={setActiveSection}
-      />
-      <div className={contentClassName}>
-        {activeSection !== 'skill-manager-v2' && (
-          <div className="settings-window-brand" aria-hidden="true">
-            <span className="settings-window-brand__mark">
-              <img src="/vibe-board-app-icon.png" alt="" />
-            </span>
-            <span className="settings-window-brand__copy">
-              <span className="settings-window-brand__name">Vibe Board</span>
-              <span className="settings-window-brand__slogan">{t('notch.slogan')}</span>
-            </span>
-          </div>
-        )}
-        <button
-          className="settings-close-btn"
-          onClick={handleCloseRequest}
-        >
-          {t('settings.close')}
-        </button>
+    <div className="settings-app settings-app--island">
+      <header className="settings-topbar">
+        <SettingsIslandNav activeSection={activeSection} onSelect={setActiveSection} />
         {!autoInstallUpdate && (updater.status === 'available' || updater.status === 'ready') && updater.version && (
           <button
             className="settings-update-pill"
@@ -167,6 +141,18 @@ export function SettingsApp({ onClose }: SettingsAppProps) {
             <em>v{updater.version}</em>
           </button>
         )}
+      </header>
+      <SettingsToast />
+      <div className="settings-body">
+      {isSkillManager && (
+        <SettingsSidebar
+          activeSection={activeSection}
+          collapsed={sidebarCollapsed}
+          onCollapsedChange={setSidebarCollapsed}
+          onSelect={setActiveSection}
+        />
+      )}
+      <div className={contentClassName}>
         <AnimatePresence mode="wait">
           <motion.div
             key={activeSection}
@@ -209,6 +195,7 @@ export function SettingsApp({ onClose }: SettingsAppProps) {
             )}
           </motion.div>
         </AnimatePresence>
+      </div>
       </div>
 
       {(updater.status === 'available' || updater.status === 'downloading' || updater.status === 'ready') && updater.version && (

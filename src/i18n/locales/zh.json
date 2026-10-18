@@ -65,6 +65,18 @@
       "general": "通用",
       "tutorial": "重看教程与向导",
       "about": "关于",
+      "short": {
+        "tasks": "任务",
+        "usage": "额度",
+        "skills": "Skill",
+        "dispatch": "派活",
+        "island": "外观",
+        "shortcuts": "快捷键",
+        "general": "通用",
+        "tutorial": "教程",
+        "about": "关于"
+      },
+      "label": "设置页面",
       "autoSave": "设置更改会自动保存"
     },
     "skillsOverview": {

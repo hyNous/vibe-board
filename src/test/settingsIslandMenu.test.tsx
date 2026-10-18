@@ -139,10 +139,10 @@ describe('settings island menu', () => {
 
   it('shows the grouped navigation entries in the required order', () => {
     const { container } = render(<SettingsApp onClose={vi.fn()} />)
-    const groups = Array.from(container.querySelectorAll('.settings-sidebar__nav > div')).map((group) => ({
-      label: group.querySelector('.settings-sidebar__group-label')?.textContent?.trim() ?? null,
-      items: Array.from(group.querySelectorAll('.settings-sidebar__item:not([hidden]) .settings-sidebar__label-text'))
-        .map((item) => item.textContent?.trim()),
+    const groups = Array.from(container.querySelectorAll('.settings-island [role="group"]')).map((group) => ({
+      label: group.getAttribute('aria-label'),
+      items: Array.from(group.querySelectorAll('.settings-island__item'))
+        .map((item) => item.getAttribute('aria-label')),
     }))
 
     expect(groups).toEqual([

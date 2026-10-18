@@ -65,6 +65,18 @@
       "general": "General",
       "tutorial": "Tutorial & Wizard",
       "about": "About",
+      "short": {
+        "tasks": "Tasks",
+        "usage": "Usage",
+        "skills": "Skills",
+        "dispatch": "Handoff",
+        "island": "Appearance",
+        "shortcuts": "Shortcuts",
+        "general": "General",
+        "tutorial": "Tutorial",
+        "about": "About"
+      },
+      "label": "Settings pages",
       "autoSave": "Changes are saved automatically"
     },
     "skillsOverview": {

@@ -1,0 +1,487 @@
+/* Vibe Board — 设置窗口「岛的延伸」主题（M16）
+ * 在 settings.css 之后加载，覆盖颜色变量和共用组件。
+ * 规则：只用黑白两极加一组灰；彩色只有品牌渐变（数量）、运行中亮蓝和珊瑚红（告急、删除、退出）。
+ * 选中 / 开启 / 需要你注意 = 白底黑字；能点的都是胶囊；分组面板 26px 圆角。
+ * 基准画面：prototypes/settings-v3/full/settings.html（维护者本机）。 */
+
+:root {
+  --vb-black: #000;
+  --vb-s1: #0e0e10;
+  --vb-s2: #18181b;
+  --vb-s3: #232327;
+  --vb-line: #26262a;
+  --vb-text: #f4f4f6;
+  --vb-text-2: #a1a1a9;
+  --vb-text-3: #8c8c94;
+  --vb-brand-a: #6a2bff;
+  --vb-brand-b: #0a8dff;
+  --vb-brand: linear-gradient(90deg, var(--vb-brand-a), var(--vb-brand-b));
+  --vb-live: #3aa2ff;
+  --vb-hot: #ff6b57;
+  --vb-ok: #3ad07a;
+  --vb-r-panel: 26px;
+  --vb-ease: cubic-bezier(.3, .9, .3, 1);
+  --vb-spring: cubic-bezier(.3, .9, .3, 1.06);
+  --vb-font: "HarmonyOS Sans SC", "Microsoft YaHei UI", "Microsoft YaHei", -apple-system, "Segoe UI", sans-serif;
+  --vb-font-num: "HarmonyOS Sans SC", "Segoe UI Variable Display", "Segoe UI", sans-serif;
+  --vb-font-mono: "Cascadia Mono", Consolas, monospace;
+
+  /* 旧变量映射到黑色主题，没改到的页面也先跟着变暗 */
+  --settings-bg: var(--vb-black);
+  --settings-sidebar-bg: var(--vb-s1);
+  --settings-content-bg: transparent;
+  --settings-card-bg: var(--vb-s1);
+  --settings-card-border: var(--vb-line);
+  --settings-text-primary: var(--vb-text);
+  --settings-text-secondary: var(--vb-text-2);
+  --settings-text-tertiary: var(--vb-text-3);
+  --settings-accent: var(--vb-text);
+  --settings-accent-strong: #fff;
+  --settings-accent-soft: var(--vb-s3);
+  --settings-accent-gradient: var(--vb-brand);
+  --settings-toggle-on: var(--vb-text);
+  --settings-toggle-off: var(--vb-s3);
+  --settings-separator: var(--vb-line);
+  --settings-sidebar-active: rgba(244, 244, 246, 0.12);
+  --settings-sidebar-hover: rgba(244, 244, 246, 0.06);
+  --settings-shadow-soft: none;
+  --settings-shadow-card: none;
+  --settings-danger: var(--vb-hot);
+  --settings-warning: var(--vb-hot);
+  --settings-status-active: var(--vb-live);
+  --settings-status-idle: var(--vb-text-3);
+  --settings-status-error: var(--vb-hot);
+  --settings-status-waiting: var(--vb-text);
+  --settings-scheme-bg: var(--vb-black);
+  --settings-scheme-fg: var(--vb-text);
+}
+
+/* ── 窗口骨架 ── */
+.settings-app.settings-app--island {
+  flex-direction: column;
+  background: var(--vb-black);
+  font-family: var(--vb-font);
+  color: var(--vb-text);
+  color-scheme: dark;
+}
+
+.settings-app--island::before { display: none; }
+
+.settings-topbar {
+  position: relative;
+  z-index: 4;
+  flex: none;
+  display: flex;
+  justify-content: center;
+  padding-top: 14px;
+}
+
+.settings-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.settings-app--island .settings-content {
+  padding: 30px 40px 32px;
+  background: transparent;
+  backdrop-filter: none;
+}
+
+.settings-app--island .settings-content--skill-manager {
+  padding: 16px 16px 16px 8px;
+}
+
+.settings-app--island .settings-scroll::-webkit-scrollbar-thumb { background: var(--vb-s3); }
+.settings-app--island .settings-scroll::-webkit-scrollbar-thumb:hover { background: #33333a; }
+
+/* ── 顶部岛形导航 ── */
+.settings-island {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 6px;
+  background: var(--vb-s1);
+  border: 1px solid var(--vb-line);
+  border-radius: 999px;
+  animation: settings-island-grow .55s var(--vb-ease) both;
+}
+
+@keyframes settings-island-grow {
+  from { clip-path: inset(0 42% round 999px); }
+  to { clip-path: inset(0 0 round 999px); }
+}
+
+.settings-island__logo {
+  width: 28px;
+  height: 28px;
+  margin: 0 8px 0 6px;
+}
+
+.settings-island__group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.settings-island__sep {
+  width: 1px;
+  height: 18px;
+  margin: 0 6px;
+  background: var(--vb-line);
+}
+
+.settings-island__item {
+  position: relative;
+  z-index: 1;
+  padding: 7px 14px;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--vb-text-2);
+  font: inherit;
+  font-size: 14px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color .2s;
+}
+
+.settings-island__item:hover { color: var(--vb-text); }
+.settings-island__item--active { color: #000; font-weight: 600; }
+.settings-island__item--active:hover { color: #000; }
+.settings-island:not(.settings-island--ready) .settings-island__item--active { background: var(--vb-text); }
+
+.settings-island__slab {
+  position: absolute;
+  left: 0;
+  top: 6px;
+  height: calc(100% - 12px);
+  border-radius: 999px;
+  background: var(--vb-text);
+  transition: transform .32s var(--vb-spring), width .32s var(--vb-spring);
+}
+
+.settings-island:not(.settings-island--ready) .settings-island__slab { opacity: 0; }
+
+.settings-island__dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: var(--vb-live);
+  vertical-align: 2px;
+}
+
+.settings-island__item--active .settings-island__dot { background: #000; }
+
+.settings-app--island .settings-update-pill {
+  position: absolute;
+  top: 22px;
+  right: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--vb-text);
+  color: #000;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: none;
+}
+
+.settings-app--island .settings-update-pill em { font-style: normal; color: #4a4a50; }
+
+/* ── 提示条：从岛下方掉出来 ── */
+.settings-toast {
+  position: fixed;
+  left: 50%;
+  top: 18px;
+  z-index: 60;
+  padding: 9px 18px;
+  border-radius: 999px;
+  background: var(--vb-text);
+  color: #000;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 0) scale(.9);
+  transition: opacity .18s, transform .32s var(--vb-spring);
+}
+
+.settings-toast--visible {
+  opacity: 1;
+  transform: translate(-50%, 54px) scale(1);
+}
+
+/* ── 页头 ── */
+.settings-app--island .setting-section { width: 100%; margin-bottom: 28px; }
+.settings-app--island .setting-section__header { margin-bottom: 20px; padding-right: 0; }
+
+.settings-app--island .setting-section__title {
+  margin-bottom: 6px;
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: .01em;
+  color: var(--vb-text);
+}
+
+.settings-app--island .setting-section__description {
+  max-width: 46em;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.55;
+  color: var(--vb-text-2);
+}
+
+.settings-app--island .setting-section__body { gap: 0; }
+
+/* ── 分组面板与设置行 ── */
+.settings-app--island .setting-group__header {
+  margin: 26px 0 10px;
+  padding-left: 22px;
+}
+
+.settings-app--island .setting-section__body > :first-child .setting-group__header { margin-top: 4px; }
+
+.settings-app--island .setting-group__label,
+.settings-app--island .setting-section--compact .setting-group__label {
+  padding-left: 0;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--vb-text-2);
+}
+
+.settings-app--island .settings-card,
+.settings-app--island .setting-section--compact .settings-card {
+  background: var(--vb-s1);
+  border: 0;
+  border-radius: var(--vb-r-panel);
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.settings-app--island .setting-group,
+.settings-app--island .setting-section--compact .setting-group { padding: 4px 22px; }
+
+.settings-app--island .setting-row,
+.settings-app--island .setting-section--compact .setting-row {
+  min-height: 64px;
+  padding: 12px 0;
+  border-radius: 0;
+  transition: none;
+}
+
+.settings-app--island .setting-row:hover,
+.settings-app--island .setting-section--compact .setting-row:hover {
+  padding: 12px 0;
+  background: none;
+}
+
+.settings-app--island .setting-row + .setting-row { border-top: 1px solid var(--vb-line); }
+
+.settings-app--island .setting-row__label {
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--vb-text);
+}
+
+.settings-app--island .setting-row__description {
+  margin-top: 2px;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.5;
+  color: var(--vb-text-2);
+}
+
+.settings-app--island .setting-row__control { gap: 12px; margin-left: 24px; }
+
+/* ── 开关：开 = 白轨黑钮 ── */
+.settings-app--island .toggle { border-radius: 999px; }
+.settings-app--island .toggle--off { background: var(--vb-s3); }
+.settings-app--island .toggle--on { background: var(--vb-text); }
+.settings-app--island .toggle--off .toggle__knob { background: var(--vb-text-2); box-shadow: none; }
+.settings-app--island .toggle--on .toggle__knob { background: #000; box-shadow: none; }
+
+/* ── 下拉：胶囊 ── */
+.settings-app--island .glass-dropdown__trigger {
+  min-width: 168px;
+  padding: 8px 16px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--vb-s2);
+  color: var(--vb-text);
+}
+
+.settings-app--island .glass-dropdown__trigger:hover { background: var(--vb-s3); }
+.settings-app--island .glass-dropdown__trigger--open { background: var(--vb-s3); box-shadow: none; }
+.settings-app--island .glass-dropdown__arrow { color: var(--vb-text-2); }
+
+.settings-app--island .glass-dropdown__menu {
+  top: calc(100% + 6px);
+  padding: 6px;
+  border: 1px solid var(--vb-line);
+  border-radius: 18px;
+  background: var(--vb-s2);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, .6);
+  max-height: 260px;
+}
+
+.settings-app--island .glass-dropdown__option {
+  padding: 8px 12px;
+  border-radius: 12px;
+  color: var(--vb-text-2);
+}
+
+.settings-app--island .glass-dropdown__option:hover { background: var(--vb-s3); color: var(--vb-text); }
+.settings-app--island .glass-dropdown__option--selected,
+.settings-app--island .glass-dropdown__option--selected:hover { background: var(--vb-text); color: #000; font-weight: 600; }
+
+/* ── 滑杆：已填部分用品牌渐变 ── */
+.settings-app--island .glass-slider { min-width: 220px; }
+
+.settings-app--island .glass-slider__input {
+  height: 6px;
+  border-radius: 3px;
+  background:
+    linear-gradient(90deg, var(--vb-brand-a), var(--vb-brand-b)) 0 0 / var(--slider-fill, 50%) 100% no-repeat,
+    var(--vb-s3);
+}
+
+.settings-app--island .glass-slider__input::-webkit-slider-thumb {
+  background: var(--vb-text);
+  box-shadow: 0 0 0 4px rgba(244, 244, 246, .08);
+}
+
+.settings-app--island .glass-slider__value {
+  min-width: 64px;
+  font-family: var(--vb-font-num);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: var(--vb-text-2);
+}
+
+/* ── 按钮：胶囊；主按钮白底黑字；危险操作只用珊瑚红文字 ── */
+.vb-btn,
+.settings-app--island .settings-mini-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--vb-s2);
+  color: var(--vb-text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: none;
+  transition: transform .12s var(--vb-spring), background .15s;
+}
+
+.vb-btn:hover,
+.settings-app--island .settings-mini-button:hover { background: var(--vb-s3); }
+.vb-btn:active,
+.settings-app--island .settings-mini-button:active { transform: scale(.95); }
+.vb-btn:disabled,
+.settings-app--island .settings-mini-button:disabled { opacity: .45; pointer-events: none; }
+.vb-btn--large { padding: 9px 18px; font-size: 14px; }
+.vb-btn--primary,
+.settings-app--island .settings-mini-button.agent-detail-primary { background: var(--vb-text); color: #000; }
+.vb-btn--primary:hover,
+.settings-app--island .settings-mini-button.agent-detail-primary:hover { background: #fff; }
+.vb-btn--danger { color: var(--vb-hot); }
+
+/* 旧共用按钮 glass-btn 跟着同一套规则 */
+.settings-app--island .glass-btn {
+  padding: 6px 14px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--vb-s2);
+  color: var(--vb-text);
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: none;
+  transition: transform .12s var(--vb-spring), background .15s;
+}
+.settings-app--island .glass-btn:hover { background: var(--vb-s3); color: var(--vb-text); }
+.settings-app--island .glass-btn:active { transform: scale(.95); }
+.settings-app--island .glass-btn--primary { background: var(--vb-text); color: #000; }
+.settings-app--island .glass-btn--primary:hover { background: #fff; color: #000; }
+.settings-app--island .glass-btn--danger,
+.settings-app--island .glass-btn--danger:hover { background: var(--vb-s2); color: var(--vb-hot); }
+.settings-app--island .glass-btn--ghost { background: transparent; color: var(--vb-text-2); }
+
+/* ── 分段控件：白色滑块 ── */
+.vb-seg {
+  position: relative;
+  display: inline-flex;
+  padding: 4px;
+  border-radius: 999px;
+  background: var(--vb-s2);
+}
+
+.vb-seg__item {
+  position: relative;
+  z-index: 1;
+  padding: 6px 14px;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--vb-text-2);
+  font: inherit;
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color .2s;
+}
+
+.vb-seg__item:hover { color: var(--vb-text); }
+.vb-seg__item--active,
+.vb-seg__item--active:hover { color: #000; font-weight: 600; }
+.vb-seg:not(.vb-seg--ready) .vb-seg__item--active { background: var(--vb-text); }
+
+.vb-seg__slab {
+  position: absolute;
+  left: 0;
+  top: 4px;
+  bottom: 4px;
+  border-radius: 999px;
+  background: var(--vb-text);
+  transition: transform .3s var(--vb-spring), width .3s var(--vb-spring);
+}
+
+.vb-seg:not(.vb-seg--ready) .vb-seg__slab { opacity: 0; }
+
+/* ── 页面进入 ── */
+.vb-page-in { animation: vb-page-in .34s var(--vb-ease) both; }
+
+@keyframes vb-page-in {
+  from { opacity: 0; transform: translateY(10px); }
+}
+
+.settings-app--island :focus-visible {
+  outline: 2px solid var(--vb-live);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settings-island,
+  .settings-island__slab,
+  .settings-toast,
+  .vb-seg__slab,
+  .vb-page-in { animation: none !important; transition: none !important; }
+}
