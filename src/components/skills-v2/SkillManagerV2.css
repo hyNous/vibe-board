@@ -26,7 +26,7 @@
   --sm2-info-bg: #dbeafe;
 }
 
-.settings-content--skill-manager .sm2 {
+.settings-content--skills .sm2 {
   --text-primary: var(--settings-text-primary);
   --text-secondary: var(--settings-text-secondary);
   --text-tertiary: var(--settings-text-tertiary);
@@ -11589,6 +11589,17 @@
   font-size: 12px;
   line-height: 1.5;
   white-space: nowrap;
+}
+
+/* 按 Agent 看：左侧是从旧设置侧栏挪进页面内的 Agent 列表 */
+.sm2__agent-layout {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.sm2__agent-layout > .sm2__rail {
+  flex: 0 0 240px;
 }
 
 .sm2--agents .sm2__main--full {

@@ -88,16 +88,15 @@
       "count": "{{total}} Skills - {{github}} can be checked for updates",
       "checkUpdates": "Check for updates",
       "checking": "Checking...",
-      "openAdvanced": "Full management",
       "categoriesLabel": "Skill categories",
       "categoryAll": "All (center library)",
       "categoryAgent": "Active in {{name}}",
-      "noteAll": "Center-library Skills are inactive by default: they do not apply to every Agent. Vibe Board has no automatic \"generic / exclusive\" assignment and never auto-covers Agents installed later. Skills without Agent icons are not active anywhere yet and must be enabled manually from Full management.",
-      "noteAgent": "These Skills are currently active in {{name}}; some may also be active in other Agents. This reflects real records, not an exclusive binding. Enabling or removing them is always a manual action in Full management.",
+      "noteAll": "Center-library Skills are inactive by default: they do not apply to every Agent. Vibe Board has no automatic \"generic / exclusive\" assignment and never auto-covers Agents installed later. Skills without Agent icons are not active anywhere yet and must be enabled manually from the Skill library.",
+      "noteAgent": "These Skills are currently active in {{name}}; some may also be active in other Agents. This reflects real records, not an exclusive binding. Enabling or removing them is always a manual action in the Skill library.",
       "unassigned": "Not active yet",
       "unassignedSummary": "{{n}} Skills are not active in any Agent yet.",
       "loading": "Loading Skill library...",
-      "empty": "No Skills in this category yet. Import from a local folder, Git, or an Agent directory in Full management.",
+      "empty": "No Skills in this category yet. Use Add Skill at the top right to import from a folder, Git, or an Agent directory.",
       "updatesTitle": "Update check",
       "updatesChecking": "Checking... ({{done}}/{{total}})",
       "updatesDone": "Checked {{n}} GitHub-backed Skills",
@@ -125,7 +124,6 @@
     "close": "Close",
     "usage": "Usage",
     "general": "General",
-    "skillManager": "Agent Skills",
     "island": {
       "effects": {
         "title": "Island appearance effect",
@@ -550,9 +548,6 @@
     "appVersion": "Vibe Board version",
     "usageNetworkToggle": "Allow checking remaining quota for {{name}}",
     "desktopOnlyUsage": "Online checks are only available in the desktop app.",
-    "backToSettings": "Back to Settings",
-    "collapseSidebar": "Collapse sidebar",
-    "expandSidebar": "Expand sidebar",
     "exportFailed": "Failed",
     "hostVisibilityMode": "Codex window behavior",
     "hostVisibilityModeDesc": "Choose whether the island hides when the Codex desktop window is minimized.",
@@ -561,18 +556,24 @@
     "notchPositionLeft": "Docked left",
     "notchPositionRight": "Docked right",
     "recheck": "Check again",
-    "skillTabs": {
-      "library": "Skill library",
-      "install": "Add Skill",
-      "agents": "By Agent",
-      "settings": "Skill settings"
-    },
     "skillAgents": {
       "installed": "Installed Agents",
       "none": "None",
       "noneInstalled": "No installed Agent detected yet",
       "others": "Other Agents (program not found)",
       "dragHint": "Drag to reorder {{name}}"
+    },
+    "skillsSection": {
+      "title": "Skills",
+      "subtitle": "Collect Skills into the center library, then decide which Agents use them.",
+      "checkUpdates": "Check for updates",
+      "checking": "Checking...",
+      "addSkill": "Add Skill",
+      "backToLibrary": "Back to Skill library",
+      "tabsLabel": "Skill views",
+      "tabLibrary": "Skill library",
+      "tabAgents": "By Agent",
+      "tabSettings": "Settings"
     },
     "tasksPage": {
       "title": "Task board",

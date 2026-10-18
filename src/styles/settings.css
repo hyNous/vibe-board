@@ -1153,16 +1153,6 @@
   backdrop-filter: blur(14px);
 }
 
-.settings-content--skill-manager {
-  padding-top: 16px;
-  padding-right: 16px;
-  padding-left: 16px;
-}
-
-.settings-content--skill-manager .settings-window-brand {
-  left: 16px;
-}
-
 .settings-window-brand {
   position: absolute;
   top: 24px;
@@ -3856,15 +3846,6 @@
 @media (max-width: 760px) {
   .settings-content {
     padding: 66px 24px 36px;
-  }
-
-  .settings-content--skill-manager {
-    padding: 16px;
-    overflow-x: auto;
-  }
-
-  .settings-content--skill-manager > div {
-    min-width: 760px;
   }
 
   .settings-window-brand {

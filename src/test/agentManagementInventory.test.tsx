@@ -94,7 +94,7 @@ const overview: SkillManagerOverview = {
 // renders into the next test. Warm the module cache once, outside any test.
 beforeAll(async () => {
   await Promise.all([
-    import('../components/settings/SettingsSidebar'),
+    import('../components/skills-v2/AgentRoster'),
   ])
 }, 60_000)
 
@@ -143,7 +143,9 @@ describe('Agent management inventory', () => {
     expect(screen.queryByTitle('Cursor · 未检测到')).not.toBeInTheDocument()
     expect(screen.queryByTitle('Gemini CLI · 不可用')).not.toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: /其他 Agent/ }))
+    // 页面左侧的 Agent 列表里也有一个「其他 Agent（没找到程序）」折叠组，
+    // 这里点的是内容区检测总览的「其他 Agent」卡片。
+    fireEvent.click(screen.getByTitle('显示未检测到程序的 Agent'))
 
     expect(await screen.findByTitle('Codex · 仅发现配置')).toBeInTheDocument()
     expect(screen.getByTitle('Kiro · 仅发现配置')).toBeInTheDocument()
@@ -161,15 +163,8 @@ describe('Agent management inventory', () => {
       ],
     })
 
-    const { SettingsSidebar } = await import('../components/settings/SettingsSidebar')
-    render(
-      <SettingsSidebar
-        activeSection="skill-manager-v2"
-        collapsed={false}
-        onCollapsedChange={() => {}}
-        onSelect={() => {}}
-      />,
-    )
+    const { AgentRoster } = await import('../components/skills-v2/AgentRoster')
+    render(<AgentRoster />)
 
     expect(screen.getByText('Claude Code')).toBeInTheDocument()
     expect(screen.queryByText('Kiro')).not.toBeInTheDocument()

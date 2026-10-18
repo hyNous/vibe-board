@@ -88,16 +88,15 @@
       "count": "共 {{total}} 个 Skill · {{github}} 个可检查更新",
       "checkUpdates": "检查更新",
       "checking": "检查中…",
-      "openAdvanced": "完整管理",
       "categoriesLabel": "Skill 分类",
       "categoryAll": "全部（中心库）",
       "categoryAgent": "生效于 {{name}}",
-      "noteAll": "中心库 Skill 默认不对任何 Agent 生效；Vibe Board 不会自动让它们作用于所有 Agent，也不会自动覆盖未来新安装的 Agent，没有「通用 / 专属」自动分配。未显示 Agent 图标的 Skill（尚未生效于任何 Agent）只存在于中心库，需在「完整管理」中手动让它生效。",
-      "noteAgent": "以下 Skill 当前生效于 {{name}}，部分可能同时对其他 Agent 生效。这是真实的生效记录，不是「专属」绑定；安装或取消安装都要在「完整管理」中手动操作。",
+      "noteAll": "中心库 Skill 默认不对任何 Agent 生效；Vibe Board 不会自动让它们作用于所有 Agent，也不会自动覆盖未来新安装的 Agent，没有「通用 / 专属」自动分配。未显示 Agent 图标的 Skill（尚未生效于任何 Agent）只存在于中心库，需在 Skill 库里手动让它生效。",
+      "noteAgent": "以下 Skill 当前生效于 {{name}}，部分可能同时对其他 Agent 生效。这是真实的生效记录，不是「专属」绑定；安装或取消安装都要在 Skill 库里手动操作。",
       "unassigned": "尚未生效",
       "unassignedSummary": "当前有 {{n}} 个 Skill 尚未对任何 Agent 生效。",
       "loading": "加载 Skill 库…",
-      "empty": "当前分类还没有 Skill。可在「完整管理」中从本地、Git 或 Agent 目录导入。",
+      "empty": "当前分类还没有 Skill。点右上角「添加 Skill」，从文件夹、Git 或 Agent 目录导入。",
       "updatesTitle": "更新检查",
       "updatesChecking": "检查中…（{{done}}/{{total}}）",
       "updatesDone": "已检查 {{n}} 个 GitHub 来源 Skill",
@@ -125,7 +124,6 @@
     "close": "关闭",
     "usage": "使用额度",
     "general": "通用",
-    "skillManager": "Agent管理",
     "island": {
       "effects": {
         "title": "灵动岛外观效果",
@@ -550,9 +548,6 @@
     "appVersion": "Vibe Board 版本",
     "usageNetworkToggle": "允许查询 {{name}} 的剩余额度",
     "desktopOnlyUsage": "联网查询只在桌面应用里可用。",
-    "backToSettings": "返回设置",
-    "collapseSidebar": "收起侧栏",
-    "expandSidebar": "展开侧栏",
     "exportFailed": "导出失败",
     "hostVisibilityMode": "Codex 最小化行为",
     "hostVisibilityModeDesc": "选择 Codex 桌面窗口最小化时是否同步隐藏灵动岛。",
@@ -561,18 +556,24 @@
     "notchPositionLeft": "贴靠左侧",
     "notchPositionRight": "贴靠右侧",
     "recheck": "重新检查",
-    "skillTabs": {
-      "library": "Skill 库",
-      "install": "添加 Skill",
-      "agents": "按 Agent 查看",
-      "settings": "Skill 设置"
-    },
     "skillAgents": {
       "installed": "已安装的 Agent",
       "none": "暂无",
       "noneInstalled": "还没有检测到已安装的 Agent",
       "others": "其他 Agent（没找到程序）",
       "dragHint": "拖拽调整 {{name}} 的顺序"
+    },
+    "skillsSection": {
+      "title": "Skill",
+      "subtitle": "把 Skill 收进中心库，再决定让哪些 Agent 用上。",
+      "checkUpdates": "检查更新",
+      "checking": "检查中…",
+      "addSkill": "添加 Skill",
+      "backToLibrary": "返回 Skill 库",
+      "tabsLabel": "Skill 页面",
+      "tabLibrary": "Skill 库",
+      "tabAgents": "按 Agent 看",
+      "tabSettings": "设置"
     },
     "tasksPage": {
       "title": "任务看板",

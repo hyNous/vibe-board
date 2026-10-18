@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { SkillOverviewPage } from '../components/skills-v2/SkillOverviewPage'
+import { SkillLibraryPage } from '../components/skills-v2/SkillLibraryPage'
 import { skillApiV2 } from '../services/skillApiV2'
 import type {
   AgentSummary,
@@ -183,7 +183,8 @@ function resetStore() {
   })
 }
 
-describe('SkillOverviewPage', () => {
+// SkillLibraryPage 现在同时承担总览页的按 Agent 筛选与更新检查面板。
+describe('SkillLibraryPage', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
     resetStore()
@@ -191,37 +192,25 @@ describe('SkillOverviewPage', () => {
   })
 
   it('shows real effect categories instead of promising generic or exclusive scopes', () => {
-    render(<SkillOverviewPage />)
+    render(<SkillLibraryPage />)
 
     const allTab = screen.getByRole('tab', { name: /全部（中心库）/ })
     expect(allTab).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByRole('tab', { name: /生效于 Codex/ })).toBeInTheDocument()
     expect(screen.getByText(/「通用 \/ 专属」自动分配/)).toBeInTheDocument()
     expect(screen.getByText(/不会自动覆盖未来新安装的 Agent/)).toBeInTheDocument()
-    expect(screen.getByText('尚未生效')).toBeInTheDocument()
+    expect(screen.getByText('尚未对任何 Agent 生效')).toBeInTheDocument()
     expect(screen.queryByText(/通用分类来自中心库/)).not.toBeInTheDocument()
   })
 
   it('filters an Agent category by its real installed targets', () => {
-    render(<SkillOverviewPage />)
+    render(<SkillLibraryPage />)
 
     fireEvent.click(screen.getByRole('tab', { name: /生效于 Codex/ }))
 
     expect(screen.getByText('Release Checklist')).toBeInTheDocument()
     expect(screen.queryByText('Local Only')).not.toBeInTheDocument()
     expect(screen.getByText(/不是「专属」绑定/)).toBeInTheDocument()
-  })
-
-  it('ignores full-manager source/status/type filters without resetting them', () => {
-    useSkillStoreV2.setState({ filters: { query: '', source: 'github', status: 'conflict', type: 'pack' } })
-
-    render(<SkillOverviewPage />)
-
-    expect(screen.getByText('Release Checklist')).toBeInTheDocument()
-    expect(screen.getByText('Local Only')).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: /全部（中心库）/ })).toHaveTextContent('2')
-    expect(screen.getByText(/共 2 个 Skill · 1 个可检查更新/)).toBeInTheDocument()
-    expect(useSkillStoreV2.getState().filters).toEqual({ query: '', source: 'github', status: 'conflict', type: 'pack' })
   })
 
   it('checks all recorded sources no matter what the visible search shows', async () => {
@@ -236,7 +225,7 @@ describe('SkillOverviewPage', () => {
       .spyOn(skillApiV2, 'checkAllSkillUpdates')
       .mockResolvedValue(updateReport([updateCheckEntry(), current]))
 
-    render(<SkillOverviewPage />)
+    render(<SkillLibraryPage />)
 
     fireEvent.click(screen.getByRole('button', { name: '检查全部更新' }))
     await waitFor(() => expect(checkSpy).toHaveBeenCalledTimes(1))
@@ -245,7 +234,7 @@ describe('SkillOverviewPage', () => {
     expect(screen.getByRole('button', { name: '更新' })).toBeInTheDocument()
     expect(screen.getByText('新增 1 · 修改 1 · 删除 0')).toBeInTheDocument()
 
-    fireEvent.change(screen.getByPlaceholderText('搜索 Skill 名称或描述'), { target: { value: 'release' } })
+    fireEvent.change(screen.getByPlaceholderText('搜索名称、描述、来源或 Agent'), { target: { value: 'release' } })
     expect(useSkillStoreV2.getState().filters).toEqual({ query: 'release', source: 'local_folder', status: '', type: '' })
   })
 
@@ -258,7 +247,7 @@ describe('SkillOverviewPage', () => {
     vi.spyOn(skillApiV2, 'listUnmanaged').mockResolvedValue([])
     vi.spyOn(skillApiV2, 'listProjects').mockResolvedValue([])
 
-    render(<SkillOverviewPage />)
+    render(<SkillLibraryPage />)
 
     fireEvent.click(screen.getByRole('button', { name: '检查全部更新' }))
     expect(await screen.findByText('1 个可更新')).toBeInTheDocument()
@@ -280,7 +269,7 @@ describe('SkillOverviewPage', () => {
     vi.spyOn(skillApiV2, 'checkAllSkillUpdates').mockResolvedValue(updateReport([updateCheckEntry()]))
     const updateSpy = vi.spyOn(skillApiV2, 'updateSkillFromSource')
 
-    render(<SkillOverviewPage />)
+    render(<SkillLibraryPage />)
 
     fireEvent.click(screen.getByRole('button', { name: '检查全部更新' }))
     expect(await screen.findByText('1 个可更新')).toBeInTheDocument()
@@ -299,7 +288,7 @@ describe('SkillOverviewPage', () => {
       updateStatus(updateReport([updateCheckEntry()]), { autoUpdateSkillIds: ['release-checklist'] }),
     )
 
-    render(<SkillOverviewPage />)
+    render(<SkillLibraryPage />)
 
     fireEvent.click(screen.getByRole('button', { name: '检查全部更新' }))
     expect(await screen.findByText('1 个可更新')).toBeInTheDocument()
@@ -332,7 +321,7 @@ describe('SkillOverviewPage', () => {
       updateStatus: updateStatus(updateReport(entries), { periodicCheckEnabled: true }),
     })
 
-    render(<SkillOverviewPage />)
+    render(<SkillLibraryPage />)
 
     expect(screen.getByText('已自动更新到新版本')).toBeInTheDocument()
     expect(screen.getByText('已跳过：这个 Skill 和安装时记录的版本对不上，可能被改过，自动更新不会覆盖它。')).toBeInTheDocument()
@@ -348,7 +337,7 @@ describe('SkillOverviewPage', () => {
     })
     useSkillStoreV2.setState({ updateStatus: updateStatus(updateReport([entry])) })
 
-    render(<SkillOverviewPage />)
+    render(<SkillLibraryPage />)
 
     expect(screen.getByText('GitHub 暂时限制了访问频率，稍后再试。')).toBeInTheDocument()
     expect(screen.queryByText(/API rate limit exceeded/)).not.toBeInTheDocument()
@@ -369,7 +358,7 @@ describe('SkillOverviewPage', () => {
     })
     const checkSpy = vi.spyOn(skillApiV2, 'checkAllSkillUpdates').mockResolvedValue(updateReport([]))
 
-    render(<SkillOverviewPage />)
+    render(<SkillLibraryPage />)
 
     expect(screen.getByRole('button', { name: '检查全部更新' })).toBeEnabled()
     fireEvent.click(screen.getByRole('button', { name: '检查全部更新' }))
@@ -396,7 +385,7 @@ describe('SkillOverviewPage', () => {
       filters: { query: '', source: '', status: '', type: '' },
     })
 
-    render(<SkillOverviewPage />)
+    render(<SkillLibraryPage />)
 
     expect(screen.getByRole('tab', { name: /生效于 Codex/ })).toBeInTheDocument()
     expect(screen.queryByRole('tab', { name: /生效于 Kiro/ })).not.toBeInTheDocument()
@@ -412,7 +401,7 @@ describe('SkillOverviewPage', () => {
   })
 
   it('keeps the Skill library path out of the default view and shows it in the details', () => {
-    render(<SkillOverviewPage />)
+    render(<SkillLibraryPage />)
 
     expect(screen.queryByText('/home/user/.agents/skills')).not.toBeInTheDocument()
 

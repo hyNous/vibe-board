@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { filteredSkills, SKILL_SOURCE_CATEGORIES, useSkillStoreV2 } from '../../stores/skillStoreV2'
+import { filteredSkills, filterSkillsByQuery, SKILL_SOURCE_CATEGORIES, splitAgentsByProgram, useSkillStoreV2 } from '../../stores/skillStoreV2'
 import { skillApiV2 } from '../../services/skillApiV2'
 import type { SkillSummary, DeleteCenterSkillPreview } from '../../services/skillApiV2'
 import { AgentIconBadge } from './AgentIconBadge'
@@ -11,6 +11,9 @@ import { SkillUpdatePanel } from './SkillUpdatePanel'
 import { PreviewDialog } from './PreviewDialog'
 import { skillModeLabel, skillSourceCategoryLabel, skillSourceTypeLabel } from './skillLabels'
 import { SettingDetails } from '../settings/SettingDetails'
+
+const SHARED_SKILLS_AGENT_ID = 'agents'
+const ALL_CATEGORY_ID = 'all'
 
 const STATUS_LABEL: Record<string, string> = {
   ok: '正常',
@@ -37,7 +40,35 @@ export function SkillLibraryPage() {
   const [sliderSkillId, setSliderSkillId] = useState<string | null>(null)
   const [deletePreview, setDeletePreview] = useState<DeleteCenterSkillPreview | null>(null)
   const [busy, setBusy] = useState(false)
-  const skills = baseSkills
+  const [categoryId, setCategoryId] = useState<string>(ALL_CATEGORY_ID)
+  const [showHiddenAgents, setShowHiddenAgents] = useState(false)
+  // 按 Agent 筛选（从总览页并进来）：全部 / 生效于某个 Agent。
+  const skills = useMemo(
+    () => (categoryId === ALL_CATEGORY_ID
+      ? baseSkills
+      : baseSkills.filter((skill) => skill.installedAgents.some((agent) => agent.agentId === categoryId))),
+    [baseSkills, categoryId],
+  )
+  // 与总览页一致：只列出检测到可执行程序的 Agent，其余收在「＋」后面。
+  const knownAgents = useMemo(
+    () => state.agents.filter((agent) => agent.id !== SHARED_SKILLS_AGENT_ID),
+    [state.agents],
+  )
+  const { detected: detectedAgents, hidden: hiddenAgents } = useMemo(
+    () => splitAgentsByProgram(knownAgents),
+    [knownAgents],
+  )
+  const agentCategories = showHiddenAgents ? [...detectedAgents, ...hiddenAgents] : detectedAgents
+  const activeAgent = agentCategories.find((agent) => agent.id === categoryId)
+  // 分类数量按当前搜索词统计，和总览页一样不受来源 / 状态筛选影响。
+  const agentCountSkills = useMemo(
+    () => filterSkillsByQuery(state.skills, state.filters.query),
+    [state.skills, state.filters.query],
+  )
+  const unassignedCount = useMemo(
+    () => baseSkills.filter((skill) => skill.installedAgents.length === 0).length,
+    [baseSkills],
+  )
   const selectedSkills = useMemo(
     () => state.skills.filter((skill) => selectedSkillIds.has(skill.id)),
     [selectedSkillIds, state.skills],
@@ -174,7 +205,6 @@ export function SkillLibraryPage() {
           <p className="sm2__header-subtitle">这里存放你的 Skill：看看每个 Skill 正在被哪些 Agent 使用，也可以让它生效、更新或删除。</p>
         </div>
         <div className="sm2__tabs">
-          <button className="sm2__btn sm2__btn--primary" onClick={() => state.setTab('install')}>添加 Skill</button>
           <button className={`sm2__btn${batchMode ? ' sm2__btn--active' : ''}`} onClick={toggleBatchMode}>
             {batchMode ? '完成选择' : '批量管理'}
           </button>
@@ -183,6 +213,24 @@ export function SkillLibraryPage() {
           </button>
         </div>
       </div>
+
+      <section className="vb-skills-scope">
+        <span aria-hidden="true">ⓘ</span>
+        <div>
+          <p>
+            <strong>{t('settings.skillsOverview.scopeTitle', { defaultValue: '只显示你自己安装的 Skill' })}</strong>
+            {t('settings.skillsOverview.scope', {
+              defaultValue: '项目文件夹里自带的 Skill 不在这里显示。来自 GitHub 的更新会先给你看改动，确认后才会替换。',
+            })}
+          </p>
+          <SettingDetails testId="skills-overview-scope-details" label={t('settings.details', { defaultValue: '详情' })}>
+            <div className="setting-details__row">
+              <span>{t('settings.skillsOverview.centerPath', { defaultValue: 'Skill 库位置' })}</span>
+              <code>{state.settings?.centerPath ?? '~/.agents/skills'}</code>
+            </div>
+          </SettingDetails>
+        </div>
+      </section>
 
       {overview && (
         <div className="sm2__metrics sm2__library-metrics">
@@ -228,6 +276,70 @@ export function SkillLibraryPage() {
             <button className={state.viewMode === 'list' ? 'active' : ''} onClick={() => state.setViewMode('list')}>列表</button>
           </div>
         </div>
+      </div>
+
+      <div className="vb-skills-chips" role="tablist" aria-label={t('settings.skillsOverview.categoriesLabel', { defaultValue: 'Skill 分类' })}>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={categoryId === ALL_CATEGORY_ID}
+          className={`vb-skills-chip${categoryId === ALL_CATEGORY_ID ? ' is--active' : ''}`}
+          onClick={() => setCategoryId(ALL_CATEGORY_ID)}
+        >
+          {t('settings.skillsOverview.categoryAll', { defaultValue: '全部（中心库）' })}
+          <span className="vb-skills-chip__count">{agentCountSkills.length}</span>
+        </button>
+        {agentCategories.map((agent) => {
+          const count = agentCountSkills.filter((skill) => skill.installedAgents.some((installed) => installed.agentId === agent.id)).length
+          return (
+            <button
+              key={agent.id}
+              type="button"
+              role="tab"
+              aria-selected={categoryId === agent.id}
+              className={`vb-skills-chip${categoryId === agent.id ? ' is--active' : ''}`}
+              onClick={() => setCategoryId(agent.id)}
+            >
+              <AgentIconBadge iconKey={agent.iconKey} title={agent.displayName} size={16} />
+              {t('settings.skillsOverview.categoryAgent', { name: agent.displayName, defaultValue: '生效于 {{name}}' })}
+              <span className="vb-skills-chip__count">{count}</span>
+            </button>
+          )
+        })}
+        {hiddenAgents.length > 0 && (
+          <button
+            type="button"
+            className={`vb-skills-chip vb-skills-chip--more${showHiddenAgents ? ' is--active' : ''}`}
+            aria-expanded={showHiddenAgents}
+            title={t('settings.skillsOverview.moreAgentsHint', { defaultValue: '未检测到可执行程序的 Agent 收在这里' })}
+            onClick={() => {
+              const next = !showHiddenAgents
+              setShowHiddenAgents(next)
+              if (!next && hiddenAgents.some((agent) => agent.id === categoryId)) setCategoryId(ALL_CATEGORY_ID)
+            }}
+          >
+            +
+            <span className="vb-skills-chip__count">{hiddenAgents.length}</span>
+          </button>
+        )}
+      </div>
+
+      <div className="vb-skills-note">
+        {categoryId === ALL_CATEGORY_ID
+          ? t('settings.skillsOverview.noteAll', {
+              defaultValue: '中心库 Skill 默认不对任何 Agent 生效；Vibe Board 不会自动让它们作用于所有 Agent，也不会自动覆盖未来新安装的 Agent，没有「通用 / 专属」自动分配。未显示 Agent 图标的 Skill（尚未生效于任何 Agent）只存在于中心库，需在 Skill 库里手动让它生效。',
+            })
+          : t('settings.skillsOverview.noteAgent', {
+              name: activeAgent?.displayName ?? categoryId,
+              defaultValue: '以下 Skill 当前生效于 {{name}}，部分可能同时对其他 Agent 生效。这是真实的生效记录，不是「专属」绑定；安装或取消安装都要在 Skill 库里手动操作。',
+            })}
+      </div>
+
+      <div className="vb-skills-note vb-skills-note--muted">
+        {t('settings.skillsOverview.unassignedSummary', {
+          n: unassignedCount,
+          defaultValue: '当前有 {{n}} 个 Skill 尚未对任何 Agent 生效。',
+        })}
       </div>
 
       {batchMode && (

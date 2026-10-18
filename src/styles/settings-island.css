@@ -88,8 +88,12 @@
   backdrop-filter: none;
 }
 
-.settings-app--island .settings-content--skill-manager {
-  padding: 16px 16px 16px 8px;
+/* Skill 页自带页头与分段，页面主体内部滚动，这里只留外壳间距。 */
+.settings-app--island .settings-content--skills {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 24px 32px 28px;
 }
 
 .settings-app--island .settings-scroll::-webkit-scrollbar-thumb { background: var(--vb-s3); }

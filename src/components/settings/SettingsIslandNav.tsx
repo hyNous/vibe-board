@@ -15,8 +15,7 @@ export function SettingsIslandNav({ activeSection, onSelect }: SettingsIslandNav
   const waiting = useSessionStore((s) => s.sessionList.filter((session) => session.phase === 'waiting_input').length)
   const navRef = useRef<HTMLElement>(null)
   const [slab, setSlab] = useState<{ left: number; width: number; animate: boolean } | null>(null)
-  // Skill 完整管理仍属于「Skill」这一项。
-  const current = activeSection === 'skill-manager-v2' ? 'skills' : activeSection
+  const current = activeSection
 
   useLayoutEffect(() => {
     const nav = navRef.current

@@ -1,0 +1,69 @@
+/* Vibe Board — Skill 页壳（M16c）
+ * 页头 + 分段 + 页面主体。配色只用 settings-island.css 的变量：
+ * 黑白两极加一组灰，按钮走 vb-btn / Segmented。 */
+
+.vb-skill-section {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  color: var(--vb-text);
+}
+
+.vb-skill-section__head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 0 0 18px;
+}
+
+.vb-skill-section__head h1 {
+  margin: 0;
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: .01em;
+  color: var(--vb-text);
+}
+
+.vb-skill-section__head p {
+  max-width: 46em;
+  margin: 6px 0 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--vb-text-2);
+}
+
+.vb-skill-section__acts {
+  display: flex;
+  flex: none;
+  gap: 8px;
+}
+
+.vb-skill-section__acts .vb-btn {
+  padding: 9px 18px;
+  font-size: 14px;
+}
+
+.vb-skill-section__seg {
+  margin-bottom: 16px;
+}
+
+.vb-skill-section__back {
+  margin-bottom: 16px;
+}
+
+.vb-skill-section__body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.vb-skill-section__body > * {
+  flex: 1;
+  min-height: 0;
+}

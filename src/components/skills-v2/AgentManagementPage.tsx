@@ -8,6 +8,7 @@ import { agentApi, type AgentOutputEvent, type AgentProgramInfo, type CustomAgen
 import type { AgentDetail, AdoptPreview, ConflictBlocker, DistributionPreview, SkillSummary, UnmanagedItemDto } from '../../services/skillApiV2'
 import { useSessionStore } from '../../stores/sessionStore'
 import { AgentIconBadge } from './AgentIconBadge'
+import { AgentRoster } from './AgentRoster'
 import { AdoptDialog } from './AdoptDialog'
 import { PreviewDialog } from './PreviewDialog'
 import { SkillDetailSlider, type SkillDetailFallback } from './SkillDetailSlider'
@@ -518,7 +519,11 @@ export function AgentManagementPage() {
         onDismissNotice={() => setNotice(null)}
       />
 
-      <div className="sm2__main sm2__main--full settings-scroll">
+      <div className="sm2__agent-layout">
+        <aside className="sm2__rail settings-scroll" aria-label={t('settings.skillAgents.installed', { defaultValue: '已安装的 Agent' })}>
+          <AgentRoster />
+        </aside>
+        <div className="sm2__main sm2__main--full settings-scroll">
         <section className="sm2-agent-inventory" aria-label="本机 Agent 检测总览">
           <div className="sm2-agent-inventory__head">
             <div>
@@ -596,6 +601,7 @@ export function AgentManagementPage() {
             onRequestDelete={setDeleteAgentTarget}
           />
         )}
+        </div>
       </div>
 
       <SkillDetailSlider

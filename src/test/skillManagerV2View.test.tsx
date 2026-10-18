@@ -11,7 +11,7 @@ import i18n from '../i18n'
 import type { SkillSummary, AgentSummary, AgentDetail, AgentSkillInventoryAgent, AdoptPreview, DistributionPreview, SkillDetail, SkillTargetDetail, UnmanagedItemDto } from '../services/skillApiV2'
 import type { AgentType, SessionState } from '../types/agent'
 
-// SkillManagerShell imports pages that call skillApiV2 at mount; we stub the api
+// SkillSection imports pages that call skillApiV2 at mount; we stub the api
 // so tests run without the Tauri runtime.
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn().mockResolvedValue(undefined) }))
 vi.mock('@tauri-apps/plugin-dialog', () => ({ open: vi.fn().mockResolvedValue(null) }))
@@ -125,14 +125,14 @@ function makeSidebarSession(agentType: AgentType, overrides: Partial<SessionStat
 // renders into the next test. Warm the module cache once, outside any test.
 beforeAll(async () => {
   await Promise.all([
-    import('../components/settings/SettingsSidebar'),
+    import('../components/skills-v2/AgentRoster'),
     import('../components/skills-v2/AgentManagementPage'),
     import('../components/skills-v2/DistributeDialog'),
     import('../components/skills-v2/InstallView'),
     import('../components/skills-v2/SettingsPageV2'),
     import('../components/skills-v2/SkillDetailSlider'),
     import('../components/skills-v2/SkillLibraryPage'),
-    import('../components/skills-v2/SkillManagerShell'),
+    import('../components/skills-v2/SkillSection'),
   ])
 }, 60_000)
 
@@ -212,8 +212,8 @@ describe('Skill library view mode (no Agent matrix)', () => {
     })
     vi.spyOn(skillApiV2, 'listAgentSkillInventory').mockResolvedValue([])
 
-    const { SkillManagerShell } = await import('../components/skills-v2/SkillManagerShell')
-    render(<SkillManagerShell />)
+    const { SkillSection } = await import('../components/skills-v2/SkillSection')
+    render(<SkillSection />)
 
     fireEvent.click(screen.getByRole('button', { name: '还没纳入管理 1' }))
 
@@ -2627,13 +2627,16 @@ describe('Skill detail slider + agent page render without crashing', () => {
     }
   })
 
-  it('AgentManagementPage uses the sidebar agent list and renders no picker in the content pane', async () => {
+  it('AgentManagementPage moves the Agent list into a left rail and keeps the detail canvas', async () => {
     const { AgentManagementPage } = await import('../components/skills-v2/AgentManagementPage')
     const { container } = render(<AgentManagementPage />)
-    expect(container.querySelector('.sm2__rail')).toBeNull()
+    // 旧侧栏的 Agent 列表已挪进页面左侧；旧 picker 不再出现。
+    const rail = container.querySelector('.sm2__rail')
+    expect(rail).not.toBeNull()
+    expect(rail?.querySelector('[data-agent-id="claude-code"]')).not.toBeNull()
     expect(container.querySelector('.sm2__agent-picker')).toBeNull()
     expect(container.querySelector('.sm2__main--full')).not.toBeNull()
-    // 内容区展示本机 Agent 检测总览，但仍是详情主画布，不恢复旧 picker。
+    // 内容区展示本机 Agent 检测总览，但仍是详情主画布。
     expect(container.querySelector('.sm2-agent-inventory')).not.toBeNull()
     expect(screen.getAllByText('Claude Code').length).toBeGreaterThan(0)
   })
@@ -2655,7 +2658,8 @@ describe('Skill detail slider + agent page render without crashing', () => {
     const { AgentManagementPage } = await import('../components/skills-v2/AgentManagementPage')
     render(<AgentManagementPage />)
 
-    expect(screen.queryByRole('button', { name: /添加自定义 Agent/ })).not.toBeInTheDocument()
+    // 添加自定义 Agent 的入口随 Agent 列表一起挪进页面内。
+    expect(screen.getByRole('button', { name: /添加自定义 Agent/ })).toBeInTheDocument()
     act(() => useSkillStoreV2.getState().requestCustomAgentDialog())
     const dialog = await screen.findByRole('dialog', { name: /添加自定义 Agent/ })
     expect(dialog.closest('.sm2-custom-agent-overlay')).toBeInTheDocument()
@@ -2743,15 +2747,8 @@ describe('Skill detail slider + agent page render without crashing', () => {
     })
     vi.spyOn(skillApiV2, 'getAgentDetail').mockResolvedValue(agentDetail)
 
-    const { SettingsSidebar } = await import('../components/settings/SettingsSidebar')
-    render(
-      <SettingsSidebar
-        activeSection="skill-manager-v2"
-        collapsed={false}
-        onCollapsedChange={() => {}}
-        onSelect={() => {}}
-      />,
-    )
+    const { AgentRoster } = await import('../components/skills-v2/AgentRoster')
+    render(<AgentRoster />)
 
     expect(screen.queryByText('.agents')).not.toBeInTheDocument()
     expect(screen.getByText('Claude Code')).toBeInTheDocument()
@@ -2788,15 +2785,8 @@ describe('Skill detail slider + agent page render without crashing', () => {
       activeSessionId: workbuddySession.id,
     })
 
-    const { SettingsSidebar } = await import('../components/settings/SettingsSidebar')
-    const { container } = render(
-      <SettingsSidebar
-        activeSection="skill-manager-v2"
-        collapsed={false}
-        onCollapsedChange={() => {}}
-        onSelect={() => {}}
-      />,
-    )
+    const { AgentRoster } = await import('../components/skills-v2/AgentRoster')
+    const { container } = render(<AgentRoster />)
 
     const labels = () => Array.from(container.querySelectorAll('.sm2-sidebar__subitem-label')).map((item) => item.textContent)
     expect(labels().slice(0, 3)).toEqual(['WorkBuddy', 'Claude Code', 'Codex'])
@@ -5043,19 +5033,8 @@ describe('Skill detail slider + agent page render without crashing', () => {
     ))
     vi.spyOn(useSkillStoreV2.getState(), 'loadOverview').mockResolvedValue(undefined)
 
-    const { SettingsSidebar } = await import('../components/settings/SettingsSidebar')
     const { AgentManagementPage } = await import('../components/skills-v2/AgentManagementPage')
-    const { container } = render(
-      <>
-        <SettingsSidebar
-          activeSection="skill-manager-v2"
-          collapsed={false}
-          onCollapsedChange={() => {}}
-          onSelect={() => {}}
-        />
-        <AgentManagementPage />
-      </>,
-    )
+    const { container } = render(<AgentManagementPage />)
 
     expect(container.querySelector('[data-agent-id="claude-code"]')).not.toBeNull()
     fireEvent.click(await screen.findByRole('button', { name: '卸载 Agent' }))
