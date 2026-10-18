@@ -67,3 +67,24 @@
   flex: 1;
   min-height: 0;
 }
+
+/* 切页动画那一层在 Skill 页撑满高度，下面的分区才能各自滚动。 */
+.settings-page--fill {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Skill 库、添加、设置整页滚动：说明、统计、更新面板和筛选栏都跟着列表一起滚。
+ * 「按 Agent 看」是左右两栏，左边列表和右边详情各自滚动，不在这里。 */
+.vb-skill-section__body > :not(.sm2--agents) {
+  overflow-y: auto;
+}
+
+.vb-skill-section__body > :not(.sm2--agents) .sm2__main,
+.vb-skill-section__body > :not(.sm2--agents) .sm2__main--full {
+  flex: none;
+  min-height: auto;
+  overflow: visible;
+}

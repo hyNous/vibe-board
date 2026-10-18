@@ -136,6 +136,8 @@ export function SettingsApp({ onClose }: SettingsAppProps) {
         <AnimatePresence mode="wait">
           <motion.div
             key={activeSection}
+            // Skill 页自己分区滚动，需要这一层把窗口高度传下去。
+            className={activeSection === 'skills' ? 'settings-page settings-page--fill' : 'settings-page'}
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
