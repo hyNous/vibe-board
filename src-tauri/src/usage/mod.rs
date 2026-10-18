@@ -672,6 +672,18 @@ mod tests {
                 assert!(production.contains("https://opencode.ai/zen/go/v1/usage"));
                 continue;
             }
+            if file == "claude.rs" {
+                // Claude's account quota query, authorized per provider like
+                // OpenCode's (M16 follow-up).
+                assert_eq!(
+                    production.matches("reqwest::Client").count(),
+                    1,
+                    "claude.rs must keep exactly one HTTP client"
+                );
+                assert!(production.contains("const CLAUDE_USAGE_URL"));
+                assert!(production.contains("https://api.anthropic.com/api/oauth/usage"));
+                continue;
+            }
             for forbidden in ["reqwest", "http://", "https://", ".send()"] {
                 assert!(
                     !production.contains(forbidden),
@@ -891,15 +903,20 @@ mod tests {
             assert!(provider.network_plan().target.is_some(), "{id} target");
         }
 
+        // Claude Code queries its account quota with the CLI's OAuth token once
+        // the user authorizes it (M16 follow-up; endpoint is undocumented).
         let claude = providers
             .iter()
             .find(|provider| provider.id() == "claude-code")
             .expect("claude provider");
         assert!(
-            !claude.requires_network(),
-            "Claude Code's online query is unverified and must stay offline"
+            claude.requires_network(),
+            "claude-code queries its quota online"
         );
-        assert_eq!(claude.network_plan().unsupported_reason, Some("unverified"));
+        assert_eq!(
+            claude.network_plan().target,
+            Some("https://api.anthropic.com/api/oauth/usage")
+        );
 
         let kimi = providers
             .iter()
