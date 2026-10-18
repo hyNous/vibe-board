@@ -200,10 +200,7 @@ export function SkillLibraryPage() {
   return (
     <div className="sm2 sm2--library">
       <div className="sm2__header sm2__header--stacked">
-        <div>
-          <h2 className="sm2__title">Skill 库</h2>
-          <p className="sm2__header-subtitle">这里存放你的 Skill：看看每个 Skill 正在被哪些 Agent 使用，也可以让它生效、更新或删除。</p>
-        </div>
+        <p className="sm2__header-subtitle">这里存放你的 Skill：看看每个 Skill 正在被哪些 Agent 使用，也可以让它生效、更新或删除。</p>
         <div className="sm2__tabs">
           <button className={`sm2__btn${batchMode ? ' sm2__btn--active' : ''}`} onClick={toggleBatchMode}>
             {batchMode ? '完成选择' : '批量管理'}

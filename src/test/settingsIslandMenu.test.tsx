@@ -303,7 +303,7 @@ describe('settings island menu', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Skill' }))
 
-    expect(await screen.findByRole('heading', { name: 'Skill 库' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Skill' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: /全部（中心库）/ })).toBeInTheDocument()
     expect(screen.getByText(/只显示你自己安装的 Skill/)).toBeInTheDocument()
     expect(screen.getByText(/「通用 \/ 专属」自动分配/)).toBeInTheDocument()

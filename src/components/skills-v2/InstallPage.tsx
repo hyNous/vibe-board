@@ -33,10 +33,7 @@ export function InstallPage() {
   return (
     <div className="sm2 sm2__install-page">
       <div className="sm2__install-page-head">
-        <div>
-          <h2 className="sm2__install-page-title">添加 Skill</h2>
-          <p className="sm2__header-subtitle">从 Agent 目录、文件夹或 Git 仓库把 Skill 收进 Skill 库，再决定让哪些 Agent 用上。</p>
-        </div>
+        <p className="sm2__header-subtitle">从 Agent 目录、文件夹或 Git 仓库把 Skill 收进 Skill 库，再决定让哪些 Agent 用上。</p>
         <nav className="sm2__install-page-nav">
           {TABS.map((t) => (
             <button

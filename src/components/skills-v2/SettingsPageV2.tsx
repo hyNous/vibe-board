@@ -64,10 +64,7 @@ export function SettingsPageV2() {
   return (
     <div className="sm2">
       <div className="sm2__header sm2__header--stacked">
-        <div>
-          <h2 className="sm2__title">Skill 设置</h2>
-          <p className="sm2__header-subtitle">这些设置决定新加的 Skill 默认怎么让 Agent 用上，以及打开这一页时要不要自动检查。</p>
-        </div>
+        <p className="sm2__header-subtitle">这些设置决定新加的 Skill 默认怎么让 Agent 用上，以及打开这一页时要不要自动检查。</p>
       </div>
       <div className="sm2__main">
         {state.error && <div className="sm2__error">{state.error}</div>}

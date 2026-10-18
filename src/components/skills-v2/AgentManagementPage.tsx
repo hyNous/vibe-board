@@ -487,10 +487,6 @@ export function AgentManagementPage() {
   return (
     <div className="sm2 sm2--agents">
       <div className="sm2__header sm2__header--stacked">
-        <div>
-          <h2 className="sm2__title">Agent 管理</h2>
-          <p className="sm2__header-subtitle">查看每个 Agent 上生效了哪些 Skill，并处理接管与移除。</p>
-        </div>
         <div className="sm2__tabs">
           {detail && canUninstallSelectedAgent && (
             <ActionButton
