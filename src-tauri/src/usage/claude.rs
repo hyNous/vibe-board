@@ -27,10 +27,12 @@ const CLAUDE_USAGE_TIMEOUT: Duration = Duration::from_secs(10);
 const CLAUDE_REDACTED: &str = "[redacted]";
 /// When the access token has expired, Vibe Board asks the Claude CLI to renew
 /// it instead of refreshing it itself: the CLI rotates the single-use refresh
-/// token and keeps the credential file consistent. A read-only command is used
-/// so the renewal never upgrades Claude Code.
-const CLAUDE_RENEW_ARGS: [&str; 2] = ["auth", "status"];
-const CLAUDE_RENEW_TIMEOUT: Duration = Duration::from_secs(30);
+/// token and keeps the credential file consistent. Verified 2026-10-19 with
+/// Claude Code 2.1.258: `claude doctor` renews an expired token (both tokens
+/// rotate) while `claude auth status` does not; `claude update` is avoided
+/// because it may upgrade Claude Code.
+const CLAUDE_RENEW_ARGS: [&str; 1] = ["doctor"];
+const CLAUDE_RENEW_TIMEOUT: Duration = Duration::from_secs(60);
 /// At most one renewal attempt per window, so a broken login is not hammered.
 const CLAUDE_RENEW_COOLDOWN: Duration = Duration::from_secs(10 * 60);
 pub(crate) const CLAUDE_NOT_LOGGED_IN: &str =
@@ -237,6 +239,9 @@ async fn renew_claude_login() -> bool {
     let mut command = crate::platform::process::background_tokio_command(binary);
     command
         .args(CLAUDE_RENEW_ARGS)
+        // `doctor` reads settings files in its working directory; keep it out
+        // of whatever project Vibe Board happens to run in.
+        .current_dir(std::env::temp_dir())
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
@@ -458,8 +463,9 @@ mod tests {
 
     #[test]
     fn login_renewal_never_upgrades_claude_code() {
-        assert_eq!(CLAUDE_RENEW_ARGS, ["auth", "status"]);
+        assert_eq!(CLAUDE_RENEW_ARGS, ["doctor"]);
         assert!(!CLAUDE_RENEW_ARGS.contains(&"update"));
+        assert!(!CLAUDE_RENEW_ARGS.contains(&"install"));
     }
 
     #[test]
