@@ -282,6 +282,10 @@ pub struct SessionState {
     pub phase: SessionPhase,
     #[serde(default)]
     pub run_state: AgentRunState,
+    /// When the last hook event for this session arrived (ms). Runtime only:
+    /// lets hook-driven lifecycle win over app-server placeholders.
+    #[serde(skip)]
+    pub last_hook_at: Option<i64>,
     pub started_at: i64,
     pub duration: i64,
     pub tokens: TokenUsage,
@@ -334,6 +338,7 @@ impl SessionState {
             terminal,
             phase: SessionPhase::Ready,
             run_state: AgentRunState::default(),
+            last_hook_at: None,
             started_at: Utc::now().timestamp(),
             duration: 0,
             tokens: TokenUsage::default(),
@@ -535,6 +540,14 @@ impl SessionStore {
     }
 
     /// Update a session with a full state replacement
+    /// Records that a hook event just arrived for this session. Does not emit
+    /// an update: the event handler that follows does.
+    pub fn mark_hook_activity(&self, session_id: &str) {
+        if let Some(mut session) = self.sessions.get_mut(session_id) {
+            session.last_hook_at = Some(Utc::now().timestamp_millis());
+        }
+    }
+
     pub fn update_session(&self, session_id: &str, updater: impl FnOnce(&mut SessionState)) {
         if let Some(mut session) = self.sessions.get_mut(session_id) {
             updater(&mut session);

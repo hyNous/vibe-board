@@ -123,11 +123,13 @@ describe('AgentMonitorSection', () => {
     expect(screen.getByText('Claude 在等你回答。')).toBeInTheDocument()
   })
 
-  it('shows the token count on each lane and keeps the raw session id out of view', async () => {
+  it('leaves token counts and the raw session id out of the lanes', async () => {
     render(<AgentMonitorSection />)
 
     await waitFor(() => expect(screen.getByTestId('live-task-list')).toBeInTheDocument())
-    expect(screen.getByTestId('live-task-session-1')).toHaveTextContent('4.2K')
+    // Token 数有的会话拿不到（只显示 0），所以车道上不显示。
+    expect(screen.getByTestId('live-task-session-1')).not.toHaveTextContent('4.2K')
+    expect(screen.getByTestId('live-task-session-1')).not.toHaveTextContent('token')
     expect(screen.queryByText('session-1')).not.toBeInTheDocument()
   })
 

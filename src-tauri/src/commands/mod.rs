@@ -849,9 +849,13 @@ fn sync_codex_app_server_thread_to_store(
     // own app-server; a placeholder must not downgrade or evict an in-flight
     // local task.
     let existing = store.get_session(&thread_id);
-    let local_owns_lifecycle = existing
-        .as_ref()
-        .is_some_and(|session| session.engine_label.as_deref() == Some("Codex Desktop"));
+    // A Codex Desktop thread whose hooks are firing is also owned locally: the
+    // app-server only sees it as an idle placeholder, and letting that win made
+    // a running task vanish every sync and reappear on the next hook event.
+    let local_owns_lifecycle = existing.as_ref().is_some_and(|session| {
+        session.engine_label.as_deref() == Some("Codex Desktop")
+            || codex_hooks_drive_session(session, chrono::Utc::now().timestamp_millis())
+    });
     if codex_app_server_idle_thread_is_stale(&phase, updated_at)
         && !(local_owns_lifecycle
             && existing
@@ -959,6 +963,16 @@ fn codex_thread_is_closed(thread: &serde_json::Value) -> bool {
     status_text
         .as_deref()
         .is_some_and(|value| closed_states.contains(&value))
+}
+
+/// The session is mid-task and its hooks reported recently. A turn ends with a
+/// `Stop` hook, so hooks keep the lifecycle accurate on their own.
+fn codex_hooks_drive_session(session: &SessionState, now_ms: i64) -> bool {
+    const HOOK_OWNERSHIP_MS: i64 = 15 * 60 * 1000;
+    session.phase.is_active()
+        && session
+            .last_hook_at
+            .is_some_and(|at| now_ms - at < HOOK_OWNERSHIP_MS)
 }
 
 fn codex_app_server_idle_thread_is_stale(phase: &SessionPhase, updated_at: Option<i64>) -> bool {
@@ -5266,6 +5280,63 @@ mod tests {
         assert_eq!(
             store.get_session("thread-local").expect("session").phase,
             SessionPhase::Processing
+        );
+    }
+
+    #[test]
+    fn codex_app_server_idle_placeholder_does_not_hide_a_hook_driven_task() {
+        // Codex Desktop task reported through hooks; the app-server only knows
+        // it as an idle placeholder. The task must stay visible.
+        let store = SessionStore::new();
+        let now = chrono::Utc::now().timestamp();
+        store.get_or_create_session("thread-hook", "codex", "Project", "/tmp/project", "Codex");
+        store.update_session("thread-hook", |session| {
+            session.engine_label = Some("Codex App".to_string());
+            session.phase = SessionPhase::Processing;
+        });
+        store.mark_hook_activity("thread-hook");
+
+        let thread = serde_json::json!({
+            "id": "thread-hook",
+            "name": "Project",
+            "cwd": "/tmp/project",
+            "updatedAt": now - 3600,
+            "status": { "type": "notLoaded" }
+        });
+        sync_codex_app_server_thread_to_store(&store, &thread).expect("thread sync");
+
+        assert_eq!(
+            store
+                .get_session("thread-hook")
+                .expect("session kept")
+                .phase,
+            SessionPhase::Processing
+        );
+    }
+
+    #[test]
+    fn codex_app_server_status_still_wins_without_recent_hooks() {
+        let store = SessionStore::new();
+        let now = chrono::Utc::now().timestamp();
+        store.get_or_create_session("thread-quiet", "codex", "Project", "/tmp/project", "Codex");
+        store.update_session("thread-quiet", |session| {
+            session.engine_label = Some("Codex App".to_string());
+            session.phase = SessionPhase::Processing;
+            session.last_hook_at = Some(chrono::Utc::now().timestamp_millis() - 16 * 60 * 1000);
+        });
+
+        let thread = serde_json::json!({
+            "id": "thread-quiet",
+            "name": "Project",
+            "cwd": "/tmp/project",
+            "updatedAt": now - 5,
+            "status": { "type": "idle" }
+        });
+        sync_codex_app_server_thread_to_store(&store, &thread).expect("thread sync");
+
+        assert_eq!(
+            store.get_session("thread-quiet").expect("session").phase,
+            SessionPhase::Idle
         );
     }
 

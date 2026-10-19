@@ -8,7 +8,6 @@ import { useSettingsLive } from '../../../stores/settingsLiveStore'
 import type { RateLimitInfo, SessionState, TokenUsage, UsageRateWindow } from '../../../types/agent'
 import { getSessionTaskDurationSeconds } from '../../../utils/sessionDisplay'
 import { rateLimitWindows } from '../../../utils/rateLimitDisplay'
-import { formatTokens } from '../../../utils/tokens'
 import { SettingDetails } from '../SettingDetails'
 import './AgentMonitorSection.css'
 
@@ -336,11 +335,6 @@ export function AgentMonitorSection({ onOpenUsage }: AgentMonitorSectionProps) {
                   {session.title || session.project || t('settings.tasksPage.untitled', { defaultValue: '未命名任务' })}
                 </span>
                 <span className="agent-monitor__lane-meta">
-                  <span className="agent-monitor__lane-token">
-                    <b>{formatTokens(session.tokenTotal)}</b>
-                    {' '}
-                    {t('settings.tasksPage.tokenUnit', { defaultValue: 'token' })}
-                  </span>
                   <span className="agent-monitor__lane-note">
                     {session.subagentCount > 0
                       ? t('settings.tasksPage.subagentCountValue', {

@@ -1916,10 +1916,11 @@ impl HookServer {
             | AgentEvent::AgentThought { session_id, .. } => session_id,
         };
 
-        if session_id.is_empty()
-            || session_id == "unknown"
-            || store.get_session(session_id).is_some()
-        {
+        if session_id.is_empty() || session_id == "unknown" {
+            return;
+        }
+        if store.get_session(session_id).is_some() {
+            store.mark_hook_activity(session_id);
             return;
         }
 
@@ -1946,6 +1947,7 @@ impl HookServer {
         };
 
         store.get_or_create_session(session_id, agent_type, &project, cwd, terminal);
+        store.mark_hook_activity(session_id);
     }
 
     fn schedule_done_session_cleanup(store: &SessionStore, session_id: &str, delay_secs: u64) {
