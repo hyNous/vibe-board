@@ -31,9 +31,25 @@ Vibe Board lives at the top or side edge of the screen. Expanding it shows the c
 
 The default look is solid black, with a frosted-glass effect available. The board docks to the top or either side edge, and the side dock has three sizes: 64×132 (narrow, default), 72×148 (standard), and 80×168 (wide).
 
+## See it in action
+
+> These animations show Vibe Board's real interface, filled with made-up demo tasks and quotas (the UI is shown in Chinese; English is built in). The recording script lives in [scripts/readme-demo](./scripts/readme-demo/record.mjs), so they can be re-recorded whenever the UI changes.
+
+**Tasks on the island**: once an agent starts working, a small bar appears at the top of the screen. Hover over it to see what each task is doing, which agents are online, and how much quota is left. New tasks join the list on their own; finished ones are marked as completed.
+
+<img src="./assets/readme/demo-island.gif" alt="The island expands from a small bar into the task panel; a new task appears and another finishes" width="100%" />
+
+**Tasks and quota**: in the settings window every running agent gets its own lane with the tool it is using and how long it has run. The quota page gathers each tool's 5-hour and weekly remaining quota and reset time, and online queries can be turned on one tool at a time.
+
+<img src="./assets/readme/demo-usage.gif" alt="Settings window: switching from the tasks page to the quota page" width="100%" />
+
+**Skill management**: all skills live in one central library. You can see which agents use each skill, filter by agent, and decide where to distribute it.
+
+<img src="./assets/readme/demo-skills.gif" alt="Skill library filtered by agent" width="100%" />
+
 ## Windows install (x64, unsigned)
 
-1. Download the latest package from [GitHub Releases](https://github.com/hyNous/agent-island/releases), or use the checked-in [Vibe Board-latest-setup.exe](./releases/Vibe%20Board-latest-setup.exe).
+1. Download the latest package from [GitHub Releases](https://github.com/hyNous/vibe-board/releases), or use the checked-in [Vibe Board-latest-setup.exe](./releases/Vibe%20Board-latest-setup.exe).
 2. Install and launch Vibe Board. The first run opens the setup wizard: it scans the agents installed on the machine, then you pick the agents to connect and approve setup.
 3. The wizard installs the selected hooks, saves startup options, and verifies the result; a failed check stays in the wizard with an error. Sessions of the connected agents then reach the board (starting the board on session start is off by default and enabled per agent).
 4. To change the choice later, rerun **Settings → General → Agent connection**.
@@ -62,8 +78,8 @@ Coding agents do not expose one stable, universal task-lifecycle interface, so s
 Requirements: Node.js 20+, pnpm, Rust/Cargo, and the Tauri CLI. Windows also needs Microsoft C++ Build Tools and WebView2.
 
 ```bash
-git clone https://github.com/hyNous/agent-island.git
-cd agent-island
+git clone https://github.com/hyNous/vibe-board.git
+cd vibe-board
 pnpm install
 pnpm tauri:dev
 ```

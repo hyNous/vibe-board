@@ -31,9 +31,25 @@ Vibe Board 常驻屏幕顶部或左右边缘，展开后按顺序显示当前任
 
 看板外观默认纯黑，可切换磨砂玻璃；侧边停靠有三档尺寸：64×132（窄，默认）、72×148（标准）、80×168（宽）。
 
+## 看看它怎么用
+
+> 下面的动图都是 Vibe Board 的真实界面，填的是虚构的演示任务和额度。录制脚本在 [scripts/readme-demo](./scripts/readme-demo/record.mjs)，界面改版后可以一键重录。
+
+**灵动岛看任务**：Agent 一开工，屏幕顶部的小条就会显示出来。鼠标移上去展开，能看到每个任务在做什么、各 Agent 是否在线，以及剩余额度。新任务会自动加进列表，做完的任务标成「已完成」。
+
+<img src="./assets/readme/demo-island.gif" alt="灵动岛：收起的小条展开成任务面板，新任务出现、旧任务完成" width="100%" />
+
+**任务与额度**：设置窗口里，每个正在跑的 Agent 占一条车道，显示正在用的工具和已运行时长。额度页集中显示各工具 5 小时和每周的剩余额度、恢复时间，并且可以逐个打开联网查询。
+
+<img src="./assets/readme/demo-usage.gif" alt="设置窗口：从任务页切到额度页，查看各 Agent 的剩余额度" width="100%" />
+
+**Skill 管理**：所有 Skill 收进一个中心库，可以看到每个 Skill 被哪些 Agent 用上，也能按 Agent 筛选，再决定分发给谁。
+
+<img src="./assets/readme/demo-skills.gif" alt="Skill 库：按 Agent 筛选查看已生效的 Skill" width="100%" />
+
 ## Windows 安装（x64，未签名）
 
-1. 从 [GitHub Releases](https://github.com/hyNous/agent-island/releases) 下载最新安装包，或直接使用仓库内的 [Vibe Board-latest-setup.exe](./releases/Vibe%20Board-latest-setup.exe)。
+1. 从 [GitHub Releases](https://github.com/hyNous/vibe-board/releases) 下载最新安装包，或直接使用仓库内的 [Vibe Board-latest-setup.exe](./releases/Vibe%20Board-latest-setup.exe)。
 2. 安装并启动 Vibe Board。首次启动进入设置向导：扫描本机已安装的 Agent，勾选要接入的 Agent，再按需逐个打开「会话开始时拉起看板」开关，然后“批准并完成设置”。
 3. 向导会安装所选 Hook、保存启动选项并重新校验；校验失败会留在向导中提示错误。之后这些 Agent 的新会话即可连接看板（自动拉起默认关闭，由你逐个打开）。
 4. 需要调整时，在 **Settings → General → Agent connection** 重新选择要接入的 Agent 或重新校验。
@@ -62,8 +78,8 @@ Hook 与本地 app-server 事件是实时主链路，前端另有默认 3 秒（
 环境要求：Node.js 20+、pnpm、Rust/Cargo、Tauri CLI；Windows 还需要 Microsoft C++ Build Tools 与 WebView2。
 
 ```bash
-git clone https://github.com/hyNous/agent-island.git
-cd agent-island
+git clone https://github.com/hyNous/vibe-board.git
+cd vibe-board
 pnpm install
 pnpm tauri:dev
 ```
