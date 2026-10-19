@@ -25,6 +25,14 @@ const CLAUDE_OAUTH_BETA: &str = "oauth-2025-04-20";
 const CLAUDE_USAGE_CACHE_TTL: Duration = Duration::from_secs(5 * 60);
 const CLAUDE_USAGE_TIMEOUT: Duration = Duration::from_secs(10);
 const CLAUDE_REDACTED: &str = "[redacted]";
+/// When the access token has expired, Vibe Board asks the Claude CLI to renew
+/// it instead of refreshing it itself: the CLI rotates the single-use refresh
+/// token and keeps the credential file consistent. A read-only command is used
+/// so the renewal never upgrades Claude Code.
+const CLAUDE_RENEW_ARGS: [&str; 2] = ["auth", "status"];
+const CLAUDE_RENEW_TIMEOUT: Duration = Duration::from_secs(30);
+/// At most one renewal attempt per window, so a broken login is not hammered.
+const CLAUDE_RENEW_COOLDOWN: Duration = Duration::from_secs(10 * 60);
 pub(crate) const CLAUDE_NOT_LOGGED_IN: &str =
     "Claude CLI is not logged in; run `claude` in a terminal and log in with your Claude account.";
 pub(crate) const CLAUDE_LOGIN_EXPIRED: &str =
@@ -196,10 +204,54 @@ async fn load_claude_oauth_rate_limits() -> (Option<UsageRateLimitSnapshot>, Opt
 
 async fn fetch_claude_oauth_rate_limits() -> Result<UsageRateLimitSnapshot, String> {
     let path = claude_credentials_path().ok_or_else(|| CLAUDE_NOT_LOGGED_IN.to_string())?;
-    let token = claude_oauth_token(&path, chrono::Utc::now())?;
-    let payload = request_claude_usage(&token).await?;
+    let payload = match query_claude_usage(&path).await {
+        Err(error) if error == CLAUDE_LOGIN_EXPIRED && renew_claude_login().await => {
+            query_claude_usage(&path).await?
+        }
+        result => result?,
+    };
     parse_claude_usage(&payload, chrono::Utc::now())
         .ok_or_else(|| "the response did not contain 5-hour and weekly quota windows".to_string())
+}
+
+async fn query_claude_usage(path: &Path) -> Result<serde_json::Value, String> {
+    let token = claude_oauth_token(path, chrono::Utc::now())?;
+    request_claude_usage(&token).await
+}
+
+/// Runs the Claude CLI once so it renews its own OAuth token. Returns whether
+/// an attempt was made (a retry is only worth it then).
+async fn renew_claude_login() -> bool {
+    static LAST_ATTEMPT: OnceLock<TokioMutex<Option<Instant>>> = OnceLock::new();
+    let last = LAST_ATTEMPT.get_or_init(|| TokioMutex::new(None));
+    {
+        let mut last = last.lock().await;
+        if last.is_some_and(|at| at.elapsed() < CLAUDE_RENEW_COOLDOWN) {
+            return false;
+        }
+        *last = Some(Instant::now());
+    }
+    let Some(binary) = crate::commands::find_binary("claude") else {
+        return false;
+    };
+    let mut command = crate::platform::process::background_tokio_command(binary);
+    command
+        .args(CLAUDE_RENEW_ARGS)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .kill_on_drop(true);
+    match tokio::time::timeout(CLAUDE_RENEW_TIMEOUT, command.status()).await {
+        Ok(Ok(_)) => true,
+        Ok(Err(error)) => {
+            log::debug!("Claude login renewal could not start: {error}");
+            false
+        }
+        Err(_) => {
+            log::debug!("Claude login renewal timed out");
+            false
+        }
+    }
 }
 
 /// Reads the CLI's OAuth access token. Vibe Board never refreshes it: the CLI
@@ -262,14 +314,10 @@ fn claude_user_agent() -> String {
         .get_or_init(|| {
             let version = crate::commands::find_binary("claude")
                 .and_then(|binary| {
-                    let mut command = std::process::Command::new(binary);
-                    command.arg("--version");
-                    #[cfg(windows)]
-                    {
-                        use std::os::windows::process::CommandExt;
-                        command.creation_flags(0x0800_0000);
-                    }
-                    command.output().ok()
+                    crate::platform::process::background_command(binary)
+                        .arg("--version")
+                        .output()
+                        .ok()
                 })
                 .and_then(|output| String::from_utf8(output.stdout).ok())
                 .and_then(|text| text.split_whitespace().next().map(str::to_string))
@@ -406,6 +454,12 @@ mod tests {
             claude_oauth_token(&mcp_only, now),
             Err(CLAUDE_NOT_LOGGED_IN.to_string())
         );
+    }
+
+    #[test]
+    fn login_renewal_never_upgrades_claude_code() {
+        assert_eq!(CLAUDE_RENEW_ARGS, ["auth", "status"]);
+        assert!(!CLAUDE_RENEW_ARGS.contains(&"update"));
     }
 
     #[test]
