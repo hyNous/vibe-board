@@ -40,6 +40,8 @@ function persistUsageQuerySettings(next: Partial<{ usageQueryEnabled: boolean; s
     .catch((err) => console.error('Failed to persist usage query settings:', err))
 }
 
+const LOGIN_REMINDER_MS = 3 * 24 * 60 * 60 * 1000
+
 export function UsageProvidersPanel() {
   const { t } = useTranslation()
   const config = useConfigStore()
@@ -111,6 +113,25 @@ export function UsageProvidersPanel() {
     } finally {
       setUsageAction(null)
     }
+  }
+
+  // 登录本身快到期时提前提醒：自动续期只能续访问令牌，续期令牌到期后必须重新登录。
+  const loginReminder = (provider: UsageSnapshot) => {
+    if (!provider.loginExpiresAt) return null
+    const remainingMs = provider.loginExpiresAt - Date.now()
+    if (remainingMs > LOGIN_REMINDER_MS) return null
+    if (remainingMs <= 0) {
+      return t('settings.usageLoginExpired', {
+        name: provider.label,
+        defaultValue: '{{name}} 的登录已到期，点「登录」重新登录后才能继续查询额度。',
+      })
+    }
+    const date = new Date(provider.loginExpiresAt).toLocaleString([], { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+    return t('settings.usageLoginExpiring', {
+      name: provider.label,
+      date,
+      defaultValue: '{{name}} 的登录将在 {{date}} 到期，到期前点「登录」重新登录一次即可。',
+    })
   }
 
   const usageFailureReason = (detail: string) => {
@@ -212,6 +233,11 @@ export function UsageProvidersPanel() {
                   </em>
                 )}
               </div>
+              {loginReminder(provider) && (
+                <div className="usage-provider-row__login-reminder" data-testid={`usage-login-reminder-${provider.provider}`}>
+                  {loginReminder(provider)}
+                </div>
+              )}
               {provider.networkSupported ? (
                 <div className="usage-provider-row__network" data-testid={`usage-network-${provider.provider}`}>
                   <span className="usage-provider-row__network-state">

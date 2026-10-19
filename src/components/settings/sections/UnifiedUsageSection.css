@@ -479,3 +479,11 @@
   background: var(--vb-s2);
   color: var(--vb-text-2);
 }
+
+/* 登录快到期的提醒：珊瑚红只用在这类需要用户处理的告急提示上。 */
+.settings-app--island .usage-provider-row__login-reminder {
+  margin-top: 4px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--vb-hot);
+}

@@ -672,6 +672,23 @@ describe('sessionStore backend overlays', () => {
     expect(state.activeOverlay).toBeNull()
   })
 
+  it('keeps a working Codex Desktop task visible between tool calls even when its text is title metadata', () => {
+    const working = session({
+      agentType: 'codex',
+      project: 'agentbro',
+      terminal: 'Codex',
+      termBundleId: 'com.openai.codex',
+      phase: 'processing',
+      responseText: '{"title":"修复灵动岛乱码"}',
+      description: '{"title":"修复灵动岛乱码"}',
+      lastToolName: 'Bash',
+      activeTools: [],
+    })
+    useSessionStore.getState().replaceAllSessions([working])
+    // A tool just finished and the next has not started: the task must not vanish.
+    expect(useSessionStore.getState().sessionList.map((item) => item.id)).toEqual([working.id])
+  })
+
   it('does not show response overlays for Codex title metadata on real sessions', () => {
     useSessionStore.getState().replaceAllSessions([
       session({

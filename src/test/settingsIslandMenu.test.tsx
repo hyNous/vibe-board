@@ -102,6 +102,7 @@ const providerFixture: UsageSnapshot = {
   networkCredential: '/home/user/.codex/auth.json',
   networkUnsupportedReason: null,
   detected: true,
+  loginExpiresAt: null,
 }
 
 const claudeFixture: UsageSnapshot = {
@@ -119,6 +120,7 @@ const claudeFixture: UsageSnapshot = {
   networkCredential: null,
   networkUnsupportedReason: 'unverified',
   detected: true,
+  loginExpiresAt: null,
 }
 
 describe('settings island menu', () => {
@@ -601,6 +603,19 @@ describe('settings island menu', () => {
     await waitFor(() => expect(tauriMocks.setUsageNetworkAuthorization).toHaveBeenCalledWith('codex', false))
     expect(tauriMocks.setUsageNetworkAuthorization).toHaveBeenCalledWith('codex', true)
     expect(await screen.findByText(/已自动关闭查询/)).toHaveTextContent('登录信息无效或已过期')
+  })
+
+  it('reminds the user shortly before a login can no longer renew itself', async () => {
+    const day = 24 * 60 * 60 * 1000
+    tauriMocks.listUsageProviders.mockResolvedValue([
+      { ...providerFixture, loginExpiresAt: Date.now() + day },
+      { ...providerFixture, provider: 'opencode', label: 'OpenCode', loginExpiresAt: Date.now() + 10 * day },
+    ])
+    render(<SettingsApp onClose={vi.fn()} />)
+
+    fireEvent.click(screen.getByRole('button', { name: '使用额度' }))
+    expect(await screen.findByTestId('usage-login-reminder-codex')).toHaveTextContent('到期')
+    expect(screen.queryByTestId('usage-login-reminder-opencode')).not.toBeInTheDocument()
   })
 
   it('marks an authorized provider as querying while the refresh is in flight', async () => {

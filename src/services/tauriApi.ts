@@ -251,6 +251,8 @@ export interface UsageSnapshot {
   networkUnsupportedReason: string | null
   /** True when the tool exists on this machine (program, credential/config file, or local quota data). */
   detected: boolean
+  /** When the stored login stops renewing itself (ms); used for an early reminder. */
+  loginExpiresAt: number | null
 }
 
 export interface UsageDashboard {

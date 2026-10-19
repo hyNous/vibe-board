@@ -304,6 +304,8 @@
     "usageFailureAuth": "The login is invalid or expired. Sign in again in that tool first.",
     "usageFailureTimeout": "The query timed out. Try again in a moment.",
     "usageFailureOther": "Try again in a moment; see Details for the reason.",
+    "usageLoginExpired": "{{name}}'s login has expired. Click Sign in to log in again before quota can be read.",
+    "usageLoginExpiring": "{{name}}'s login expires on {{date}}. Click Sign in once before then to keep reading quota.",
     "usageNetworkEnabledNotice": "Online check allowed. Refreshing the quota now.",
     "usageNetworkDisabledNotice": "Online check stopped; no more requests go to this tool.",
     "usagePage": {

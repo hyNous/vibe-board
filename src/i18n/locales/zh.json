@@ -304,6 +304,8 @@
     "usageFailureAuth": "登录信息无效或已过期，请先在这个工具里重新登录。",
     "usageFailureTimeout": "查询超时，请稍后再试。",
     "usageFailureOther": "请稍后再试，原因见「详情」。",
+    "usageLoginExpired": "{{name}} 的登录已到期，点「登录」重新登录后才能继续查询额度。",
+    "usageLoginExpiring": "{{name}} 的登录将在 {{date}} 到期，到期前点「登录」重新登录一次即可。",
     "usageNetworkEnabledNotice": "已允许联网查询，正在刷新额度。",
     "usageNetworkDisabledNotice": "已停止联网查询，不会再向这个工具发出请求。",
     "usagePage": {

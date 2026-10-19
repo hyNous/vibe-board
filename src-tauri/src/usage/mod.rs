@@ -218,6 +218,8 @@ pub struct UsageSnapshot {
     /// Whether this tool exists on this machine: its program, its credential
     /// or config file, or local quota data. Pages list only detected tools.
     pub detected: bool,
+    /// When the stored login stops renewing itself (ms), for an early reminder.
+    pub login_expires_at: Option<i64>,
 }
 
 pub trait UsageProvider: Send + Sync {
@@ -272,6 +274,11 @@ pub trait UsageProvider: Send + Sync {
     /// A program whose presence alone shows the tool is installed, for tools
     /// whose credentials Vibe Board never reads (Antigravity's `agy`).
     fn detection_binary(&self) -> Option<&'static str> {
+        None
+    }
+
+    /// When the stored login can no longer renew itself (ms since epoch).
+    fn login_expires_at(&self) -> Option<i64> {
         None
     }
 
@@ -357,6 +364,7 @@ pub(crate) fn build_snapshot(
         network_credential: plan.credential.clone(),
         network_unsupported_reason: plan.unsupported_reason.map(str::to_string),
         detected: false,
+        login_expires_at: None,
     }
 }
 
@@ -432,6 +440,7 @@ pub async fn collect_snapshot(
     let mut snapshot = provider.normalize(enabled, credentials, fetched);
     snapshot.network_authorized = authorized;
     snapshot.detected = present || !snapshot.windows.is_empty();
+    snapshot.login_expires_at = provider.login_expires_at();
     snapshot
 }
 

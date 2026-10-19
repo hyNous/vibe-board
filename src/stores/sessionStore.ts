@@ -200,8 +200,17 @@ function isInternalCodexPromptText(text: string | undefined | null): boolean {
   return INTERNAL_CODEX_PROMPT_PREFIXES.some((prefix) => normalized.startsWith(prefix))
 }
 
+// Codex's internal helper sessions (title generation, prompt probes) never call
+// tools. A session that has called a tool is a real task and must stay visible,
+// even when its text happens to be title metadata — otherwise it vanished every
+// time a tool finished and came back when the next one started.
+function hasCalledTools(session: SessionState): boolean {
+  return Boolean(session.lastToolName) || session.activeTools.length > 0
+}
+
 function isInternalCodexPromptSession(session: SessionState): boolean {
   if (session.agentType !== 'codex') return false
+  if (hasCalledTools(session)) return false
   if (!isInternalCodexPromptText(session.sessionTitle) && !isInternalCodexPromptText(session.lastUserMessage)) return false
   if (usefulCompletionText(session.responseText) || usefulCompletionText(session.description)) return false
   return true
@@ -209,7 +218,7 @@ function isInternalCodexPromptSession(session: SessionState): boolean {
 
 function isCodexTitleMetadataOnlySession(session: SessionState): boolean {
   if (session.agentType !== 'codex') return false
-  if (session.subagents.length > 0 || session.activeTools.length > 0 || (session.tasks && session.tasks.length > 0)) return false
+  if (session.subagents.length > 0 || hasCalledTools(session) || (session.tasks && session.tasks.length > 0)) return false
 
   const texts = [
     session.sessionTitle,

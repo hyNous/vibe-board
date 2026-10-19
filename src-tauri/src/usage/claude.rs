@@ -113,6 +113,14 @@ impl UsageProvider for ClaudeUsageProvider {
         .boxed()
     }
 
+    /// The refresh token's own expiry: renewal keeps the access token alive,
+    /// but this date does not move (verified 2026-10-19), so the user has to
+    /// log in again around it.
+    fn login_expires_at(&self) -> Option<i64> {
+        let path = claude_credentials_path()?;
+        claude_refresh_expiry(&fs::read_to_string(path).ok()?)
+    }
+
     fn network_plan(&self) -> UsageNetworkPlan {
         UsageNetworkPlan {
             kind: Some(UsageNetworkKind::Http),
@@ -344,6 +352,14 @@ fn claude_user_agent() -> String {
         .clone()
 }
 
+fn claude_refresh_expiry(credentials: &str) -> Option<i64> {
+    let payload: serde_json::Value = serde_json::from_str(credentials).ok()?;
+    payload
+        .get("claudeAiOauth")?
+        .get("refreshTokenExpiresAt")?
+        .as_i64()
+}
+
 /// `five_hour` / `seven_day` carry `utilization` (0-100) and `resets_at`.
 fn parse_claude_usage(
     payload: &serde_json::Value,
@@ -475,6 +491,18 @@ mod tests {
         assert_eq!(CLAUDE_RENEW_ARGS, ["doctor"]);
         assert!(!CLAUDE_RENEW_ARGS.contains(&"update"));
         assert!(!CLAUDE_RENEW_ARGS.contains(&"install"));
+    }
+
+    #[test]
+    fn reads_the_refresh_token_expiry_without_the_tokens() {
+        assert_eq!(
+            claude_refresh_expiry(
+                r#"{"claudeAiOauth":{"accessToken":"a","refreshToken":"r","refreshTokenExpiresAt":1795000000000}}"#
+            ),
+            Some(1_795_000_000_000)
+        );
+        assert_eq!(claude_refresh_expiry(r#"{"claudeAiOauth":{}}"#), None);
+        assert_eq!(claude_refresh_expiry("not json"), None);
     }
 
     #[test]

@@ -87,6 +87,7 @@ function snapshotProvider(overrides: Partial<UsageSnapshot> = {}): UsageSnapshot
     networkCredential: null,
     networkUnsupportedReason: null,
     detected: true,
+    loginExpiresAt: null,
     ...overrides,
   }
 }
