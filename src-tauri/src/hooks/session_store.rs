@@ -1128,6 +1128,7 @@ impl SessionStore {
     fn emit_update_with_suppression(&self, suppressed: bool) {
         if let Some(ref handle) = self.app_handle {
             let sessions = self.get_all_sessions();
+            log_codex_visibility_signals(&sessions);
             let payload = SessionUpdatePayload {
                 sessions,
                 suppressed,
@@ -1135,6 +1136,90 @@ impl SessionStore {
             if let Err(e) = handle.emit("session-update", &payload) {
                 log::error!("Failed to emit session-update: {}", e);
             }
+        }
+    }
+}
+
+/// Diagnostic: logs, whenever it changes, the fields the island uses to decide
+/// whether a Codex session is shown. Only classifications and names — never
+/// conversation text — so the log can be shared.
+fn log_codex_visibility_signals(sessions: &[SessionState]) {
+    use std::collections::HashMap;
+    use std::sync::{Mutex, OnceLock};
+    static LAST: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
+    let last = LAST.get_or_init(|| Mutex::new(HashMap::new()));
+    let Ok(mut last) = last.lock() else {
+        return;
+    };
+
+    fn title_metadata(text: Option<&str>) -> bool {
+        let Some(text) = text.map(str::trim) else {
+            return false;
+        };
+        if !(text.starts_with('{') && text.ends_with('}')) {
+            return false;
+        }
+        serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(text)
+            .is_ok_and(|map| !map.is_empty() && map.keys().all(|key| key == "title"))
+    }
+    fn internal_prompt(text: Option<&str>) -> bool {
+        const PREFIXES: [&str; 4] = [
+            "<environment_context>",
+            "you are a helpful assistant. you will be presented with a user prompt",
+            "you are codex, a coding agent",
+            "you are an ai assistant accessed via an api",
+        ];
+        let normalized = text
+            .unwrap_or_default()
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
+            .to_lowercase();
+        !normalized.is_empty() && PREFIXES.iter().any(|prefix| normalized.starts_with(prefix))
+    }
+    fn kind(text: Option<&str>) -> &'static str {
+        match text.map(str::trim) {
+            None | Some("") => "empty",
+            Some(_) if title_metadata(text) => "title-json",
+            Some(_) if internal_prompt(text) => "internal",
+            Some(_) => "text",
+        }
+    }
+
+    let now = Utc::now().timestamp_millis();
+    for session in sessions
+        .iter()
+        .filter(|session| session.agent_type == "codex")
+    {
+        let signature = format!(
+            "phase={:?} label={:?} terminal={:?} bundle={:?} project_empty={} pid={} title={} desc={} response={} user={} last_tool={:?} active_tools={} subagents={} has_hook={}",
+            session.phase,
+            session.engine_label,
+            session.terminal,
+            session.term_bundle_id,
+            session.project.trim().is_empty(),
+            session.pid.is_some(),
+            kind(session.session_title.as_deref()),
+            kind(session.description.as_deref()),
+            kind(session.last_response.as_deref()),
+            kind(session.last_user_message.as_deref()),
+            session.last_tool_name,
+            session.active_tools.len(),
+            session.subagents.len(),
+            session.last_hook_at.is_some(),
+        );
+        if last.get(&session.id) != Some(&signature) {
+            let hook_age = session
+                .last_hook_at
+                .map(|at| format!("{}s", (now - at) / 1000))
+                .unwrap_or_else(|| "-".to_string());
+            log::info!(
+                "[CodexVisibility] session={} hook_age={} {}",
+                session.id.chars().take(8).collect::<String>(),
+                hook_age,
+                signature
+            );
+            last.insert(session.id.clone(), signature);
         }
     }
 }
