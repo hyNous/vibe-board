@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import type { SessionState } from '../types/agent'
 import { formatDuration, formatDurationShort } from '../utils/time'
-import { getSessionTaskDurationSeconds } from '../utils/sessionDisplay'
+import { getAgentDisplayName, getSessionTaskDurationSeconds } from '../utils/sessionDisplay'
 
 describe('formatDuration', () => {
   it('formats seconds only', () => {
@@ -117,5 +117,12 @@ describe('getSessionTaskDurationSeconds', () => {
     } as SessionState
 
     expect(getSessionTaskDurationSeconds(session, now)).toBe(80)
+  })
+})
+
+describe('getAgentDisplayName', () => {
+  it('keeps the product spelling of OpenCode', () => {
+    expect(getAgentDisplayName({ agentType: 'opencode' } as SessionState)).toBe('OpenCode')
+    expect(getAgentDisplayName({ agentType: 'codex' } as SessionState)).toBe('Codex')
   })
 })

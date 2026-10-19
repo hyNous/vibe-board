@@ -72,6 +72,7 @@ export function getAgentDisplayName(session: SessionState): string {
   switch (session.agentType) {
     case 'claude-code': return 'Claude'
     case 'gemini-cli': return 'Gemini'
+    case 'opencode': return 'OpenCode'
     case 'workbuddy': return 'WorkBuddy'
     case 'zcode': return 'ZCode'
     case 'doubao': return 'Doubao'
