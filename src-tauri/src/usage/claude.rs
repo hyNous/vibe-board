@@ -481,6 +481,26 @@ mod tests {
     }
 
     #[test]
+    fn parses_the_live_response_shape() {
+        // Trimmed from a real Pro-account answer (2026-10-19): fractional-second
+        // reset times, dollar fields, and many null model windows.
+        let payload = serde_json::json!({
+            "five_hour": { "utilization": 66.0, "resets_at": "2026-10-19T06:29:59.687321+00:00",
+                           "limit_dollars": null, "used_dollars": null },
+            "seven_day": { "utilization": 45.0, "resets_at": "2026-10-24T17:59:59.687340+00:00" },
+            "seven_day_opus": null,
+            "extra_usage": { "is_enabled": false }
+        });
+        let limits = parse_claude_usage(&payload, chrono::Utc::now())
+            .expect("snapshot")
+            .rate_limits;
+        assert_eq!(limits.windows[0].remaining_percent, Some(34.0));
+        assert_eq!(limits.windows[1].remaining_percent, Some(55.0));
+        let reset = limits.windows[0].resets_at.as_deref().expect("reset time");
+        assert!(reset.starts_with("2026-10-19T06:29:59"), "{reset}");
+    }
+
+    #[test]
     fn ignores_a_response_without_both_windows() {
         let payload = serde_json::json!({ "five_hour": null, "seven_day": { "utilization": 10 } });
         assert!(parse_claude_usage(&payload, chrono::Utc::now()).is_none());
