@@ -215,6 +215,9 @@ pub struct UsageSnapshot {
     /// Reason code shown when online querying is not wired (for example
     /// `unverified` for Claude Code).
     pub network_unsupported_reason: Option<String>,
+    /// Whether this tool exists on this machine: its program, its credential
+    /// or config file, or local quota data. Pages list only detected tools.
+    pub detected: bool,
 }
 
 pub trait UsageProvider: Send + Sync {
@@ -265,6 +268,12 @@ pub trait UsageProvider: Send + Sync {
     /// Step 2a — local-only data (session logs, local statusline files). Always
     /// allowed; never starts a provider process or an HTTP request.
     fn fetch_local<'a>(&'a self) -> BoxFuture<'a, UsageFetch>;
+
+    /// A program whose presence alone shows the tool is installed, for tools
+    /// whose credentials Vibe Board never reads (Antigravity's `agy`).
+    fn detection_binary(&self) -> Option<&'static str> {
+        None
+    }
 
     /// Step 2b — the provider query. Called only after the user authorized
     /// this provider; implementations must not be reached otherwise.
@@ -347,6 +356,7 @@ pub(crate) fn build_snapshot(
         network_target: plan.target.map(str::to_string),
         network_credential: plan.credential.clone(),
         network_unsupported_reason: plan.unsupported_reason.map(str::to_string),
+        detected: false,
     }
 }
 
@@ -399,6 +409,7 @@ pub async fn collect_snapshot(
     network_authorized: bool,
 ) -> UsageSnapshot {
     let credentials = provider.read_credentials();
+    let present = installed_on_this_machine(provider, &credentials);
     let mut fetched = provider.fetch_local().await;
     let authorized = network_authorized && provider.requires_network();
     if authorized && live {
@@ -413,7 +424,31 @@ pub async fn collect_snapshot(
     }
     let mut snapshot = provider.normalize(enabled, credentials, fetched);
     snapshot.network_authorized = authorized;
+    snapshot.detected = present || !snapshot.windows.is_empty();
     snapshot
+}
+
+/// The tool's program can be found, or its credential / config file exists.
+fn installed_on_this_machine(provider: &dyn UsageProvider, credentials: &UsageCredential) -> bool {
+    credentials.can_authorize
+        || credentials
+            .path
+            .as_deref()
+            .is_some_and(|path| std::path::Path::new(path).exists())
+        || provider
+            .detection_binary()
+            .is_some_and(|binary| crate::commands::find_binary(binary).is_some())
+}
+
+/// Whether a tool with this id (or alias) exists on this machine, without
+/// querying anything. Used to decide which Agents the island lists.
+pub(crate) fn provider_detected(id: &str) -> bool {
+    all_providers()
+        .into_iter()
+        .find(|provider| provider.id() == id || provider.aliases().contains(&id))
+        .is_some_and(|provider| {
+            installed_on_this_machine(provider.as_ref(), &provider.read_credentials())
+        })
 }
 
 pub fn all_providers() -> Vec<Box<dyn UsageProvider>> {

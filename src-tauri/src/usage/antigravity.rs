@@ -46,6 +46,10 @@ impl UsageProvider for AntigravityUsageProvider {
         }
     }
 
+    fn detection_binary(&self) -> Option<&'static str> {
+        Some("agy")
+    }
+
     fn network_plan(&self) -> UsageNetworkPlan {
         UsageNetworkPlan {
             kind: Some(UsageNetworkKind::Cli),

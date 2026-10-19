@@ -101,6 +101,7 @@ const providerFixture: UsageSnapshot = {
   networkTarget: 'codex app-server (JSON-RPC account/rateLimits/read)',
   networkCredential: '/home/user/.codex/auth.json',
   networkUnsupportedReason: null,
+  detected: true,
 }
 
 const claudeFixture: UsageSnapshot = {
@@ -117,6 +118,7 @@ const claudeFixture: UsageSnapshot = {
   networkTarget: null,
   networkCredential: null,
   networkUnsupportedReason: 'unverified',
+  detected: true,
 }
 
 describe('settings island menu', () => {
@@ -214,7 +216,8 @@ describe('settings island menu', () => {
       expect(screen.queryByText('Global Shortcuts')).not.toBeInTheDocument()
       expect(screen.queryByText('settings.jumpBeforeSend')).not.toBeInTheDocument()
     }
-    expect(tauriMocks.listUsageProviders).not.toHaveBeenCalled()
+    // 设置窗口会在后台预取额度（settingsLiveStore），但外观页里不出现任何额度服务商的界面。
+    expect(document.querySelector('[data-testid^="usage-provider-"]')).toBeNull()
   })
 
   it('keeps SSH server management out of the appearance page', async () => {

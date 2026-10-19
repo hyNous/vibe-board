@@ -1,15 +1,14 @@
 import { Fragment, useCallback, useEffect, useState } from 'react'
+import { isListedUsageProvider, useSettingsLive } from '../../../stores/settingsLiveStore'
 import { useTranslation } from 'react-i18next'
 import { UsageProvidersPanel } from './UsageProvidersPanel'
 import { Segmented } from '../Segmented'
 import { SettingDetails } from '../SettingDetails'
 import {
-  getUsageDashboard,
   getUsageHistoryScanStatus,
   isTauri,
   startUsageHistoryScan,
   type UsageCost,
-  type UsageDashboard,
   type UsageHistoryScanStatus,
   type UsagePeriod,
   type UsageSnapshot,
@@ -165,27 +164,15 @@ function CostValue({ cost, label, noPrice }: { cost: UsageCost | null; label: st
 export function UnifiedUsageSection() {
   const { t } = useTranslation()
   const unknown = t('settings.usagePage.unknown', { defaultValue: '未知' })
-  const [dashboard, setDashboard] = useState<UsageDashboard | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
+  // 额度由设置窗口在后台持续刷新（settingsLiveStore），切回这页时直接显示上次的结果。
+  const dashboard = useSettingsLive((state) => state.usageDashboard)
+  const loading = useSettingsLive((state) => state.usageLoading)
+  const usageError = useSettingsLive((state) => state.usageError)
+  const loadUsage = useSettingsLive((state) => state.refreshUsage)
+  const [scanError, setError] = useState('')
+  const error = scanError || (usageError ? readableError(usageError) : '')
   const [period, setPeriod] = useState<UsagePeriodId>('today')
   const [scan, setScan] = useState<UsageHistoryScanStatus | null>(null)
-
-  const loadUsage = useCallback(async () => {
-    if (!isTauri()) {
-      setDashboard(null)
-      return
-    }
-    setLoading(true)
-    setError('')
-    try {
-      setDashboard(await getUsageDashboard())
-    } catch (err) {
-      setError(readableError(err))
-    } finally {
-      setLoading(false)
-    }
-  }, [])
 
   const startScan = useCallback(async () => {
     if (!isTauri()) return
@@ -197,6 +184,7 @@ export function UnifiedUsageSection() {
   }, [])
 
   useEffect(() => {
+    // 先显示已有结果，同时补一次刷新。
     const id = window.setTimeout(() => {
       void loadUsage()
     }, 0)
@@ -233,7 +221,8 @@ export function UnifiedUsageSection() {
     }
   }, [loadUsage, startScan])
 
-  const providers = dashboard?.providers ?? []
+  // 只列出本机检测到、且 Vibe Board 真能读到额度的工具。
+  const providers = (dashboard?.providers ?? []).filter(isListedUsageProvider)
   const pricingEffectiveDate = dashboard?.pricingEffectiveDate
     ?? providers
       .map((provider) => provider.history.pricingEffectiveDate)

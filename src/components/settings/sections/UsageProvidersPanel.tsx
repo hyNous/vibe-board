@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
+import { isListedUsageProvider, useSettingsLive } from '../../../stores/settingsLiveStore'
 import { useTranslation } from 'react-i18next'
 import { useConfigStore } from '../../../stores/configStore'
 import {
   authorizeUsageProvider,
   getConfig,
   isTauri,
-  listUsageProviders,
   openSystemPath,
   setUsageNetworkAuthorization,
   updateConfig as updateBackendConfig,
@@ -29,19 +29,6 @@ function readableError(error: unknown): string {
   return String(error)
 }
 
-function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
-  let timer: ReturnType<typeof window.setTimeout> | undefined
-  const timeout = new Promise<T>((_, reject) => {
-    timer = window.setTimeout(() => reject(new Error(message)), timeoutMs)
-  })
-  return Promise.race([
-    promise.finally(() => {
-      if (timer) window.clearTimeout(timer)
-    }),
-    timeout,
-  ])
-}
-
 function persistUsageQuerySettings(next: Partial<{ usageQueryEnabled: boolean; showUsageQuota: boolean }>) {
   const state = useConfigStore.getState()
   getConfig()
@@ -56,39 +43,31 @@ function persistUsageQuerySettings(next: Partial<{ usageQueryEnabled: boolean; s
 export function UsageProvidersPanel() {
   const { t } = useTranslation()
   const config = useConfigStore()
-  const [usageProviders, setUsageProviders] = useState<UsageSnapshot[]>([])
-  const [usageLoading, setUsageLoading] = useState(false)
+  // 各工具的查询状态由设置窗口在后台持续刷新（settingsLiveStore）。
+  const usageProviders = useSettingsLive((state) => state.usageProviders)
+  const usageLoading = useSettingsLive((state) => state.providersLoading)
+  const refreshProviders = useSettingsLive((state) => state.refreshProviders)
   const [usageAction, setUsageAction] = useState<string | null>(null)
   const [pendingAuthorization, setPendingAuthorization] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
-  const usageRequestSeq = useRef(0)
 
   const fetchUsageProviders = useCallback(async (options: { live?: boolean; showLoading?: boolean } = {}) => {
     const { live = true, showLoading = true } = options
-    const requestSeq = ++usageRequestSeq.current
-    if (showLoading) setUsageLoading(true)
     try {
-      const providers = await withTimeout(
-        listUsageProviders(live),
-        USAGE_PROVIDER_REFRESH_TIMEOUT_MS,
-        t('settings.usageRefreshTimeout', { defaultValue: '用量查询超时，请稍后刷新。' }),
-      )
-      if (requestSeq === usageRequestSeq.current) {
-        setUsageProviders(providers)
-      }
+      await refreshProviders({
+        live,
+        showLoading,
+        timeoutMs: USAGE_PROVIDER_REFRESH_TIMEOUT_MS,
+        timeoutMessage: t('settings.usageRefreshTimeout', { defaultValue: '用量查询超时，请稍后刷新。' }),
+      })
     } catch (e) {
-      if (showLoading && requestSeq === usageRequestSeq.current) {
-        setError(readableError(e))
-      }
-    } finally {
-      if (showLoading && requestSeq === usageRequestSeq.current) {
-        setUsageLoading(false)
-      }
+      if (showLoading) setError(readableError(e))
     }
-  }, [t])
+  }, [refreshProviders, t])
 
   useEffect(() => {
+    // 先显示已有结果，同时补一次刷新。
     const timer = window.setTimeout(() => { fetchUsageProviders({ live: false, showLoading: false }) }, 0)
     return () => window.clearTimeout(timer)
   }, [fetchUsageProviders])
@@ -138,8 +117,9 @@ export function UsageProvidersPanel() {
     }
   }
 
+  // 只列出本机检测到、且 Vibe Board 真能读到额度的工具。
   const accountUsageProviders = usageProviders
-    .filter((provider) => provider.settingsOrder != null)
+    .filter((provider) => provider.settingsOrder != null && isListedUsageProvider(provider))
     .sort((a, b) => (a.settingsOrder ?? 0) - (b.settingsOrder ?? 0))
 
   const usageStatusLabel = (provider: UsageSnapshot) => {

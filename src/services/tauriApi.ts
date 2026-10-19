@@ -249,6 +249,8 @@ export interface UsageSnapshot {
   /** Local credential file location; never the value. */
   networkCredential: string | null
   networkUnsupportedReason: string | null
+  /** True when the tool exists on this machine (program, credential/config file, or local quota data). */
+  detected: boolean
 }
 
 export interface UsageDashboard {

@@ -4,6 +4,7 @@ import { ask } from '@tauri-apps/plugin-dialog'
 import { motion, AnimatePresence } from 'framer-motion'
 import { SettingsIslandNav } from './SettingsIslandNav'
 import { SettingsToast } from './SettingsToast'
+import { startSettingsLive } from '../../stores/settingsLiveStore'
 import { UpdateDialog } from './UpdateDialog'
 import { GeneralSection } from './sections/GeneralSection'
 import { AppearanceSection } from './sections/AppearanceSection'
@@ -33,6 +34,10 @@ export function SettingsApp({ onClose }: SettingsAppProps) {
   const setupWizardCompleted = useConfigStore((s) => s.setupWizardCompleted)
   const [setupConfigLoaded, setSetupConfigLoaded] = useState(() => !isTauri())
   const [activeSection, setActiveSection] = useState('tasks')
+  const sessionRefreshIntervalSeconds = useConfigStore((s) => s.sessionRefreshIntervalSeconds)
+  const taskRefreshMs = Math.max(1, Math.min(30, sessionRefreshIntervalSeconds)) * 1000
+  // 任务与额度在后台持续刷新，切换页面时直接显示最新结果，不再从空白重新加载。
+  useEffect(() => startSettingsLive(taskRefreshMs), [taskRefreshMs])
   const [activeIslandView, setActiveIslandView] = useState<IslandSettingsView>('overview')
   const [updateMinimized, setUpdateMinimized] = useState(false)
   const contentClassName = `settings-content settings-scroll${activeSection === 'skills' ? ' settings-content--skills' : ''}`

@@ -335,7 +335,12 @@ pub async fn get_agent_statuses(
         snapshot.online = false;
     }
     let now = chrono::Utc::now().timestamp_millis();
+    // Placeholder rows only for Agents that exist on this machine; an Agent
+    // that already reported a session keeps its row either way.
     for (agent, label) in TRACKED_AGENTS {
+        if !statuses.contains_key(agent) && !crate::usage::provider_detected(agent) {
+            continue;
+        }
         statuses
             .entry(agent.to_string())
             .or_insert_with(|| AgentStatusSnapshot {
@@ -394,6 +399,9 @@ pub async fn get_agent_statuses(
         }
     }
 
+    // `other` collects hook events that could not be matched to an Agent; it
+    // is not an Agent the user has.
+    statuses.remove("other");
     let mut result = statuses.into_values().collect::<Vec<_>>();
     result.sort_by_key(|snapshot| tracked_agent_rank(&snapshot.agent));
     state.session_store.persist_agent_status_snapshots(&result);

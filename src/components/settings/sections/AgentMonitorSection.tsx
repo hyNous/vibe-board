@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { getMonitorSessions, type MonitorSessionSummary } from '../../../services/monitorApi'
+import type { MonitorSessionSummary } from '../../../services/monitorApi'
 import { jumpToTerminal } from '../../../services/tauriApi'
 import { selectSessionList, selectUsageSnapshots, useSessionStore } from '../../../stores/sessionStore'
 import { useSettingsToast } from '../../../stores/settingsToastStore'
-import { useConfigStore } from '../../../stores/configStore'
+import { useSettingsLive } from '../../../stores/settingsLiveStore'
 import type { RateLimitInfo, SessionState, TokenUsage, UsageRateWindow } from '../../../types/agent'
 import { getSessionTaskDurationSeconds } from '../../../utils/sessionDisplay'
 import { rateLimitWindows } from '../../../utils/rateLimitDisplay'
@@ -188,11 +188,20 @@ export function AgentMonitorSection({ onOpenUsage }: AgentMonitorSectionProps) {
   const showToast = useSettingsToast((state) => state.show)
   const liveSessions = useSessionStore(selectSessionList)
   const usageSnapshots = useSessionStore(selectUsageSnapshots)
-  const sessionRefreshIntervalSeconds = useConfigStore((state) => state.sessionRefreshIntervalSeconds)
-  const [sessions, setSessions] = useState<TaskLaneSession[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
-  const configuredRefreshMs = Math.max(1, Math.min(30, sessionRefreshIntervalSeconds)) * 1000
+  // 后台会话由设置窗口持续刷新（settingsLiveStore）；本窗口实时收到的会话在显示时直接合并，
+  // 不用等下一次刷新。
+  const remoteSessions = useSettingsLive((state) => state.monitorSessions)
+  const monitorLoaded = useSettingsLive((state) => state.monitorLoaded)
+  const monitorLoading = useSettingsLive((state) => state.monitorLoading)
+  const error = useSettingsLive((state) => state.monitorError)
+  const refreshMonitor = useSettingsLive((state) => state.refreshMonitor)
+  const loading = monitorLoading || !monitorLoaded
+  // 先显示已有结果，同时补一次刷新。
+  useEffect(() => { void refreshMonitor() }, [refreshMonitor])
+  const sessions = useMemo<TaskLaneSession[]>(() => Array.from(new Map(
+    [...remoteSessions.map(remoteLaneSession), ...liveSessions.map(summaryFromSession)]
+      .map((session) => [session.id, session] as const),
+  ).values()), [remoteSessions, liveSessions])
 
   // 等你的那条排在最前面，其余按开始时间从新到旧。
   const liveTaskSessions = useMemo(() => sessions
@@ -206,35 +215,6 @@ export function AgentMonitorSection({ onOpenUsage }: AgentMonitorSectionProps) {
 
   const waitingSession = liveTaskSessions.find((session) => session.phase === 'waiting_input')
   const lowQuota = useMemo(() => findLowQuota(usageSnapshots), [usageSnapshots])
-
-  const loadSessions = useCallback(async (showSpinner = false) => {
-    if (showSpinner) setLoading(true)
-    setError('')
-    try {
-      const remoteSessions = await getMonitorSessions()
-      const nextSessions = Array.from(new Map(
-        [...remoteSessions.map(remoteLaneSession), ...liveSessions.map(summaryFromSession)]
-          .map((session) => [session.id, session] as const),
-      ).values())
-      setSessions(nextSessions)
-    } catch (err) {
-      setError(String(err))
-      setSessions(liveSessions.map(summaryFromSession))
-    } finally {
-      setLoading(false)
-    }
-  }, [liveSessions])
-
-  useEffect(() => {
-    void loadSessions(true)
-  }, [loadSessions])
-
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      void loadSessions(false)
-    }, configuredRefreshMs)
-    return () => window.clearInterval(timer)
-  }, [configuredRefreshMs, loadSessions])
 
   const recallTerminal = async (session: TaskLaneSession) => {
     const name = agentLabel(session.agentType, session.engineLabel)
@@ -285,7 +265,7 @@ export function AgentMonitorSection({ onOpenUsage }: AgentMonitorSectionProps) {
             className="vb-btn"
             disabled={loading}
             onClick={() => {
-              void loadSessions(true)
+              void refreshMonitor({ showLoading: true })
             }}
           >
             {refreshLabel}
@@ -301,7 +281,7 @@ export function AgentMonitorSection({ onOpenUsage }: AgentMonitorSectionProps) {
             {t('settings.tasksPage.staleHint', { defaultValue: '，先显示本机缓存，可能落后几秒。' })}
           </span>
           <SettingDetails testId="tasks-error-details">{error}</SettingDetails>
-          <button type="button" className="vb-btn" onClick={() => { void loadSessions(true) }}>
+          <button type="button" className="vb-btn" onClick={() => { void refreshMonitor({ showLoading: true }) }}>
             {t('settings.tasksPage.retry', { defaultValue: '重试' })}
           </button>
         </div>
