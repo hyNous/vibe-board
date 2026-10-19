@@ -1213,7 +1213,7 @@ fn log_codex_visibility_signals(sessions: &[SessionState]) {
                 .last_hook_at
                 .map(|at| format!("{}s", (now - at) / 1000))
                 .unwrap_or_else(|| "-".to_string());
-            log::info!(
+            log::debug!(
                 "[CodexVisibility] session={} hook_age={} {}",
                 session.id.chars().take(8).collect::<String>(),
                 hook_age,

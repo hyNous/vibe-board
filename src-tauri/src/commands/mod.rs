@@ -1207,8 +1207,18 @@ fn read_local_codex_rollout_state(
                 let Some(payload) = json.get("payload") else {
                     continue;
                 };
+                // Sub-agent rollouts (guardian checks, spawned agents) repeat the
+                // parent's `session_id`; only the parent's own file may drive it,
+                // or a finished sub-agent flips the running parent back to idle.
+                if payload
+                    .get("source")
+                    .and_then(|source| source.get("subagent"))
+                    .is_some()
+                {
+                    return None;
+                }
                 state.session_id =
-                    codex_string(payload, "session_id").or_else(|| codex_string(payload, "id"));
+                    codex_string(payload, "id").or_else(|| codex_string(payload, "session_id"));
                 state.cwd = codex_string(payload, "cwd");
             }
             Some("event_msg") => {
@@ -5144,6 +5154,55 @@ mod tests {
         assert_eq!(state.updated_at, Some(1788825660));
 
         let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn finished_subagent_rollout_does_not_idle_its_running_parent() {
+        // Real Codex Desktop layout: guardian / spawned sub-agent rollouts carry
+        // the parent's `session_id` and their own `id`.
+        let root = temp_codex_rollout_root("subagent");
+        let parent = write_active_codex_rollout(&root, "parent-thread");
+        let now = chrono::Utc::now().to_rfc3339();
+        for (name, source) in [
+            ("guardian", r#"{"subagent":{"other":"guardian"}}"#),
+            (
+                "spawned",
+                r#"{"subagent":{"thread_spawn":{"parent_thread_id":"parent-thread","depth":1}}}"#,
+            ),
+        ] {
+            fs::write(
+                root.join(format!("rollout-{name}.jsonl")),
+                format!(
+                    r#"{{"type":"session_meta","payload":{{"session_id":"parent-thread","id":"child-{name}","cwd":"C:\\work","source":{source}}}}}
+{{"timestamp":"{now}","type":"event_msg","payload":{{"type":"task_started"}}}}
+{{"timestamp":"{now}","type":"event_msg","payload":{{"type":"task_complete","last_agent_message":"ok"}}}}
+"#
+                ),
+            )
+            .expect("write sub-agent rollout");
+            // Older than the parent's file, so the sync visits it afterwards —
+            // the order in which it used to overwrite the parent.
+            fs::File::options()
+                .write(true)
+                .open(root.join(format!("rollout-{name}.jsonl")))
+                .and_then(|file| {
+                    file.set_modified(
+                        std::time::SystemTime::now() - std::time::Duration::from_secs(60),
+                    )
+                })
+                .expect("age sub-agent rollout");
+        }
+
+        let store = SessionStore::new();
+        sync_local_codex_rollouts_from_root(&store, &root);
+
+        let session = store.get_session("parent-thread").expect("parent session");
+        assert_eq!(session.phase, SessionPhase::Processing);
+        assert!(store.get_session("child-guardian").is_none());
+        assert!(store.get_session("child-spawned").is_none());
+        assert!(read_local_codex_rollout_state(&parent, 0).is_some());
+
+        let _ = fs::remove_dir_all(root);
     }
 
     fn write_active_codex_rollout(root: &std::path::Path, session_id: &str) -> PathBuf {
