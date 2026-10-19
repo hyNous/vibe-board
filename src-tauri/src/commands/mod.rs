@@ -323,6 +323,16 @@ pub async fn get_agent_statuses(
     } else {
         None
     };
+    let claude_authorized = config.usage_query_enabled
+        && crate::usage::is_network_authorized(
+            &config.usage_network_authorized_providers,
+            "claude-code",
+        );
+    let claude_rate_limits = if claude_authorized {
+        crate::usage::claude::load_network_rate_limits().await
+    } else {
+        None
+    };
     let mut statuses = state
         .session_store
         .get_agent_status_snapshots()
@@ -382,6 +392,30 @@ pub async fn get_agent_statuses(
             .any(|process| process_matches_agent(&process.command, agent))
         {
             snapshot.online = true;
+        }
+    }
+
+    // Quotas that only come from an online query must not outlive the
+    // permission: a snapshot persisted while it was allowed would otherwise
+    // keep showing weeks-old numbers.
+    for agent in ["opencode", "antigravity"] {
+        let authorized = config.usage_query_enabled
+            && crate::usage::is_network_authorized(
+                &config.usage_network_authorized_providers,
+                agent,
+            );
+        if !authorized {
+            if let Some(status) = statuses.get_mut(agent) {
+                status.rate_limits = None;
+                status.detail = None;
+            }
+        }
+    }
+
+    if let Some(rate_limits) = claude_rate_limits {
+        if let Some(status) = statuses.get_mut("claude-code") {
+            status.rate_limits = Some(rate_limits);
+            status.detail = Some("Claude account quota synced".to_string());
         }
     }
 

@@ -561,6 +561,14 @@ pub async fn get_usage_dashboard(state: State<'_, AppState>) -> Result<UsageDash
             continue;
         };
         let canonical_id = canonical_provider_id(provider_id);
+        // Quotas that only come from an online query must not outlive the
+        // permission (a persisted snapshot would show weeks-old numbers).
+        if matches!(canonical_id.as_str(), "opencode" | "antigravity")
+            && !(enabled
+                && is_network_authorized(&config.usage_network_authorized_providers, &canonical_id))
+        {
+            continue;
+        }
         if let Some(snapshot) = providers
             .iter_mut()
             .find(|snapshot| snapshot.provider == canonical_id)

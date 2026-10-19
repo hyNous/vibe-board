@@ -159,6 +159,15 @@ pub(crate) fn load_rate_limits() -> Option<RateLimitInfo> {
     load_claude_usage_rate_limits().map(|snapshot| snapshot.rate_limits)
 }
 
+/// The account quota from the OAuth usage query, for the island's Agent list.
+/// Only call it after the user authorized Claude's online query.
+pub(crate) async fn load_network_rate_limits() -> Option<RateLimitInfo> {
+    load_claude_oauth_rate_limits()
+        .await
+        .0
+        .map(|snapshot| snapshot.rate_limits)
+}
+
 fn claude_credentials_path() -> Option<PathBuf> {
     dirs::home_dir().map(|home| home.join(".claude").join(".credentials.json"))
 }
