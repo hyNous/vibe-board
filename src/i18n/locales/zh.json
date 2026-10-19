@@ -300,6 +300,10 @@
     "usageNetworkCancel": "取消",
     "usageNetworkConfirmHttp": "向 {{target}} 发出一次只读的额度查询。",
     "usageNetworkConfirmCli": "让本机上的 {{target}} 自己去查一次额度。",
+    "usageNetworkEnableFailed": "没能查到 {{name}} 的额度，已自动关闭查询。",
+    "usageFailureAuth": "登录信息无效或已过期，请先在这个工具里重新登录。",
+    "usageFailureTimeout": "查询超时，请稍后再试。",
+    "usageFailureOther": "请稍后再试，原因见「详情」。",
     "usageNetworkEnabledNotice": "已允许联网查询，正在刷新额度。",
     "usageNetworkDisabledNotice": "已停止联网查询，不会再向这个工具发出请求。",
     "usagePage": {

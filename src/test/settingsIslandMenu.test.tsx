@@ -579,6 +579,30 @@ describe('settings island menu', () => {
     expect(within(claudeRow).queryByRole('switch')).not.toBeInTheDocument()
   })
 
+  it('turns the query back off and says why when the first query fails', async () => {
+    tauriMocks.listUsageProviders.mockResolvedValue([{ ...providerFixture, networkAuthorized: false }])
+    tauriMocks.setUsageNetworkAuthorization.mockResolvedValue([])
+    render(<SettingsApp onClose={vi.fn()} />)
+    tauriMocks.isTauri.mockReturnValue(true)
+
+    fireEvent.click(screen.getByRole('button', { name: '使用额度' }))
+    const codexRow = await screen.findByTestId('usage-provider-codex')
+    fireEvent.click(within(codexRow).getByRole('switch'))
+    const confirm = await within(codexRow).findByTestId('usage-network-confirm-codex')
+
+    tauriMocks.listUsageProviders.mockResolvedValue([{
+      ...providerFixture,
+      networkAuthorized: true,
+      state: 'failed',
+      detail: 'OpenCode usage request failed: HTTP 401',
+    }])
+    fireEvent.click(within(confirm).getByRole('button', { name: '允许查询' }))
+
+    await waitFor(() => expect(tauriMocks.setUsageNetworkAuthorization).toHaveBeenCalledWith('codex', false))
+    expect(tauriMocks.setUsageNetworkAuthorization).toHaveBeenCalledWith('codex', true)
+    expect(await screen.findByText(/已自动关闭查询/)).toHaveTextContent('登录信息无效或已过期')
+  })
+
   it('marks an authorized provider as querying while the refresh is in flight', async () => {
     tauriMocks.listUsageProviders.mockResolvedValueOnce([{ ...providerFixture, networkAuthorized: true }])
     render(<SettingsApp onClose={vi.fn()} />)

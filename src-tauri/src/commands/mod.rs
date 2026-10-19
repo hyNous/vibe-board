@@ -201,6 +201,13 @@ pub async fn get_usage_snapshots(state: State<'_, AppState>) -> Result<Vec<RateL
         let Some(provider) = rate_limits.provider.as_deref() else {
             continue;
         };
+        if crate::usage::hides_stored_quota(
+            provider,
+            config.usage_query_enabled,
+            &config.usage_network_authorized_providers,
+        ) {
+            continue;
+        }
         if let Some(current) = snapshots
             .iter_mut()
             .find(|current| current.provider.as_deref() == Some(provider))
@@ -386,11 +393,14 @@ pub async fn get_agent_statuses(
     }
 
     let process_tree = crate::terminal::process_tree::build_tree();
+    let own_pid = std::process::id();
     for (agent, snapshot) in &mut statuses {
-        if process_tree
-            .values()
-            .any(|process| process_matches_agent(&process.command, agent))
-        {
+        // Vibe Board itself starts `codex app-server`, `claude doctor` and
+        // `agy /usage`; those must not make the Agent look like it is running.
+        if process_tree.iter().any(|(pid, process)| {
+            process_matches_agent(&process.command, agent)
+                && !started_by(&process_tree, *pid, own_pid)
+        }) {
             snapshot.online = true;
         }
     }
@@ -399,16 +409,11 @@ pub async fn get_agent_statuses(
     // permission: a snapshot persisted while it was allowed would otherwise
     // keep showing weeks-old numbers.
     for agent in ["opencode", "antigravity"] {
-        let authorized = config.usage_query_enabled
-            && crate::usage::is_network_authorized(
-                &config.usage_network_authorized_providers,
-                agent,
-            );
-        if !authorized {
-            if let Some(status) = statuses.get_mut(agent) {
-                status.rate_limits = None;
-                status.detail = None;
-            }
+        if let Some(status) = statuses.get_mut(agent) {
+            // Authorized: only this query's answer counts (a failed query shows
+            // nothing rather than an old number). Not authorized: nothing.
+            status.rate_limits = None;
+            status.detail = None;
         }
     }
 
@@ -450,6 +455,25 @@ fn tracked_agent_rank(agent: &str) -> usize {
         "antigravity" => 3,
         _ => 99,
     }
+}
+
+/// Whether `pid` is `ancestor` or one of its descendants.
+fn started_by(
+    tree: &HashMap<u32, crate::terminal::process_tree::ProcessInfo>,
+    pid: u32,
+    ancestor: u32,
+) -> bool {
+    let mut current = pid;
+    for _ in 0..64 {
+        if current == ancestor {
+            return true;
+        }
+        match tree.get(&current) {
+            Some(info) if info.ppid != current && info.ppid != 0 => current = info.ppid,
+            _ => return false,
+        }
+    }
+    false
 }
 
 fn process_matches_agent(command: &str, agent: &str) -> bool {
@@ -5315,6 +5339,39 @@ mod tests {
             store.get_session("thread-local").expect("session").phase,
             SessionPhase::Processing
         );
+    }
+
+    #[test]
+    fn processes_started_by_vibe_board_do_not_count_as_running_agents() {
+        use crate::terminal::process_tree::ProcessInfo;
+        let process = |pid: u32, ppid: u32, command: &str| {
+            (
+                pid,
+                ProcessInfo {
+                    pid,
+                    ppid,
+                    command: command.to_string(),
+                    tty: None,
+                },
+            )
+        };
+        let tree: std::collections::HashMap<u32, ProcessInfo> = [
+            process(100, 1, "vibe-board.exe"),
+            process(200, 100, "cmd.exe"),
+            process(300, 200, "codex.exe"),
+            process(400, 1, "codex.exe"),
+        ]
+        .into_iter()
+        .collect();
+        assert!(
+            crate::commands::started_by(&tree, 300, 100),
+            "app-server child of Vibe Board"
+        );
+        assert!(
+            !crate::commands::started_by(&tree, 400, 100),
+            "a Codex the user started"
+        );
+        assert!(crate::commands::started_by(&tree, 100, 100));
     }
 
     #[test]

@@ -395,6 +395,13 @@ fn merge_usage_fetch(local: UsageFetch, network: UsageFetch) -> UsageFetch {
     merged
 }
 
+/// Quotas for these tools only ever come from an online query, so a stored
+/// copy must not be shown unless the user currently allows that query.
+pub(crate) fn hides_stored_quota(provider_id: &str, enabled: bool, authorized: &[String]) -> bool {
+    matches!(provider_id, "opencode" | "antigravity")
+        && !(enabled && is_network_authorized(authorized, provider_id))
+}
+
 pub(crate) fn is_network_authorized(authorized: &[String], provider_id: &str) -> bool {
     authorized.iter().any(|id| id == provider_id)
 }
@@ -563,10 +570,11 @@ pub async fn get_usage_dashboard(state: State<'_, AppState>) -> Result<UsageDash
         let canonical_id = canonical_provider_id(provider_id);
         // Quotas that only come from an online query must not outlive the
         // permission (a persisted snapshot would show weeks-old numbers).
-        if matches!(canonical_id.as_str(), "opencode" | "antigravity")
-            && !(enabled
-                && is_network_authorized(&config.usage_network_authorized_providers, &canonical_id))
-        {
+        if hides_stored_quota(
+            &canonical_id,
+            enabled,
+            &config.usage_network_authorized_providers,
+        ) {
             continue;
         }
         if let Some(snapshot) = providers

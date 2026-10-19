@@ -300,6 +300,10 @@
     "usageNetworkCancel": "Cancel",
     "usageNetworkConfirmHttp": "Send one read-only quota request to {{target}}.",
     "usageNetworkConfirmCli": "Ask the local program {{target}} to check the quota itself.",
+    "usageNetworkEnableFailed": "Couldn't read {{name}}'s quota, so the query was turned off again. ",
+    "usageFailureAuth": "The login is invalid or expired. Sign in again in that tool first.",
+    "usageFailureTimeout": "The query timed out. Try again in a moment.",
+    "usageFailureOther": "Try again in a moment; see Details for the reason.",
     "usageNetworkEnabledNotice": "Online check allowed. Refreshing the quota now.",
     "usageNetworkDisabledNotice": "Online check stopped; no more requests go to this tool.",
     "usagePage": {

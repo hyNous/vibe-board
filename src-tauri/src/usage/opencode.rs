@@ -317,6 +317,13 @@ fn load_opencode_api_key() -> Option<String> {
 }
 
 fn load_opencode_api_key_from(home: &Path) -> Option<String> {
+    // Newer OpenCode keeps the active key in its database; auth.json is only
+    // the legacy store and can hold an expired key long after a replacement.
+    load_opencode_api_key_from_db(&opencode_db_path_from(home))
+        .or_else(|| load_opencode_api_key_from_auth_file(home))
+}
+
+fn load_opencode_api_key_from_auth_file(home: &Path) -> Option<String> {
     let path = opencode_auth_path_from(home);
     let payload: serde_json::Value = serde_json::from_str(&fs::read_to_string(path).ok()?).ok()?;
     ["opencode-go", "opencode"]
@@ -324,11 +331,45 @@ fn load_opencode_api_key_from(home: &Path) -> Option<String> {
         .find_map(|provider| payload.get(provider).and_then(opencode_api_key_from_entry))
 }
 
+fn opencode_db_path_from(home: &Path) -> PathBuf {
+    home.join(".local")
+        .join("share")
+        .join("opencode")
+        .join("opencode.db")
+}
+
+/// Reads the active OpenCode Go key from OpenCode's own database, read-only.
+/// The `credential.value` column holds `{"type":"key","key":"..."}`.
+fn load_opencode_api_key_from_db(path: &Path) -> Option<String> {
+    if !path.is_file() {
+        return None;
+    }
+    let connection = rusqlite::Connection::open_with_flags(
+        path,
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    )
+    .ok()?;
+    connection.busy_timeout(Duration::from_secs(2)).ok()?;
+    let value: String = connection
+        .query_row(
+            "SELECT value FROM credential \
+             WHERE integration_id IN ('opencode-go', 'opencode') AND active = 1 \
+             ORDER BY CASE integration_id WHEN 'opencode-go' THEN 0 ELSE 1 END, time_updated DESC \
+             LIMIT 1",
+            [],
+            |row| row.get(0),
+        )
+        .ok()?;
+    let entry: serde_json::Value = serde_json::from_str(&value).ok()?;
+    opencode_api_key_from_entry(&entry)
+}
+
 fn opencode_api_key_from_entry(entry: &serde_json::Value) -> Option<String> {
+    // auth.json marks API keys "api"; the database marks them "key".
     if entry
         .get("type")
         .and_then(|value| value.as_str())
-        .is_some_and(|kind| kind != "api")
+        .is_some_and(|kind| kind != "api" && kind != "key")
     {
         return None;
     }
@@ -603,6 +644,50 @@ mod tests {
         assert!(!snapshot.network_authorized);
         assert!(snapshot.windows.is_empty());
         assert!(snapshot.detail.contains("not authorized"));
+    }
+
+    #[test]
+    fn prefers_the_active_key_in_opencode_database_over_auth_json() {
+        let home = std::env::temp_dir().join(format!("vb-opencode-db-{}", std::process::id()));
+        let data = home.join(".local").join("share").join("opencode");
+        fs::create_dir_all(&data).expect("data dir");
+        fs::write(
+            data.join("auth.json"),
+            r#"{"opencode-go":{"type":"api","key":"old-expired"}}"#,
+        )
+        .expect("auth.json");
+        let db = rusqlite::Connection::open(data.join("opencode.db")).expect("db");
+        db.execute_batch(
+            "CREATE TABLE credential (id TEXT, integration_id TEXT, label TEXT, value TEXT, \
+             connector_id TEXT, method_id TEXT, active INTEGER, time_created INTEGER, time_updated INTEGER); \
+             INSERT INTO credential VALUES ('c1','opencode-go','OpenCode Go','{\"type\":\"key\",\"key\":\"new-active\"}',NULL,NULL,1,1,2); \
+             INSERT INTO credential VALUES ('c0','opencode-go','OpenCode Go','{\"type\":\"key\",\"key\":\"inactive\"}',NULL,NULL,0,1,3);",
+        )
+        .expect("seed");
+        drop(db);
+
+        assert_eq!(
+            load_opencode_api_key_from(&home).as_deref(),
+            Some("new-active")
+        );
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn falls_back_to_auth_json_without_a_database() {
+        let home = std::env::temp_dir().join(format!("vb-opencode-nodb-{}", std::process::id()));
+        let data = home.join(".local").join("share").join("opencode");
+        fs::create_dir_all(&data).expect("data dir");
+        fs::write(
+            data.join("auth.json"),
+            r#"{"opencode-go":{"type":"api","key":"from-file"}}"#,
+        )
+        .expect("auth.json");
+        assert_eq!(
+            load_opencode_api_key_from(&home).as_deref(),
+            Some("from-file")
+        );
+        let _ = fs::remove_dir_all(&home);
     }
 
     #[test]

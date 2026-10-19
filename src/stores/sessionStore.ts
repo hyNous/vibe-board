@@ -57,6 +57,8 @@ interface SessionStore {
   prependChatHistory: (sessionId: string, messages: ChatMessage[], meta?: ChatHistoryMeta) => void
   setRateLimits: (limits: RateLimitInfo) => void
   setUsageSnapshots: (limits: RateLimitInfo[]) => void
+  /** Replaces every stored quota with the backend's full list (drops tools no longer reported). */
+  replaceUsageSnapshots: (limits: RateLimitInfo[]) => void
   setAgentStatuses: (statuses: AgentStatusSnapshot[]) => void
   setHookNotification: (notification: 'restored' | 'rate_limited' | null) => void
   applyIdleTimeout: (now?: number) => void
@@ -847,6 +849,14 @@ export const useSessionStore: UseBoundStore<StoreApi<SessionStore>> = create<Ses
         rateLimits: limits[0] ?? state.rateLimits,
       }
     })
+  },
+
+  replaceUsageSnapshots: (limits) => {
+    const usageSnapshots: Record<string, RateLimitInfo> = {}
+    for (const limit of limits) {
+      if (limit.provider) usageSnapshots[limit.provider] = limit
+    }
+    set((state) => ({ usageSnapshots, rateLimits: limits[0] ?? state.rateLimits }))
   },
 
   setAgentStatuses: (statuses) => {

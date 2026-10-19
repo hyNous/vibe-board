@@ -353,10 +353,10 @@ function refreshUsageRateLimits(force = false) {
   usageRateLimitLastRefreshAt = now
   getUsageSnapshots()
     .then(async (snapshots) => {
-      if (snapshots.length > 0) {
-        useSessionStore.getState().setUsageSnapshots(snapshots)
-        return
-      }
+      // The backend list is complete: tools it no longer reports (query turned
+      // off, or no longer installed) must disappear rather than keep old numbers.
+      useSessionStore.getState().replaceUsageSnapshots(snapshots)
+      if (snapshots.length > 0) return
       const rateLimits = await getUsageRateLimits()
       if (rateLimits) {
         useSessionStore.getState().setUsageSnapshots([rateLimits])

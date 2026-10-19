@@ -93,11 +93,34 @@ export function UsageProvidersPanel() {
         ? t('settings.usageNetworkEnabledNotice', { defaultValue: '已允许联网查询，正在刷新额度。' })
         : t('settings.usageNetworkDisabledNotice', { defaultValue: '已停止联网查询，不会再向这个工具发出请求。' }))
       await fetchUsageProviders({ live: authorized, showLoading: true })
+      if (authorized) {
+        // 打开后第一次就没查到：自动关回去，说明原因，让用户处理后再试。
+        const result = useSettingsLive.getState().usageProviders.find((item) => item.provider === provider)
+        if (result?.state === 'failed') {
+          await setUsageNetworkAuthorization(provider, false)
+          await fetchUsageProviders({ live: false, showLoading: false })
+          setNotice(null)
+          setError(t('settings.usageNetworkEnableFailed', {
+            name: result.label,
+            defaultValue: '没能查到 {{name}} 的额度，已自动关闭查询。',
+          }) + usageFailureReason(result.detail))
+        }
+      }
     } catch (e) {
       setError(readableError(e))
     } finally {
       setUsageAction(null)
     }
+  }
+
+  const usageFailureReason = (detail: string) => {
+    if (/\b401\b|\b403\b|expired|not logged in/i.test(detail)) {
+      return t('settings.usageFailureAuth', { defaultValue: '登录信息无效或已过期，请先在这个工具里重新登录。' })
+    }
+    if (/timed? ?out|timeout/i.test(detail)) {
+      return t('settings.usageFailureTimeout', { defaultValue: '查询超时，请稍后再试。' })
+    }
+    return t('settings.usageFailureOther', { defaultValue: '请稍后再试，原因见「详情」。' })
   }
 
   const authorizeProvider = async (provider: string) => {
