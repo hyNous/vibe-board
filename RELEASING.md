@@ -77,12 +77,13 @@
 
 | 工作流 | 触发 | 内容 |
 | --- | --- | --- |
-| `.github/workflows/ci.yml` | PR / push | 前端 lint + test + build；Windows 后端 fmt + clippy + check；macOS 后端 fmt + clippy + test；release readiness |
+| `.github/workflows/ci.yml` | PR / push | 前端 lint + test + build；Windows 后端 fmt + clippy + check；release readiness |
 | `.github/workflows/build.yml` | push / 手动 | Windows NSIS + MSI 安装包；macOS 编译验证 |
 
 Windows 后端**不跑单元测试**：有一批测试仍然假设 POSIX 路径分隔符、可写的 `$HOME`
 和符号链接权限，在 Windows runner 上会因为与被测代码无关的原因失败。所以 Windows
-只做编译门禁，测试回归由 macOS 把关。修这批测试见 [ROADMAP.md](ROADMAP.md)。
+只做编译门禁。产品只发 Windows，CI 里也不再有 macOS 后端 job，所以目前没有任何
+CI job 跑 Rust 单元测试。修这批测试见 [ROADMAP.md](ROADMAP.md)。
 
 CI 只跑本仓库的检查，不依赖上游的任何流水线。
 

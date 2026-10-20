@@ -5048,7 +5048,7 @@ pub async fn activate_session_host(
         let bundle_id = app_host_bundle_id(&session)
             .ok_or_else(|| "Session has no desktop app metadata".to_string())?;
         open_bundle_id(bundle_id)?;
-        return Ok(true);
+        Ok(true)
     }
 
     #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
