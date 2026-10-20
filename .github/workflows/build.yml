@@ -108,6 +108,10 @@ jobs:
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 
+      # beforeBuildCommand builds the bridge first, and that cargo build
+      # compiles tauri::generate_context!(), which needs ../dist to exist.
+      - name: Build frontend
+        run: pnpm build
       - name: Build Tauri installers
         run: pnpm tauri:build:windows
 
