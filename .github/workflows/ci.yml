@@ -50,6 +50,14 @@ jobs:
         run: |
           mkdir -p src-tauri/target/vibe-board-bridge-resource
           touch src-tauri/target/vibe-board-bridge-resource/vibe-board-bridge
+      - name: Prepare placeholder frontend dist
+        # tauri::generate_context!() checks at compile time that
+        # build.frontendDist (../dist) exists. These jobs only check/test Rust,
+        # so an empty placeholder is enough; the Frontend job builds the real one.
+        shell: bash
+        run: |
+          mkdir -p dist
+          echo '<!doctype html><title>placeholder</title>' > dist/index.html
       - run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
       - run: cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
       - run: cargo check --manifest-path src-tauri/Cargo.toml --all-targets
@@ -72,6 +80,14 @@ jobs:
         run: |
           mkdir -p src-tauri/target/vibe-board-bridge-resource
           touch src-tauri/target/vibe-board-bridge-resource/vibe-board-bridge
+      - name: Prepare placeholder frontend dist
+        # tauri::generate_context!() checks at compile time that
+        # build.frontendDist (../dist) exists. These jobs only check/test Rust,
+        # so an empty placeholder is enough; the Frontend job builds the real one.
+        shell: bash
+        run: |
+          mkdir -p dist
+          echo '<!doctype html><title>placeholder</title>' > dist/index.html
       - run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
       - run: cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
       - run: cargo test --manifest-path src-tauri/Cargo.toml
