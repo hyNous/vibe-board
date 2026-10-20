@@ -33,45 +33,6 @@ fn truncate_text(value: &str, max_chars: usize) -> String {
     }
 }
 
-/// Send a native notification for a blocking event that was suppressed
-/// (the user is looking at the terminal, so we degrade to notification instead of overlay).
-pub fn send_permission_notification(app: &AppHandle, tool_name: &str) {
-    if !should_notify("permission", tool_name) {
-        return;
-    }
-    let _ = app
-        .notification()
-        .builder()
-        .title("Permission Request")
-        .body(format!("{} needs approval", tool_name))
-        .show();
-}
-
-pub fn send_question_notification(app: &AppHandle, question: &str) {
-    if !should_notify("question", question) {
-        return;
-    }
-    let truncated = truncate_text(question, 77);
-    let _ = app
-        .notification()
-        .builder()
-        .title("Question")
-        .body(truncated)
-        .show();
-}
-
-pub fn send_plan_notification(app: &AppHandle, plan_title: &str) {
-    if !should_notify("plan", plan_title) {
-        return;
-    }
-    let _ = app
-        .notification()
-        .builder()
-        .title("Plan Approval")
-        .body(plan_title.to_string())
-        .show();
-}
-
 pub fn send_completion_notification(app: &AppHandle, summary: &str) {
     if !should_notify("completion", summary) {
         return;

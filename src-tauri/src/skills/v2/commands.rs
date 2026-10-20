@@ -45,20 +45,10 @@ pub fn skill_manager_refresh_overview() -> Result<SkillManagerOverview, String> 
 }
 
 #[tauri::command(async)]
-pub fn skill_manager_settings() -> Result<SkillManagerSettings, String> {
-    Ok(svc()?.settings()?)
-}
-
-#[tauri::command(async)]
 pub fn skill_manager_update_settings(
     update: SettingsUpdate,
 ) -> Result<SkillManagerSettings, String> {
     svc()?.update_settings(update)
-}
-
-#[tauri::command(async)]
-pub fn list_center_skills_v2() -> Result<Vec<SkillSummary>, String> {
-    Ok(svc()?.list_center_skills()?)
 }
 
 #[tauri::command(async)]
@@ -221,13 +211,6 @@ pub fn delete_unmanaged_agent_skills(
 }
 
 #[tauri::command(async)]
-pub fn preview_sync_copy_target(
-    target_id: String,
-) -> Result<crate::skills::v2::service::CopySyncPreview, String> {
-    Ok(svc()?.preview_sync_copy_target(&target_id)?)
-}
-
-#[tauri::command(async)]
 pub fn preview_copy_target_diff(
     target_id: String,
 ) -> Result<crate::skills::v2::service::CopyTargetDiffPreview, String> {
@@ -255,11 +238,6 @@ pub fn delete_skill_target_distributions(
 }
 
 #[tauri::command(async)]
-pub fn list_managed_agents_v2() -> Result<Vec<AgentSummary>, String> {
-    Ok(svc()?.list_managed_agents()?)
-}
-
-#[tauri::command(async)]
 pub fn get_agent_detail_v2(agent_id: String) -> Result<AgentDetail, String> {
     Ok(svc()?.get_agent_detail(&agent_id)?)
 }
@@ -267,32 +245,6 @@ pub fn get_agent_detail_v2(agent_id: String) -> Result<AgentDetail, String> {
 #[tauri::command(async)]
 pub fn refresh_agent_skill_view_v2(agent_id: String) -> Result<AgentSkillViewSnapshot, String> {
     svc()?.refresh_agent_skill_view(&agent_id)
-}
-
-#[tauri::command(async)]
-pub fn read_agent_config_file_v2(
-    agent_id: String,
-    path: String,
-) -> Result<crate::skills::config_file_editor::AgentConfigDocument, String> {
-    let service = svc()?;
-    crate::skills::config_file_editor::read_agent_config_file(&service, &agent_id, &path)
-}
-
-#[tauri::command(async)]
-pub fn write_agent_config_file_v2(
-    agent_id: String,
-    path: String,
-    content: String,
-    expected_revision: String,
-) -> Result<crate::skills::config_file_editor::AgentConfigDocument, String> {
-    let service = svc()?;
-    crate::skills::config_file_editor::write_agent_config_file(
-        &service,
-        &agent_id,
-        &path,
-        &content,
-        &expected_revision,
-    )
 }
 
 #[tauri::command(async)]
@@ -306,66 +258,10 @@ pub fn list_agent_skill_inventory_v2() -> Result<Vec<AgentSkillInventoryAgent>, 
 }
 
 #[tauri::command(async)]
-pub fn list_skill_projects_v2() -> Result<Vec<ProjectSummary>, String> {
-    svc()?.list_projects()
-}
-
-#[tauri::command(async)]
-pub fn add_skill_project_v2(root_path: String) -> Result<ProjectDetail, String> {
-    svc()?.add_project(root_path)
-}
-
-#[tauri::command(async)]
-pub fn remove_skill_project_v2(project_id: String) -> Result<(), String> {
-    svc()?.remove_project(&project_id)
-}
-
-#[tauri::command(async)]
-pub fn get_skill_project_detail_v2(project_id: String) -> Result<ProjectDetail, String> {
-    svc()?.get_project_detail(&project_id)
-}
-
-#[tauri::command(async)]
-pub fn scan_skill_project_v2(project_id: String) -> Result<ProjectDetail, String> {
-    svc()?.scan_project(&project_id)
-}
-
-#[tauri::command(async)]
-pub fn install_center_skills_to_project_v2(
-    project_id: String,
-    agent_id: String,
-    skill_ids: Vec<String>,
-    requested_mode: String,
-) -> Result<ProjectDetail, String> {
-    svc()?.install_center_skills_to_project(&project_id, &agent_id, skill_ids, requested_mode)
-}
-
-#[tauri::command(async)]
 pub fn run_skill_manager_diagnosis() -> Result<Vec<DiagnosisIssue>, String> {
     let svc = svc()?;
     svc.refresh()?;
     diagnosis::run(&svc)
-}
-
-#[tauri::command(async)]
-pub fn list_diagnosis_issues() -> Result<Vec<DiagnosisIssue>, String> {
-    svc()?.list_current_diagnosis_issues()
-}
-
-#[tauri::command(async)]
-pub fn preview_fix_diagnosis_issue(
-    issue_type: String,
-    entity_id: String,
-) -> Result<serde_json::Value, String> {
-    let svc = svc()?;
-    let issues = diagnosis::run(&svc)?;
-    let issue = issues
-        .into_iter()
-        .find(|i| i.issue_type == issue_type && i.entity_id.as_deref() == Some(&entity_id));
-    Ok(serde_json::json!({
-        "issue": issue,
-        "destructive": issue.as_ref().map(|i| i.fix_kind == "confirm").unwrap_or(false),
-    }))
 }
 
 #[tauri::command(async)]
@@ -384,12 +280,6 @@ pub fn execute_safe_fixes() -> Result<usize, String> {
 pub fn skill_manager_export_snapshot() -> Result<String, String> {
     let svc = svc()?;
     snapshot::export_to_file(&svc)
-}
-
-#[tauri::command(async)]
-pub fn skill_manager_get_snapshot() -> Result<Snapshot, String> {
-    let svc = svc()?;
-    snapshot::export(&svc)
 }
 
 #[tauri::command(async)]

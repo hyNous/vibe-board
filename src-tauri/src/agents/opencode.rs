@@ -7,18 +7,6 @@ use super::{
 };
 use std::path::PathBuf;
 
-/// Result of verifying hook installation integrity for OpenCode
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum OpenCodeHookVerificationResult {
-    /// Everything is correctly installed
-    Ok,
-    /// Plugin file is missing and needs reinstall
-    MissingPluginFile,
-    /// opencode.json is missing the agentbro plugin registration
-    NotRegistered,
-}
-
 pub struct OpenCodeAdapter {
     status: AdapterStatus,
 }
@@ -39,68 +27,6 @@ impl OpenCodeAdapter {
 
     fn plugin_path(&self) -> PathBuf {
         profiles::configuration_url(&profiles::opencode_profile())
-    }
-
-    /// Verify that the opencode plugin hooks are correctly installed.
-    /// Checks:
-    ///  1. The plugin file exists at ~/.config/opencode/plugins/vibeboard.js
-    ///  2. opencode.json contains the Vibe Board plugin in its plugin array
-    pub fn verify_hooks(&self) -> OpenCodeHookVerificationResult {
-        let plugin_path = self.plugin_path();
-        let legacy_home = dirs::home_dir().unwrap_or_else(std::env::temp_dir);
-        let legacy_plugin_path = legacy_home
-            .join(".config")
-            .join("opencode")
-            .join("plugins")
-            .join("agentbro.js");
-        if !plugin_path.exists() && !legacy_plugin_path.exists() {
-            return OpenCodeHookVerificationResult::MissingPluginFile;
-        }
-
-        let home = dirs::home_dir().unwrap_or_else(std::env::temp_dir);
-        let config_path = home.join(".config").join("opencode").join("opencode.json");
-
-        let config_content = match std::fs::read_to_string(&config_path) {
-            Ok(c) => c,
-            Err(_) => return OpenCodeHookVerificationResult::NotRegistered,
-        };
-
-        let config: serde_json::Value = match serde_json::from_str(&config_content) {
-            Ok(v) => v,
-            Err(_) => return OpenCodeHookVerificationResult::NotRegistered,
-        };
-
-        let plugins = match config.get("plugin").and_then(|p| p.as_array()) {
-            Some(arr) => arr,
-            None => return OpenCodeHookVerificationResult::NotRegistered,
-        };
-
-        let has_agentbro = plugins.iter().any(|p| {
-            p.as_str()
-                .map(|s| {
-                    s.contains("vibeboard")
-                        || s.contains("vibe-board")
-                        || s.contains("agentbro")
-                        || s.contains("agent-island")
-                })
-                .unwrap_or(false)
-                || p.as_array()
-                    .and_then(|arr| {
-                        arr.first().and_then(|v| v.as_str()).map(|s| {
-                            s.contains("vibeboard")
-                                || s.contains("vibe-board")
-                                || s.contains("agentbro")
-                                || s.contains("agent-island")
-                        })
-                    })
-                    .unwrap_or(false)
-        });
-
-        if has_agentbro {
-            OpenCodeHookVerificationResult::Ok
-        } else {
-            OpenCodeHookVerificationResult::NotRegistered
-        }
     }
 }
 
@@ -914,19 +840,6 @@ mod tests {
         }
     }
 
-    #[test]
-    fn truncate_display_text_short() {
-        assert_eq!(truncate_display_text("hello", 50), "hello");
-    }
-
-    #[test]
-    fn truncate_display_text_long() {
-        let long = "A".repeat(100);
-        let result = truncate_display_text(&long, 50);
-        assert!(result.ends_with("..."));
-        assert!(result.len() <= 53);
-    }
-
     // ——— P1: New event types ———
 
     #[test]
@@ -1082,20 +995,4 @@ mod tests {
     }
 
     // ——— P2: verify_hooks ———
-
-    #[test]
-    fn verify_hooks_detects_missing_plugin_file() {
-        let adapter = OpenCodeAdapter {
-            status: AdapterStatus::Available,
-        };
-        let result = adapter.verify_hooks();
-        match result {
-            OpenCodeHookVerificationResult::Ok => {
-                // Plugin is installed — verify fields are accessible
-            }
-            _ => {
-                // Plugin not installed — expected in CI
-            }
-        }
-    }
 }

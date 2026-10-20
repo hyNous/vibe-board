@@ -3,11 +3,8 @@
 
 use chrono::Timelike;
 use rodio::{Decoder, OutputStream, OutputStreamHandle, Sink, Source};
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::fs::{self, File};
-use std::io::{BufReader, Cursor, Read};
-use std::path::{Path, PathBuf};
+use std::fs::File;
+use std::io::{BufReader, Cursor};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -50,402 +47,16 @@ impl SoundEvent {
             _ => None,
         }
     }
-
-    pub fn id(&self) -> &'static str {
-        match self {
-            Self::SessionStart => "session-start",
-            Self::SessionEnd => "session-end",
-            Self::TaskComplete => "task-complete",
-            Self::TaskError => "session-error",
-            Self::NeedsApproval => "permission-request",
-            Self::TaskConfirmation => "question-asked",
-            Self::PlanApproval => "plan-approval",
-            Self::ContextLimit => "context-compact",
-            Self::Boot => "boot",
-        }
-    }
-
-    fn cesp_categories(&self) -> &'static [&'static str] {
-        match self {
-            Self::SessionStart => &["task.acknowledge", "session.start"],
-            Self::SessionEnd => &["task.complete", "session.end"],
-            Self::TaskComplete => &["task.complete"],
-            Self::TaskError => &["task.error"],
-            Self::NeedsApproval => &["input.required"],
-            Self::TaskConfirmation => &["input.required"],
-            Self::PlanApproval => &["input.required"],
-            Self::ContextLimit => &["resource.limit"],
-            Self::Boot => &["session.start", "task.acknowledge"],
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SoundPackImportedSound {
-    pub id: String,
-    pub name: String,
-    pub path: String,
-    pub event_id: String,
-    pub category: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SoundPackAppliedRule {
-    pub event_id: String,
-    pub sound_id: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SoundPackImportResult {
-    pub name: String,
-    pub display_name: String,
-    pub version: Option<String>,
-    pub root_path: String,
-    pub imported_sounds: Vec<SoundPackImportedSound>,
-    pub applied_rules: Vec<SoundPackAppliedRule>,
-}
-
-#[derive(Debug, Deserialize)]
-struct OpenPeonSoundEntry {
-    file: String,
-    label: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-struct OpenPeonCategoryManifest {
-    sounds: Vec<OpenPeonSoundEntry>,
-}
-
-#[derive(Debug, Deserialize)]
-struct OpenPeonManifest {
-    #[serde(rename = "cesp_version")]
-    cesp_version: String,
-    name: String,
-    #[serde(rename = "display_name")]
-    display_name: Option<String>,
-    version: Option<String>,
-    categories: HashMap<String, OpenPeonCategoryManifest>,
-}
-
-pub fn import_openpeon_sound_pack(
-    root: &Path,
-    destination_dir: &Path,
-) -> Result<SoundPackImportResult, String> {
-    let root = root
-        .canonicalize()
-        .map_err(|e| format!("Failed to read sound pack directory: {e}"))?;
-    if !root.is_dir() {
-        return Err("Sound pack path is not a directory".to_string());
-    }
-
-    let manifest_path = root.join("openpeon.json");
-    let manifest_bytes =
-        fs::read(&manifest_path).map_err(|e| format!("Failed to read openpeon.json: {e}"))?;
-    let manifest: OpenPeonManifest = serde_json::from_slice(&manifest_bytes)
-        .map_err(|e| format!("Invalid openpeon.json: {e}"))?;
-    if !manifest.cesp_version.trim().starts_with("1.") {
-        return Err("Unsupported CESP sound pack version".to_string());
-    }
-
-    fs::create_dir_all(destination_dir).map_err(|e| format!("Failed to create sounds dir: {e}"))?;
-
-    let pack_label = manifest
-        .display_name
-        .as_deref()
-        .unwrap_or(&manifest.name)
-        .trim()
-        .to_string();
-    let pack_label = if pack_label.is_empty() {
-        "Sound Pack".to_string()
-    } else {
-        pack_label
-    };
-
-    let events = [
-        SoundEvent::SessionStart,
-        SoundEvent::SessionEnd,
-        SoundEvent::TaskComplete,
-        SoundEvent::TaskError,
-        SoundEvent::NeedsApproval,
-        SoundEvent::TaskConfirmation,
-        SoundEvent::PlanApproval,
-        SoundEvent::ContextLimit,
-        SoundEvent::Boot,
-    ];
-    let mut imported_sounds = Vec::new();
-    let mut imported_by_category: HashMap<String, SoundPackImportedSound> = HashMap::new();
-
-    for event in events {
-        for category in event.cesp_categories() {
-            if imported_by_category.contains_key(*category) {
-                continue;
-            }
-            if let Some(sound) = import_category_sound(
-                &root,
-                destination_dir,
-                &pack_label,
-                event,
-                category,
-                &manifest,
-            )? {
-                imported_by_category.insert((*category).to_string(), sound.clone());
-                imported_sounds.push(sound);
-            }
-        }
-    }
-
-    let mut applied_rules = Vec::new();
-    for event in events {
-        if let Some(sound) = event
-            .cesp_categories()
-            .iter()
-            .find_map(|category| imported_by_category.get(*category))
-        {
-            applied_rules.push(SoundPackAppliedRule {
-                event_id: event.id().to_string(),
-                sound_id: sound.id.clone(),
-            });
-            if event == SoundEvent::ContextLimit {
-                applied_rules.push(SoundPackAppliedRule {
-                    event_id: "token-limit".to_string(),
-                    sound_id: sound.id.clone(),
-                });
-            }
-        }
-    }
-
-    if applied_rules.is_empty() {
-        return Err("Sound pack does not contain supported event sounds".to_string());
-    }
-
-    Ok(SoundPackImportResult {
-        name: manifest.name,
-        display_name: pack_label,
-        version: manifest.version,
-        root_path: root.to_string_lossy().to_string(),
-        imported_sounds,
-        applied_rules,
-    })
-}
-
-fn import_category_sound(
-    root: &Path,
-    destination_dir: &Path,
-    pack_label: &str,
-    event: SoundEvent,
-    category: &str,
-    manifest: &OpenPeonManifest,
-) -> Result<Option<SoundPackImportedSound>, String> {
-    let Some(category_manifest) = manifest.categories.get(category) else {
-        return Ok(None);
-    };
-
-    for entry in &category_manifest.sounds {
-        let Some(source) = resolve_pack_sound_path(root, &entry.file)? else {
-            continue;
-        };
-        let Some(ext) = supported_pack_audio_extension(&source) else {
-            continue;
-        };
-        if !has_valid_audio_magic(&source, ext) {
-            continue;
-        }
-
-        let id = uuid::Uuid::new_v4().to_string();
-        let dest = destination_dir.join(format!("{id}.{ext}"));
-        fs::copy(&source, &dest).map_err(|e| format!("Failed to import sound: {e}"))?;
-
-        let label = entry
-            .label
-            .as_deref()
-            .map(str::trim)
-            .filter(|label| !label.is_empty())
-            .map(ToOwned::to_owned)
-            .or_else(|| {
-                source
-                    .file_stem()
-                    .and_then(|name| name.to_str())
-                    .map(|name| name.replace(['-', '_'], " "))
-            })
-            .unwrap_or_else(|| category.to_string());
-
-        return Ok(Some(SoundPackImportedSound {
-            id,
-            name: format!("{pack_label} - {label}"),
-            path: dest.to_string_lossy().to_string(),
-            event_id: event.id().to_string(),
-            category: category.to_string(),
-        }));
-    }
-
-    Ok(None)
-}
-
-fn resolve_pack_sound_path(root: &Path, file: &str) -> Result<Option<PathBuf>, String> {
-    let Ok(resolved) = root.join(file).canonicalize() else {
-        return Ok(None);
-    };
-    if resolved == root || resolved.starts_with(root) {
-        Ok(Some(resolved))
-    } else {
-        Err("Sound pack file points outside the pack directory".to_string())
-    }
-}
-
-fn supported_pack_audio_extension(path: &Path) -> Option<&'static str> {
-    match path
-        .extension()
-        .and_then(|ext| ext.to_str())
-        .map(|ext| ext.to_ascii_lowercase())
-        .as_deref()
-    {
-        Some("mp3") => Some("mp3"),
-        Some("wav") => Some("wav"),
-        Some("ogg") => Some("ogg"),
-        Some("flac") => Some("flac"),
-        _ => None,
-    }
-}
-
-fn has_valid_audio_magic(path: &Path, ext: &str) -> bool {
-    let Ok(mut file) = File::open(path) else {
-        return false;
-    };
-    let mut bytes = [0_u8; 12];
-    let Ok(count) = file.read(&mut bytes) else {
-        return false;
-    };
-    let bytes = &bytes[..count];
-
-    match ext {
-        "wav" => bytes.starts_with(b"RIFF"),
-        "ogg" => bytes.starts_with(b"OggS"),
-        "flac" => bytes.starts_with(b"fLaC"),
-        "mp3" => {
-            bytes.starts_with(b"ID3")
-                || bytes
-                    .get(0..2)
-                    .map(|pair| pair[0] == 0xFF && (pair[1] & 0xE0) == 0xE0)
-                    .unwrap_or(false)
-        }
-        _ => false,
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn temp_test_dir(name: &str) -> PathBuf {
-        let path = std::env::temp_dir().join(format!("agentbro-{name}-{}", uuid::Uuid::new_v4()));
-        fs::create_dir_all(&path).unwrap();
-        path
-    }
-
-    fn write_wav(path: &Path) {
-        fs::write(path, b"RIFF0000WAVEfmt ").unwrap();
-    }
-
     #[test]
     fn normalizes_legacy_chime_builtin_choice() {
         let choice = concat!("builtin:", "p", "i", "n", "g");
         assert_eq!(builtin_sound_id(choice), Some("chime"));
-    }
-
-    #[test]
-    fn imports_openpeon_pack_and_maps_events() {
-        let root = temp_test_dir("sound-pack-root");
-        let dest = temp_test_dir("sound-pack-dest");
-        write_wav(&root.join("session-start.wav"));
-        write_wav(&root.join("attention.wav"));
-        write_wav(&root.join("complete.wav"));
-        write_wav(&root.join("error.wav"));
-        write_wav(&root.join("limit.wav"));
-        fs::write(
-            root.join("openpeon.json"),
-            r#"{
-              "cesp_version": "1.0",
-              "name": "my-pack",
-              "display_name": "My Pack",
-              "version": "0.1.0",
-              "categories": {
-                "task.acknowledge": { "sounds": [{ "file": "session-start.wav", "label": "Session Start" }] },
-                "input.required": { "sounds": [{ "file": "attention.wav", "label": "Attention" }] },
-                "task.complete": { "sounds": [{ "file": "complete.wav", "label": "Complete" }] },
-                "task.error": { "sounds": [{ "file": "error.wav", "label": "Error" }] },
-                "resource.limit": { "sounds": [{ "file": "limit.wav", "label": "Limit" }] }
-              }
-            }"#,
-        )
-        .unwrap();
-
-        let result = import_openpeon_sound_pack(&root, &dest).unwrap();
-
-        assert_eq!(result.display_name, "My Pack");
-        assert_eq!(result.imported_sounds.len(), 5);
-        assert!(result
-            .imported_sounds
-            .iter()
-            .all(|sound| Path::new(&sound.path).exists()));
-        assert!(result
-            .applied_rules
-            .iter()
-            .any(|rule| rule.event_id == "session-start"));
-        assert!(result
-            .applied_rules
-            .iter()
-            .any(|rule| rule.event_id == "token-limit"));
-
-        let approval = result
-            .applied_rules
-            .iter()
-            .find(|rule| rule.event_id == "permission-request")
-            .unwrap()
-            .sound_id
-            .clone();
-        let question = result
-            .applied_rules
-            .iter()
-            .find(|rule| rule.event_id == "question-asked")
-            .unwrap()
-            .sound_id
-            .clone();
-        assert_eq!(approval, question);
-
-        let _ = fs::remove_dir_all(root);
-        let _ = fs::remove_dir_all(dest);
-    }
-
-    #[test]
-    fn rejects_pack_files_outside_root() {
-        let root = temp_test_dir("sound-pack-root");
-        let dest = temp_test_dir("sound-pack-dest");
-        let outside = temp_test_dir("sound-pack-outside");
-        write_wav(&outside.join("escape.wav"));
-        fs::write(
-            root.join("openpeon.json"),
-            format!(
-                r#"{{
-                  "cesp_version": "1.0",
-                  "name": "bad-pack",
-                  "categories": {{
-                    "task.acknowledge": {{ "sounds": [{{ "file": "../{}/escape.wav" }}] }}
-                  }}
-                }}"#,
-                outside.file_name().unwrap().to_string_lossy()
-            ),
-        )
-        .unwrap();
-
-        let err = import_openpeon_sound_pack(&root, &dest).unwrap_err();
-        assert!(err.contains("outside"));
-
-        let _ = fs::remove_dir_all(root);
-        let _ = fs::remove_dir_all(dest);
-        let _ = fs::remove_dir_all(outside);
     }
 }
 
@@ -529,48 +140,6 @@ unsafe impl Send for SoundEngine {}
 unsafe impl Sync for SoundEngine {}
 
 impl SoundEngine {
-    /// Create a new SoundEngine, initializing the audio output stream
-    pub fn new() -> Option<Self> {
-        match OutputStream::try_default() {
-            Ok((stream, handle)) => Some(Self {
-                _stream: stream,
-                stream_handle: handle,
-                volume: Arc::new(Mutex::new(0.7)),
-                enabled: Arc::new(Mutex::new(true)),
-                event_enabled: Arc::new(Mutex::new(std::collections::HashMap::new())),
-                event_sound: Arc::new(Mutex::new(std::collections::HashMap::new())),
-                custom_sounds: Arc::new(Mutex::new(std::collections::HashMap::new())),
-                sound_pack: Arc::new(Mutex::new(SoundPack::Synth)),
-                probe_filter: Arc::new(Mutex::new(false)),
-                quiet_hours: Arc::new(Mutex::new(QuietHours {
-                    enabled: false,
-                    start: "22:00".to_string(),
-                    end: "08:00".to_string(),
-                })),
-                recent_play_times: Arc::new(Mutex::new(Vec::new())),
-            }),
-            Err(e) => {
-                log::warn!("Failed to initialize audio output: {}", e);
-                None
-            }
-        }
-    }
-
-    /// Set the master volume (0.0 to 1.0)
-    pub fn set_volume(&self, volume: f32) {
-        let volume = volume.clamp(0.0, 1.0);
-        if let Ok(mut v) = self.volume.lock() {
-            *v = volume;
-        }
-    }
-
-    /// Enable or disable sound playback
-    pub fn set_enabled(&self, enabled: bool) {
-        if let Ok(mut e) = self.enabled.lock() {
-            *e = enabled;
-        }
-    }
-
     /// Get current enabled state
     pub fn is_enabled(&self) -> bool {
         self.enabled.lock().map(|e| *e).unwrap_or(false)
@@ -590,15 +159,6 @@ impl SoundEngine {
         }
     }
 
-    pub fn set_custom_sounds(&self, sounds: Vec<(String, String)>) {
-        if let Ok(mut map) = self.custom_sounds.lock() {
-            map.clear();
-            for (id, path) in sounds {
-                map.insert(id, path);
-            }
-        }
-    }
-
     /// Check if a specific event is enabled (defaults to true)
     fn is_event_enabled(&self, event: SoundEvent) -> bool {
         self.event_enabled
@@ -607,32 +167,9 @@ impl SoundEngine {
             .unwrap_or(true)
     }
 
-    /// Set the active sound pack
-    pub fn set_sound_pack(&self, pack: SoundPack) {
-        if let Ok(mut p) = self.sound_pack.lock() {
-            *p = pack;
-        }
-    }
-
-    /// Enable or disable probe session filtering
-    pub fn set_probe_filter(&self, enabled: bool) {
-        if let Ok(mut pf) = self.probe_filter.lock() {
-            *pf = enabled;
-        }
-    }
-
     /// Check if probe filter is enabled
     pub fn is_probe_filter_enabled(&self) -> bool {
         self.probe_filter.lock().map(|pf| *pf).unwrap_or(false)
-    }
-
-    /// Configure quiet hours. Invalid times are ignored at playback time.
-    pub fn set_quiet_hours(&self, enabled: bool, start: String, end: String) {
-        if let Ok(mut quiet_hours) = self.quiet_hours.lock() {
-            quiet_hours.enabled = enabled;
-            quiet_hours.start = start;
-            quiet_hours.end = end;
-        }
     }
 
     fn is_quiet_hours_active(&self) -> bool {
@@ -677,15 +214,6 @@ impl SoundEngine {
             return;
         }
         self.play_resolved(event, None, true);
-    }
-
-    /// Preview a selected sound from settings. This is user-initiated, so it
-    /// bypasses event toggles, quiet hours, and spam suppression.
-    pub fn preview(&self, event: SoundEvent, choice: String) {
-        if !self.is_enabled() {
-            return;
-        }
-        self.play_resolved(event, Some(choice), false);
     }
 
     fn play_resolved(

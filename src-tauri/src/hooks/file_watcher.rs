@@ -37,19 +37,10 @@ pub struct ConversationWatcher {
     /// The underlying notify watcher (kept alive to maintain the watch).
     _watcher: PollWatcher,
     /// Shared parser state: session_id -> ConversationParser
-    parsers: Arc<Mutex<HashMap<String, ConversationParser>>>,
+    _parsers: Arc<Mutex<HashMap<String, ConversationParser>>>,
 }
 
 impl ConversationWatcher {
-    /// Create and start a new conversation watcher.
-    ///
-    /// Accepts optional extra config roots (custom engine instances) to watch
-    /// in addition to the default `~/.claude/projects/`.
-    /// Returns `None` if no projects directories exist or the watcher fails.
-    pub fn start(app_handle: AppHandle) -> Option<Self> {
-        Self::start_with_roots(app_handle, &[])
-    }
-
     /// Start watching default + custom engine instance project directories.
     pub fn start_with_roots(app_handle: AppHandle, extra_roots: &[PathBuf]) -> Option<Self> {
         let mut projects_dirs = Vec::new();
@@ -192,42 +183,7 @@ impl ConversationWatcher {
 
         Some(Self {
             _watcher: watcher,
-            parsers,
+            _parsers: parsers,
         })
-    }
-
-    /// Register a session for watching by pre-creating a parser.
-    ///
-    /// Called when a new session is detected via hooks, so we're ready
-    /// to parse its JSONL file as soon as it's created/modified.
-    pub fn register_session(&self, session_id: &str, file_path: PathBuf) {
-        if let Ok(mut parsers) = self.parsers.lock() {
-            parsers
-                .entry(session_id.to_string())
-                .or_insert_with(|| ConversationParser::new(file_path));
-        }
-    }
-
-    /// Remove a session's parser (on session end).
-    pub fn unregister_session(&self, session_id: &str) {
-        if let Ok(mut parsers) = self.parsers.lock() {
-            parsers.remove(session_id);
-        }
-    }
-
-    /// Manually trigger a full parse for a session.
-    /// Returns the full message list or None if the session is unknown.
-    pub fn parse_session_full(
-        &self,
-        session_id: &str,
-        file_path: PathBuf,
-    ) -> Option<IncrementalParseResult> {
-        let mut parsers = self.parsers.lock().ok()?;
-        let parser = parsers
-            .entry(session_id.to_string())
-            .or_insert_with(|| ConversationParser::new(file_path));
-
-        parser.reset();
-        parser.parse_incremental().ok()
     }
 }

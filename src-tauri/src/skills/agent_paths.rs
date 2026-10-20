@@ -310,10 +310,6 @@ pub fn known_agent_ids() -> &'static [&'static str] {
     ]
 }
 
-pub fn agentbro_skills_dir() -> PathBuf {
-    central_skills_dir()
-}
-
 pub fn central_skills_dir() -> PathBuf {
     home().join(".agents").join("skills")
 }

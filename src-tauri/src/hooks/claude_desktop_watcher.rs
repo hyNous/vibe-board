@@ -64,22 +64,6 @@ pub fn start(session_store: Arc<SessionStore>, app_handle: AppHandle) {
     });
 }
 
-pub fn find_audit_file_for_cli_session(session_id: &str) -> Option<PathBuf> {
-    for root in sessions_roots() {
-        for metadata_path in metadata_files(&root) {
-            let Some(metadata) = read_metadata(&metadata_path) else {
-                continue;
-            };
-            if metadata.cli_session_id == session_id {
-                if let Some(audit_path) = transcript_path_for_metadata(&metadata_path, &metadata) {
-                    return Some(audit_path);
-                }
-            }
-        }
-    }
-    None
-}
-
 async fn run_loop(session_store: Arc<SessionStore>, app_handle: AppHandle) {
     let mut state = WatchState::default();
     loop {

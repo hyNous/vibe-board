@@ -93,13 +93,6 @@ impl RawHookEventStore {
         events.push_back(event);
     }
 
-    fn session_events(&self, session_id: &str) -> Vec<RawHookEvent> {
-        self.by_session
-            .get(session_id)
-            .map(|events| events.iter().cloned().collect())
-            .unwrap_or_default()
-    }
-
     fn recent_summaries(&self, limit: usize) -> Vec<RawHookEventSummary> {
         let mut events = self
             .by_session
@@ -221,13 +214,6 @@ impl HookServer {
     pub fn set_config_store(&self, config_store: ConfigStore) {
         if let Ok(mut store) = self.config_store.lock() {
             *store = Some(config_store);
-        }
-    }
-
-    /// Set the sound engine (called after construction, once the engine is ready)
-    pub fn set_sound_engine(&self, engine: Arc<SoundEngine>) {
-        if let Ok(mut se) = self.sound_engine.lock() {
-            *se = Some(engine);
         }
     }
 
@@ -547,14 +533,6 @@ impl HookServer {
         }
 
         Ok(())
-    }
-
-    /// Return recent raw hook events for a session, oldest first.
-    pub fn raw_events_for_session(&self, session_id: &str) -> Vec<RawHookEvent> {
-        self.raw_events
-            .lock()
-            .map(|events| events.session_events(session_id))
-            .unwrap_or_default()
     }
 
     pub fn recent_raw_event_summaries(&self, limit: usize) -> Vec<RawHookEventSummary> {

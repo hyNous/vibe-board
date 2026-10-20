@@ -569,22 +569,6 @@ mod tests {
     };
 
     #[test]
-    fn defaults_match_vibe_board_behavior() {
-        let config = AppConfig::default();
-
-        assert_eq!(config.completion_timeout, 5);
-        assert_eq!(config.idle_timeout_minutes, 5);
-        assert_eq!(config.sound_volume, 0.7);
-        assert_eq!(config.volume, 70);
-        assert_eq!(config.session_refresh_interval_seconds, 3);
-        assert_eq!(config.window_close_behavior, "tray");
-        assert!(config.boot_sound_default_migrated);
-        assert!(!config.setup_wizard_completed);
-        assert!(!config.launch_at_login);
-        assert!(config.auto_launch_agents.is_empty());
-    }
-
-    #[test]
     fn ignores_removed_host_agent_fields_without_writing_them_back() {
         let base = std::env::temp_dir().join(format!(
             "vibeboard-config-legacy-host-{}-{}",

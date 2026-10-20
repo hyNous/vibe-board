@@ -83,33 +83,6 @@ pub struct CacheTtlInfo {
     pub ttl_ms: i64,
 }
 
-/// Pending native Codex `request_user_input` recovered from rollout JSONL.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CodexPendingUserInput {
-    pub call_id: String,
-    pub question: String,
-    pub options: Vec<String>,
-    pub descriptions: Vec<String>,
-    pub header: Option<String>,
-    pub multi_select: bool,
-    pub questions: Vec<CodexUserInputQuestion>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CodexUserInputQuestion {
-    pub id: Option<String>,
-    pub question: String,
-    pub header: Option<String>,
-    pub options: Vec<CodexUserInputOption>,
-    pub multi_select: bool,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CodexUserInputOption {
-    pub label: String,
-    pub description: Option<String>,
-}
-
 /// Subagent metadata recovered from Claude Code JSONL transcripts.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TranscriptSubagentInfo {
@@ -162,26 +135,6 @@ impl ConversationParser {
             total_parsed: 0,
             seen_tool_ids: HashSet::new(),
         }
-    }
-
-    /// Return the file path this parser is tracking.
-    pub fn file_path(&self) -> &PathBuf {
-        &self.file_path
-    }
-
-    /// Current byte offset (position after the last successful parse).
-    pub fn last_byte_offset(&self) -> u64 {
-        self.last_offset
-    }
-
-    /// Parse from an explicit byte offset (for external streaming callers).
-    /// Updates internal offset to `start_offset` before parsing new lines.
-    pub fn parse_from_offset(
-        &mut self,
-        start_offset: u64,
-    ) -> Result<IncrementalParseResult, std::io::Error> {
-        self.last_offset = start_offset;
-        self.parse_incremental()
     }
 
     /// Parse only new lines appended since the last call.
@@ -306,79 +259,12 @@ impl ConversationParser {
         }
     }
 
-    /// Parse the entire file from scratch (ignores previous offset).
-    /// Useful for initial load of a conversation. Returns the full message
-    /// list — `parse_full` is intentionally not subject to the in-memory
-    /// retention cap, so user-initiated "open this session" still surfaces
-    /// complete history. Internal state is left primed with only the tail,
-    /// so subsequent `parse_incremental` calls stay bounded.
-    pub fn parse_full(&mut self) -> Result<Vec<ParsedMessage>, std::io::Error> {
-        self.last_offset = 0;
-        self.messages.clear();
-        self.total_parsed = 0;
-        self.seen_tool_ids.clear();
-
-        let file = match File::open(&self.file_path) {
-            Ok(f) => f,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
-            Err(e) => return Err(e),
-        };
-        let file_size = file.metadata()?.len();
-
-        let mut reader = BufReader::new(file);
-        let mut all = Vec::new();
-        let mut line_buf = String::new();
-        loop {
-            line_buf.clear();
-            let bytes_read = reader.read_line(&mut line_buf)?;
-            if bytes_read == 0 {
-                break;
-            }
-            let line = line_buf.trim();
-            if line.is_empty() {
-                continue;
-            }
-            if line.contains("<command-name>/clear</command-name>") {
-                all.clear();
-                self.seen_tool_ids.clear();
-                continue;
-            }
-            let json: serde_json::Value = match serde_json::from_str(line) {
-                Ok(v) => v,
-                Err(e) => {
-                    log::warn!(
-                        "Skipping malformed JSONL line in {}: {}",
-                        self.file_path.display(),
-                        e
-                    );
-                    continue;
-                }
-            };
-            if let Some(msg) = self.parse_line(&json) {
-                all.push(msg);
-            }
-        }
-
-        self.last_offset = file_size;
-        self.total_parsed = all.len();
-        let tail_start = all.len().saturating_sub(MAX_RETAINED_MESSAGES);
-        self.messages = all[tail_start..].to_vec();
-        self.compact_seen_tool_ids();
-
-        Ok(all)
-    }
-
     /// Reset parser state (useful when conversation is cleared or reloaded).
     pub fn reset(&mut self) {
         self.last_offset = 0;
         self.messages.clear();
         self.total_parsed = 0;
         self.seen_tool_ids.clear();
-    }
-
-    /// Get current messages without re-parsing.
-    pub fn messages(&self) -> &[ParsedMessage] {
-        &self.messages
     }
 
     // ── Internal parsing ────────────────────────────────────────
@@ -874,175 +760,12 @@ fn find_codex_session_file_in_dir(root: &Path, session_id: &str) -> Option<PathB
     None
 }
 
-/// Extract the latest unresolved native Codex `request_user_input` call.
-pub fn extract_pending_codex_user_input(path: &Path) -> Option<CodexPendingUserInput> {
-    let file = File::open(path).ok()?;
-    let reader = BufReader::new(file);
-    let mut pending: Option<CodexPendingUserInput> = None;
-
-    for line in reader.lines() {
-        let Ok(line) = line else {
-            continue;
-        };
-        let line = line.trim();
-        if line.is_empty() {
-            continue;
-        }
-        let Ok(json) = serde_json::from_str::<serde_json::Value>(line) else {
-            continue;
-        };
-        let Some(payload) = json.get("payload") else {
-            continue;
-        };
-        let Some(payload_type) = payload.get("type").and_then(|value| value.as_str()) else {
-            continue;
-        };
-
-        match payload_type {
-            "function_call" => {
-                let tool_name = payload
-                    .get("name")
-                    .and_then(|value| value.as_str())
-                    .unwrap_or_default();
-                if normalize_tool_name(tool_name) != "requestuserinput" {
-                    continue;
-                }
-                if let Some(next_pending) = parse_codex_user_input_call(payload) {
-                    pending = Some(next_pending);
-                }
-            }
-            "function_call_output" => {
-                let call_id = payload
-                    .get("call_id")
-                    .or_else(|| payload.get("callId"))
-                    .or_else(|| payload.get("id"))
-                    .and_then(|value| value.as_str());
-                if pending
-                    .as_ref()
-                    .is_some_and(|item| call_id == Some(item.call_id.as_str()))
-                {
-                    pending = None;
-                }
-            }
-            _ => {}
-        }
-    }
-
-    pending
-}
-
-fn parse_codex_user_input_call(payload: &serde_json::Value) -> Option<CodexPendingUserInput> {
-    let call_id = payload
-        .get("call_id")
-        .or_else(|| payload.get("callId"))
-        .or_else(|| payload.get("id"))
-        .and_then(|value| value.as_str())?
-        .to_string();
-    let arguments = codex_arguments_value(payload.get("arguments"))?;
-    let questions = parse_codex_user_input_questions(arguments.get("questions")?.as_array()?);
-    if questions.is_empty() {
-        return None;
-    }
-
-    let first = &questions[0];
-    Some(CodexPendingUserInput {
-        call_id,
-        question: first.question.clone(),
-        options: first
-            .options
-            .iter()
-            .map(|option| option.label.clone())
-            .collect(),
-        descriptions: first
-            .options
-            .iter()
-            .map(|option| option.description.clone().unwrap_or_default())
-            .collect(),
-        header: first.header.clone(),
-        multi_select: first.multi_select,
-        questions,
-    })
-}
-
 fn codex_arguments_value(arguments: Option<&serde_json::Value>) -> Option<serde_json::Value> {
     match arguments? {
         serde_json::Value::String(raw) => serde_json::from_str(raw).ok(),
         value @ serde_json::Value::Object(_) => Some(value.clone()),
         _ => None,
     }
-}
-
-fn parse_codex_user_input_questions(
-    raw_questions: &[serde_json::Value],
-) -> Vec<CodexUserInputQuestion> {
-    raw_questions
-        .iter()
-        .filter_map(|question| {
-            let prompt = string_field(question, &["question", "prompt", "label"])?;
-            if prompt.trim().is_empty() {
-                return None;
-            }
-            let options = question
-                .get("options")
-                .and_then(|value| value.as_array())
-                .map(|items| {
-                    items
-                        .iter()
-                        .filter_map(parse_codex_user_input_option)
-                        .collect::<Vec<_>>()
-                })
-                .unwrap_or_default();
-            if options.is_empty() {
-                return None;
-            }
-            Some(CodexUserInputQuestion {
-                id: string_field(question, &["id"]),
-                question: prompt,
-                header: string_field(question, &["header"]),
-                options,
-                multi_select: bool_field(
-                    question,
-                    &[
-                        "multiSelect",
-                        "multi_select",
-                        "isMultiple",
-                        "allowsMultiple",
-                        "multiple",
-                    ],
-                )
-                .unwrap_or(false),
-            })
-        })
-        .collect()
-}
-
-fn parse_codex_user_input_option(value: &serde_json::Value) -> Option<CodexUserInputOption> {
-    if let Some(label) = value.as_str() {
-        if label.trim().is_empty() {
-            return None;
-        }
-        return Some(CodexUserInputOption {
-            label: label.to_string(),
-            description: None,
-        });
-    }
-
-    let label = string_field(value, &["label", "title"])?;
-    if label.trim().is_empty() {
-        return None;
-    }
-    Some(CodexUserInputOption {
-        label,
-        description: string_field(value, &["description", "detail"]),
-    })
-}
-
-fn normalize_tool_name(value: &str) -> String {
-    value
-        .chars()
-        .filter(|ch| ch.is_ascii_alphanumeric())
-        .flat_map(|ch| ch.to_lowercase())
-        .collect()
 }
 
 fn string_field(value: &serde_json::Value, keys: &[&str]) -> Option<String> {
@@ -1053,11 +776,6 @@ fn string_field(value: &serde_json::Value, keys: &[&str]) -> Option<String> {
             .filter(|inner| !inner.trim().is_empty())
             .map(|inner| inner.to_string())
     })
-}
-
-fn bool_field(value: &serde_json::Value, keys: &[&str]) -> Option<bool> {
-    keys.iter()
-        .find_map(|key| value.get(*key).and_then(|inner| inner.as_bool()))
 }
 
 /// Extract the latest main-agent assistant text from a Claude/Codex JSONL transcript.
@@ -2024,15 +1742,6 @@ pub struct DiscoveredSession {
     pub modified_at: i64,
 }
 
-/// Scan projects directories for recently-active JSONL files.
-///
-/// Returns sessions whose JSONL file was modified within `max_age`.
-/// For each file, reads the first ~30 lines to extract session metadata
-/// and the first user message as a title.
-pub fn discover_active_sessions(max_age: Duration) -> Vec<DiscoveredSession> {
-    discover_active_sessions_in_dirs(max_age, &all_projects_dirs())
-}
-
 /// Scan specific projects directories for recently-active sessions.
 pub fn discover_active_sessions_in_dirs(
     max_age: Duration,
@@ -2482,41 +2191,6 @@ mod tests {
     }
 
     #[test]
-    fn extracts_pending_codex_request_user_input() {
-        let path = write_temp_jsonl(
-            "codex-request-user-input",
-            r#"{"timestamp":"2026-01-01T00:00:00Z","type":"response_item","payload":{"type":"function_call","name":"request_user_input","call_id":"call_question_1","arguments":"{\"questions\":[{\"header\":\"Choice\",\"id\":\"choice\",\"question\":\"Pick one\",\"options\":[{\"label\":\"Preview\",\"description\":\"Open staging\"},{\"label\":\"Ship\",\"description\":\"Release now\"}]}]}"}}
-"#,
-        );
-
-        let pending = extract_pending_codex_user_input(&path).expect("pending question");
-        assert_eq!(pending.call_id, "call_question_1");
-        assert_eq!(pending.question, "Pick one");
-        assert_eq!(pending.header.as_deref(), Some("Choice"));
-        assert_eq!(pending.options, vec!["Preview", "Ship"]);
-        assert_eq!(
-            pending.descriptions,
-            vec!["Open staging".to_string(), "Release now".to_string()]
-        );
-        assert_eq!(pending.questions[0].id.as_deref(), Some("choice"));
-
-        let _ = std::fs::remove_file(path);
-    }
-
-    #[test]
-    fn clears_codex_request_user_input_after_output() {
-        let path = write_temp_jsonl(
-            "codex-request-user-input-resolved",
-            r#"{"timestamp":"2026-01-01T00:00:00Z","type":"response_item","payload":{"type":"function_call","name":"request_user_input","call_id":"call_question_1","arguments":"{\"questions\":[{\"id\":\"choice\",\"question\":\"Pick one\",\"options\":[{\"label\":\"Preview\"}]}]}"}}
-{"timestamp":"2026-01-01T00:00:01Z","type":"response_item","payload":{"type":"function_call_output","call_id":"call_question_1","output":"{\"answers\":{\"choice\":{\"answers\":[\"Preview\"]}}}"}}
-"#,
-        );
-
-        assert!(extract_pending_codex_user_input(&path).is_none());
-        let _ = std::fs::remove_file(path);
-    }
-
-    #[test]
     fn test_find_codex_session_file_in_dir() {
         let session_id = "019d1a08-a24d-7ef0-a7ed-c3a84a84704a";
         let root = std::env::temp_dir().join(format!(
@@ -2854,27 +2528,6 @@ mod tests {
             MessageBlock::Text { text } => assert_ne!(text, "m0"),
             other => panic!("unexpected block: {other:?}"),
         }
-
-        let _ = std::fs::remove_file(path);
-    }
-
-    #[test]
-    fn parse_full_returns_complete_history_then_primes_tail() {
-        let total = MAX_RETAINED_MESSAGES + 25;
-        let path = write_assistant_text_lines("parse-full", total);
-
-        let mut parser = ConversationParser::new(path.clone());
-        let full = parser.parse_full().expect("parse full");
-        assert_eq!(full.len(), total, "parse_full must return everything");
-
-        let follow_up = parser.parse_incremental().expect("incremental follow-up");
-        assert_eq!(follow_up.total_count, total);
-        assert_eq!(follow_up.all_messages.len(), MAX_RETAINED_MESSAGES);
-        assert!(follow_up.truncated);
-        assert!(
-            follow_up.new_messages.is_empty(),
-            "no new bytes since parse_full"
-        );
 
         let _ = std::fs::remove_file(path);
     }

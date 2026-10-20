@@ -1,54 +1,11 @@
 // buddy.rs — Read Claude Buddy data from ~/.claude.json
 
-use std::fs;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
-use std::path::PathBuf;
 use std::sync::Arc;
-use tauri::State;
 
-use super::AppState;
 use crate::config::BuddyDeviceConfig;
 use crate::hooks::session_store::SessionStore;
-
-fn claude_json_path() -> Option<PathBuf> {
-    dirs::home_dir().map(|h| h.join(".claude.json"))
-}
-
-/// Read the buddy section from ~/.claude.json and return it as a JSON string.
-/// Returns a default stub if the file doesn't exist or has no buddy section.
-#[tauri::command]
-pub fn read_buddy_data() -> Result<String, String> {
-    let path = claude_json_path().ok_or("Cannot determine home directory")?;
-
-    if !path.exists() {
-        return Ok(default_buddy_json());
-    }
-
-    let raw = fs::read_to_string(&path).map_err(|e| e.to_string())?;
-    let parsed: serde_json::Value = serde_json::from_str(&raw).map_err(|e| e.to_string())?;
-
-    // Extract buddy sub-object if present
-    if let Some(buddy) = parsed.get("buddy") {
-        return serde_json::to_string(buddy).map_err(|e| e.to_string());
-    }
-
-    Ok(default_buddy_json())
-}
-
-fn default_buddy_json() -> String {
-    r#"{
-  "species": "cat",
-  "name": "Claude",
-  "level": 1,
-  "xp": 0,
-  "xpMax": 100,
-  "happiness": 50,
-  "energy": 50,
-  "interactions": 0
-}"#
-    .to_string()
-}
 
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -69,61 +26,6 @@ pub struct BuddyDeviceSnapshot {
     pub protocol_version: u32,
     pub sessions: Vec<BuddyDeviceSession>,
     pub focus_action: String,
-}
-
-/// Compact JSON protocol payload for Apple Watch / ESP32 companion devices.
-#[tauri::command]
-pub fn buddy_device_snapshot(state: State<'_, AppState>) -> Result<BuddyDeviceSnapshot, String> {
-    let sessions = state
-        .session_store
-        .get_all_sessions()
-        .into_iter()
-        .map(|session| BuddyDeviceSession {
-            id: session.id,
-            source_slot: buddy_source_slot(&session.agent_type),
-            agent_type: session.agent_type,
-            project: session.project,
-            phase: serde_json::to_value(&session.phase)
-                .ok()
-                .and_then(|value| value.as_str().map(ToString::to_string))
-                .unwrap_or_else(|| "idle".to_string()),
-            status_code: buddy_status_code(&session.phase, session.last_tool_status.as_deref()),
-            needs_attention: session.phase.needs_attention(),
-            last_tool_name: session.last_tool_name,
-        })
-        .collect();
-
-    Ok(BuddyDeviceSnapshot {
-        protocol_version: 1,
-        sessions,
-        focus_action: "buddy_reverse_focus".to_string(),
-    })
-}
-
-#[tauri::command]
-pub fn get_buddy_device_config(state: State<'_, AppState>) -> Result<BuddyDeviceConfig, String> {
-    Ok(state.config_store.get().buddy_device)
-}
-
-#[tauri::command]
-pub fn set_buddy_device_config(
-    state: State<'_, AppState>,
-    config: BuddyDeviceConfig,
-) -> Result<BuddyDeviceConfig, String> {
-    let mut app_config = state.config_store.get();
-    app_config.buddy_device = config.clone();
-    state.config_store.update(app_config)?;
-    Ok(config)
-}
-
-/// Reverse-focus entrypoint used by external Buddy devices.
-#[tauri::command]
-pub async fn buddy_reverse_focus(
-    app: tauri::AppHandle,
-    state: State<'_, AppState>,
-    session_id: String,
-) -> Result<(), String> {
-    super::jump_to_terminal(app, state, session_id).await
 }
 
 pub fn start_buddy_device_server(config: BuddyDeviceConfig, store: Arc<SessionStore>) {

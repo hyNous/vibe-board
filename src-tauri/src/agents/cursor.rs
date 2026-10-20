@@ -111,12 +111,4 @@ impl AgentAdapter for CursorAdapter {
     }
 }
 
-impl CursorAdapter {
-    pub fn is_cursor_installed() -> bool {
-        !matches!(Self::detect_status(), AdapterStatus::Unavailable)
-    }
-
-    pub fn has_agentbro_hooks(&self) -> bool {
-        profiles::is_installed_at(&profiles::cursor_profile(), &self.settings_path())
-    }
-}
+impl CursorAdapter {}

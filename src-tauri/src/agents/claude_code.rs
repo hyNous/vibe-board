@@ -92,21 +92,6 @@ impl ClaudeCodeAdapter {
         }
     }
 
-    /// Get the config root path for this instance
-    pub fn config_root(&self) -> &PathBuf {
-        &self.config_root
-    }
-
-    /// Get the projects directory for this instance (for conversation watching)
-    pub fn projects_dir(&self) -> Option<PathBuf> {
-        let dir = self.config_root.join("projects");
-        if dir.is_dir() {
-            Some(dir)
-        } else {
-            None
-        }
-    }
-
     /// Check if Claude Code CLI is installed
     fn is_claude_code_installed() -> bool {
         super::executable::command_exists("claude")
@@ -123,12 +108,6 @@ impl ClaudeCodeAdapter {
         } else {
             AdapterStatus::Unavailable
         }
-    }
-
-    /// Get the path where the bridge binary should be installed
-    /// Uses ~/.agent-island/bin/ to avoid spaces in path (shared across all instances)
-    fn bridge_binary_path() -> PathBuf {
-        hook_manager::bridge_binary_path()
     }
 
     /// Get the settings.json path for this instance
@@ -891,18 +870,6 @@ fn remaining_label(value: &serde_json::Value) -> String {
     }
 }
 
-/// Result of verifying hook installation integrity
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum HookVerificationResult {
-    /// Everything is correctly installed
-    Ok,
-    /// Bridge binary is missing or outdated and needs reinstall
-    NeedsReinstall,
-    /// settings.json is missing or corrupted / missing our hook entries
-    SettingsCorrupted,
-}
-
 /// Read the first non-empty string value from a list of possible hook payload keys.
 fn optional_string(raw: &serde_json::Value, keys: &[&str]) -> Option<String> {
     keys.iter().find_map(|key| {
@@ -951,78 +918,6 @@ fn truncate_display_text(text: &str, max_chars: usize) -> String {
 }
 
 impl ClaudeCodeAdapter {
-    /// Verify that hooks are correctly installed and up to date.
-    /// Checks:
-    ///  1. The bridge binary exists on disk
-    ///  2. settings.json contains our hook entries pointing to the bridge binary
-    pub fn verify_hooks(&self) -> HookVerificationResult {
-        // 1. Check bridge binary exists
-        let bridge_path = Self::bridge_binary_path();
-        if !bridge_path.exists() {
-            return HookVerificationResult::NeedsReinstall;
-        }
-
-        // 2. Check settings.json has our hook entries
-        let settings_path = self.settings_path();
-        let settings_content = match std::fs::read_to_string(&settings_path) {
-            Ok(c) => c,
-            Err(_) => return HookVerificationResult::SettingsCorrupted,
-        };
-        let settings: serde_json::Value = match serde_json::from_str(&settings_content) {
-            Ok(v) => v,
-            Err(_) => return HookVerificationResult::SettingsCorrupted,
-        };
-
-        let hooks = match settings.get("hooks").and_then(|h| h.as_object()) {
-            Some(h) => h,
-            None => return HookVerificationResult::SettingsCorrupted,
-        };
-
-        // Spot-check a few critical events
-        for event in &["PermissionRequest", "PreToolUse", "SessionStart"] {
-            let has_our_hook = hooks
-                .get(*event)
-                .and_then(|v| v.as_array())
-                .map(|arr| {
-                    arr.iter().any(|group| {
-                        group
-                            .get("hooks")
-                            .and_then(|h| h.as_array())
-                            .map(|hooks_arr| {
-                                hooks_arr.iter().any(|h| {
-                                    h.get("command")
-                                        .and_then(|c| c.as_str())
-                                        .map(|c| {
-                                            c.contains("vibe-board-bridge")
-                                                || c.contains("agentbro-bridge")
-                                                || c.contains("agent-island-bridge")
-                                        })
-                                        .unwrap_or(false)
-                                })
-                            })
-                            .unwrap_or(false)
-                    })
-                })
-                .unwrap_or(false);
-
-            if !has_our_hook {
-                return HookVerificationResult::SettingsCorrupted;
-            }
-        }
-
-        // A missing/null statusLine means the live Claude quota/context feed
-        // is not installed yet. Custom user commands remain valid.
-        if settings
-            .get("statusLine")
-            .map(|value| value.is_null())
-            .unwrap_or(true)
-        {
-            return HookVerificationResult::NeedsReinstall;
-        }
-
-        HookVerificationResult::Ok
-    }
-
     /// Check if the deployed bridge binary differs from the bundled version.
     /// If so, overwrite with the new version (app was updated).
     /// Returns true if the binary was updated.

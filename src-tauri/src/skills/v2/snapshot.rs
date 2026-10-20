@@ -23,9 +23,3 @@ pub fn export_to_file(svc: &Service) -> Result<String, String> {
 pub fn snapshot_path(svc: &Service) -> Result<PathBuf, String> {
     Ok(svc.center_path()?.join("vibeboard-skills.snapshot.json"))
 }
-
-pub fn import(_svc: &Service, _json: String) -> Result<(), String> {
-    // Snapshot import is a recovery escape hatch; we only validate structure.
-    // Restoring fully is intentionally conservative to avoid clobbering.
-    Ok(())
-}

@@ -28,16 +28,6 @@ pub fn service() -> Result<Arc<service::Service>, String> {
     Ok(SERVICE.get().unwrap().clone())
 }
 
-/// Rebuild the service (e.g. after sqlite path setting changed). Returns the
-/// new service; the global slot is replaced.
-pub fn rebuild_service() -> Result<Arc<service::Service>, String> {
-    let svc = build_service()?;
-    // OnceLock can't be reset; store into a separate Mutex-free replaceable cell.
-    // We rely on the inner Db being reopenable instead — so here we just return
-    // the freshly built service without replacing the global lock.
-    Ok(svc)
-}
-
 fn build_service() -> Result<Arc<service::Service>, String> {
     let home = fsutil::home();
     fsutil::activate_unified_center()?;

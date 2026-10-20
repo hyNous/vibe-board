@@ -46,12 +46,6 @@ pub fn legacy_agentbro_home() -> PathBuf {
     home().join(".agentbro")
 }
 
-/// Compatibility alias for older callers. New Vibe Board data belongs under
-/// `.vibeboard`.
-pub fn agentbro_home() -> PathBuf {
-    vibeboard_home()
-}
-
 pub fn unified_center_marker_path() -> PathBuf {
     vibeboard_home().join("unified-skill-center")
 }
@@ -110,26 +104,10 @@ pub fn default_center_path() -> PathBuf {
     }
 }
 
-/// Both roots stay discoverable for migration/diagnosis. New writes use the
-/// activated shared root.
-pub fn all_center_dirs() -> Vec<PathBuf> {
-    let primary = default_center_path();
-    let legacy = legacy_agentbro_home().join("skills");
-    if primary == legacy {
-        vec![primary]
-    } else {
-        vec![primary, legacy]
-    }
-}
-
 pub fn default_sqlite_path() -> PathBuf {
     vibeboard_home()
         .join("skill-manager")
         .join("skill-manager.db")
-}
-
-pub fn default_snapshot_path() -> PathBuf {
-    default_center_path().join("vibeboard-skills.snapshot.json")
 }
 
 pub fn settings_path() -> PathBuf {
@@ -147,14 +125,6 @@ pub fn expand_tilde(p: &str) -> PathBuf {
 pub fn normalized_path(path: &Path) -> PathBuf {
     path.canonicalize()
         .unwrap_or_else(|_| resolve_non_existing_path(path))
-}
-
-pub fn is_path_within(base: &Path, target: &Path) -> bool {
-    let base_resolved = normalized_path(base);
-    let target_resolved = target
-        .canonicalize()
-        .unwrap_or_else(|_| resolve_non_existing_path(target));
-    target_resolved.starts_with(base_resolved)
 }
 
 fn resolve_non_existing_path(path: &Path) -> PathBuf {

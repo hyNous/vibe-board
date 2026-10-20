@@ -5,24 +5,11 @@ use std::path::PathBuf;
 
 const SESSIONS_FILE: &str = "sessions.json";
 const APP_SUPPORT_DIR: &str = "vibeboard";
-const LEGACY_APP_SUPPORT_DIRS: [&str; 2] = ["agent-island", "agentbro"];
 
 fn get_sessions_path() -> Option<PathBuf> {
     dirs::data_dir()
         .or_else(dirs::data_local_dir) // fallback
         .map(|p| p.join(APP_SUPPORT_DIR).join(SESSIONS_FILE))
-}
-
-fn get_legacy_sessions_paths() -> Vec<PathBuf> {
-    dirs::data_dir()
-        .or_else(dirs::data_local_dir)
-        .map(|p| {
-            LEGACY_APP_SUPPORT_DIRS
-                .iter()
-                .map(|dir| p.join(dir).join(SESSIONS_FILE))
-                .collect()
-        })
-        .unwrap_or_default()
 }
 
 #[tauri::command(async)]
@@ -34,22 +21,4 @@ pub fn save_sessions(sessions_json: String) -> Result<(), String> {
     fs::write(&path, sessions_json).map_err(|e| e.to_string())?;
     log::debug!("Sessions persisted to {:?}", path);
     Ok(())
-}
-
-#[tauri::command(async)]
-pub fn load_sessions() -> Result<String, String> {
-    let path = get_sessions_path().ok_or("Cannot get data directory")?;
-    let path = if path.exists() {
-        path
-    } else if let Some(legacy) = get_legacy_sessions_paths()
-        .into_iter()
-        .find(|candidate| candidate.exists())
-    {
-        legacy
-    } else {
-        return Ok("[]".to_string());
-    };
-    let data = fs::read_to_string(&path).map_err(|e| e.to_string())?;
-    log::debug!("Sessions loaded from {:?}", path);
-    Ok(data)
 }

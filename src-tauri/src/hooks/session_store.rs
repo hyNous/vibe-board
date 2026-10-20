@@ -1118,13 +1118,6 @@ impl SessionStore {
         self.emit_update_with_suppression(false);
     }
 
-    /// Emit session update event with an optional suppression flag.
-    /// When `suppressed` is true the frontend should update state but NOT
-    /// auto-expand the panel (because the user is looking at the terminal).
-    pub fn emit_update_suppressed(&self, suppressed: bool) {
-        self.emit_update_with_suppression(suppressed);
-    }
-
     fn emit_update_with_suppression(&self, suppressed: bool) {
         if let Some(ref handle) = self.app_handle {
             let sessions = self.get_all_sessions();

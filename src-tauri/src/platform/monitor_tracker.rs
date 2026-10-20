@@ -61,17 +61,6 @@ fn monitor_identity(monitor: &tauri::Monitor) -> String {
         .unwrap_or_else(|| "primary".to_string())
 }
 
-/// Register an in-process callback invoked whenever the cursor moves to a
-/// different monitor. Always dispatched on the Tauri main thread.
-pub fn subscribe<F>(callback: F)
-where
-    F: Fn(&AppHandle, &CursorMonitorChange) + Send + Sync + 'static,
-{
-    if let Ok(mut guard) = state().lock() {
-        guard.listeners.push(Box::new(callback));
-    }
-}
-
 /// Spawn the background poller. Idempotent — safe to call from `setup`.
 pub fn start(app: AppHandle) {
     if TRACKER_STARTED.set(()).is_err() {

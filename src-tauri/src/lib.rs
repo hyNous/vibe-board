@@ -23,9 +23,9 @@ use tauri::{Emitter, Manager};
 use agents::claude_code::ClaudeCodeAdapter;
 use agents::AdapterStatus;
 use agents::AgentAdapter;
-use commands::persistence::{load_sessions, save_sessions};
+use commands::persistence::save_sessions;
 use commands::AppState;
-use config::{ConfigStore, CustomSoundConfig, SoundRuleConfig};
+use config::{ConfigStore, SoundRuleConfig};
 use hooks::conversation_parser::{
     all_projects_dirs, discover_active_sessions_in_dirs, projects_dirs_from_roots,
 };
@@ -33,7 +33,7 @@ use hooks::file_watcher::ConversationWatcher;
 use hooks::server::HookServer;
 use hooks::session_store::SessionStore;
 use platform::display::{find_target_monitor, list_displays_inner, DisplayInfo};
-use sound::{SoundEvent, SoundPack, SoundPackImportResult};
+use sound::SoundEvent;
 
 #[derive(Debug, Clone)]
 struct NotchDragState {
@@ -74,37 +74,6 @@ fn tray_icon_rect() -> &'static Mutex<Option<tauri::Rect>> {
 }
 
 // ── Display Controller Commands ─────────────────────────────────
-
-#[tauri::command]
-async fn get_display_level(
-    state: tauri::State<'_, commands::AppState>,
-) -> Result<platform::display_controller::DisplayLevel, String> {
-    Ok(state.display_controller.current_level())
-}
-
-#[tauri::command]
-async fn notify_cursor_enter(state: tauri::State<'_, commands::AppState>) -> Result<(), String> {
-    state.display_controller.on_cursor_enter().await;
-    Ok(())
-}
-
-#[tauri::command]
-async fn notify_cursor_leave(state: tauri::State<'_, commands::AppState>) -> Result<(), String> {
-    state.display_controller.on_cursor_leave().await;
-    Ok(())
-}
-
-#[tauri::command]
-async fn notify_esc(state: tauri::State<'_, commands::AppState>) -> Result<(), String> {
-    state.display_controller.on_esc().await;
-    Ok(())
-}
-
-#[tauri::command]
-async fn notify_expand(state: tauri::State<'_, commands::AppState>) -> Result<(), String> {
-    state.display_controller.on_expand();
-    Ok(())
-}
 
 #[tauri::command]
 async fn set_notch_focusable(app: tauri::AppHandle, focusable: bool) -> Result<(), String> {
@@ -156,172 +125,16 @@ async fn set_notch_ignore_cursor_events(
 }
 
 #[tauri::command]
-async fn open_image(src: String) -> Result<(), String> {
-    let target = if src.starts_with("data:") {
-        persist_data_url_image(&src)?
-    } else {
-        src
-    };
-    open_system_target(&target)
-}
-
-#[tauri::command]
-async fn read_image_data_url(src: String) -> Result<String, String> {
-    if src.starts_with("data:") {
-        return Ok(src);
-    }
-    let path = image_source_path(&src)?;
-    let metadata =
-        std::fs::metadata(&path).map_err(|e| format!("Failed to read image metadata: {}", e))?;
-    if !metadata.is_file() {
-        return Err("Image source is not a file".to_string());
-    }
-    const MAX_INLINE_IMAGE_BYTES: u64 = 30 * 1024 * 1024;
-    if metadata.len() > MAX_INLINE_IMAGE_BYTES {
-        return Err("Image is too large to preview inline".to_string());
-    }
-
-    let bytes = std::fs::read(&path).map_err(|e| format!("Failed to read image: {}", e))?;
-    let media_type = infer_image_media_type(&path, &bytes)
-        .ok_or_else(|| "Unsupported image format".to_string())?;
-    let encoded = {
-        use base64::Engine as _;
-        base64::engine::general_purpose::STANDARD.encode(bytes)
-    };
-    Ok(format!("data:{};base64,{}", media_type, encoded))
-}
-
-#[tauri::command]
 async fn open_system_path(path: String) -> Result<(), String> {
     open_system_target(&path)
-}
-
-fn image_source_path(src: &str) -> Result<PathBuf, String> {
-    let trimmed = src.trim();
-    if let Some(rest) = trimmed.strip_prefix("file://") {
-        let rest = rest.strip_prefix("localhost").unwrap_or(rest);
-        return Ok(PathBuf::from(percent_decode_path(rest)?));
-    }
-    if Path::new(trimmed).is_absolute() || trimmed.starts_with("~/") {
-        return Ok(PathBuf::from(expand_tilde_target(trimmed)));
-    }
-    #[cfg(target_os = "windows")]
-    if trimmed.starts_with("~\\") {
-        return Ok(PathBuf::from(expand_tilde_target(trimmed)));
-    }
-    Err("Image source is not a local file path".to_string())
-}
-
-fn percent_decode_path(input: &str) -> Result<String, String> {
-    let bytes = input.as_bytes();
-    let mut decoded = Vec::with_capacity(bytes.len());
-    let mut i = 0;
-    while i < bytes.len() {
-        if bytes[i] == b'%' {
-            let hi = bytes
-                .get(i + 1)
-                .copied()
-                .and_then(hex_value)
-                .ok_or_else(|| "Invalid file URL escape".to_string())?;
-            let lo = bytes
-                .get(i + 2)
-                .copied()
-                .and_then(hex_value)
-                .ok_or_else(|| "Invalid file URL escape".to_string())?;
-            decoded.push((hi << 4) | lo);
-            i += 3;
-        } else {
-            decoded.push(bytes[i]);
-            i += 1;
-        }
-    }
-    String::from_utf8(decoded).map_err(|_| "Invalid UTF-8 file URL".to_string())
-}
-
-fn hex_value(byte: u8) -> Option<u8> {
-    match byte {
-        b'0'..=b'9' => Some(byte - b'0'),
-        b'a'..=b'f' => Some(byte - b'a' + 10),
-        b'A'..=b'F' => Some(byte - b'A' + 10),
-        _ => None,
-    }
-}
-
-fn infer_image_media_type(path: &Path, bytes: &[u8]) -> Option<&'static str> {
-    let ext = path
-        .extension()
-        .and_then(|value| value.to_str())
-        .map(|value| value.to_ascii_lowercase());
-    match ext.as_deref() {
-        Some("png") => return Some("image/png"),
-        Some("jpg") | Some("jpeg") => return Some("image/jpeg"),
-        Some("gif") => return Some("image/gif"),
-        Some("webp") => return Some("image/webp"),
-        Some("bmp") => return Some("image/bmp"),
-        Some("svg") => return Some("image/svg+xml"),
-        Some("heic") | Some("heif") => return Some("image/heic"),
-        Some("avif") => return Some("image/avif"),
-        _ => {}
-    }
-
-    if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
-        Some("image/png")
-    } else if bytes.starts_with(b"\xff\xd8\xff") {
-        Some("image/jpeg")
-    } else if bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a") {
-        Some("image/gif")
-    } else if bytes.len() >= 12 && &bytes[0..4] == b"RIFF" && &bytes[8..12] == b"WEBP" {
-        Some("image/webp")
-    } else if bytes.starts_with(b"BM") {
-        Some("image/bmp")
-    } else {
-        None
-    }
 }
 
 #[cfg(test)]
 mod image_preview_tests {
     use super::*;
 
-    #[test]
-    fn file_url_image_paths_are_decoded() {
-        let path = image_source_path("file:///tmp/agentbro%20preview/image.png").unwrap();
-        assert_eq!(path, PathBuf::from("/tmp/agentbro preview/image.png"));
-    }
-
     #[cfg(target_os = "windows")]
-    #[test]
-    fn windows_image_source_accepts_absolute_paths() {
-        let path = image_source_path(r"C:\Users\admin\Pictures\preview.png").unwrap();
-        assert_eq!(path, PathBuf::from(r"C:\Users\admin\Pictures\preview.png"));
-    }
-
     #[cfg(target_os = "windows")]
-    #[test]
-    fn windows_tilde_backslash_paths_expand_to_home() {
-        let Some(home) = dirs::home_dir() else {
-            return;
-        };
-
-        assert_eq!(
-            expand_tilde_target(r"~\AgentBro\hooks"),
-            home.join(r"AgentBro\hooks").display().to_string()
-        );
-        assert_eq!(
-            image_source_path(r"~\Pictures\preview.png").unwrap(),
-            home.join(r"Pictures\preview.png")
-        );
-    }
-
-    #[test]
-    fn image_media_type_uses_magic_bytes_without_extension() {
-        let bytes = b"\x89PNG\r\n\x1a\nrest";
-        assert_eq!(
-            infer_image_media_type(Path::new("/tmp/preview"), bytes),
-            Some("image/png")
-        );
-    }
-
     #[cfg(target_os = "windows")]
     #[test]
     fn windows_system_open_recognizes_urls_without_matching_paths() {
@@ -329,45 +142,6 @@ mod image_preview_tests {
         assert!(is_system_url("ccswitch://provider"));
         assert!(!is_system_url(r"C:\Users\admin\Pictures\preview.png"));
         assert!(!is_system_url(r"\\server\share\preview.png"));
-    }
-}
-
-fn persist_data_url_image(src: &str) -> Result<String, String> {
-    let (header, data) = src
-        .split_once(',')
-        .ok_or_else(|| "Invalid image data URL".to_string())?;
-    if !header.contains(";base64") {
-        return Err("Only base64 image data URLs can be opened".to_string());
-    }
-
-    let media_type = header
-        .strip_prefix("data:")
-        .unwrap_or("image/png")
-        .split(';')
-        .next()
-        .unwrap_or("image/png");
-    let bytes = {
-        use base64::Engine as _;
-        base64::engine::general_purpose::STANDARD
-            .decode(data)
-            .map_err(|e| format!("Invalid image data: {}", e))?
-    };
-    let ext = image_extension(media_type);
-    let path =
-        std::env::temp_dir().join(format!("agentbro-image-{}.{}", uuid::Uuid::new_v4(), ext));
-    std::fs::write(&path, bytes).map_err(|e| format!("Failed to write temp image: {}", e))?;
-    Ok(path.to_string_lossy().to_string())
-}
-
-fn image_extension(media_type: &str) -> &'static str {
-    match media_type {
-        "image/jpeg" | "image/jpg" => "jpg",
-        "image/gif" => "gif",
-        "image/webp" => "webp",
-        "image/bmp" => "bmp",
-        "image/svg+xml" => "svg",
-        "image/heic" => "heic",
-        _ => "png",
     }
 }
 
@@ -578,87 +352,6 @@ async fn install_agent_hook(
 }
 
 #[tauri::command]
-async fn install_custom_agent_hook(
-    state: tauri::State<'_, commands::AppState>,
-    profile_id: String,
-    install_directory: String,
-    custom_name: Option<String>,
-) -> Result<String, String> {
-    let profile = agents::profiles::profile_for_agent(&profile_id)
-        .ok_or_else(|| format!("Unknown hook profile: {}", profile_id))?;
-    let base_directory = std::path::PathBuf::from(expand_tilde_target(&install_directory));
-    if !base_directory.is_dir() {
-        return Err(format!(
-            "Install directory does not exist: {}",
-            base_directory.display()
-        ));
-    }
-
-    // Validate the directory looks like a valid config root for this agent.
-    // For JSON-based hooks (claude-code, codex, etc.), the parent of configuration_path
-    // must exist. E.g. for claude-code, configuration_path is ".claude/settings.json",
-    // so the base_directory should look like a .claude directory or contain one.
-    let config_file_name = std::path::Path::new(profile.configuration_path)
-        .file_name()
-        .map(|n| n.to_string_lossy().to_string())
-        .unwrap_or_default();
-    let target_path = agents::profiles::custom_installation_path(&profile, &base_directory);
-    if let Some(parent) = target_path.parent() {
-        if !parent.is_dir() {
-            return Err(format!(
-                "Config parent directory does not exist: {}. Expected a valid config root for {}.",
-                parent.display(),
-                profile.id
-            ));
-        }
-    }
-
-    // Check for duplicate install directory
-    let cfg = state.config_store.get();
-    let dir_lower = install_directory.trim().to_lowercase();
-    if cfg
-        .custom_hook_installs
-        .iter()
-        .any(|e| e.install_directory.to_lowercase() == dir_lower && e.profile_id == profile_id)
-    {
-        return Err(format!(
-            "A custom hook for {} at this directory already exists.",
-            profile.id
-        ));
-    }
-    drop(cfg);
-
-    let display_name = custom_name
-        .filter(|n| !n.trim().is_empty())
-        .unwrap_or_else(|| format!("{} ({})", profile.id, install_directory));
-    let dir_str = base_directory.display().to_string();
-    let target = agents::profiles::install_custom_at_labeled(
-        &profile,
-        &base_directory,
-        Some(&display_name),
-        Some(&dir_str),
-    )
-    .map_err(|e| e.to_string())?;
-    let entry = config::CustomHookInstall {
-        id: uuid::Uuid::new_v4().to_string(),
-        profile_id: profile_id.clone(),
-        display_name,
-        install_directory,
-    };
-    let mut cfg = state.config_store.get();
-    cfg.custom_hook_installs.push(entry);
-    state.config_store.update(cfg).map_err(|e| e.to_string())?;
-
-    // Provide a helpful hint about what was validated
-    let hint = if target_path.exists() || config_file_name.is_empty() {
-        String::new()
-    } else {
-        format!(" (note: {} was created at this path)", config_file_name)
-    };
-    Ok(format!("{}{}", display_path_with_home(&target), hint))
-}
-
-#[tauri::command]
 async fn uninstall_agent_hook(
     state: tauri::State<'_, commands::AppState>,
     tool_name: String,
@@ -698,65 +391,6 @@ async fn uninstall_agent_hook(
     if let Err(e) = state.config_store.mark_agent_disabled(adapter.name()) {
         log::warn!(
             "Failed to clear enabled-agent intent for {}: {}",
-            adapter.name(),
-            e
-        );
-    }
-    Ok(())
-}
-
-#[tauri::command]
-async fn configure_agent_hook_events(
-    state: tauri::State<'_, commands::AppState>,
-    tool_name: String,
-    enabled_events: Vec<String>,
-) -> Result<(), String> {
-    if let Some(instance) = configured_engine_instance(&state, &tool_name) {
-        let profile = agents::profiles::claude_code_profile();
-        agents::profiles::save_event_selection(&profile, &enabled_events)
-            .map_err(|error| error.to_string())?;
-        configured_engine_adapter(&instance)
-            .install_hooks()
-            .map_err(|error| error.to_string())?;
-        persist_engine_enabled(&state, &instance.id, true)?;
-        return Ok(());
-    }
-    if let Some(custom_id) = tool_name.strip_prefix("custom:") {
-        let cfg = state.config_store.get();
-        let entry = cfg
-            .custom_hook_installs
-            .iter()
-            .find(|e| e.id == custom_id)
-            .ok_or_else(|| format!("Unknown custom hook: {}", custom_id))?
-            .clone();
-        let profile = agents::profiles::profile_for_agent(&entry.profile_id)
-            .ok_or_else(|| format!("Unknown hook profile: {}", entry.profile_id))?;
-        agents::profiles::save_event_selection(&profile, &enabled_events)
-            .map_err(|e| e.to_string())?;
-        let base_dir = std::path::PathBuf::from(expand_tilde_target(&entry.install_directory));
-        let dir_str = base_dir.display().to_string();
-        agents::profiles::install_custom_at_labeled(
-            &profile,
-            &base_dir,
-            Some(&entry.display_name),
-            Some(&dir_str),
-        )
-        .map_err(|e| e.to_string())?;
-        return Ok(());
-    }
-    let adapter = state
-        .adapters
-        .iter()
-        .find(|a| a.name() == tool_name || a.display_name() == tool_name)
-        .ok_or_else(|| format!("Unknown tool: {}", tool_name))?;
-    let profile = agents::profiles::profile_for_agent(adapter.name())
-        .ok_or_else(|| format!("Unknown hook profile: {}", adapter.name()))?;
-    agents::profiles::save_event_selection(&profile, &enabled_events).map_err(|e| e.to_string())?;
-    ensure_installable(adapter.as_ref())?;
-    adapter.install_hooks().map_err(|e| e.to_string())?;
-    if let Err(e) = state.config_store.mark_agent_enabled(adapter.name()) {
-        log::warn!(
-            "Failed to persist enabled-agent intent for {}: {}",
             adapter.name(),
             e
         );
@@ -996,435 +630,13 @@ async fn reinstall_all_hooks(
     Ok(errors)
 }
 
-#[tauri::command]
-async fn uninstall_all_hooks(
-    state: tauri::State<'_, commands::AppState>,
-) -> Result<Vec<String>, String> {
-    let mut errors = Vec::new();
-    for adapter in &state.adapters {
-        let result = adapter.remove_hooks().map_err(|e| e.to_string());
-        if let Err(e) = result {
-            errors.push(format!("{}: {}", adapter.display_name(), e));
-        } else {
-            if let Err(e) = state.config_store.mark_agent_disabled(adapter.name()) {
-                log::warn!(
-                    "Failed to clear enabled-agent intent for {}: {}",
-                    adapter.name(),
-                    e
-                );
-            }
-        }
-    }
-    // Keep user-defined custom hook registrations (display name + install directory)
-    // so the user doesn't have to re-enter them after a bulk uninstall.
-    // We only remove the injected hook files on disk.
-    let cfg = state.config_store.get();
-    for entry in &cfg.custom_hook_installs {
-        let Some(profile) = agents::profiles::profile_for_agent(&entry.profile_id) else {
-            continue;
-        };
-        let base_dir = std::path::PathBuf::from(expand_tilde_target(&entry.install_directory));
-        let target = agents::profiles::custom_installation_path(&profile, &base_dir);
-        if target.exists() {
-            let result =
-                agents::profiles::uninstall_at(&profile, &target).map_err(|e| e.to_string());
-            if let Err(e) = result {
-                errors.push(format!("{}: {}", entry.display_name, e));
-            }
-        }
-    }
-    Ok(errors)
-}
-
-#[tauri::command]
-fn probe_codex_app_server() -> agents::codex::CodexAppServerProbe {
-    agents::codex::probe_app_server_readiness()
-}
-
 // ── Webhook Commands ────────────────────────────────────────────
-
-#[derive(Debug, Clone, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct WebhookFormConfig {
-    enabled: bool,
-    url: String,
-    secret: Option<String>,
-    #[serde(default)]
-    events: Vec<String>,
-    #[serde(default)]
-    delay_enabled: bool,
-    #[serde(default = "default_webhook_delay_minutes")]
-    delay_minutes: u32,
-}
-
-fn default_webhook_delay_minutes() -> u32 {
-    1
-}
-
-fn webhook_provider_id(provider: &webhook::WebhookPlatform) -> &'static str {
-    match provider {
-        webhook::WebhookPlatform::DingTalk => "dingtalk",
-        webhook::WebhookPlatform::Feishu => "feishu",
-    }
-}
-
-fn webhook_provider_name(provider: &webhook::WebhookPlatform) -> &'static str {
-    match provider {
-        webhook::WebhookPlatform::DingTalk => "DingTalk",
-        webhook::WebhookPlatform::Feishu => "Feishu",
-    }
-}
-
-fn normalize_webhook_secret(secret: Option<String>) -> Option<String> {
-    secret
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty())
-}
-
-fn webhook_config_from_form(
-    provider: webhook::WebhookPlatform,
-    form: WebhookFormConfig,
-    force_enabled: bool,
-) -> webhook::WebhookConfig {
-    let WebhookFormConfig {
-        enabled,
-        url,
-        secret,
-        events,
-        delay_enabled,
-        delay_minutes,
-    } = form;
-
-    webhook::WebhookConfig {
-        id: webhook_provider_id(&provider).to_string(),
-        name: webhook_provider_name(&provider).to_string(),
-        platform: provider,
-        url: url.trim().to_string(),
-        secret: normalize_webhook_secret(secret),
-        sources: Vec::new(),
-        events,
-        enabled: force_enabled || enabled,
-        delay_enabled,
-        delay_minutes: delay_minutes.max(1),
-    }
-}
-
-fn upsert_provider_webhook_config(
-    configs: &mut Vec<webhook::WebhookConfig>,
-    config: webhook::WebhookConfig,
-) {
-    let id = config.id.clone();
-    let platform = config.platform.clone();
-    configs.retain(|existing| existing.id != id && existing.platform != platform);
-    configs.push(config);
-}
-
-#[cfg(test)]
-mod webhook_config_tests {
-    use super::*;
-
-    fn webhook_config(
-        id: &str,
-        platform: webhook::WebhookPlatform,
-        enabled: bool,
-    ) -> webhook::WebhookConfig {
-        webhook::WebhookConfig {
-            id: id.to_string(),
-            name: id.to_string(),
-            platform,
-            url: format!("https://example.com/{id}"),
-            secret: None,
-            sources: Vec::new(),
-            events: Vec::new(),
-            enabled,
-            delay_enabled: false,
-            delay_minutes: 1,
-        }
-    }
-
-    #[test]
-    fn upsert_provider_webhook_config_removes_duplicate_platform_configs() {
-        let mut configs = vec![
-            webhook_config("legacy-dingtalk", webhook::WebhookPlatform::DingTalk, true),
-            webhook_config("feishu", webhook::WebhookPlatform::Feishu, true),
-        ];
-
-        upsert_provider_webhook_config(
-            &mut configs,
-            webhook_config("dingtalk", webhook::WebhookPlatform::DingTalk, false),
-        );
-
-        assert_eq!(configs.len(), 2);
-        assert!(configs
-            .iter()
-            .any(|config| config.id == "dingtalk" && !config.enabled));
-        assert!(configs.iter().any(|config| config.id == "feishu"));
-        assert!(!configs.iter().any(|config| config.id == "legacy-dingtalk"));
-    }
-}
-
-#[tauri::command]
-async fn list_webhooks(
-    state: tauri::State<'_, commands::AppState>,
-) -> Result<Vec<webhook::WebhookConfig>, String> {
-    Ok(state.config_store.get().webhook_configs)
-}
-
-#[tauri::command]
-async fn add_webhook(
-    state: tauri::State<'_, commands::AppState>,
-    config: webhook::WebhookConfig,
-) -> Result<(), String> {
-    let mut cfg = state.config_store.get();
-    cfg.webhook_configs.push(config);
-    state.config_store.update(cfg)
-}
-
-#[tauri::command]
-async fn remove_webhook(
-    state: tauri::State<'_, commands::AppState>,
-    id: String,
-) -> Result<(), String> {
-    let mut cfg = state.config_store.get();
-    cfg.webhook_configs.retain(|w| w.id != id);
-    state.config_store.update(cfg)
-}
-
-#[tauri::command]
-async fn update_webhook(
-    state: tauri::State<'_, commands::AppState>,
-    config: webhook::WebhookConfig,
-) -> Result<(), String> {
-    let mut cfg = state.config_store.get();
-    let id = config.id.clone();
-    match cfg.webhook_configs.iter_mut().find(|w| w.id == id) {
-        Some(existing) => {
-            *existing = config;
-            state.config_store.update(cfg)
-        }
-        None => Err(format!("Webhook {} not found", id)),
-    }
-}
-
-#[tauri::command]
-async fn save_webhook_config(
-    state: tauri::State<'_, commands::AppState>,
-    provider: webhook::WebhookPlatform,
-    config: WebhookFormConfig,
-) -> Result<(), String> {
-    let wh = webhook_config_from_form(provider, config, false);
-    let mut cfg = state.config_store.get();
-    upsert_provider_webhook_config(&mut cfg.webhook_configs, wh);
-
-    state.config_store.update(cfg)
-}
-
-#[tauri::command]
-async fn test_webhook(
-    state: tauri::State<'_, commands::AppState>,
-    id: Option<String>,
-    provider: Option<webhook::WebhookPlatform>,
-    url: Option<String>,
-    secret: Option<String>,
-) -> Result<String, String> {
-    let wh = if let Some(id) = id {
-        let cfg = state.config_store.get();
-        cfg.webhook_configs
-            .iter()
-            .find(|w| w.id == id)
-            .ok_or_else(|| format!("Webhook {} not found", id))?
-            .clone()
-    } else {
-        let provider = provider.ok_or_else(|| "Webhook provider is required".to_string())?;
-        let url = url
-            .map(|value| value.trim().to_string())
-            .filter(|value| !value.is_empty())
-            .ok_or_else(|| "Webhook URL is required".to_string())?;
-
-        webhook::WebhookConfig {
-            id: format!("{}-test", webhook_provider_id(&provider)),
-            name: format!("{} Test", webhook_provider_name(&provider)),
-            platform: provider,
-            url,
-            secret: normalize_webhook_secret(secret),
-            sources: Vec::new(),
-            events: Vec::new(),
-            enabled: true,
-            delay_enabled: false,
-            delay_minutes: default_webhook_delay_minutes(),
-        }
-    };
-
-    let event = webhook::templates::NotificationEvent::Custom {
-        title: "Vibe Board Test".to_string(),
-        body: "This is a test notification from Vibe Board.".to_string(),
-    };
-    let language = state.config_store.get().language;
-    let results =
-        webhook::WebhookForwarder::send(&[wh], &event, "test", "test-session", &language).await;
-    if let Some((_, result)) = results.first() {
-        match result {
-            webhook::WebhookResult::Success => {
-                return Ok("Test notification sent successfully".to_string())
-            }
-            webhook::WebhookResult::Failed(msg) => return Err(msg.clone()),
-            webhook::WebhookResult::Skipped => {
-                return Ok("Webhook skipped (disabled or source filter)".to_string())
-            }
-        }
-    }
-    Ok("No webhooks matched".to_string())
-}
-
-#[tauri::command]
-async fn get_webhook_logs(
-    state: tauri::State<'_, commands::AppState>,
-) -> Result<Vec<hooks::diagnostics::DiagnosticEvent>, String> {
-    Ok(state.diagnostic_buffer.query(
-        hooks::diagnostics::DiagnosticSeverity::Debug,
-        Some("webhook"),
-    ))
-}
 
 // ── Diagnostic Event Commands ───────────────────────────────────
 
-#[tauri::command]
-async fn get_diagnostic_events(
-    state: tauri::State<'_, commands::AppState>,
-    since_seq: Option<u64>,
-    component: Option<String>,
-) -> Result<Vec<hooks::diagnostics::DiagnosticEvent>, String> {
-    Ok(match since_seq {
-        Some(seq) => {
-            let mut events = state.diagnostic_buffer.since(seq);
-            if let Some(ref comp) = component {
-                events.retain(|e| &e.component == comp);
-            }
-            events
-        }
-        None => state.diagnostic_buffer.query(
-            hooks::diagnostics::DiagnosticSeverity::Debug,
-            component.as_deref(),
-        ),
-    })
-}
-
 // ── Suppression Commands ────────────────────────────────────────
 
-#[tauri::command]
-async fn should_suppress(
-    state: tauri::State<'_, AppState>,
-    session_id: String,
-) -> Result<bool, String> {
-    let session = state
-        .session_store
-        .get_session(&session_id)
-        .ok_or_else(|| format!("Session {} not found", session_id))?;
-    let pid = session.pid.unwrap_or(0);
-    if pid == 0 {
-        return Ok(false);
-    }
-    Ok(terminal::suppression::is_terminal_focused(pid))
-}
-
 // ── Cursor Hot-zone Commands ────────────────────────────────────
-
-#[tauri::command]
-async fn get_cursor_position() -> Result<(f64, f64), String> {
-    // Use osascript instead — more reliable, no dependencies
-    #[cfg(target_os = "macos")]
-    {
-        let output = std::process::Command::new("osascript")
-            .args([
-                "-e",
-                r#"
-                use framework "AppKit"
-                set mouseLoc to current application's NSEvent's mouseLocation()
-                set x to mouseLoc's x as real
-                set y to mouseLoc's y as real
-                return (x as text) & "," & (y as text)
-            "#,
-            ])
-            .output()
-            .map_err(|e| e.to_string())?;
-
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let parts: Vec<&str> = stdout.trim().split(',').collect();
-        if parts.len() == 2 {
-            let x: f64 = parts[0]
-                .parse()
-                .map_err(|e: std::num::ParseFloatError| e.to_string())?;
-            let y: f64 = parts[1]
-                .parse()
-                .map_err(|e: std::num::ParseFloatError| e.to_string())?;
-            Ok((x, y))
-        } else {
-            Err("Failed to parse cursor position".to_string())
-        }
-    }
-    #[cfg(target_os = "windows")]
-    {
-        get_cursor_position_sync()
-    }
-    #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
-    {
-        get_cursor_position_sync()
-    }
-}
-
-#[derive(serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct LogicalRect {
-    left: f64,
-    top: f64,
-    width: f64,
-    height: f64,
-}
-
-/// Hit-tests the cursor against a list of logical (CSS px) rects expressed in
-/// the notch webview's viewport coordinates. Returns true if the cursor is
-/// inside any rect; used to drive per-zone click-through.
-#[tauri::command]
-async fn is_cursor_in_window_zones(
-    app: tauri::AppHandle,
-    zones: Vec<LogicalRect>,
-    window_label: Option<String>,
-) -> Result<bool, String> {
-    if zones.is_empty() {
-        return Ok(false);
-    }
-    let label = window_label.as_deref().unwrap_or("notch");
-    let Some(window) = app.get_webview_window(label) else {
-        return Ok(false);
-    };
-    drain_pool(|| {
-        let (cursor_x, cursor_y) = app_cursor_position(&app)?;
-        let position = window.outer_position().map_err(|e| e.to_string())?;
-        let scale = window.scale_factor().unwrap_or(1.0).max(1.0);
-
-        let monitor = window.current_monitor().ok().flatten();
-        let monitor_origin_logical = monitor
-            .map(|m| {
-                let s = m.scale_factor().max(1.0);
-                (m.position().x as f64 / s, m.position().y as f64 / s)
-            })
-            .unwrap_or((0.0, 0.0));
-
-        let cx_logical = cursor_x / scale - monitor_origin_logical.0;
-        let cy_logical = cursor_y / scale - monitor_origin_logical.1;
-        let win_left_logical = position.x as f64 / scale - monitor_origin_logical.0;
-        let win_top_logical = position.y as f64 / scale - monitor_origin_logical.1;
-
-        Ok(zones.iter().any(|r| {
-            let zone_left = win_left_logical + r.left;
-            let zone_top = win_top_logical + r.top;
-            cx_logical >= zone_left
-                && cx_logical <= zone_left + r.width
-                && cy_logical >= zone_top
-                && cy_logical <= zone_top + r.height
-        }))
-    })
-}
 
 #[tauri::command]
 async fn is_cursor_over_notch(
@@ -1527,11 +739,6 @@ fn app_cursor_position(app: &tauri::AppHandle) -> Result<(f64, f64), String> {
 
 // ── Path Validation Command ─────────────────────────────────────
 
-#[tauri::command]
-async fn validate_path(path: String) -> Result<bool, String> {
-    Ok(std::path::Path::new(&path).exists())
-}
-
 // ── Global Shortcut Commands ────────────────────────────────────
 
 fn toggle_notch_window(app: &tauri::AppHandle) {
@@ -1627,15 +834,6 @@ async fn register_global_shortcut(app: tauri::AppHandle, shortcut: String) -> Re
         return Err(err);
     }
     state.config_store.update(next)
-}
-
-#[tauri::command]
-async fn unregister_global_shortcut(app: tauri::AppHandle) -> Result<(), String> {
-    use tauri_plugin_global_shortcut::GlobalShortcutExt;
-    app.global_shortcut()
-        .unregister_all()
-        .map_err(|e| format!("{e}"))?;
-    Ok(())
 }
 
 // ── Quit Command ────────────────────────────────────────────────
@@ -2053,13 +1251,6 @@ async fn restart_app(app: tauri::AppHandle) -> Result<(), String> {
 
 // ── Sound Commands ───────────────────────────────────────────────
 
-fn custom_sounds_dir() -> PathBuf {
-    let base = dirs::data_dir()
-        .or_else(dirs::config_dir)
-        .unwrap_or_else(std::env::temp_dir);
-    base.join("vibeboard").join("sounds")
-}
-
 fn schedule_initial_setup(app: &tauri::AppHandle) {
     let handle = app.clone();
     tauri::async_runtime::spawn(async move {
@@ -2071,135 +1262,6 @@ fn schedule_initial_setup(app: &tauri::AppHandle) {
             log::warn!("Failed to open initial setup window: {error}");
         }
     });
-}
-
-fn supported_audio_extension(path: &Path) -> Option<&'static str> {
-    match path
-        .extension()
-        .and_then(|ext| ext.to_str())
-        .map(|ext| ext.to_ascii_lowercase())
-        .as_deref()
-    {
-        Some("mp3") => Some("mp3"),
-        Some("wav") => Some("wav"),
-        Some("ogg") => Some("ogg"),
-        Some("flac") => Some("flac"),
-        _ => None,
-    }
-}
-
-#[tauri::command]
-async fn play_sound(state: tauri::State<'_, AppState>, event: String) -> Result<(), String> {
-    let event =
-        SoundEvent::from_id(&event).ok_or_else(|| format!("Unknown sound event: {event}"))?;
-    if let Some(ref engine) = state.sound_engine {
-        engine.play(event);
-    }
-    Ok(())
-}
-
-#[tauri::command]
-async fn preview_sound(
-    state: tauri::State<'_, AppState>,
-    event: String,
-    sound: String,
-) -> Result<(), String> {
-    let event =
-        SoundEvent::from_id(&event).ok_or_else(|| format!("Unknown sound event: {event}"))?;
-    if let Some(ref engine) = state.sound_engine {
-        engine.preview(event, sound);
-    }
-    Ok(())
-}
-
-#[tauri::command]
-async fn set_sound_volume(state: tauri::State<'_, AppState>, volume: f32) -> Result<(), String> {
-    let normalized = if volume > 1.0 { volume / 100.0 } else { volume }.clamp(0.0, 1.0);
-    if let Some(ref engine) = state.sound_engine {
-        engine.set_volume(normalized);
-    }
-    let mut config = state.config_store.get();
-    config.sound_volume = normalized;
-    config.volume = (normalized * 100.0).round() as u8;
-    state.config_store.update(config)?;
-    Ok(())
-}
-
-#[tauri::command]
-async fn set_sound_enabled(state: tauri::State<'_, AppState>, enabled: bool) -> Result<(), String> {
-    if let Some(ref engine) = state.sound_engine {
-        engine.set_enabled(enabled);
-    }
-    let mut config = state.config_store.get();
-    config.sound_enabled = enabled;
-    state.config_store.update(config)?;
-    Ok(())
-}
-
-#[tauri::command]
-async fn set_sound_pack(state: tauri::State<'_, AppState>, pack: String) -> Result<(), String> {
-    let sound_pack =
-        SoundPack::from_id(&pack).ok_or_else(|| format!("Unknown sound pack: {pack}"))?;
-    if let Some(ref engine) = state.sound_engine {
-        engine.set_sound_pack(sound_pack);
-    }
-    let mut config = state.config_store.get();
-    config.sound_pack = if pack == "custom" {
-        "custom".to_string()
-    } else {
-        sound_pack.to_string()
-    };
-    state.config_store.update(config)?;
-    Ok(())
-}
-
-#[tauri::command]
-async fn set_probe_session_filter(
-    state: tauri::State<'_, AppState>,
-    enabled: bool,
-) -> Result<(), String> {
-    if let Some(ref engine) = state.sound_engine {
-        engine.set_probe_filter(enabled);
-    }
-    let mut config = state.config_store.get();
-    config.probe_session_filter = enabled;
-    state.config_store.update(config)?;
-    Ok(())
-}
-
-#[tauri::command]
-async fn set_sound_quiet_hours(
-    state: tauri::State<'_, AppState>,
-    enabled: bool,
-    start: String,
-    end: String,
-) -> Result<(), String> {
-    if let Some(ref engine) = state.sound_engine {
-        engine.set_quiet_hours(enabled, start.clone(), end.clone());
-    }
-    let mut config = state.config_store.get();
-    config.quiet_hours_enabled = enabled;
-    config.quiet_hours_start = start;
-    config.quiet_hours_end = end;
-    state.config_store.update(config)?;
-    Ok(())
-}
-
-#[tauri::command]
-async fn set_sound_event_enabled(
-    state: tauri::State<'_, AppState>,
-    event_id: String,
-    enabled: bool,
-) -> Result<(), String> {
-    let event =
-        SoundEvent::from_id(&event_id).ok_or_else(|| format!("Unknown sound event: {event_id}"))?;
-    if let Some(ref engine) = state.sound_engine {
-        engine.set_event_enabled(event, enabled);
-    }
-    let mut config = state.config_store.get();
-    config.sound_events.insert(event_id, enabled);
-    state.config_store.update(config)?;
-    Ok(())
 }
 
 #[tauri::command]
@@ -2219,130 +1281,6 @@ async fn set_sound_event_rule(
     config
         .sound_rules
         .insert(event_id, SoundRuleConfig { enabled, sound });
-    state.config_store.update(config)?;
-    Ok(())
-}
-
-#[tauri::command]
-async fn import_custom_sound(
-    state: tauri::State<'_, AppState>,
-    file_path: String,
-) -> Result<CustomSoundConfig, String> {
-    let source = PathBuf::from(&file_path);
-    if !source.exists() {
-        return Err("Sound file not found".to_string());
-    }
-    if !source.is_file() {
-        return Err("Sound path is not a file".to_string());
-    }
-    let ext = supported_audio_extension(&source)
-        .ok_or_else(|| "Unsupported sound file type. Use mp3, wav, ogg, or flac.".to_string())?;
-    let id = uuid::Uuid::new_v4().to_string();
-    let dest_dir = custom_sounds_dir();
-    std::fs::create_dir_all(&dest_dir).map_err(|e| format!("Failed to create sounds dir: {e}"))?;
-    let dest = dest_dir.join(format!("{id}.{ext}"));
-    std::fs::copy(&source, &dest).map_err(|e| format!("Failed to import sound: {e}"))?;
-
-    let name = source
-        .file_stem()
-        .and_then(|name| name.to_str())
-        .map(|name| name.replace(['-', '_'], " "))
-        .map(|name| name.trim().to_string())
-        .filter(|name| !name.is_empty())
-        .unwrap_or_else(|| "Custom Sound".to_string());
-    let sound = CustomSoundConfig {
-        id,
-        name,
-        path: dest.to_string_lossy().to_string(),
-        data_url: None,
-    };
-
-    if let Some(ref engine) = state.sound_engine {
-        let mut sounds = state.config_store.get().custom_sounds;
-        sounds.push(sound.clone());
-        engine.set_custom_sounds(
-            sounds
-                .iter()
-                .map(|sound| (sound.id.clone(), sound.path.clone()))
-                .collect(),
-        );
-    }
-
-    Ok(sound)
-}
-
-#[tauri::command]
-async fn import_sound_pack(
-    state: tauri::State<'_, AppState>,
-    pack_path: String,
-) -> Result<SoundPackImportResult, String> {
-    let result =
-        sound::import_openpeon_sound_pack(&PathBuf::from(&pack_path), &custom_sounds_dir())?;
-    let imported_configs = result
-        .imported_sounds
-        .iter()
-        .map(|sound| CustomSoundConfig {
-            id: sound.id.clone(),
-            name: sound.name.clone(),
-            path: sound.path.clone(),
-            data_url: None,
-        });
-
-    let mut config = state.config_store.get();
-    config.custom_sounds.extend(imported_configs);
-    config.sound_pack = "custom".to_string();
-
-    for rule in &result.applied_rules {
-        let enabled = config
-            .sound_rules
-            .get(&rule.event_id)
-            .map(|rule| rule.enabled)
-            .or_else(|| config.sound_events.get(&rule.event_id).copied())
-            .unwrap_or(true);
-        let sound = format!("custom:{}", rule.sound_id);
-        config.sound_events.insert(rule.event_id.clone(), enabled);
-        config
-            .sound_rules
-            .insert(rule.event_id.clone(), SoundRuleConfig { enabled, sound });
-    }
-
-    if let Some(ref engine) = state.sound_engine {
-        engine.set_sound_pack(SoundPack::Synth);
-        engine.set_custom_sounds(
-            config
-                .custom_sounds
-                .iter()
-                .map(|sound| (sound.id.clone(), sound.path.clone()))
-                .collect(),
-        );
-        for rule in &result.applied_rules {
-            if let Some(event) = SoundEvent::from_id(&rule.event_id) {
-                if let Some(rule_config) = config.sound_rules.get(&rule.event_id) {
-                    engine.set_event_rule(event, rule_config.enabled, rule_config.sound.clone());
-                }
-            }
-        }
-    }
-
-    state.config_store.update(config)?;
-    Ok(result)
-}
-
-#[tauri::command]
-async fn set_custom_sounds(
-    state: tauri::State<'_, AppState>,
-    sounds: Vec<CustomSoundConfig>,
-) -> Result<(), String> {
-    if let Some(ref engine) = state.sound_engine {
-        engine.set_custom_sounds(
-            sounds
-                .iter()
-                .map(|sound| (sound.id.clone(), sound.path.clone()))
-                .collect(),
-        );
-    }
-    let mut config = state.config_store.get();
-    config.custom_sounds = sounds;
     state.config_store.update(config)?;
     Ok(())
 }
@@ -2378,209 +1316,6 @@ async fn perform_haptic(intensity: u8) -> Result<(), String> {
 }
 
 // ── Skill Management Commands ───────────────────────────────────
-
-#[tauri::command]
-async fn scan_all_skills(
-) -> Result<std::collections::HashMap<String, Vec<skills::ScannedSkill>>, String> {
-    Ok(skills::scanner::scan_all())
-}
-
-#[tauri::command]
-async fn scan_agent_skills(agent: String) -> Result<Vec<skills::ScannedSkill>, String> {
-    Ok(skills::scanner::scan_agent(&agent))
-}
-
-#[tauri::command]
-async fn get_central_skill_bundles() -> Result<Vec<skills::CentralSkillBundle>, String> {
-    let scan = skills::scanner::scan_all();
-    let mut linked_by_id: std::collections::HashMap<String, usize> =
-        std::collections::HashMap::new();
-    for (agent, agent_skills) in &scan {
-        if agent == "central" {
-            continue;
-        }
-        for skill in agent_skills {
-            *linked_by_id.entry(skill.id.clone()).or_default() += 1;
-        }
-    }
-
-    let mut grouped: std::collections::HashMap<String, skills::CentralSkillBundle> =
-        std::collections::HashMap::new();
-    for skill in scan.get("central").into_iter().flatten() {
-        let Some(path) = central_skill_path(skill) else {
-            continue;
-        };
-        let name = central_bundle_name_for_path(&path);
-        let entry = grouped
-            .entry(name.clone())
-            .or_insert_with(|| skills::CentralSkillBundle {
-                name: name.clone(),
-                path: central_bundle_path_for_path(&path),
-                skill_count: 0,
-                linked_agent_count: 0,
-                skill_ids: Vec::new(),
-            });
-        entry.skill_count += 1;
-        entry.linked_agent_count += linked_by_id.get(&skill.id).copied().unwrap_or(0);
-        if !entry.skill_ids.iter().any(|id| id == &skill.id) {
-            entry.skill_ids.push(skill.id.clone());
-        }
-    }
-
-    let mut bundles = grouped.into_values().collect::<Vec<_>>();
-    for bundle in &mut bundles {
-        bundle.skill_ids.sort();
-    }
-    bundles.sort_by_key(|a| a.name.to_lowercase());
-    Ok(bundles)
-}
-
-#[tauri::command]
-async fn get_central_skill_bundle_detail(
-    bundle_name: String,
-) -> Result<Vec<skills::ScannedSkill>, String> {
-    Ok(skills::scanner::scan_agent("central")
-        .into_iter()
-        .filter(|skill| {
-            central_skill_path(skill)
-                .map(|path| central_bundle_matches(&path, &bundle_name))
-                .unwrap_or(false)
-        })
-        .collect())
-}
-
-#[tauri::command]
-async fn preview_delete_central_skill_bundle(
-    bundle_name: String,
-) -> Result<skills::CentralDeletePreview, String> {
-    central_delete_preview(|path| central_bundle_matches(path, &bundle_name))
-}
-
-#[tauri::command]
-async fn delete_central_skill_bundle(
-    bundle_name: String,
-    remove_linked: Option<bool>,
-) -> Result<(), String> {
-    let preview = central_delete_preview(|path| central_bundle_matches(path, &bundle_name))?;
-    delete_central_paths(preview, remove_linked.unwrap_or(false))
-}
-
-#[tauri::command]
-async fn preview_delete_central_skill(
-    skill_path: String,
-) -> Result<skills::CentralDeletePreview, String> {
-    let target = PathBuf::from(skill_path);
-    central_delete_preview(|path| path == target)
-}
-
-#[tauri::command]
-async fn delete_central_skill(
-    skill_path: String,
-    remove_linked: Option<bool>,
-) -> Result<(), String> {
-    let preview = preview_delete_central_skill(skill_path).await?;
-    delete_central_paths(preview, remove_linked.unwrap_or(false))
-}
-
-#[tauri::command]
-async fn discover_project_skills_cmd(
-    roots: Vec<String>,
-) -> Result<Vec<skills::DiscoveredSkill>, String> {
-    let discovered = skills::scanner::discover_project_skills(&roots);
-    skills::registry::cache_discovered_skills(discovered)
-}
-
-#[tauri::command]
-async fn discover_enabled_project_skills_cmd() -> Result<Vec<skills::DiscoveredSkill>, String> {
-    let discovered = skills::scanner::discover_project_skills_from_scan_roots();
-    skills::registry::cache_discovered_skills(discovered)
-}
-
-#[tauri::command]
-async fn get_discovered_skills_cmd() -> Result<Vec<skills::DiscoveredSkill>, String> {
-    Ok(skills::registry::list_discovered_skills())
-}
-
-#[tauri::command]
-async fn clear_discovered_skills_cmd() -> Result<(), String> {
-    skills::registry::clear_discovered_skills()
-}
-
-#[tauri::command]
-async fn stop_project_scan() -> Result<(), String> {
-    Ok(())
-}
-
-#[tauri::command]
-async fn get_scan_roots_cmd() -> Result<Vec<skills::ScanRoot>, String> {
-    Ok(skills::registry::list_scan_roots())
-}
-
-#[tauri::command]
-async fn set_scan_roots_cmd(roots: Vec<skills::ScanRoot>) -> Result<(), String> {
-    skills::registry::set_scan_roots(roots)
-}
-
-#[tauri::command]
-async fn set_scan_root_enabled_cmd(path: String, enabled: bool) -> Result<(), String> {
-    skills::registry::set_scan_root_enabled(&path, enabled)
-}
-
-#[tauri::command]
-async fn get_obsidian_vaults_cmd() -> Result<Vec<skills::ObsidianVault>, String> {
-    Ok(skills::scanner::get_obsidian_vaults())
-}
-
-#[tauri::command]
-async fn get_obsidian_vault_skills_cmd(
-    vault_path: String,
-) -> Result<Vec<skills::DiscoveredSkill>, String> {
-    Ok(skills::scanner::get_obsidian_vault_skills(&vault_path))
-}
-
-#[tauri::command]
-async fn install_skill_cmd(
-    source: String,
-    targets: Vec<skills::TargetConfig>,
-    mode: skills::InstallMode,
-) -> Result<(), String> {
-    for skill_id in skills::installer::install_skill(&source, &targets, &mode)? {
-        skills::registry::add_source(&skill_id, &source)?;
-    }
-    Ok(())
-}
-
-#[tauri::command]
-async fn batch_import_discovered_skills_cmd(
-    skills_to_import: Vec<skills::DiscoveredSkill>,
-    target_agents: Vec<String>,
-    mode: skills::InstallMode,
-) -> Result<Vec<String>, String> {
-    let targets = target_agents
-        .into_iter()
-        .map(|agent| skills::TargetConfig {
-            agent,
-            install_mode: mode.clone(),
-        })
-        .collect::<Vec<_>>();
-    let mut imported = Vec::new();
-    for skill in skills_to_import {
-        for installed_id in skills::installer::install_skill(&skill.dir_path, &targets, &mode)? {
-            skills::registry::add_source(&installed_id, &skill.dir_path)?;
-            imported.push(installed_id);
-        }
-    }
-    imported.sort();
-    imported.dedup();
-    Ok(imported)
-}
-
-#[tauri::command]
-async fn preview_github_skills_cmd(
-    source: String,
-) -> Result<Vec<skills::GitHubSkillPreview>, String> {
-    skills::installer::preview_github_skills(&source)
-}
 
 #[tauri::command]
 async fn preview_github_repo_import(
@@ -3135,158 +1870,6 @@ fn sanitize_skill_directory_name(value: &str) -> String {
     }
 }
 
-fn central_skill_path(skill: &skills::ScannedSkill) -> Option<PathBuf> {
-    skill
-        .agents
-        .iter()
-        .find(|agent| {
-            agent.agent == "central"
-                || agent.install_path.contains("/.agents/skills/")
-                || agent.install_path.contains("/.agentbro/skills/")
-        })
-        .map(|agent| PathBuf::from(&agent.install_path))
-        .or_else(|| {
-            (skill.file_path.contains("/.agents/skills/")
-                || skill.file_path.contains("/.agentbro/skills/"))
-            .then(|| PathBuf::from(&skill.file_path))
-        })
-}
-
-fn central_bundle_name_for_path(path: &Path) -> String {
-    let value = path.display().to_string();
-    let marker = if value.contains("/.agents/skills/") {
-        "/.agents/skills/"
-    } else {
-        "/.agentbro/skills/"
-    };
-    value
-        .split(marker)
-        .nth(1)
-        .and_then(|rest| rest.split('/').find(|part| !part.is_empty()))
-        .unwrap_or("root")
-        .to_string()
-}
-
-fn central_bundle_path_for_path(path: &Path) -> String {
-    let value = path.display().to_string();
-    let marker = if value.contains("/.agents/skills/") {
-        "/.agents/skills/"
-    } else {
-        "/.agentbro/skills/"
-    };
-    let Some((root, rest)) = value.split_once(marker) else {
-        return value;
-    };
-    let Some(first) = rest.split('/').find(|part| !part.is_empty()) else {
-        return value;
-    };
-    format!("{root}{marker}{first}")
-}
-
-fn central_bundle_matches(path: &Path, bundle_name: &str) -> bool {
-    let query = bundle_name.trim();
-    if query.is_empty() {
-        return false;
-    }
-    central_bundle_name_for_path(path) == query || central_bundle_path_for_path(path) == query
-}
-
-fn is_central_path(path: &Path) -> bool {
-    skills::agent_paths::central_skill_dirs()
-        .into_iter()
-        .any(|root| path.starts_with(root))
-}
-
-fn central_delete_preview<F>(matches_path: F) -> Result<skills::CentralDeletePreview, String>
-where
-    F: Fn(&Path) -> bool,
-{
-    let scan = skills::scanner::scan_all();
-    let central_skills = scan
-        .get("central")
-        .into_iter()
-        .flatten()
-        .filter_map(|skill| {
-            let path = central_skill_path(skill)?;
-            (is_central_path(&path) && matches_path(&path)).then(|| (skill.clone(), path))
-        })
-        .collect::<Vec<_>>();
-    if central_skills.is_empty() {
-        return Err("Central skill or bundle not found".to_string());
-    }
-
-    let skill_ids = central_skills
-        .iter()
-        .map(|(skill, _)| skill.id.clone())
-        .collect::<std::collections::HashSet<_>>();
-    let central_paths = central_skills
-        .iter()
-        .map(|(_, path)| path.display().to_string())
-        .collect::<std::collections::HashSet<_>>();
-
-    let mut linked_install_paths = Vec::new();
-    for (agent, agent_skills) in &scan {
-        if agent == "central" {
-            continue;
-        }
-        for skill in agent_skills {
-            if !skill_ids.contains(&skill.id) {
-                continue;
-            }
-            for state in &skill.agents {
-                if state.agent == "central" || central_paths.contains(&state.install_path) {
-                    continue;
-                }
-                linked_install_paths.push(state.install_path.clone());
-            }
-        }
-    }
-    linked_install_paths.sort();
-    linked_install_paths.dedup();
-
-    let mut removable_paths = central_paths.into_iter().collect::<Vec<_>>();
-    removable_paths.sort();
-    let mut ids = skill_ids.into_iter().collect::<Vec<_>>();
-    ids.sort();
-
-    Ok(skills::CentralDeletePreview {
-        path: removable_paths.first().cloned().unwrap_or_default(),
-        skill_ids: ids,
-        linked_install_paths,
-        removable_paths,
-        warnings: Vec::new(),
-    })
-}
-
-fn delete_central_paths(
-    preview: skills::CentralDeletePreview,
-    remove_linked: bool,
-) -> Result<(), String> {
-    let mut paths = preview.removable_paths.clone();
-    if remove_linked {
-        paths.extend(preview.linked_install_paths.clone());
-    }
-    paths.sort();
-    paths.dedup();
-    for path in paths {
-        skills::installer::uninstall_skill(&path)?;
-    }
-    for skill_id in preview.skill_ids {
-        skills::registry::remove_source(&skill_id)?;
-    }
-    Ok(())
-}
-
-#[tauri::command]
-async fn uninstall_skill_cmd(skill_path: String) -> Result<(), String> {
-    skills::installer::uninstall_skill(&skill_path)
-}
-
-#[tauri::command]
-async fn toggle_skill_cmd(skill_id: String, agent: String, enabled: bool) -> Result<(), String> {
-    skills::installer::toggle_skill(&skill_id, &agent, enabled)
-}
-
 #[tauri::command]
 async fn read_skill_files(skill_path: String) -> Result<skills::FileTreeNode, String> {
     Ok(skills::scanner::read_file_tree(&skill_path))
@@ -3295,111 +1878,6 @@ async fn read_skill_files(skill_path: String) -> Result<skills::FileTreeNode, St
 #[tauri::command]
 async fn read_skill_file_content(file_path: String) -> Result<String, String> {
     std::fs::read_to_string(&file_path).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn get_skill_explanation_cmd(
-    skill_id: String,
-    lang: String,
-) -> Result<Option<skills::explanation::SkillExplanation>, String> {
-    Ok(skills::explanation::get_cached(&skill_id, &lang))
-}
-
-#[tauri::command]
-async fn generate_skill_explanation_cmd(
-    skill_id: String,
-    skill_path: String,
-    lang: String,
-    refresh: bool,
-) -> Result<skills::explanation::SkillExplanation, String> {
-    skills::explanation::generate(&skill_id, &skill_path, &lang, refresh)
-}
-
-#[tauri::command]
-async fn list_collections_cmd() -> Result<Vec<skills::SkillCollection>, String> {
-    Ok(skills::registry::list_collections())
-}
-
-#[tauri::command]
-async fn upsert_collection_cmd(
-    collection: skills::SkillCollection,
-) -> Result<skills::SkillCollection, String> {
-    skills::registry::upsert_collection(collection)
-}
-
-#[tauri::command]
-async fn delete_collection_cmd(id: String) -> Result<(), String> {
-    skills::registry::delete_collection(&id)
-}
-
-#[tauri::command]
-async fn export_collection_cmd(id: String) -> Result<String, String> {
-    skills::registry::export_collection(&id)
-}
-
-#[tauri::command]
-async fn import_collection_cmd(json: String) -> Result<skills::SkillCollection, String> {
-    skills::registry::import_collection(&json)
-}
-
-#[tauri::command]
-async fn batch_install_collection_cmd(
-    collection: skills::SkillCollection,
-    target_agents: Vec<String>,
-) -> Result<(), String> {
-    let pack = skills::SkillPack {
-        id: collection.id,
-        name: collection.name,
-        description: collection.description,
-        skills: collection.skills,
-        target_agents,
-    };
-    skills::installer::apply_pack(&pack)
-}
-
-#[tauri::command]
-async fn configure_sync_cmd(config: skills::SyncConfig) -> Result<(), String> {
-    skills::registry::set_sync_config(config)
-}
-
-#[tauri::command]
-async fn push_sync_cmd() -> Result<skills::SyncResult, String> {
-    skills::sync::push_to_github()
-}
-
-#[tauri::command]
-async fn pull_sync_cmd() -> Result<skills::SyncResult, String> {
-    skills::sync::pull_from_github()
-}
-
-#[tauri::command]
-async fn resolve_conflicts_cmd(resolutions: Vec<skills::ConflictResolution>) -> Result<(), String> {
-    skills::sync::resolve_conflicts(resolutions)
-}
-
-#[tauri::command]
-async fn sync_agent_to_agent_cmd(from: String, to: String) -> Result<skills::SyncPreview, String> {
-    skills::sync::sync_agent_to_agent(&from, &to)
-}
-
-#[tauri::command]
-async fn execute_agent_sync_cmd(from: String, to: String) -> Result<(), String> {
-    skills::sync::execute_agent_sync(&from, &to)
-}
-
-#[tauri::command]
-async fn export_backup_cmd(path: String) -> Result<(), String> {
-    skills::sync::export_backup(&path)
-}
-
-#[tauri::command]
-async fn import_backup_cmd(path: String) -> Result<(), String> {
-    skills::sync::import_backup(&path)
-}
-
-#[tauri::command]
-async fn get_registry_metadata() -> Result<skills::registry::Metadata, String> {
-    Ok(skills::registry::load())
 }
 
 // ── Display reconfiguration handler ──────────────────────────────
@@ -4715,11 +3193,6 @@ pub fn run() {
             );
 
             // Store shared state for Tauri commands
-            // Initialize display controller
-            let display_controller =
-                Arc::new(platform::display_controller::DisplayController::new());
-            display_controller.set_app_handle(app.handle().clone());
-
             // Initialize diagnostic ring buffer
             let diagnostic_buffer = Arc::new(hooks::diagnostics::DiagnosticRingBuffer::new());
 
@@ -4736,7 +3209,6 @@ pub fn run() {
                 adapters: (*adapters).clone(),
                 sound_engine,
                 conversation_watcher,
-                display_controller,
                 diagnostic_buffer,
                 task_db,
                 tray_icon,
@@ -4789,34 +3261,12 @@ pub fn run() {
             commands::set_language,
             commands::set_launch_at_login,
             commands::set_island_feature_flags,
-            commands::install_hooks,
-            commands::remove_hooks,
-            commands::get_adapter_status,
-            commands::verify_hooks,
             commands::is_terminal_focused,
             commands::run_hook_doctor,
-            commands::get_chat_history,
-            commands::get_chat_history_tail,
-            commands::get_subagent_chat_history,
             commands::monitor::get_monitor_sessions,
             commands::export_diagnostics,
-            commands::add_engine_instance,
-            commands::remove_engine_instance,
-            commands::set_engine_instance_enabled,
-            commands::verify_engine_path,
             resize_notch,
-            play_sound,
-            preview_sound,
-            set_sound_volume,
-            set_sound_enabled,
-            set_sound_pack,
-            set_probe_session_filter,
-            set_sound_quiet_hours,
-            set_sound_event_enabled,
             set_sound_event_rule,
-            import_custom_sound,
-            import_sound_pack,
-            set_custom_sounds,
             set_notch_opacity,
             list_displays,
             set_display_id,
@@ -4825,101 +3275,26 @@ pub fn run() {
             clear_island_layout_preview,
             start_notch_drag,
             end_notch_drag,
-            is_cursor_in_window_zones,
-            should_suppress,
-            get_cursor_position,
             is_cursor_over_notch,
             set_notch_ignore_cursor_events,
             save_sessions,
-            load_sessions,
-            get_display_level,
-            notify_cursor_enter,
-            notify_cursor_leave,
-            notify_esc,
-            notify_expand,
             detect_tools,
             install_agent_hook,
-            install_custom_agent_hook,
             uninstall_agent_hook,
-            configure_agent_hook_events,
             get_all_hook_status,
             reinstall_all_hooks,
-            uninstall_all_hooks,
-            commands::simulate_hook_event,
-            probe_codex_app_server,
-            list_webhooks,
-            add_webhook,
-            remove_webhook,
-            update_webhook,
-            save_webhook_config,
-            test_webhook,
-            get_webhook_logs,
-            get_diagnostic_events,
-            commands::buddy::read_buddy_data,
-            commands::buddy::buddy_device_snapshot,
-            commands::buddy::get_buddy_device_config,
-            commands::buddy::set_buddy_device_config,
-            commands::buddy::buddy_reverse_focus,
-            validate_path,
             register_global_shortcut,
-            unregister_global_shortcut,
             perform_haptic,
             set_notch_focusable,
             restart_app,
-            open_image,
-            read_image_data_url,
             open_system_path,
-            scan_all_skills,
-            scan_agent_skills,
-            get_central_skill_bundles,
-            get_central_skill_bundle_detail,
-            preview_delete_central_skill_bundle,
-            delete_central_skill_bundle,
-            preview_delete_central_skill,
-            delete_central_skill,
-            discover_project_skills_cmd,
-            discover_enabled_project_skills_cmd,
-            get_discovered_skills_cmd,
-            clear_discovered_skills_cmd,
-            stop_project_scan,
-            get_scan_roots_cmd,
-            set_scan_roots_cmd,
-            set_scan_root_enabled_cmd,
-            get_obsidian_vaults_cmd,
-            get_obsidian_vault_skills_cmd,
-            install_skill_cmd,
-            batch_import_discovered_skills_cmd,
-            preview_github_skills_cmd,
             preview_github_repo_import,
             import_github_repo_skills,
-            uninstall_skill_cmd,
-            toggle_skill_cmd,
             read_skill_files,
             read_skill_file_content,
-            get_skill_explanation_cmd,
-            generate_skill_explanation_cmd,
-            list_collections_cmd,
-            upsert_collection_cmd,
-            delete_collection_cmd,
-            export_collection_cmd,
-            import_collection_cmd,
-            batch_install_collection_cmd,
-            configure_sync_cmd,
-            push_sync_cmd,
-            pull_sync_cmd,
-            resolve_conflicts_cmd,
-            sync_agent_to_agent_cmd,
-            execute_agent_sync_cmd,
-            export_backup_cmd,
-            import_backup_cmd,
-            get_registry_metadata,
             agents::programs::agent_list,
-            agents::programs::agent_refresh,
             agents::programs::agent_uninstall,
-            agents::programs::agent_open_download,
-            agents::programs::agent_open_app,
             agents::programs::add_custom_agent,
-            agents::programs::update_custom_agent,
             agents::programs::remove_custom_agent,
             commands::dispatch::dispatch_tree,
             commands::dispatch::dispatch_install_tool,
@@ -4932,9 +3307,7 @@ pub fn run() {
             skills::v2::commands::skill_manager_overview,
             skills::v2::commands::skill_manager_refresh,
             skills::v2::commands::skill_manager_refresh_overview,
-            skills::v2::commands::skill_manager_settings,
             skills::v2::commands::skill_manager_update_settings,
-            skills::v2::commands::list_center_skills_v2,
             skills::v2::commands::get_skill_detail_v2,
             skills::v2::commands::preview_add_center_skill,
             skills::v2::commands::execute_add_center_skill,
@@ -4957,31 +3330,18 @@ pub fn run() {
             skills::v2::commands::takeover_center_agent_skills,
             skills::v2::commands::delete_unmanaged_agent_skill,
             skills::v2::commands::delete_unmanaged_agent_skills,
-            skills::v2::commands::preview_sync_copy_target,
             skills::v2::commands::preview_copy_target_diff,
             skills::v2::commands::execute_sync_copy_target,
             skills::v2::commands::delete_skill_target_distribution,
             skills::v2::commands::delete_skill_target_distributions,
-            skills::v2::commands::list_managed_agents_v2,
             skills::v2::commands::get_agent_detail_v2,
             skills::v2::commands::refresh_agent_skill_view_v2,
-            skills::v2::commands::read_agent_config_file_v2,
-            skills::v2::commands::write_agent_config_file_v2,
             skills::v2::commands::list_unmanaged_v2,
             skills::v2::commands::list_agent_skill_inventory_v2,
-            skills::v2::commands::list_skill_projects_v2,
-            skills::v2::commands::add_skill_project_v2,
-            skills::v2::commands::remove_skill_project_v2,
-            skills::v2::commands::get_skill_project_detail_v2,
-            skills::v2::commands::scan_skill_project_v2,
-            skills::v2::commands::install_center_skills_to_project_v2,
             skills::v2::commands::run_skill_manager_diagnosis,
-            skills::v2::commands::list_diagnosis_issues,
-            skills::v2::commands::preview_fix_diagnosis_issue,
             skills::v2::commands::execute_fix_diagnosis_issue,
             skills::v2::commands::execute_safe_fixes,
             skills::v2::commands::skill_manager_export_snapshot,
-            skills::v2::commands::skill_manager_get_snapshot,
             skills::v2::commands::open_skill_path,
             skills::v2::commands::reveal_skill_path,
         ])

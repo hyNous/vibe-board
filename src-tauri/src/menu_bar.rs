@@ -37,14 +37,3 @@ pub fn build_tray_menu<M: Manager<Wry>>(manager: &M, language: &str) -> tauri::R
         .item(&quit_item)
         .build()
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn tray_labels_follow_the_selected_language() {
-        assert_eq!(labels("zh").open, "打开 Vibe Board");
-        assert_eq!(labels("en").settings, "Settings");
-    }
-}

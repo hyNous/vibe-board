@@ -361,16 +361,6 @@ pub struct QuestionOption {
     pub description: Option<String>,
 }
 
-/// Adapter info returned to the frontend
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AdapterInfo {
-    pub name: String,
-    pub display_name: String,
-    pub icon: String,
-    pub status: AdapterStatus,
-}
-
 /// Build the default list of all supported adapters
 pub fn all_adapters() -> Vec<Box<dyn AgentAdapter>> {
     vec![

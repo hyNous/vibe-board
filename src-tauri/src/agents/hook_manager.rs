@@ -41,47 +41,6 @@ pub fn write_json_config(
     Ok(())
 }
 
-/// Inject Vibe Board hook entries into a JSON "hooks" object.
-/// Keys are event names; each value is an array of hook entries.
-/// Existing non-Vibe Board entries are preserved.
-pub fn inject_hooks_json(settings: &mut serde_json::Value, events: &[&str], hook_command: &str) {
-    if settings.get("hooks").is_none() {
-        settings["hooks"] = serde_json::json!({});
-    }
-    let hooks = settings["hooks"].as_object_mut().unwrap();
-    for event in events {
-        let entry = hooks
-            .entry(event.to_string())
-            .or_insert_with(|| serde_json::json!([]));
-        if let Some(arr) = entry.as_array_mut() {
-            // Remove stale Vibe Board and legacy AgentBro entries.
-            arr.retain(|e| {
-                !e.get("command")
-                    .and_then(|c| c.as_str())
-                    .map(is_managed_hook_command)
-                    .unwrap_or(false)
-            });
-            arr.push(serde_json::json!({"type": "command", "command": hook_command}));
-        }
-    }
-}
-
-/// Remove all Vibe Board and legacy AgentBro hook entries from a JSON config.
-pub fn remove_hooks_json(settings: &mut serde_json::Value) {
-    if let Some(hooks) = settings.get_mut("hooks").and_then(|h| h.as_object_mut()) {
-        for (_, v) in hooks.iter_mut() {
-            if let Some(arr) = v.as_array_mut() {
-                arr.retain(|e| {
-                    !e.get("command")
-                        .and_then(|c| c.as_str())
-                        .map(is_managed_hook_command)
-                        .unwrap_or(false)
-                });
-            }
-        }
-    }
-}
-
 // ── YAML ─────────────────────────────────────────────────────────────────────
 
 /// Inject Vibe Board hooks into a YAML config using sentinel block markers.
@@ -138,60 +97,6 @@ fn build_yaml_block(hook_command: &str, events: &[&str]) -> String {
 }
 
 // ── TOML ─────────────────────────────────────────────────────────────────────
-
-/// Inject Vibe Board hooks into a TOML config using sentinel block markers.
-pub fn inject_hooks_toml(
-    config_path: &Path,
-    hook_command: &str,
-    events: &[&str],
-) -> Result<(), Box<dyn std::error::Error>> {
-    let existing = if config_path.exists() {
-        std::fs::read_to_string(config_path)?
-    } else {
-        String::new()
-    };
-
-    let stripped = strip_sentinel_block(&existing);
-    let block = build_toml_block(hook_command, events);
-    let new_content = if stripped.trim().is_empty() {
-        block
-    } else {
-        format!("{}\n{}", stripped.trim_end(), block)
-    };
-
-    if let Some(parent) = config_path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    atomic_write(config_path, new_content.as_bytes())?;
-    Ok(())
-}
-
-/// Remove the Vibe Board sentinel block from a TOML config.
-pub fn remove_hooks_toml(config_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
-    if !config_path.exists() {
-        return Ok(());
-    }
-    let content = std::fs::read_to_string(config_path)?;
-    if !is_managed_hook_command(&content) {
-        return Ok(());
-    }
-    let stripped = strip_sentinel_block(&content);
-    atomic_write(config_path, stripped.as_bytes())?;
-    Ok(())
-}
-
-fn build_toml_block(hook_command: &str, events: &[&str]) -> String {
-    let cmd = hook_command.replace('"', "\\\"");
-    let mut lines = vec![BLOCK_START.to_string()];
-    for event in events {
-        lines.push("[[hooks]]".to_string());
-        lines.push(format!("event = \"{}\"", event));
-        lines.push(format!("command = \"{}\"", cmd));
-        lines.push(String::new());
-    }
-    lines.push(BLOCK_END.to_string());
-    lines.join("\n")
-}
 
 // ── Shared utilities ──────────────────────────────────────────────────────────
 

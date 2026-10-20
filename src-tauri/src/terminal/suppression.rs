@@ -41,37 +41,6 @@ pub fn is_terminal_focused(agent_pid: u32) -> bool {
     }
 }
 
-/// Tab-level suppression with explicit session identifiers (for callers that have them).
-pub fn is_terminal_focused_with_explicit_ids(
-    agent_pid: u32,
-    iterm_session_id: Option<&str>,
-    kitty_window_id: Option<&str>,
-    tmux_pane: Option<&str>,
-) -> bool {
-    if !is_terminal_frontmost() {
-        return false;
-    }
-
-    let tree = process_tree::build_tree();
-
-    // tmux: check active pane
-    if tmux_pane.is_some() || process_tree::is_in_tmux(agent_pid, &tree) {
-        return tmux::is_pane_active(agent_pid);
-    }
-
-    // iTerm2: precise session check
-    if let Some(sid) = iterm_session_id {
-        return is_iterm_session_active(sid);
-    }
-
-    // Kitty: window focus check
-    if let Some(wid) = kitty_window_id {
-        return is_kitty_window_focused(wid);
-    }
-
-    is_agent_terminal_frontmost(agent_pid, &tree)
-}
-
 /// Suppression check using metadata captured by the compiled hook bridge.
 pub fn is_terminal_focused_with_session(
     agent_pid: u32,
@@ -522,19 +491,6 @@ fn flatten_zellij_panes(json: &serde_json::Value) -> Vec<&serde_json::Value> {
             .collect();
     }
     Vec::new()
-}
-
-/// Check if any terminal window is visible (less strict than frontmost check)
-pub fn is_any_terminal_visible() -> bool {
-    #[cfg(target_os = "windows")]
-    {
-        is_terminal_frontmost()
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        is_any_terminal_visible_macos()
-    }
 }
 
 #[cfg(not(target_os = "windows"))]

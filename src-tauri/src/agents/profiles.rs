@@ -232,13 +232,6 @@ pub const CLINE_EVENTS: &[HookEventDescriptor] = &[
     },
 ];
 
-pub const SNAKE_SESSION_TOOL_EVENTS: &[HookEventDescriptor] = &[
-    plain_event("pre_tool_use"),
-    plain_event("post_tool_use"),
-    plain_event("session_start"),
-    plain_event("session_end"),
-];
-
 pub const OPENCODE_EVENTS: &[HookEventDescriptor] = &[
     plain_event("SessionStart"),
     plain_event("SessionEnd"),
@@ -894,45 +887,6 @@ pub fn selected_event_names(profile: &AgentIntegrationProfile) -> Vec<String> {
     selected_event_name_set(profile).into_iter().collect()
 }
 
-pub fn effective_event_descriptors(profile: &AgentIntegrationProfile) -> Vec<HookEventDescriptor> {
-    effective_events(profile)
-}
-
-pub fn save_event_selection(
-    profile: &AgentIntegrationProfile,
-    enabled_event_names: &[String],
-) -> Result<Vec<String>, Box<dyn std::error::Error>> {
-    if !supports_event_selection(profile) {
-        return Ok(Vec::new());
-    }
-
-    let valid_names: BTreeSet<&str> = profile.events.iter().map(|event| event.name).collect();
-    let filtered: Vec<String> = enabled_event_names
-        .iter()
-        .filter(|name| valid_names.contains(name.as_str()))
-        .cloned()
-        .collect::<BTreeSet<_>>()
-        .into_iter()
-        .collect();
-
-    if filtered.is_empty() {
-        return Err("At least one hook event must be enabled".into());
-    }
-
-    let path = hook_selection_path();
-    let mut stored = load_stored_hook_selections().0;
-    stored.insert(profile.id.to_string(), filtered.clone());
-
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    std::fs::write(
-        path,
-        serde_json::to_string_pretty(&StoredHookSelections(stored))?,
-    )?;
-    Ok(filtered)
-}
-
 pub fn install(profile: &AgentIntegrationProfile) -> Result<(), Box<dyn std::error::Error>> {
     install_at(profile, &configuration_url(profile))
 }
@@ -1037,13 +991,6 @@ fn install_at_labeled(
         }
     }
     Ok(())
-}
-
-pub fn install_custom_at(
-    profile: &AgentIntegrationProfile,
-    base_directory: &Path,
-) -> Result<PathBuf, Box<dyn std::error::Error>> {
-    install_custom_at_labeled(profile, base_directory, None, None)
 }
 
 pub fn install_custom_at_labeled(

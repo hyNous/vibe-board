@@ -235,19 +235,6 @@ pub fn migrate_sqlite(old_db: &Path, new_db: &Path) -> io::Result<bool> {
     Ok(true)
 }
 
-/// Move a Vibe Board-owned directory once. Only used for directories the app
-/// created itself; user-editable legacy roots are never renamed.
-pub fn migrate_dir(old: &Path, new: &Path) -> io::Result<bool> {
-    if !old.is_dir() || new.exists() {
-        return Ok(false);
-    }
-    if let Some(parent) = new.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    std::fs::rename(old, new)?;
-    Ok(true)
-}
-
 /// Retired Tauri identifiers whose WebView data directory can hold preferences
 /// written before the Vibe Board namespace change, newest first.
 #[cfg(target_os = "windows")]

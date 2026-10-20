@@ -109,47 +109,12 @@ pub async fn agent_list(state: State<'_, AppState>) -> Result<Vec<AgentProgramIn
 }
 
 #[tauri::command]
-pub async fn agent_refresh(state: State<'_, AppState>) -> Result<Vec<AgentProgramInfo>, String> {
-    Ok(build_agent_list(&state.adapters, true).await)
-}
-
-#[tauri::command]
 pub async fn agent_uninstall(
     app: AppHandle,
     state: State<'_, AppState>,
     agent_id: String,
 ) -> Result<(), String> {
     run_agent_command(app, &state.adapters, &agent_id, "uninstall").await
-}
-
-#[tauri::command]
-pub async fn agent_open_download(
-    _state: State<'_, AppState>,
-    agent_id: String,
-) -> Result<(), String> {
-    let meta = metadata_for(&agent_id).ok_or_else(|| format!("Unknown agent: {agent_id}"))?;
-    let url = meta
-        .download_url
-        .ok_or_else(|| format!("No download URL for {agent_id}"))?;
-    open_target(url)
-}
-
-#[tauri::command]
-pub async fn agent_open_app(state: State<'_, AppState>, agent_id: String) -> Result<(), String> {
-    let _ = state;
-    let meta = metadata_for(&agent_id).ok_or_else(|| format!("Unknown agent: {agent_id}"))?;
-    if let Some(path) = installed_app_path(&agent_id, &meta) {
-        return open_target(&path);
-    }
-    if let Some(binary) = find_agent_binary(&agent_id, &meta) {
-        return launch_binary(&binary);
-    }
-    let paths = app_path_candidates(&agent_id, &meta).join(", ");
-    if paths.is_empty() {
-        Err(format!("No app path or launcher binary for {agent_id}"))
-    } else {
-        Err(format!("App is not installed at any known path: {paths}"))
-    }
 }
 
 #[tauri::command]
@@ -171,15 +136,6 @@ pub async fn add_custom_agent(
         return Err(error);
     }
 
-    Ok(info_for_custom_agent(entry))
-}
-
-#[tauri::command]
-pub async fn update_custom_agent(
-    agent_id: String,
-    config: registry::UpdateCustomAgentConfig,
-) -> Result<AgentProgramInfo, String> {
-    let entry = registry::update_custom_agent(&agent_id, config)?;
     Ok(info_for_custom_agent(entry))
 }
 
@@ -890,94 +846,6 @@ fn command_shell(command: &str) -> tokio::process::Command {
             shell.env("PATH", path);
         }
         shell
-    }
-}
-
-fn open_target(target: &str) -> Result<(), String> {
-    #[cfg(target_os = "macos")]
-    let mut command = {
-        let mut c = std::process::Command::new("open");
-        c.arg(target);
-        c
-    };
-
-    #[cfg(target_os = "windows")]
-    {
-        open_target_windows(target)
-    }
-
-    #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
-    let mut command = {
-        let mut c = std::process::Command::new("xdg-open");
-        c.arg(target);
-        c
-    };
-
-    #[cfg(not(target_os = "windows"))]
-    command.spawn().map(|_| ()).map_err(|e| e.to_string())
-}
-
-#[cfg(target_os = "windows")]
-fn open_target_windows(target: &str) -> Result<(), String> {
-    let target = target.trim();
-    if target.is_empty() {
-        return Err("Open target is empty".to_string());
-    }
-
-    let mut command = if is_url(target) {
-        let mut c = std::process::Command::new("rundll32.exe");
-        c.args(["url.dll,FileProtocolHandler", target]);
-        c
-    } else {
-        let path = Path::new(target);
-        if path.exists() && is_windows_executable_path(path) {
-            std::process::Command::new(path)
-        } else {
-            let mut c = std::process::Command::new("explorer.exe");
-            c.arg(target);
-            c
-        }
-    };
-
-    command.spawn().map(|_| ()).map_err(|e| e.to_string())
-}
-
-#[cfg(target_os = "windows")]
-fn is_windows_executable_path(path: &Path) -> bool {
-    path.extension()
-        .and_then(|ext| ext.to_str())
-        .map(|ext| {
-            matches!(
-                ext.to_ascii_lowercase().as_str(),
-                "exe" | "cmd" | "bat" | "com"
-            )
-        })
-        .unwrap_or(false)
-}
-
-#[cfg(target_os = "windows")]
-fn is_url(target: &str) -> bool {
-    target.starts_with("http://")
-        || target.starts_with("https://")
-        || target.starts_with("mailto:")
-        || target.starts_with("vibeboard:")
-        || target.starts_with("agentisland:")
-        || target.starts_with("agentbro:")
-        || target.starts_with("ccswitch:")
-}
-
-fn launch_binary(path: &Path) -> Result<(), String> {
-    #[cfg(target_os = "windows")]
-    {
-        open_target(&path.display().to_string())
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        std::process::Command::new(path)
-            .spawn()
-            .map(|_| ())
-            .map_err(|e| e.to_string())
     }
 }
 
@@ -1965,28 +1833,7 @@ mod tests {
     }
 
     #[cfg(target_os = "windows")]
-    #[test]
-    fn windows_open_target_recognizes_urls() {
-        assert!(is_url("https://github.com/shirenchuang/agentbro"));
-        assert!(is_url("agentbro://settings"));
-        assert!(is_url("ccswitch://provider"));
-        assert!(!is_url(
-            r"C:\Users\admin\AppData\Local\Programs\AgentBro\AgentBro.exe"
-        ));
-    }
-
     #[cfg(target_os = "windows")]
-    #[test]
-    fn windows_executable_detection_includes_common_launcher_extensions() {
-        assert!(is_windows_executable_path(Path::new(r"C:\Tools\agent.exe")));
-        assert!(is_windows_executable_path(Path::new(r"C:\Tools\agent.CMD")));
-        assert!(is_windows_executable_path(Path::new(r"C:\Tools\agent.bat")));
-        assert!(!is_windows_executable_path(Path::new(
-            r"C:\Tools\agent.txt"
-        )));
-        assert!(!is_windows_executable_path(Path::new(r"C:\Tools\agent")));
-    }
-
     #[cfg(target_os = "windows")]
     #[test]
     fn windows_program_paths_expand_backslash_home_prefix() {
