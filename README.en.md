@@ -1,9 +1,9 @@
 <div align="center">
-  <img src="./assets/readme/vibe-board-hero.svg" alt="Vibe Board: a screen-edge task board for AI coding agents" width="100%" />
+  <img src="./assets/readme/vibe-board-hero.svg" alt="Vibe Board: the island hangs from the top of the screen and expands to list running tasks from Claude, Codex and OpenCode with each agent's remaining quota" width="100%" />
 
   <p>
     <strong>A screen-edge task board for AI coding agents</strong><br />
-    Vibe Board is a local-first Tauri desktop app that collects task status, approvals, and usage from Claude Code, Codex, Gemini CLI, OpenCode, Antigravity, and other agents into one board docked to the screen edge.
+    Vibe Board is a local-first Tauri desktop app that collects task status and usage from Claude Code, Codex, Gemini CLI, OpenCode, Antigravity, and other agents into one board docked to the screen edge.
   </p>
 
   <p>
@@ -15,25 +15,14 @@
   </p>
 
   <p>
-    <img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-111820" />
-    <img alt="Platform" src="https://img.shields.io/badge/platform-Windows%20x64-f5b84b" />
-    <img alt="Stack" src="https://img.shields.io/badge/Tauri-React%20%2B%20Rust-0c6b63" />
+    <a href="https://github.com/hyNous/vibe-board/releases/latest"><img alt="Release" src="https://img.shields.io/github/v/release/hyNous/vibe-board?color=0A8DFF" /></a>
+    <img alt="Platform" src="https://img.shields.io/badge/platform-Windows%20x64-6A2BFF" />
+    <img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-111111" />
+    <img alt="Stack" src="https://img.shields.io/badge/Tauri-React%20%2B%20Rust-111111" />
   </p>
 </div>
 
-## What it is
-
-Vibe Board lives at the top or side edge of the screen. Expanding it shows the current task, agent online state, and usage. It solves three everyday problems:
-
-- Several agents running at once stay distinguishable through conversation titles and execution states, without switching windows.
-- Clicking a task jumps to its terminal; desktop agents open and foreground their app window.
-- When token data is available it is shown directly; otherwise the UI shows provider quota and reset time. Online quota queries are off by default and only run for providers you authorize individually, using the credentials already stored locally for that provider.
-
-The default look is solid black, with a frosted-glass effect available. The board docks to the top or either side edge, and the side dock has three sizes: 64×132 (narrow, default), 72×148 (standard), and 80×168 (wide).
-
 ## See it in action
-
-> These animations show Vibe Board's real interface, filled with made-up demo tasks and quotas (the UI is shown in Chinese; English is built in). The recording script lives in [scripts/readme-demo](./scripts/readme-demo/record.mjs), so they can be re-recorded whenever the UI changes.
 
 **Tasks on the island**: once an agent starts working, a small bar appears at the top of the screen. Hover over it to see what each task is doing, which agents are online, and how much quota is left. New tasks join the list on their own; finished ones are marked as completed.
 
@@ -47,12 +36,22 @@ The default look is solid black, with a frosted-glass effect available. The boar
 
 <img src="./assets/readme/demo-skills.gif" alt="Skill library filtered by agent" width="100%" />
 
+<sub>The animations show Vibe Board's real interface (in Chinese; English is built in) filled with made-up demo tasks and quotas. They can be re-recorded with [scripts/readme-demo](./scripts/readme-demo/record.mjs) whenever the UI changes.</sub>
+
+## What it is
+
+Vibe Board lives at the top or side edge of the screen. Expanding it shows the current tasks, which agents are online, and their quota. It solves three everyday problems:
+
+- With several agents running at once, you can see each task's conversation title and state without switching windows.
+- Clicking a task jumps back to its terminal; desktop agents open and bring their app window to the front.
+- You see quota running low before it runs out, without checking each tool; online queries are off by default and enabled per tool.
+
 ## Windows install (x64, unsigned)
 
 1. Download the latest package from [GitHub Releases](https://github.com/hyNous/vibe-board/releases), or use the checked-in [Vibe Board-latest-setup.exe](./releases/Vibe%20Board-latest-setup.exe).
 2. Install and launch Vibe Board. The first run opens the setup wizard: it scans the agents installed on the machine, then you pick the agents to connect and approve setup.
 3. The wizard installs the selected hooks, saves startup options, and verifies the result; a failed check stays in the wizard with an error. Sessions of the connected agents then reach the board (starting the board on session start is off by default and enabled per agent).
-4. To change the choice later, rerun **Settings → General → Agent connection**.
+4. To change the choice later, open **Settings → General → Connected Agents**.
 
 The installer is an unsigned Windows x64 build, so SmartScreen may ask for confirmation. Automatic updates are disabled; releases are downloaded manually from GitHub. The full first-run, permission, and migration notes are in [Product setup](docs/product-setup.md).
 
@@ -61,9 +60,9 @@ The installer is an unsigned Windows x64 build, so SmartScreen may ask for confi
 | Capability | Details |
 | --- | --- |
 | Task board | Shows the current task, agent online state, and completion reminders. The task area scrolls and shows only the agent, conversation title, and execution state — never conversation bodies. |
-| Approvals and questions | Approve, deny, answer, or confirm plans during a run without returning to the terminal. |
-| Usage | Prefers real tokens; otherwise shows provider quota, window, and reset time. Local session logs and local files need no authorization; online queries are off by default and require per-provider authorization on the Usage page, after which Vibe Board queries the provider with the credentials already stored locally (or through that provider's own CLI). Authorization can be revoked at any time. |
-| Agent management | Scans CLIs and desktop apps for version, path, hook, and configuration state, and supports custom agents. |
+| Quota | Each agent's 5-hour and weekly remaining quota and reset time, optionally shown on the island. Reading local logs needs no permission; online queries are off by default and are turned on one tool at a time on the Quota page, using the login that tool already stores on this machine. They can be turned off at any time. |
+| Agent connection | The first-run wizard scans the agents installed on the machine and you pick which ones report task status to the board; change it later on the General page. Custom agents are supported. |
+| Dispatch | Let one agent hand tasks to another, adding or removing workers per main agent. |
 | Skill management | Imports from an agent, local folder, or GitHub; adopts into the center library; distributes by symlink or copy. |
 | Look and docking | Solid black by default with an optional frosted-glass effect; docks to the top or either side edge, with three side sizes. |
 

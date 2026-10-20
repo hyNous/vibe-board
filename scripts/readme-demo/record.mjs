@@ -256,7 +256,9 @@ async function record(name) {
   mkdirSync(frameDir, { recursive: true })
 
   const scale = 2
-  const browser = await chromium.launch({ executablePath: chrome })
+  // The screencast only delivers device-pixel frames when Chrome itself runs at
+  // 2x; the context's deviceScaleFactor alone yields 1x frames.
+  const browser = await chromium.launch({ executablePath: chrome, args: [`--force-device-scale-factor=${scale}`] })
   const context = await browser.newContext({ viewport: scene.viewport, deviceScaleFactor: scale, locale: 'zh-CN' })
   const page = await context.newPage()
   page.on('pageerror', (error) => console.warn(`[${name}] page error:`, error.message))

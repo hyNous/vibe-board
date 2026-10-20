@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="400" viewBox="0 0 1200 400" role="img" aria-labelledby="title desc">
+  <title id="title">Vibe Board：每个 AI 编程 Agent 的任务和额度，都在屏幕边缘</title>
+  <desc id="desc">Vibe Board 的灵动岛挂在屏幕顶部，展开后列出 Claude、Codex、OpenCode 正在跑的任务，以及各自 5 小时内的剩余额度。</desc>
+
+  <defs>
+    <linearGradient id="brand" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#6A2BFF" />
+      <stop offset="1" stop-color="#0A8DFF" />
+    </linearGradient>
+  </defs>
+
+  <!-- Desktop behind the island -->
+  <rect x="0.75" y="0.75" width="1198.5" height="398.5" rx="27.5" fill="#0E0F14" stroke="#2A2C34" stroke-width="1.5" />
+
+  <!-- Title -->
+  <g id="title-block" transform="translate(64 0)">
+    <text x="0" y="104" fill="#8A8F9A" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="18" letter-spacing="2.4">AI 编程 AGENT · 屏幕边缘看板</text>
+    <text x="-3" y="186" fill="#FFFFFF" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif" font-size="76" font-weight="800" letter-spacing="-2.5">Vibe Board</text>
+    <text x="0" y="238" fill="#D5D8DE" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif" font-size="30">每个 Agent 的任务和额度，</text>
+    <text x="0" y="276" fill="#D5D8DE" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif" font-size="30">抬眼就能看到。</text>
+    <text x="0" y="336" fill="#8A8F9A" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="18">Windows x64 · 本地优先 · Apache-2.0</text>
+  </g>
+
+  <!-- The island, hanging from the top edge and expanded -->
+  <g id="island" transform="translate(628 0)">
+    <path d="M0 0 H508 V318 A30 30 0 0 1 478 348 H30 A30 30 0 0 1 0 318 Z" fill="#000000" stroke="#2A2C34" stroke-width="1.5" />
+
+    <!-- Tasks -->
+    <g font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif" font-size="21">
+      <g transform="translate(32 52)">
+        <circle cx="6" cy="-7" r="6" fill="#3AA2FF" />
+        <text x="24" y="0" fill="#FFFFFF" font-weight="700">Claude</text>
+        <text x="122" y="0" fill="#9AA0AB">weather-app</text>
+        <text x="444" y="0" text-anchor="end" fill="#3AA2FF" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="20">执行中 4:12</text>
+      </g>
+      <g transform="translate(32 98)">
+        <circle cx="6" cy="-7" r="6" fill="#3AA2FF" />
+        <text x="24" y="0" fill="#FFFFFF" font-weight="700">Codex</text>
+        <text x="122" y="0" fill="#9AA0AB">shop-api</text>
+        <text x="444" y="0" text-anchor="end" fill="#3AA2FF" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="20">执行中 11:03</text>
+      </g>
+      <g transform="translate(32 144)">
+        <circle cx="6" cy="-7" r="6" fill="#5C616C" />
+        <text x="24" y="0" fill="#FFFFFF" font-weight="700">OpenCode</text>
+        <text x="148" y="0" fill="#9AA0AB">blog</text>
+        <text x="444" y="0" text-anchor="end" fill="#8A8F9A" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="20">已完成</text>
+      </g>
+    </g>
+
+    <rect x="32" y="172" width="444" height="1" fill="#24262E" />
+
+    <!-- Quota left -->
+    <g font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif" font-size="20">
+      <g transform="translate(32 214)">
+        <text x="0" y="0" fill="#D5D8DE">Claude Code</text>
+        <rect x="150" y="-11" width="214" height="8" rx="4" fill="#1C1E25" />
+        <rect x="150" y="-11" width="133" height="8" rx="4" fill="url(#brand)" />
+        <text x="444" y="0" text-anchor="end" fill="#FFFFFF" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">62%</text>
+      </g>
+      <g transform="translate(32 256)">
+        <text x="0" y="0" fill="#D5D8DE">Codex</text>
+        <rect x="150" y="-11" width="214" height="8" rx="4" fill="#1C1E25" />
+        <rect x="150" y="-11" width="60" height="8" rx="4" fill="url(#brand)" />
+        <text x="444" y="0" text-anchor="end" fill="#FFFFFF" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">28%</text>
+      </g>
+      <g transform="translate(32 298)">
+        <text x="0" y="0" fill="#D5D8DE">OpenCode</text>
+        <rect x="150" y="-11" width="214" height="8" rx="4" fill="#1C1E25" />
+        <rect x="150" y="-11" width="188" height="8" rx="4" fill="url(#brand)" />
+        <text x="444" y="0" text-anchor="end" fill="#FFFFFF" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">88%</text>
+      </g>
+    </g>
+    <text x="476" y="330" text-anchor="end" fill="#6B707B" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="16">5 小时剩余额度</text>
+  </g>
+</svg>
