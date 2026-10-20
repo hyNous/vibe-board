@@ -151,7 +151,3 @@ export function runStateForLegacyEvent(
     })
   return applyAgentRunEvent(base, normalized, now)
 }
-
-export function filterCodexSessions(sessions: SessionState[]): SessionState[] {
-  return sessions.filter((session) => (session.runState?.agent ?? session.agentType) === 'codex')
-}

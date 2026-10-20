@@ -657,8 +657,7 @@
   50% { opacity: 1; transform: scale(1); }
 }
 
-@media (prefers-reduced-motion: reduce) {
-}
+
 
 /* ── Settings Scrollbar ── */
 .settings-scroll::-webkit-scrollbar {
@@ -732,38 +731,15 @@
 }
 
 /* ── Section ── */
-.setting-section {
-  width: min(100%, 900px);
-  margin-bottom: 32px;
-}
 
-.setting-section__header {
-  margin-bottom: 24px;
-  padding-right: 76px;
-}
 
-.setting-section__title {
-  font-size: 34px;
-  line-height: 1.08;
-  font-weight: 860;
-  color: var(--settings-text-primary);
-  margin-bottom: 8px;
-  letter-spacing: -0.055em;
-}
 
-.setting-section__description {
-  max-width: 680px;
-  font-size: 16px;
-  font-weight: 520;
-  color: var(--settings-text-secondary);
-  line-height: 1.45;
-}
 
-.setting-section__body {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-lg);
-}
+
+
+
+
+
 
 /* ── Group ── */
 .settings-card {
@@ -1666,9 +1642,7 @@
     padding: 66px 24px 36px;
   }
 
-  .setting-section__title {
-    font-size: 28px;
-  }
+  
 
   .setting-row,
   .usage-provider-row {

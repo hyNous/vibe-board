@@ -12,7 +12,6 @@ export const PRIORITY = {
 } as const
 
 export type Priority = typeof PRIORITY[keyof typeof PRIORITY]
-export type PriorityName = keyof typeof PRIORITY
 
 export function computePriority(session: {
   phase: string
@@ -50,9 +49,4 @@ export function computePriority(session: {
     return PRIORITY.idle
   }
   return PRIORITY.idle
-}
-
-export function priorityName(p: Priority): PriorityName {
-  const entries = Object.entries(PRIORITY) as [PriorityName, Priority][]
-  return entries.find(([, v]) => v === p)?.[0] ?? 'idle'
 }

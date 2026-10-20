@@ -42,16 +42,6 @@ export interface CustomAgentConfig {
   mcpConfig?: string | null
 }
 
-export interface UpdateCustomAgentConfig {
-  displayName: string
-  category?: string | null
-  globalSkillsDir: string
-  iconName?: string | null
-  configDir?: string | null
-  settingsFile?: string | null
-  mcpConfig?: string | null
-}
-
 export interface AgentOutputEvent {
   agentId: string
   operation: string
@@ -223,62 +213,18 @@ export const agentApi = {
     ? invoke<AgentProgramInfo[]>('agent_list')
     : Promise.resolve(seedAgentPrograms()),
 
-  refresh: () => isTauriRuntime()
-    ? invoke<AgentProgramInfo[]>('agent_refresh')
-    : Promise.resolve(seedAgentPrograms()),
-
   uninstall: (agentId: string) => isTauriRuntime()
     ? invoke('agent_uninstall', { agentId })
-    : Promise.resolve(),
-
-  openDownload: (agentId: string) => isTauriRuntime()
-    ? invoke('agent_open_download', { agentId })
-    : Promise.resolve(),
-
-  openApp: (agentId: string) => isTauriRuntime()
-    ? invoke('agent_open_app', { agentId })
-    : Promise.resolve(),
-
-  installHook: (agentId: string) => isTauriRuntime()
-    ? invoke('install_agent_hook', { toolName: agentId })
     : Promise.resolve(),
 
   uninstallHook: (agentId: string) => isTauriRuntime()
     ? invoke('uninstall_agent_hook', { toolName: agentId })
     : Promise.resolve(),
 
-  openPath: (path: string) => isTauriRuntime()
-    ? invoke('open_system_path', { path })
-    : Promise.resolve(),
-
   addCustom: (config: CustomAgentConfig) => isTauriRuntime()
     ? invoke<AgentProgramInfo>('add_custom_agent', { config })
     : Promise.resolve({
       id: config.id || `custom-${config.displayName.toLowerCase().replace(/\s+/g, '-')}`,
-      displayName: config.displayName,
-      icon: config.iconName || 'custom',
-      kind: 'cli' as const,
-      status: 'installed' as const,
-      packageManager: 'custom',
-      packageName: null,
-      installedVersion: null,
-      latestVersion: null,
-      binaryPath: null,
-      configDir: config.configDir || config.globalSkillsDir,
-      appPath: null,
-      downloadUrl: null,
-      installCommand: null,
-      updateCommand: null,
-      uninstallCommand: null,
-      hooksInstalled: false,
-      skillsDir: config.globalSkillsDir,
-      isCustom: true,
-    }),
-
-  updateCustom: (agentId: string, config: UpdateCustomAgentConfig) => isTauriRuntime()
-    ? invoke<AgentProgramInfo>('update_custom_agent', { agentId, config })
-    : Promise.resolve({
-      id: agentId,
       displayName: config.displayName,
       icon: config.iconName || 'custom',
       kind: 'cli' as const,

@@ -47,8 +47,6 @@ export type AgentRunEvent =
   | { type: 'completed'; summary?: string }
   | { type: 'usage_updated' }
 
-export type UnifiedAgentEvent = AgentRunEvent
-
 export type SessionPhase =
   | 'ready'
   | 'idle'
@@ -62,7 +60,6 @@ export type SessionPhase =
 export type PanelState = 'collapsed' | 'hover' | 'expanded'
 
 export type BaseLayer = 'compact' | 'expanded' | 'detail'
-export type DisplayLevel = 'dormant' | 'compact' | 'visible'
 
 export type OverlayType = 'completion' | 'response' | 'compacting'
 
@@ -137,14 +134,6 @@ export interface ContextWindowInfo {
   totalOutputTokens: number
   contextWindowSize: number
   usedPercentage: number | null
-}
-
-export interface TerminalInfo {
-  app: string
-  pid: number
-  tty: string
-  tabId?: string
-  paneId?: string
 }
 
 /**
@@ -254,12 +243,6 @@ export interface TaskInfo {
   id: string
   name: string
   status: 'pending' | 'in_progress' | 'completed'
-}
-
-export interface McpToolInfo {
-  server: string
-  tool: string
-  displayName: string
 }
 
 export interface ChatToolCall {

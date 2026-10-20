@@ -4,7 +4,6 @@ import {
   agentRunEventFromLegacy,
   agentRunStateFromSession,
   applyAgentRunEvent,
-  filterCodexSessions,
 } from '../utils/agentRunState'
 
 function session(overrides: Partial<SessionState> = {}): SessionState {
@@ -57,17 +56,6 @@ describe('agent run state normalization', () => {
 
     const next = applyAgentRunEvent(agentRunStateFromSession(session()), event!, 1_700_000_001_000)
     expect(next).toMatchObject({ status: 'running', currentAction: 'Bash: pnpm test' })
-  })
-
-  it('keeps only normalized Codex sessions in the Island', () => {
-    const codex = session({ runState: { ...agentRunStateFromSession(session()), agent: 'codex' } })
-    const claude = session({
-      id: 's2',
-      agentType: 'claude-code',
-      runState: { ...agentRunStateFromSession(session()), agent: 'claude-code', sessionId: 's2' },
-    })
-
-    expect(filterCodexSessions([codex, claude]).map((item) => item.id)).toEqual(['s1'])
   })
 })
 

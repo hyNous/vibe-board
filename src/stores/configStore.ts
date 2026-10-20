@@ -238,18 +238,7 @@ interface ConfigState {
 interface ConfigActions {
   updateConfig: <K extends keyof ConfigState>(key: K, value: ConfigState[K]) => void
   resetIslandDefaults: () => void
-  toggleAgentHook: (agentType: AgentType) => void
-  toggleSoundEvent: (id: string) => void
   updateShortcut: (action: string, keys: string) => void
-  toggleLabFeature: (id: string) => void
-  // Webhook actions
-  addWebhook: (webhook: WebhookEntry) => void
-  removeWebhook: (id: string) => void
-  updateWebhook: (webhook: WebhookEntry) => void
-  toggleWebhook: (id: string) => void
-  addSessionSilenceRule: (rule: Omit<SessionSilenceRule, 'id' | 'enabled' | 'createdAt'> & Partial<Pick<SessionSilenceRule, 'enabled'>>) => void
-  removeSessionSilenceRule: (id: string) => void
-  toggleSessionSilenceRule: (id: string) => void
 }
 
 type ConfigStore = ConfigState & ConfigActions
@@ -600,101 +589,11 @@ export const useConfigStore = create<ConfigStore>()(
     set(createIslandDefaults())
   },
 
-  toggleAgentHook: (agentType) => {
-    set((state) => ({
-      agentHooks: state.agentHooks.map((h) =>
-        h.agentType === agentType ? { ...h, enabled: !h.enabled } : h
-      ),
-    }))
-  },
-
-  toggleSoundEvent: (id) => {
-    set((state) => ({
-      soundEvents: state.soundEvents.map((e) =>
-        e.id === id ? { ...e, enabled: !e.enabled } : e
-      ),
-      soundRules: {
-        ...state.soundRules,
-        [id]: {
-          ...(state.soundRules[id] ?? { enabled: true, sound: 'default' as const }),
-          enabled: !(state.soundRules[id]?.enabled ?? state.soundEvents.find((e) => e.id === id)?.enabled ?? true),
-        },
-      },
-    }))
-  },
-
   updateShortcut: (action, keys) => {
     set((state) => ({
       shortcuts: state.shortcuts.map((s) =>
         s.action === action ? { ...s, keys } : s
       ),
-    }))
-  },
-
-  toggleLabFeature: (id) => {
-    set((state) => ({
-      labFeatures: state.labFeatures.map((f) =>
-        f.id === id ? { ...f, enabled: !f.enabled } : f
-      ),
-    }))
-  },
-
-  addWebhook: (webhook) => {
-    set((state) => ({ webhooks: [...state.webhooks, webhook] }))
-  },
-
-  removeWebhook: (id) => {
-    set((state) => ({ webhooks: state.webhooks.filter((w) => w.id !== id) }))
-  },
-
-  updateWebhook: (webhook) => {
-    set((state) => ({
-      webhooks: state.webhooks.map((w) => (w.id === webhook.id ? webhook : w)),
-    }))
-  },
-
-  toggleWebhook: (id) => {
-    set((state) => ({
-      webhooks: state.webhooks.map((w) => (w.id === id ? { ...w, enabled: !w.enabled } : w)),
-    }))
-  },
-
-  addSessionSilenceRule: (rule) => {
-    const pattern = rule.pattern.trim()
-    if (!pattern) return
-    set((state) => {
-      const exists = state.sessionSilenceRules.some((item) => (
-        item.kind === rule.kind
-        && item.pattern.trim().toLowerCase() === pattern.toLowerCase()
-      ))
-      if (exists) return state
-      return {
-        sessionSilenceRules: [
-          ...state.sessionSilenceRules,
-          {
-            id: `silence-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-            kind: rule.kind,
-            pattern,
-            label: rule.label?.trim() || undefined,
-            enabled: rule.enabled ?? true,
-            createdAt: Date.now(),
-          },
-        ],
-      }
-    })
-  },
-
-  removeSessionSilenceRule: (id) => {
-    set((state) => ({
-      sessionSilenceRules: state.sessionSilenceRules.filter((rule) => rule.id !== id),
-    }))
-  },
-
-  toggleSessionSilenceRule: (id) => {
-    set((state) => ({
-      sessionSilenceRules: state.sessionSilenceRules.map((rule) => (
-        rule.id === id ? { ...rule, enabled: !rule.enabled } : rule
-      )),
     }))
   },
     }),

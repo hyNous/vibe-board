@@ -32,7 +32,6 @@ describe('sessionStore backend overlays', () => {
       hookNotification: null,
       overlayQueue: [],
       activeOverlay: null,
-      mutedSessions: {},
       wakeSilencedUntil: 0,
       focusedTerminal: null,
     })

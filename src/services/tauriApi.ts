@@ -262,24 +262,6 @@ export interface UsageDashboard {
   pricingEffectiveDate: string | null
 }
 
-export interface CodexAppServerThreadSummary {
-  id: string
-  name?: string | null
-  preview?: string | null
-  cwd?: string | null
-  status?: string | null
-  phase: string
-  updatedAt?: number | null
-}
-
-export interface CodexAppServerSyncReport {
-  total: number
-  synced: number
-  read: number
-  errors: string[]
-  threads: CodexAppServerThreadSummary[]
-}
-
 export interface BackendConfig {
   soundEnabled: boolean
   soundVolume: number
@@ -340,13 +322,6 @@ export interface BackendDisplayInfo {
   height: number
   scaleFactor: number
   isPrimary: boolean
-}
-
-export interface BackendAdapterInfo {
-  name: string
-  displayName: string
-  icon: string
-  status: string
 }
 
 // ── Session Commands ─────────────────────────────────────────────
@@ -556,154 +531,6 @@ export async function runHookDoctor(): Promise<HookDoctorReport> {
   return invoke<HookDoctorReport>('run_hook_doctor')
 }
 
-export interface CodexAppServerProbeCheck {
-  id: string
-  label: string
-  status: 'ok' | 'warn' | 'error'
-  detail: string
-  suggestion?: string
-}
-
-export interface CodexAppServerProbe {
-  port: number
-  cliPath?: string | null
-  cliVersion?: string | null
-  desktopPath?: string | null
-  cliAvailable: boolean
-  appServerCommandAvailable: boolean
-  serverListening: boolean
-  codexAppInstalled: boolean
-  authConfigured: boolean
-  sessionsDirExists: boolean
-  checks: CodexAppServerProbeCheck[]
-}
-
-export async function probeCodexAppServer(): Promise<CodexAppServerProbe> {
-  if (!isTauri()) {
-    return {
-      port: 41241,
-      cliPath: null,
-      cliVersion: null,
-      desktopPath: null,
-      cliAvailable: false,
-      appServerCommandAvailable: false,
-      serverListening: false,
-      codexAppInstalled: false,
-      authConfigured: false,
-      sessionsDirExists: false,
-      checks: [
-        { id: 'browser', label: 'Browser mode', status: 'warn', detail: 'Codex app-server diagnostics run inside the Tauri app.' },
-      ],
-    }
-  }
-  return invoke<CodexAppServerProbe>('probe_codex_app_server')
-}
-
-export interface BuddyDeviceConfig {
-  enabled: boolean
-  transport: string
-  port: number
-  sharedSecret: string
-}
-
-export interface BuddyDeviceSnapshot {
-  protocolVersion: number
-  sessions: Array<{
-    id: string
-    agentType: string
-    sourceSlot: number
-    project: string
-    phase: string
-    statusCode: number
-    needsAttention: boolean
-    lastToolName?: string | null
-  }>
-  focusAction: string
-}
-
-export async function buddyDeviceSnapshot(): Promise<BuddyDeviceSnapshot> {
-  if (!isTauri()) return { protocolVersion: 1, sessions: [], focusAction: 'buddy_reverse_focus' }
-  return invoke<BuddyDeviceSnapshot>('buddy_device_snapshot')
-}
-
-export async function getBuddyDeviceConfig(): Promise<BuddyDeviceConfig> {
-  if (!isTauri()) return { enabled: false, transport: 'http', port: 17893, sharedSecret: '' }
-  return invoke<BuddyDeviceConfig>('get_buddy_device_config')
-}
-
-export async function setBuddyDeviceConfig(config: BuddyDeviceConfig): Promise<BuddyDeviceConfig> {
-  if (!isTauri()) return config
-  return invoke<BuddyDeviceConfig>('set_buddy_device_config', { config })
-}
-
-export async function buddyReverseFocus(sessionId: string): Promise<void> {
-  if (!isTauri()) return
-  return invoke('buddy_reverse_focus', { sessionId })
-}
-
-// ── Hook Management ──────────────────────────────────────────────
-
-export async function installHooks(agent: string): Promise<void> {
-  if (!isTauri()) {
-    console.log(`[mock] installHooks(${agent})`)
-    return
-  }
-  return invoke('install_hooks', { agent })
-}
-
-export async function removeHooks(agent: string): Promise<void> {
-  if (!isTauri()) {
-    console.log(`[mock] removeHooks(${agent})`)
-    return
-  }
-  return invoke('remove_hooks', { agent })
-}
-
-export async function getAdapterStatus(): Promise<BackendAdapterInfo[]> {
-  if (!isTauri()) return []
-  return invoke<BackendAdapterInfo[]>('get_adapter_status')
-}
-
-export type HookVerificationResult = 'ok' | 'needs_reinstall' | 'settings_corrupted'
-
-export async function verifyHooks(agent: string): Promise<HookVerificationResult> {
-  if (!isTauri()) return 'ok'
-  return invoke<HookVerificationResult>('verify_hooks', { agent })
-}
-
-// ── Sound Commands ──────────────────────────────────────────
-
-export async function setSoundVolume(volume: number): Promise<void> {
-  if (!isTauri()) return
-  return invoke('set_sound_volume', { volume })
-}
-
-export async function setSoundEnabled(enabled: boolean): Promise<void> {
-  if (!isTauri()) return
-  return invoke('set_sound_enabled', { enabled })
-}
-
-export async function setSoundPack(pack: string): Promise<void> {
-  if (!isTauri()) return
-  return invoke('set_sound_pack', { pack })
-}
-
-/** Play the sound configured for a given event id (e.g. 'permission-request'). No-op outside Tauri. */
-export async function playSound(event: string): Promise<void> {
-  if (!isTauri()) return
-  return invoke('play_sound', { event })
-}
-
-export async function previewSound(event: string, sound: string): Promise<void> {
-  if (!isTauri()) return
-  return invoke('preview_sound', { event, sound })
-}
-
-export async function setProbeSessionFilter(enabled: boolean): Promise<void> {
-  if (!isTauri()) return
-  return invoke('set_probe_session_filter', { enabled })
-}
-
 export async function setIslandFeatureFlags(options: {
   tipsEnabled: boolean
   pixelCursorEnabled: boolean
@@ -714,69 +541,14 @@ export async function setIslandFeatureFlags(options: {
   return invoke('set_island_feature_flags', options)
 }
 
-export async function setSoundQuietHours(enabled: boolean, start: string, end: string): Promise<void> {
-  if (!isTauri()) return
-  return invoke('set_sound_quiet_hours', { enabled, start, end })
-}
-
-export async function setSoundEventEnabled(eventId: string, enabled: boolean): Promise<void> {
-  if (!isTauri()) return
-  return invoke('set_sound_event_enabled', { eventId, enabled })
-}
-
 export async function setSoundEventRule(eventId: string, enabled: boolean, sound: string): Promise<void> {
   if (!isTauri()) return
   return invoke('set_sound_event_rule', { eventId, enabled, sound })
 }
 
-export async function importCustomSound(filePath: string): Promise<{ id: string; name: string; path: string; dataUrl?: string }> {
-  if (!isTauri()) {
-    const normalized = filePath.replace(/\\/g, '/')
-    return {
-      id: `${Date.now()}`,
-      name: normalized.split(/[\\/]+/).pop() || 'Custom sound',
-      path: filePath,
-    }
-  }
-  return invoke('import_custom_sound', { filePath })
-}
-
-export interface SoundPackImportResult {
-  name: string
-  displayName: string
-  version?: string | null
-  rootPath: string
-  importedSounds: Array<{ id: string; name: string; path: string; dataUrl?: string; eventId: string; category: string }>
-  appliedRules: Array<{ eventId: string; soundId: string }>
-}
-
-export async function importSoundPack(packPath: string): Promise<SoundPackImportResult> {
-  if (!isTauri()) {
-    return {
-      name: 'preview-pack',
-      displayName: 'Preview Pack',
-      version: null,
-      rootPath: packPath,
-      importedSounds: [],
-      appliedRules: [],
-    }
-  }
-  return invoke('import_sound_pack', { packPath })
-}
-
-export async function setCustomSounds(sounds: Array<{ id: string; name: string; path: string; dataUrl?: string }>): Promise<void> {
-  if (!isTauri()) return
-  return invoke('set_custom_sounds', { sounds })
-}
-
 export async function registerGlobalShortcut(shortcut: string): Promise<void> {
   if (!isTauri()) return
   return invoke('register_global_shortcut', { shortcut })
-}
-
-export async function unregisterGlobalShortcut(): Promise<void> {
-  if (!isTauri()) return
-  return invoke('unregister_global_shortcut')
 }
 
 // ── Chat History Commands ────────────────────────────────────────
@@ -796,158 +568,6 @@ export interface ParsedMessage {
   role: 'user' | 'assistant'
   timestamp: string | null
   blocks: ParsedMessageBlock[]
-}
-
-/** Request a full parse of a session's JSONL conversation file. */
-export async function getChatHistory(sessionId: string): Promise<ParsedMessage[]> {
-  if (!isTauri()) return []
-  return invoke<ParsedMessage[]>('get_chat_history', { sessionId })
-}
-
-/** Paginated slice of a session's chat history. Matches Rust ChatHistorySlice. */
-export interface ChatHistorySlice {
-  messages: ParsedMessage[]
-  hasMore: boolean
-  firstMessageId: string | null
-  totalCount: number
-  transcriptPath: string | null
-}
-
-/**
- * Load only the tail (most recent N messages) of a session's transcript.
- * `beforeId` is kept for backend compatibility, but the floating chat view
- * intentionally avoids loading older pages for performance.
- */
-export async function getChatHistoryTail(
-  sessionId: string,
-  options: { limit?: number; beforeId?: string } = {},
-): Promise<ChatHistorySlice> {
-  if (!isTauri()) {
-    return { messages: [], hasMore: false, firstMessageId: null, totalCount: 0, transcriptPath: null }
-  }
-  return invoke<ChatHistorySlice>('get_chat_history_tail', {
-    sessionId,
-    limit: options.limit ?? 50,
-    beforeId: options.beforeId ?? null,
-  })
-}
-
-function demoSubagentChatHistory(transcriptPath: string): ParsedMessage[] {
-  const iso = (offsetMs: number) => new Date(Date.now() - offsetMs).toISOString()
-
-  if (transcriptPath === 'demo://subagent/coverage-running') {
-    return [
-      {
-        id: 'demo-coverage-user',
-        role: 'user',
-        timestamp: iso(52_000),
-        blocks: [
-          { type: 'text', text: '检查 src/auth 测试覆盖缺口，只读不要改文件。' },
-        ],
-      },
-      {
-        id: 'demo-coverage-agent',
-        role: 'assistant',
-        timestamp: iso(38_000),
-        blocks: [
-          { type: 'thinking', thinking: '需要先定位 auth 相关测试，再 grep getToken / refreshToken 覆盖情况。' },
-          {
-            type: 'tool_use',
-            id: 'demo-coverage-read',
-            name: 'Read',
-            input: { file_path: 'src/auth/middleware.test.ts' },
-          },
-          {
-            type: 'tool_result',
-            toolUseId: 'demo-coverage-read',
-            content: 'No tests found for buildAuthHeaders empty-token branch.',
-            isError: false,
-          },
-          {
-            type: 'tool_use',
-            id: 'demo-coverage-grep',
-            name: 'Grep',
-            input: { pattern: 'refreshToken|getToken', path: 'src/auth' },
-          },
-          {
-            type: 'tool_result',
-            toolUseId: 'demo-coverage-grep',
-            content: 'src/auth/middleware.ts\nsrc/auth/auth.ts',
-            isError: false,
-          },
-          { type: 'text', text: '仍在检查：getToken、refreshToken 和空 token 分支缺少直接回归覆盖。' },
-        ],
-      },
-    ]
-  }
-
-  if (transcriptPath === 'demo://subagent/readme-completed') {
-    return [
-      {
-        id: 'demo-readme-user',
-        role: 'user',
-        timestamp: iso(48_000),
-        blocks: [
-          { type: 'text', text: '总结 README 中的产品定位和能力点。' },
-        ],
-      },
-      {
-        id: 'demo-readme-agent',
-        role: 'assistant',
-        timestamp: iso(18_000),
-        blocks: [
-          {
-            type: 'tool_use',
-            id: 'demo-readme-read',
-            name: 'Read',
-            input: { file_path: 'README.md' },
-          },
-          {
-            type: 'tool_result',
-            toolUseId: 'demo-readme-read',
-            content: '# Vibe Board\nVibe Board 是一个面向 AI 编程 Agent 的 macOS 灵动岛应用。',
-            isError: false,
-          },
-          {
-            type: 'text',
-            text: 'README 总结完成：Vibe Board 面向 Claude Code、Codex 等 AI 编程 Agent，在 macOS 顶部提供灵动岛式状态、审批、提问、计划和完成提醒。',
-          },
-        ],
-      },
-    ]
-  }
-
-  return []
-}
-
-/** Request a full parse of a completed subagent transcript JSONL file. */
-export async function getSubagentChatHistory(sessionId: string, transcriptPath: string): Promise<ParsedMessage[]> {
-  if (!isTauri()) {
-    if (transcriptPath.startsWith('demo://subagent/')) return demoSubagentChatHistory(transcriptPath)
-    return []
-  }
-  return invoke<ParsedMessage[]>('get_subagent_chat_history', { sessionId, transcriptPath })
-}
-
-export async function openImage(src: string): Promise<void> {
-  if (!isTauri()) {
-    window.open(src, '_blank', 'noopener,noreferrer')
-    return
-  }
-  return invoke('open_image', { src })
-}
-
-export function isLocalImageSource(src: string): boolean {
-  const trimmed = src.trim()
-  return trimmed.startsWith('/')
-    || trimmed.startsWith('~/')
-    || trimmed.startsWith('~\\')
-    || trimmed.startsWith('file://')
-}
-
-export async function resolveImageSrc(src: string): Promise<string> {
-  if (!isTauri() || !isLocalImageSource(src)) return src
-  return invoke<string>('read_image_data_url', { src })
 }
 
 export async function openSystemPath(path: string): Promise<void> {
@@ -1005,24 +625,10 @@ export async function openTutorialWindow(): Promise<void> {
   return invoke('open_tutorial_window')
 }
 
-// ── Suppression Commands ────────────────────────────────────────
-
-/** Check if a session's terminal is currently focused (smart suppression). */
-export async function shouldSuppress(sessionId: string): Promise<boolean> {
-  if (!isTauri()) return false
-  return invoke<boolean>('should_suppress', { sessionId })
-}
-
 /** Check if a session's owning terminal tab/window is currently focused. */
 export async function isTerminalFocused(sessionId: string): Promise<boolean> {
   if (!isTauri()) return false
   return invoke<boolean>('is_terminal_focused', { sessionId })
-}
-
-/** Get current cursor screen coordinates. */
-export async function getCursorPosition(): Promise<[number, number]> {
-  if (!isTauri()) return [0, 0]
-  return invoke<[number, number]>('get_cursor_position')
 }
 
 /** Native fallback for transparent-window hover hit testing. */
@@ -1105,21 +711,6 @@ export async function endNotchDrag(): Promise<NotchDragResult | null> {
   return invoke<NotchDragResult | null>('end_notch_drag')
 }
 
-export interface LogicalRect {
-  left: number
-  top: number
-  width: number
-  height: number
-}
-
-export async function isCursorInWindowZones(
-  zones: LogicalRect[],
-  windowLabel?: 'notch',
-): Promise<boolean> {
-  if (!isTauri() || zones.length === 0) return false
-  return invoke<boolean>('is_cursor_in_window_zones', { zones, windowLabel })
-}
-
 // ── Diagnostics Commands ────────────────────────────────────────
 
 export async function exportDiagnostics(targetPath: string): Promise<void> {
@@ -1143,17 +734,6 @@ export async function saveSessions(sessions: SessionState[]): Promise<void> {
   return invoke('save_sessions', { sessionsJson: JSON.stringify(sessions) })
 }
 
-export async function loadSessions(): Promise<SessionState[]> {
-  if (!isTauri()) return []
-  try {
-    const data = await invoke<string>('load_sessions')
-    return data ? JSON.parse(data) : []
-  } catch (err) {
-    console.warn('Failed to parse loaded sessions:', err)
-    return []
-  }
-}
-
 // ── App Lifecycle ────────────────────────────────────────────────
 
 export async function quitApp(): Promise<void> {
@@ -1166,35 +746,6 @@ export async function quitApp(): Promise<void> {
   } catch {
     window.close()
   }
-}
-
-// ── Engine Instance Commands ────────────────────────────────────
-
-export interface BackendEngineInstance {
-  id: string
-  label: string
-  configRoot: string
-  enabled: boolean
-}
-
-export async function addEngineInstance(label: string, configRoot: string): Promise<BackendEngineInstance> {
-  if (!isTauri()) throw new Error('Not in Tauri')
-  return await invoke<BackendEngineInstance>('add_engine_instance', { label, configRoot })
-}
-
-export async function removeEngineInstance(id: string): Promise<void> {
-  if (!isTauri()) return
-  await invoke('remove_engine_instance', { id })
-}
-
-export async function setEngineInstanceEnabled(id: string, enabled: boolean): Promise<void> {
-  if (!isTauri()) return
-  await invoke('set_engine_instance_enabled', { id, enabled })
-}
-
-export async function verifyEnginePath(path: string): Promise<boolean> {
-  if (!isTauri()) return false
-  return await invoke<boolean>('verify_engine_path', { path })
 }
 
 // ── Agent Detection & Hook Management ────────────────────────────
@@ -1253,18 +804,6 @@ export async function uninstallAgentHook(toolName: string): Promise<void> {
   return invoke('uninstall_agent_hook', { toolName })
 }
 
-export async function simulateHookEvent(eventName: string, toolName?: string): Promise<void> {
-  if (!isTauri()) return
-  return invoke('simulate_hook_event', { eventName, toolName })
-}
-
-export async function simulateHookLifecycle(): Promise<void> {
-  if (!isTauri()) return
-  for (const eventName of ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'Stop']) {
-    await simulateHookEvent(eventName)
-  }
-}
-
 export async function getAllHookStatus(): Promise<HookStatus[]> {
   if (!isTauri()) return []
   return invoke<HookStatus[]>('get_all_hook_status')
@@ -1275,78 +814,9 @@ export async function reinstallAllHooks(): Promise<string[]> {
   return invoke<string[]>('reinstall_all_hooks')
 }
 
-export async function uninstallAllHooks(): Promise<string[]> {
-  if (!isTauri()) return []
-  return invoke<string[]>('uninstall_all_hooks')
-}
-
-// ── Webhook Management ───────────────────────────────────────────
-
-export interface WebhookConfig {
-  id: string
-  name: string
-  platform: 'dingtalk' | 'feishu'
-  url: string
-  secret: string | null
-  sources: string[]
-  events: string[]
-  enabled: boolean
-  delayEnabled: boolean
-  delayMinutes: number
-}
-
-export async function listWebhooks(): Promise<WebhookConfig[]> {
-  if (!isTauri()) return []
-  return invoke<WebhookConfig[]>('list_webhooks')
-}
-
-export async function addWebhook(config: WebhookConfig): Promise<void> {
-  if (!isTauri()) return
-  return invoke('add_webhook', { config })
-}
-
-export async function removeWebhook(id: string): Promise<void> {
-  if (!isTauri()) return
-  return invoke('remove_webhook', { id })
-}
-
-export async function updateWebhook(config: WebhookConfig): Promise<void> {
-  if (!isTauri()) return
-  return invoke('update_webhook', { config })
-}
-
-export async function testWebhook(id: string): Promise<string> {
-  if (!isTauri()) return 'mock: test skipped in browser'
-  return invoke<string>('test_webhook', { id })
-}
-
-export async function getWebhookLogs(): Promise<DiagnosticEvent[]> {
-  if (!isTauri()) return []
-  return invoke<DiagnosticEvent[]>('get_webhook_logs')
-}
-
 // ── Haptic Feedback ─────────────────────────────────────────────
 
 export async function performHaptic(intensity: number): Promise<void> {
   if (!isTauri()) return
   return invoke('perform_haptic', { intensity })
-}
-
-// ── Diagnostic Events ────────────────────────────────────────────
-
-export interface DiagnosticEvent {
-  seq: number
-  timestampMs: number
-  severity: 'debug' | 'info' | 'warning' | 'error'
-  component: string
-  message: string
-  payload: unknown | null
-}
-
-export async function getDiagnosticEvents(sinceSeq?: number, component?: string): Promise<DiagnosticEvent[]> {
-  if (!isTauri()) return []
-  return invoke<DiagnosticEvent[]>('get_diagnostic_events', {
-    sinceSeq: sinceSeq ?? null,
-    component: component ?? null,
-  })
 }

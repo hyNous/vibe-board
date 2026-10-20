@@ -17,14 +17,7 @@
 }
 
 /* Glass Highlight (refraction edge) */
-.glass-highlight {
-  background: linear-gradient(
-    135deg,
-    var(--island-subtle-hover) 0%,
-    transparent 50%,
-    var(--island-subtle) 100%
-  );
-}
+
 
 /* Glass Card */
 .glass-card {
@@ -131,30 +124,16 @@
 .status-dot--idle { background: var(--status-idle); }
 
 /* Divider */
-.glass-divider {
-  height: 1px;
-  background: var(--island-subtle);
-  margin: 0;
-  border: none;
-}
+
 
 /* Scrollbar */
-.glass-scroll::-webkit-scrollbar {
-  width: 4px;
-}
 
-.glass-scroll::-webkit-scrollbar-track {
-  background: transparent;
-}
 
-.glass-scroll::-webkit-scrollbar-thumb {
-  background: var(--island-scrollbar);
-  border-radius: 2px;
-}
 
-.glass-scroll::-webkit-scrollbar-thumb:hover {
-  background: var(--island-scrollbar-hover);
-}
+
+
+
+
 
 /* Reduced motion fallback */
 @media (prefers-reduced-motion: reduce) {

@@ -158,30 +158,13 @@ html[data-island-color-theme="ink-amber"] {
   --status-thinking: #695783;
 }
 
-html[data-island-color-theme="ink-amber"] .color-theme-card--active,
-html[data-island-color-theme="ink-amber"] .claude-hook-lab__island-theme[data-active="true"] {
-  border-color: var(--island-accent);
-  background: rgba(var(--island-accent-rgb), 0.08);
-  box-shadow: inset 0 0 0 1px rgba(var(--island-accent-rgb), 0.48);
-  color: var(--island-text);
-}
 
-html[data-island-color-theme="ink-amber"] .color-theme-card:hover,
-html[data-island-color-theme="ink-amber"] .claude-hook-lab__island-theme:hover {
-  border-color: rgba(var(--island-accent-rgb), 0.42);
-}
 
-html[data-island-color-theme="ink-amber"] .color-theme-card,
-html[data-island-color-theme="ink-amber"] .claude-hook-lab__island-theme {
-  border-color: color-mix(in srgb, var(--island-border) 82%, var(--island-accent) 8%);
-  background: color-mix(in srgb, var(--island-card) 72%, var(--island-bg) 28%);
-  color: var(--island-text);
-}
 
-html[data-island-color-theme="ink-amber"] .color-theme-card__tag,
-html[data-island-color-theme="ink-amber"] .claude-hook-lab__island-theme-tag {
-  color: var(--island-text-muted);
-}
+
+
+
+
 
 html[data-island-color-theme="ink-amber"] .notch-panel {
   background:
@@ -220,9 +203,7 @@ html[data-island-color-theme="ink-amber"] .collapsed-bar--expanded .collapsed-ba
   border-bottom-color: rgba(74, 47, 20, 0.12);
 }
 
-html[data-island-color-theme="ink-amber"] .collapsed-bar--shimmer .collapsed-bar__main::after {
-  background: linear-gradient(90deg, transparent 0%, rgba(var(--island-accent-rgb), 0.13) 50%, transparent 100%);
-}
+
 
 html[data-island-color-theme="ink-amber"] .collapsed-bar__counter-pills {
   border-color: rgba(95, 68, 34, 0.16);
@@ -238,121 +219,49 @@ html[data-island-color-theme="ink-amber"] .collapsed-bar__counter-pill--active {
   background: rgba(var(--island-accent-rgb), 0.12);
 }
 
-html[data-island-color-theme="ink-amber"] .collapsed-bar__counter-pill--act,
-html[data-island-color-theme="ink-amber"] .hover-list__tool-count--add,
-html[data-island-color-theme="ink-amber"] .hover-list__task-icon--done,
-html[data-island-color-theme="ink-amber"] .hover-list__hook-notice--restored {
+html[data-island-color-theme="ink-amber"] .collapsed-bar__counter-pill--act {
   color: var(--island-success-text);
 }
 
-html[data-island-color-theme="ink-amber"] .collapsed-bar__counter-pill--wait,
-html[data-island-color-theme="ink-amber"] .collapsed-bar__unattended--amber,
-html[data-island-color-theme="ink-amber"] .collapsed-bar__yolo-badge,
-html[data-island-color-theme="ink-amber"] .hover-list__yolo-badge,
-html[data-island-color-theme="ink-amber"] .hover-list__hook-notice--rate_limited,
-html[data-island-color-theme="ink-amber"] .hover-list__error-icon,
-html[data-island-color-theme="ink-amber"] .hover-list__error-text,
-html[data-island-color-theme="ink-amber"] .hover-list__state-ribbon--warning {
+html[data-island-color-theme="ink-amber"] .collapsed-bar__counter-pill--wait {
   color: var(--island-warning-text);
 }
 
-html[data-island-color-theme="ink-amber"] .collapsed-bar__error-badge,
-html[data-island-color-theme="ink-amber"] .collapsed-bar__unattended--red,
-html[data-island-color-theme="ink-amber"] .hover-list__tool-count--del {
-  color: var(--island-danger-text);
-}
 
-html[data-island-color-theme="ink-amber"] .collapsed-bar__tool-label,
-html[data-island-color-theme="ink-amber"] .collapsed-bar__tool-status,
-html[data-island-color-theme="ink-amber"] .hover-list__tool-label {
-  color: #9d5438;
-}
 
-html[data-island-color-theme="ink-amber"] .collapsed-bar__tool-target-name,
-html[data-island-color-theme="ink-amber"] .hover-list__tool-target-name {
-  color: var(--island-info-text);
-}
 
-html[data-island-color-theme="ink-amber"] .hover-list__source-badge,
-html[data-island-color-theme="ink-amber"] .hover-list__notice-icon,
-html[data-island-color-theme="ink-amber"] .hover-list__notice-action,
-html[data-island-color-theme="ink-amber"] .hover-list__empty-agents span {
-  background: rgba(var(--island-accent-rgb), 0.10);
-  color: var(--island-text-secondary);
-}
 
-html[data-island-color-theme="ink-amber"] .hover-list__notice-action:hover {
-  background: rgba(var(--island-accent-rgb), 0.17);
-}
 
-html[data-island-color-theme="ink-amber"] .hover-list__notice--terminal_approval .hover-list__notice-icon,
-html[data-island-color-theme="ink-amber"] .hover-list__notice--terminal_question .hover-list__notice-icon {
-  color: var(--island-warning-text);
-}
 
-html[data-island-color-theme="ink-amber"] .hover-list__notice--restart .hover-list__notice-icon,
-html[data-island-color-theme="ink-amber"] .hover-list__notice--trust .hover-list__notice-icon {
-  color: var(--island-info-text);
-}
 
-html[data-island-color-theme="ink-amber"] .hover-list__notice--compact_complete .hover-list__notice-icon,
-html[data-island-color-theme="ink-amber"] .hover-list__state-ribbon--compact,
-html[data-island-color-theme="ink-amber"] .hover-list__tool-label--compact {
-  color: #695783;
-}
 
-html[data-island-color-theme="ink-amber"] .hover-list__context-menu {
-  background: color-mix(in srgb, var(--island-card) 88%, var(--island-bg) 12%);
-}
 
-html[data-island-color-theme="ink-amber"] .hover-list__active-tool-diff .diff-view,
-html[data-island-color-theme="ink-amber"] .hover-list__inline-perm-diff .diff-view {
-  border-color: color-mix(in srgb, var(--island-border) 76%, var(--island-accent) 14%) !important;
-  background: color-mix(in srgb, var(--island-code-bg) 94%, #5a3700 6%) !important;
-}
 
-html[data-island-color-theme="ink-amber"] .hover-list__active-tool-diff .diff-view__header,
-html[data-island-color-theme="ink-amber"] .hover-list__inline-perm-diff .diff-view__header {
-  background: rgba(var(--island-accent-rgb), 0.08);
-}
 
-html[data-island-color-theme="ink-amber"] .hover-list__inline-perm {
-  border-color: color-mix(in srgb, var(--island-border) 72%, var(--island-warning) 18%);
-  background: color-mix(in srgb, var(--island-card) 86%, var(--island-warning) 7%);
-  box-shadow: inset 0 1px 0 rgba(255, 253, 248, 0.72);
-}
 
-html[data-island-color-theme="ink-amber"] .hover-list__inline-perm-preview {
-  border-color: color-mix(in srgb, var(--island-border) 84%, transparent);
-  background: color-mix(in srgb, var(--island-card-hover) 78%, transparent);
-}
 
-html[data-island-color-theme="ink-amber"] .hover-list__inline-perm-alert,
-html[data-island-color-theme="ink-amber"] .hover-list__inline-perm-tool,
-html[data-island-color-theme="ink-amber"] .hover-list__inline-perm-tool-name {
-  color: var(--island-warning-text);
-}
 
-html[data-island-color-theme="ink-amber"] .hover-list__inline-perm-tool-name {
-  background: var(--island-warning-bg);
-}
 
-html[data-island-color-theme="ink-amber"] .hover-list__inline-plan-perms {
-  background: color-mix(in srgb, var(--island-card) 86%, var(--inline-plan-accent) 6%);
-  box-shadow: inset 0 1px 0 rgba(255, 253, 248, 0.72);
-}
 
-html[data-island-color-theme="ink-amber"] .hover-list__empty {
-  background:
-    radial-gradient(circle at 50% 26%, rgba(var(--island-accent-rgb), 0.12), transparent 23%),
-    linear-gradient(180deg, rgba(var(--island-accent-rgb), 0.06), transparent 52%);
-}
 
-html[data-island-color-theme="ink-amber"] .hover-list__empty-orbit::before,
-html[data-island-color-theme="ink-amber"] .hover-list__empty-orbit::after,
-html[data-island-color-theme="ink-amber"] .hover-list__empty-agents span {
-  border-color: rgba(95, 68, 34, 0.16);
-}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 html[data-island-color-theme="midnight"] {
   --island-bg: #000000;
@@ -476,29 +385,13 @@ html[data-island-color-theme="frosted-glass"] {
   --status-thinking: #6366f1;
 }
 
-html[data-island-color-theme="frosted-glass"] .color-theme-card,
-html[data-island-color-theme="frosted-glass"] .claude-hook-lab__island-theme {
-  border-color: color-mix(in srgb, var(--island-border) 78%, var(--island-accent) 10%);
-  background: color-mix(in srgb, var(--island-card) 74%, var(--island-bg) 26%);
-  color: var(--island-text);
-}
 
-html[data-island-color-theme="frosted-glass"] .color-theme-card:hover,
-html[data-island-color-theme="frosted-glass"] .claude-hook-lab__island-theme:hover {
-  border-color: rgba(var(--island-accent-rgb), 0.36);
-}
 
-html[data-island-color-theme="frosted-glass"] .color-theme-card--active,
-html[data-island-color-theme="frosted-glass"] .claude-hook-lab__island-theme[data-active="true"] {
-  border-color: var(--island-accent);
-  background: rgba(var(--island-accent-rgb), 0.07);
-  box-shadow: inset 0 0 0 1px rgba(var(--island-accent-rgb), 0.42);
-}
 
-html[data-island-color-theme="frosted-glass"] .color-theme-card__tag,
-html[data-island-color-theme="frosted-glass"] .claude-hook-lab__island-theme-tag {
-  color: var(--island-text-muted);
-}
+
+
+
+
 
 html[data-island-color-theme="frosted-glass"] .notch-panel {
   background:
@@ -525,46 +418,14 @@ html[data-island-color-theme="frosted-glass"] .notch-panel {
   font-weight: 600;
 }
 
-html[data-island-color-theme="frosted-glass"] :is(
-  .collapsed-bar__agent-name,
-  .collapsed-bar__brand-name,
-  .collapsed-bar__brand-slogan,
-  .collapsed-bar__info,
-  .collapsed-bar__tool-label,
-  .collapsed-bar__tool-project,
-  .collapsed-bar__tool-target,
-  .collapsed-bar__tool-target-name,
-  .collapsed-bar__tool-status,
-  .collapsed-bar__waiting-project,
-  .collapsed-bar__waiting-label,
-  .collapsed-bar__waiting-target,
-  .collapsed-bar__compacting-label,
-  .collapsed-bar__count,
-  .task-board__agent,
-  .task-board__title,
-  .task-board__state,
-  .task-board__empty,
-  .task-board__brand-slogan,
-  .hover-list__task-subject,
-  .hover-list__notice-title,
-  .hover-list__notice-detail,
-  .hover-list__subagent-type,
-  .hover-list__subagent-desc,
-  .hover-list__empty-agents span
-) {
-  font-weight: 720;
-}
 
-html[data-island-color-theme="frosted-glass"] .collapsed-bar__icon-btn,
-html[data-island-color-theme="frosted-glass"] .hover-list__source-badge,
-html[data-island-color-theme="frosted-glass"] .hover-list__notice-icon,
-html[data-island-color-theme="frosted-glass"] .hover-list__notice-action {
+
+html[data-island-color-theme="frosted-glass"] .collapsed-bar__icon-btn {
   background: rgba(var(--island-accent-rgb), 0.08);
   color: var(--island-text-secondary);
 }
 
-html[data-island-color-theme="frosted-glass"] .collapsed-bar__icon-btn:hover,
-html[data-island-color-theme="frosted-glass"] .hover-list__notice-action:hover {
+html[data-island-color-theme="frosted-glass"] .collapsed-bar__icon-btn:hover {
   background: rgba(var(--island-accent-rgb), 0.14);
 }
 
@@ -578,73 +439,31 @@ html[data-island-color-theme="frosted-glass"] .collapsed-bar__counter-pill--acti
   background: rgba(var(--island-accent-rgb), 0.10);
 }
 
-html[data-island-color-theme="frosted-glass"] .collapsed-bar__counter-pill--act,
-html[data-island-color-theme="frosted-glass"] .hover-list__tool-count--add,
-html[data-island-color-theme="frosted-glass"] .hover-list__task-icon--done,
-html[data-island-color-theme="frosted-glass"] .hover-list__hook-notice--restored {
+html[data-island-color-theme="frosted-glass"] .collapsed-bar__counter-pill--act {
   color: var(--island-success-text);
 }
 
-html[data-island-color-theme="frosted-glass"] .collapsed-bar__counter-pill--wait,
-html[data-island-color-theme="frosted-glass"] .collapsed-bar__unattended--amber,
-html[data-island-color-theme="frosted-glass"] .collapsed-bar__yolo-badge,
-html[data-island-color-theme="frosted-glass"] .hover-list__yolo-badge,
-html[data-island-color-theme="frosted-glass"] .hover-list__hook-notice--rate_limited,
-html[data-island-color-theme="frosted-glass"] .hover-list__error-icon,
-html[data-island-color-theme="frosted-glass"] .hover-list__error-text,
-html[data-island-color-theme="frosted-glass"] .hover-list__state-ribbon--warning {
+html[data-island-color-theme="frosted-glass"] .collapsed-bar__counter-pill--wait {
   color: var(--island-warning-text);
 }
 
-html[data-island-color-theme="frosted-glass"] .collapsed-bar__error-badge,
-html[data-island-color-theme="frosted-glass"] .collapsed-bar__unattended--red,
-html[data-island-color-theme="frosted-glass"] .hover-list__tool-count--del {
-  color: var(--island-danger-text);
-}
 
-html[data-island-color-theme="frosted-glass"] .collapsed-bar__tool-label,
-html[data-island-color-theme="frosted-glass"] .collapsed-bar__tool-status,
-html[data-island-color-theme="frosted-glass"] .hover-list__tool-label {
-  color: #5862b2;
-}
 
-html[data-island-color-theme="frosted-glass"] .collapsed-bar__tool-target-name,
-html[data-island-color-theme="frosted-glass"] .hover-list__tool-target-name,
-html[data-island-color-theme="frosted-glass"] .hover-list__notice--restart .hover-list__notice-icon,
-html[data-island-color-theme="frosted-glass"] .hover-list__notice--trust .hover-list__notice-icon {
-  color: var(--island-info-text);
-}
 
-html[data-island-color-theme="frosted-glass"] .hover-list__context-menu {
-  background: color-mix(in srgb, var(--island-card) 84%, var(--island-bg) 16%);
-}
 
-html[data-island-color-theme="frosted-glass"] .hover-list__active-tool-diff .diff-view,
-html[data-island-color-theme="frosted-glass"] .hover-list__inline-perm-diff .diff-view {
-  border-color: color-mix(in srgb, var(--island-border) 74%, var(--island-accent) 14%) !important;
-  background: color-mix(in srgb, var(--island-code-bg) 92%, #27305c 8%) !important;
-}
 
-html[data-island-color-theme="frosted-glass"] .hover-list__inline-perm {
-  border-color: color-mix(in srgb, var(--island-border) 74%, var(--island-warning) 16%);
-  background: color-mix(in srgb, var(--island-card) 88%, var(--island-warning) 5%);
-}
 
-html[data-island-color-theme="frosted-glass"] .hover-list__inline-perm-alert,
-html[data-island-color-theme="frosted-glass"] .hover-list__inline-perm-tool,
-html[data-island-color-theme="frosted-glass"] .hover-list__inline-perm-tool-name {
-  color: var(--island-warning-text);
-}
 
-html[data-island-color-theme="frosted-glass"] .hover-list__inline-perm-tool-name {
-  background: var(--island-warning-bg);
-}
 
-html[data-island-color-theme="frosted-glass"] .hover-list__empty {
-  background:
-    radial-gradient(circle at 50% 26%, rgba(var(--island-accent-rgb), 0.10), transparent 23%),
-    linear-gradient(180deg, rgba(var(--island-accent-rgb), 0.05), transparent 52%);
-}
+
+
+
+
+
+
+
+
+
 
 html[data-island-color-theme="apple"] {
   --island-bg: #f5f5f7;
@@ -1123,86 +942,13 @@ html[data-island-color-theme="system"] {
   }
 }
 
-html:is(
-  [data-island-color-theme="apple"],
-  [data-island-color-theme="smoke"],
-  [data-island-color-theme="ocean-mist"],
-  [data-island-color-theme="warm-paper"],
-  [data-island-color-theme="soft-lavender"],
-  [data-island-color-theme="system"]
-) .color-theme-card,
-html:is(
-  [data-island-color-theme="apple"],
-  [data-island-color-theme="smoke"],
-  [data-island-color-theme="ocean-mist"],
-  [data-island-color-theme="warm-paper"],
-  [data-island-color-theme="soft-lavender"],
-  [data-island-color-theme="system"]
-) .claude-hook-lab__island-theme {
-  border-color: color-mix(in srgb, var(--island-border) 80%, var(--island-accent) 8%);
-  background: color-mix(in srgb, var(--island-card) 74%, var(--island-bg) 26%);
-  color: var(--island-text);
-}
 
-html:is(
-  [data-island-color-theme="apple"],
-  [data-island-color-theme="smoke"],
-  [data-island-color-theme="ocean-mist"],
-  [data-island-color-theme="warm-paper"],
-  [data-island-color-theme="soft-lavender"],
-  [data-island-color-theme="system"]
-) .color-theme-card:hover,
-html:is(
-  [data-island-color-theme="apple"],
-  [data-island-color-theme="smoke"],
-  [data-island-color-theme="ocean-mist"],
-  [data-island-color-theme="warm-paper"],
-  [data-island-color-theme="soft-lavender"],
-  [data-island-color-theme="system"]
-) .claude-hook-lab__island-theme:hover {
-  border-color: rgba(var(--island-accent-rgb), 0.38);
-}
 
-html:is(
-  [data-island-color-theme="apple"],
-  [data-island-color-theme="smoke"],
-  [data-island-color-theme="ocean-mist"],
-  [data-island-color-theme="warm-paper"],
-  [data-island-color-theme="soft-lavender"],
-  [data-island-color-theme="system"]
-) .color-theme-card--active,
-html:is(
-  [data-island-color-theme="apple"],
-  [data-island-color-theme="smoke"],
-  [data-island-color-theme="ocean-mist"],
-  [data-island-color-theme="warm-paper"],
-  [data-island-color-theme="soft-lavender"],
-  [data-island-color-theme="system"]
-) .claude-hook-lab__island-theme[data-active="true"] {
-  border-color: var(--island-accent);
-  background: rgba(var(--island-accent-rgb), 0.07);
-  box-shadow: inset 0 0 0 1px rgba(var(--island-accent-rgb), 0.42);
-  color: var(--island-text);
-}
 
-html:is(
-  [data-island-color-theme="apple"],
-  [data-island-color-theme="smoke"],
-  [data-island-color-theme="ocean-mist"],
-  [data-island-color-theme="warm-paper"],
-  [data-island-color-theme="soft-lavender"],
-  [data-island-color-theme="system"]
-) .color-theme-card__tag,
-html:is(
-  [data-island-color-theme="apple"],
-  [data-island-color-theme="smoke"],
-  [data-island-color-theme="ocean-mist"],
-  [data-island-color-theme="warm-paper"],
-  [data-island-color-theme="soft-lavender"],
-  [data-island-color-theme="system"]
-) .claude-hook-lab__island-theme-tag {
-  color: var(--island-text-muted);
-}
+
+
+
+
 
 html:is(
   [data-island-color-theme="apple"],
@@ -1249,31 +995,7 @@ html:is(
   [data-island-color-theme="warm-paper"],
   [data-island-color-theme="soft-lavender"],
   [data-island-color-theme="system"]
-) .collapsed-bar__icon-btn,
-html:is(
-  [data-island-color-theme="apple"],
-  [data-island-color-theme="smoke"],
-  [data-island-color-theme="ocean-mist"],
-  [data-island-color-theme="warm-paper"],
-  [data-island-color-theme="soft-lavender"],
-  [data-island-color-theme="system"]
-) .hover-list__source-badge,
-html:is(
-  [data-island-color-theme="apple"],
-  [data-island-color-theme="smoke"],
-  [data-island-color-theme="ocean-mist"],
-  [data-island-color-theme="warm-paper"],
-  [data-island-color-theme="soft-lavender"],
-  [data-island-color-theme="system"]
-) .hover-list__notice-icon,
-html:is(
-  [data-island-color-theme="apple"],
-  [data-island-color-theme="smoke"],
-  [data-island-color-theme="ocean-mist"],
-  [data-island-color-theme="warm-paper"],
-  [data-island-color-theme="soft-lavender"],
-  [data-island-color-theme="system"]
-) .hover-list__notice-action {
+) .collapsed-bar__icon-btn {
   background: rgba(var(--island-accent-rgb), 0.08);
   color: var(--island-text-secondary);
 }
@@ -1285,15 +1007,7 @@ html:is(
   [data-island-color-theme="warm-paper"],
   [data-island-color-theme="soft-lavender"],
   [data-island-color-theme="system"]
-) .collapsed-bar__icon-btn:hover,
-html:is(
-  [data-island-color-theme="apple"],
-  [data-island-color-theme="smoke"],
-  [data-island-color-theme="ocean-mist"],
-  [data-island-color-theme="warm-paper"],
-  [data-island-color-theme="soft-lavender"],
-  [data-island-color-theme="system"]
-) .hover-list__notice-action:hover {
+) .collapsed-bar__icon-btn:hover {
   background: rgba(var(--island-accent-rgb), 0.14);
 }
 
@@ -1328,31 +1042,7 @@ html:is(
   [data-island-color-theme="warm-paper"],
   [data-island-color-theme="soft-lavender"],
   [data-island-color-theme="system"]
-) .collapsed-bar__counter-pill--act,
-html:is(
-  [data-island-color-theme="apple"],
-  [data-island-color-theme="smoke"],
-  [data-island-color-theme="ocean-mist"],
-  [data-island-color-theme="warm-paper"],
-  [data-island-color-theme="soft-lavender"],
-  [data-island-color-theme="system"]
-) .hover-list__tool-count--add,
-html:is(
-  [data-island-color-theme="apple"],
-  [data-island-color-theme="smoke"],
-  [data-island-color-theme="ocean-mist"],
-  [data-island-color-theme="warm-paper"],
-  [data-island-color-theme="soft-lavender"],
-  [data-island-color-theme="system"]
-) .hover-list__task-icon--done,
-html:is(
-  [data-island-color-theme="apple"],
-  [data-island-color-theme="smoke"],
-  [data-island-color-theme="ocean-mist"],
-  [data-island-color-theme="warm-paper"],
-  [data-island-color-theme="soft-lavender"],
-  [data-island-color-theme="system"]
-) .hover-list__hook-notice--restored {
+) .collapsed-bar__counter-pill--act {
   color: var(--island-success-text);
 }
 
@@ -1363,245 +1053,24 @@ html:is(
   [data-island-color-theme="warm-paper"],
   [data-island-color-theme="soft-lavender"],
   [data-island-color-theme="system"]
-) .collapsed-bar__counter-pill--wait,
-html:is(
-  [data-island-color-theme="apple"],
-  [data-island-color-theme="smoke"],
-  [data-island-color-theme="ocean-mist"],
-  [data-island-color-theme="warm-paper"],
-  [data-island-color-theme="soft-lavender"],
-  [data-island-color-theme="system"]
-) .collapsed-bar__unattended--amber,
-html:is(
-  [data-island-color-theme="apple"],
-  [data-island-color-theme="smoke"],
-  [data-island-color-theme="ocean-mist"],
-  [data-island-color-theme="warm-paper"],
-  [data-island-color-theme="soft-lavender"],
-  [data-island-color-theme="system"]
-) .collapsed-bar__yolo-badge,
-html:is(
-  [data-island-color-theme="apple"],
-  [data-island-color-theme="smoke"],
-  [data-island-color-theme="ocean-mist"],
-  [data-island-color-theme="warm-paper"],
-  [data-island-color-theme="soft-lavender"],
-  [data-island-color-theme="system"]
-) .hover-list__yolo-badge,
-html:is(
-  [data-island-color-theme="apple"],
-  [data-island-color-theme="smoke"],
-  [data-island-color-theme="ocean-mist"],
-  [data-island-color-theme="warm-paper"],
-  [data-island-color-theme="soft-lavender"],
-  [data-island-color-theme="system"]
-) .hover-list__hook-notice--rate_limited,
-html:is(
-  [data-island-color-theme="apple"],
-  [data-island-color-theme="smoke"],
-  [data-island-color-theme="ocean-mist"],
-  [data-island-color-theme="warm-paper"],
-  [data-island-color-theme="soft-lavender"],
-  [data-island-color-theme="system"]
-) .hover-list__error-icon,
-html:is(
-  [data-island-color-theme="apple"],
-  [data-island-color-theme="smoke"],
-  [data-island-color-theme="ocean-mist"],
-  [data-island-color-theme="warm-paper"],
-  [data-island-color-theme="soft-lavender"],
-  [data-island-color-theme="system"]
-) .hover-list__error-text,
-html:is(
-  [data-island-color-theme="apple"],
-  [data-island-color-theme="smoke"],
-  [data-island-color-theme="ocean-mist"],
-  [data-island-color-theme="warm-paper"],
-  [data-island-color-theme="soft-lavender"],
-  [data-island-color-theme="system"]
-) .hover-list__state-ribbon--warning {
+) .collapsed-bar__counter-pill--wait {
   color: var(--island-warning-text);
 }
 
-html:is(
-  [data-island-color-theme="apple"],
-  [data-island-color-theme="smoke"],
-  [data-island-color-theme="ocean-mist"],
-  [data-island-color-theme="warm-paper"],
-  [data-island-color-theme="soft-lavender"],
-  [data-island-color-theme="system"]
-) .collapsed-bar__error-badge,
-html:is(
-  [data-island-color-theme="apple"],
-  [data-island-color-theme="smoke"],
-  [data-island-color-theme="ocean-mist"],
-  [data-island-color-theme="warm-paper"],
-  [data-island-color-theme="soft-lavender"],
-  [data-island-color-theme="system"]
-) .collapsed-bar__unattended--red,
-html:is(
-  [data-island-color-theme="apple"],
-  [data-island-color-theme="smoke"],
-  [data-island-color-theme="ocean-mist"],
-  [data-island-color-theme="warm-paper"],
-  [data-island-color-theme="soft-lavender"],
-  [data-island-color-theme="system"]
-) .hover-list__tool-count--del {
-  color: var(--island-danger-text);
-}
 
-html:is(
-  [data-island-color-theme="apple"],
-  [data-island-color-theme="smoke"],
-  [data-island-color-theme="ocean-mist"],
-  [data-island-color-theme="warm-paper"],
-  [data-island-color-theme="soft-lavender"],
-  [data-island-color-theme="system"]
-) .collapsed-bar__tool-label,
-html:is(
-  [data-island-color-theme="apple"],
-  [data-island-color-theme="smoke"],
-  [data-island-color-theme="ocean-mist"],
-  [data-island-color-theme="warm-paper"],
-  [data-island-color-theme="soft-lavender"],
-  [data-island-color-theme="system"]
-) .collapsed-bar__tool-status,
-html:is(
-  [data-island-color-theme="apple"],
-  [data-island-color-theme="smoke"],
-  [data-island-color-theme="ocean-mist"],
-  [data-island-color-theme="warm-paper"],
-  [data-island-color-theme="soft-lavender"],
-  [data-island-color-theme="system"]
-) .hover-list__tool-label {
-  color: var(--theme-tool-label, var(--island-info-text));
-}
 
-html:is(
-  [data-island-color-theme="apple"],
-  [data-island-color-theme="smoke"],
-  [data-island-color-theme="ocean-mist"],
-  [data-island-color-theme="warm-paper"],
-  [data-island-color-theme="soft-lavender"],
-  [data-island-color-theme="system"]
-) .collapsed-bar__tool-target-name,
-html:is(
-  [data-island-color-theme="apple"],
-  [data-island-color-theme="smoke"],
-  [data-island-color-theme="ocean-mist"],
-  [data-island-color-theme="warm-paper"],
-  [data-island-color-theme="soft-lavender"],
-  [data-island-color-theme="system"]
-) .hover-list__tool-target-name,
-html:is(
-  [data-island-color-theme="apple"],
-  [data-island-color-theme="smoke"],
-  [data-island-color-theme="ocean-mist"],
-  [data-island-color-theme="warm-paper"],
-  [data-island-color-theme="soft-lavender"],
-  [data-island-color-theme="system"]
-) .hover-list__notice--restart .hover-list__notice-icon,
-html:is(
-  [data-island-color-theme="apple"],
-  [data-island-color-theme="smoke"],
-  [data-island-color-theme="ocean-mist"],
-  [data-island-color-theme="warm-paper"],
-  [data-island-color-theme="soft-lavender"],
-  [data-island-color-theme="system"]
-) .hover-list__notice--trust .hover-list__notice-icon {
-  color: var(--island-info-text);
-}
 
-html:is(
-  [data-island-color-theme="apple"],
-  [data-island-color-theme="smoke"],
-  [data-island-color-theme="ocean-mist"],
-  [data-island-color-theme="warm-paper"],
-  [data-island-color-theme="soft-lavender"],
-  [data-island-color-theme="system"]
-) .hover-list__context-menu {
-  background: color-mix(in srgb, var(--island-card) 84%, var(--island-bg) 16%);
-}
 
-html:is(
-  [data-island-color-theme="apple"],
-  [data-island-color-theme="smoke"],
-  [data-island-color-theme="ocean-mist"],
-  [data-island-color-theme="warm-paper"],
-  [data-island-color-theme="soft-lavender"],
-  [data-island-color-theme="system"]
-) .hover-list__active-tool-diff .diff-view,
-html:is(
-  [data-island-color-theme="apple"],
-  [data-island-color-theme="smoke"],
-  [data-island-color-theme="ocean-mist"],
-  [data-island-color-theme="warm-paper"],
-  [data-island-color-theme="soft-lavender"],
-  [data-island-color-theme="system"]
-) .hover-list__inline-perm-diff .diff-view {
-  border-color: color-mix(in srgb, var(--island-border) 74%, var(--island-accent) 14%) !important;
-  background: color-mix(in srgb, var(--island-code-bg) 92%, var(--island-accent) 8%) !important;
-}
 
-html:is(
-  [data-island-color-theme="apple"],
-  [data-island-color-theme="smoke"],
-  [data-island-color-theme="ocean-mist"],
-  [data-island-color-theme="warm-paper"],
-  [data-island-color-theme="soft-lavender"],
-  [data-island-color-theme="system"]
-) .hover-list__inline-perm {
-  border-color: color-mix(in srgb, var(--island-border) 74%, var(--island-warning) 16%);
-  background: color-mix(in srgb, var(--island-card) 88%, var(--island-warning) 5%);
-}
 
-html:is(
-  [data-island-color-theme="apple"],
-  [data-island-color-theme="smoke"],
-  [data-island-color-theme="ocean-mist"],
-  [data-island-color-theme="warm-paper"],
-  [data-island-color-theme="soft-lavender"],
-  [data-island-color-theme="system"]
-) .hover-list__inline-perm-alert,
-html:is(
-  [data-island-color-theme="apple"],
-  [data-island-color-theme="smoke"],
-  [data-island-color-theme="ocean-mist"],
-  [data-island-color-theme="warm-paper"],
-  [data-island-color-theme="soft-lavender"],
-  [data-island-color-theme="system"]
-) .hover-list__inline-perm-tool,
-html:is(
-  [data-island-color-theme="apple"],
-  [data-island-color-theme="smoke"],
-  [data-island-color-theme="ocean-mist"],
-  [data-island-color-theme="warm-paper"],
-  [data-island-color-theme="soft-lavender"],
-  [data-island-color-theme="system"]
-) .hover-list__inline-perm-tool-name {
-  color: var(--island-warning-text);
-}
 
-html:is(
-  [data-island-color-theme="apple"],
-  [data-island-color-theme="smoke"],
-  [data-island-color-theme="ocean-mist"],
-  [data-island-color-theme="warm-paper"],
-  [data-island-color-theme="soft-lavender"],
-  [data-island-color-theme="system"]
-) .hover-list__inline-perm-tool-name {
-  background: var(--island-warning-bg);
-}
 
-html:is(
-  [data-island-color-theme="apple"],
-  [data-island-color-theme="smoke"],
-  [data-island-color-theme="ocean-mist"],
-  [data-island-color-theme="warm-paper"],
-  [data-island-color-theme="soft-lavender"],
-  [data-island-color-theme="system"]
-) .hover-list__empty {
-  background:
-    radial-gradient(circle at 50% 26%, rgba(var(--island-accent-rgb), 0.10), transparent 23%),
-    linear-gradient(180deg, rgba(var(--island-accent-rgb), 0.05), transparent 52%);
-}
+
+
+
+
+
+
+
+
+

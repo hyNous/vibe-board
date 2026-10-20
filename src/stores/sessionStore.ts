@@ -39,7 +39,6 @@ interface SessionStore {
   overlayQueue: OverlayItem[]
   activeOverlay: OverlayItem | null
   // Session mute
-  mutedSessions: Record<string, number>  // sessionId → mute expiry timestamp
   wakeSilencedUntil: number
   // App-level capability flags pulled from the Rust backend.
   codexAppServerLive: boolean
@@ -47,30 +46,22 @@ interface SessionStore {
   updateSession: (event: AgentEvent) => void
   setActiveSession: (id: string | null) => void
   setPanelState: (state: PanelState) => void
-  setBaseLayer: (layer: BaseLayer) => void
   pushOverlay: (item: OverlayItem) => void
   dismissOverlay: (id: string) => void
   clearSessionOverlays: (sessionId: string) => void
-  removeSession: (id: string) => void
   replaceAllSessions: (sessions: SessionState[], options?: { suppressed?: boolean }) => void
   setChatHistory: (sessionId: string, messages: ChatMessage[], meta?: ChatHistoryMeta) => void
-  prependChatHistory: (sessionId: string, messages: ChatMessage[], meta?: ChatHistoryMeta) => void
-  setRateLimits: (limits: RateLimitInfo) => void
   setUsageSnapshots: (limits: RateLimitInfo[]) => void
   /** Replaces every stored quota with the backend's full list (drops tools no longer reported). */
   replaceUsageSnapshots: (limits: RateLimitInfo[]) => void
   setAgentStatuses: (statuses: AgentStatusSnapshot[]) => void
   setHookNotification: (notification: 'restored' | 'rate_limited' | null) => void
   applyIdleTimeout: (now?: number) => void
-  muteSession: (id: string, durationMs?: number) => void
-  unmuteSession: (id: string) => void
-  isSessionMuted: (id: string) => boolean
   setWakeSilencedUntil: (timestamp: number) => void
   isWakeSilenced: () => boolean
   setCodexAppServerLive: (live: boolean) => void
   // Follow-focus
   focusedTerminal: string | null
-  setFocusedTerminal: (name: string | null) => void
 }
 
 function toList(sessions: Record<string, SessionState>, now = Date.now()): SessionState[] {
@@ -340,16 +331,11 @@ function didBackendActivityChange(incoming: SessionState, existing?: SessionStat
 }
 
 export const selectSessionList = (s: SessionStore) => s.sessionList
-export const selectActiveSession = (s: SessionStore): SessionState | undefined =>
-  s.activeSessionId ? s.sessions[s.activeSessionId] : undefined
 export const selectPanelState = (s: SessionStore) => s.panelState
-export const selectActiveSessionId = (s: SessionStore) => s.activeSessionId
 export const selectRateLimits = (s: SessionStore) => s.rateLimits
 export const selectUsageSnapshots = (s: SessionStore) => s.usageSnapshots
 export const selectAgentStatuses = (s: SessionStore) => s.agentStatuses
-export const selectBaseLayer = (s: SessionStore) => s.baseLayer
 export const selectActiveOverlay = (s: SessionStore) => s.activeOverlay
-export const selectOverlayQueue = (s: SessionStore) => s.overlayQueue
 
 export const useSessionStore: UseBoundStore<StoreApi<SessionStore>> = create<SessionStore>((set) => ({
   sessions: {},
@@ -363,7 +349,6 @@ export const useSessionStore: UseBoundStore<StoreApi<SessionStore>> = create<Ses
   baseLayer: 'compact',
   overlayQueue: [],
   activeOverlay: null,
-  mutedSessions: {},
   wakeSilencedUntil: 0,
   codexAppServerLive: false,
   focusedTerminal: null,
@@ -648,19 +633,6 @@ export const useSessionStore: UseBoundStore<StoreApi<SessionStore>> = create<Ses
     const layerMap: Record<PanelState, BaseLayer> = { collapsed: 'compact', hover: 'expanded', expanded: 'detail' }
     set({ panelState, baseLayer: layerMap[panelState] })
   },
-  removeSession: (id) => {
-    set((state) => {
-      const sessions = { ...state.sessions }
-      delete sessions[id]
-      let activeSessionId = state.activeSessionId
-      if (activeSessionId === id) {
-        const ids = Object.keys(sessions)
-        activeSessionId = ids[0] ?? null
-      }
-      return { sessions, sessionList: toList(sessions), activeSessionId }
-    })
-    saveSessionsDebounced()
-  },
 
   replaceAllSessions: (newSessions, options) => {
     const prevState = useSessionStore.getState()
@@ -817,35 +789,6 @@ export const useSessionStore: UseBoundStore<StoreApi<SessionStore>> = create<Ses
     })
   },
 
-  prependChatHistory: (sessionId, messages, meta) => {
-    set((state) => {
-      const session = state.sessions[sessionId]
-      if (!session || messages.length === 0) return state
-      const existing = session.chatHistory
-      const existingKeys = new Set(
-        existing
-          .map((message) => (typeof (message as { id?: string }).id === 'string'
-            ? (message as { id?: string }).id
-            : null))
-          .filter((id): id is string => Boolean(id)),
-      )
-      const filtered = messages.filter((message) => {
-        const id = (message as { id?: string }).id
-        return !id || !existingKeys.has(id)
-      })
-      const chatHistory = [...filtered, ...existing]
-      const sessions = {
-        ...state.sessions,
-        [sessionId]: { ...session, chatHistory, chatHistoryMeta: meta ?? session.chatHistoryMeta },
-      }
-      return { sessions, sessionList: toList(sessions) }
-    })
-  },
-
-  setRateLimits: (limits) => {
-    set({ rateLimits: limits })
-  },
-
   setUsageSnapshots: (limits) => {
     set((state) => {
       const usageSnapshots = { ...state.usageSnapshots }
@@ -914,16 +857,7 @@ export const useSessionStore: UseBoundStore<StoreApi<SessionStore>> = create<Ses
     if (shouldSave) saveSessionsDebounced()
   },
 
-  setBaseLayer: (baseLayer) => {
-    const panelMap: Record<BaseLayer, PanelState> = { compact: 'collapsed', expanded: 'hover', detail: 'expanded' }
-    set({ baseLayer, panelState: panelMap[baseLayer] })
-  },
-
   pushOverlay: (item) => {
-    // Skip overlays for muted sessions
-    const muted = useSessionStore.getState().mutedSessions[item.sessionId]
-    if (muted && Date.now() < muted) return
-
     // Overlays are informational only; keep quiet hours and wake silence quiet.
     if (isQuietHours()) return
     if (useSessionStore.getState().isWakeSilenced()) return
@@ -943,13 +877,6 @@ export const useSessionStore: UseBoundStore<StoreApi<SessionStore>> = create<Ses
     })
   },
 
-  dismissOverlay: (id) => {
-    set((state) => {
-      const queue = state.overlayQueue.filter((o) => o.id !== id)
-      return { overlayQueue: queue, activeOverlay: queue[0] ?? null }
-    })
-  },
-
   clearSessionOverlays: (sessionId) => {
     set((state) => {
       const queue = state.overlayQueue.filter((o) => o.sessionId !== sessionId)
@@ -957,32 +884,11 @@ export const useSessionStore: UseBoundStore<StoreApi<SessionStore>> = create<Ses
     })
   },
 
-  muteSession: (id, durationMs = 30 * 60 * 1000) => {
-    const expiry = Date.now() + durationMs
-    set((state) => ({
-      mutedSessions: { ...state.mutedSessions, [id]: expiry },
-    }))
-    setTimeout(() => {
-      useSessionStore.getState().unmuteSession(id)
-    }, durationMs)
-  },
-
-  unmuteSession: (id) => {
+  dismissOverlay: (id) => {
     set((state) => {
-      const mutedSessions = { ...state.mutedSessions }
-      delete mutedSessions[id]
-      return { mutedSessions }
+      const queue = state.overlayQueue.filter((o) => o.id !== id)
+      return { overlayQueue: queue, activeOverlay: queue[0] ?? null }
     })
-  },
-
-  isSessionMuted: (id) => {
-    const expiry = useSessionStore.getState().mutedSessions[id]
-    if (!expiry) return false
-    if (Date.now() > expiry) {
-      useSessionStore.getState().unmuteSession(id)
-      return false
-    }
-    return true
   },
 
   setWakeSilencedUntil: (timestamp) => {
@@ -995,9 +901,5 @@ export const useSessionStore: UseBoundStore<StoreApi<SessionStore>> = create<Ses
 
   setCodexAppServerLive: (live) => {
     set({ codexAppServerLive: live })
-  },
-
-  setFocusedTerminal: (name) => {
-    useSessionStore.setState({ focusedTerminal: name })
   },
 }))

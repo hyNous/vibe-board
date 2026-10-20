@@ -23,7 +23,3 @@ export function isWindowsPlatform(): boolean {
 export function primaryModifierPressed(event: { metaKey: boolean; ctrlKey: boolean }): boolean {
   return isApplePlatform() ? event.metaKey : event.ctrlKey
 }
-
-export function primaryModifierName(): 'Cmd' | 'Ctrl' {
-  return isApplePlatform() ? 'Cmd' : 'Ctrl'
-}

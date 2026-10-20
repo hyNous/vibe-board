@@ -45,15 +45,6 @@ code, pre {
 
 /* Pet companion window (label "pet") — strip every default background so the
    transparent Tauri window only shows the pet sprite and emote. */
-html.pet-window-body,
-body.pet-window-body,
-.pet-window-root {
-  background: transparent !important;
-  margin: 0;
-  padding: 0;
-}
 
-.pet-window-root {
-  position: fixed;
-  inset: 0;
-}
+
+

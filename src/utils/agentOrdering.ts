@@ -41,26 +41,6 @@ export function normalizeAgentOrder(order: string[], agentIds: string[]): string
   return normalized
 }
 
-export function moveAgentInOrder(
-  currentOrder: string[],
-  displayedAgentIds: string[],
-  agentId: string,
-  direction: 'up' | 'down',
-): string[] {
-  const base = currentOrder.length > 0
-    ? normalizeAgentOrder(currentOrder, displayedAgentIds)
-    : [...displayedAgentIds]
-  const index = base.indexOf(agentId)
-  if (index < 0) return base
-  const nextIndex = direction === 'up' ? index - 1 : index + 1
-  if (nextIndex < 0 || nextIndex >= base.length) return base
-  const next = [...base]
-  const target = next[nextIndex]
-  next[nextIndex] = next[index]
-  next[index] = target
-  return next
-}
-
 export function buildAgentUsageScores(
   sessions: SessionState[],
   activeSessionId: string | null,

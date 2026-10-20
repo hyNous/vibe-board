@@ -97,15 +97,6 @@ export interface SkillDetail extends SkillSummary {
   source: SkillSourceDetail | null
 }
 
-export interface SkillExplanation {
-  skillId: string
-  lang: string
-  model: string
-  text: string
-  cachedAt: string
-  fromCache: boolean
-}
-
 export interface AgentSummary {
   id: string
   displayName: string
@@ -120,12 +111,6 @@ export interface AgentSummary {
   managedSkillCount: number
   unmanagedSkillCount: number
   readOnlySkillCount?: number
-}
-
-export interface AgentSummaryLite {
-  id: string
-  displayName: string
-  iconKey: string
 }
 
 export interface AgentHealthIssue {
@@ -150,12 +135,6 @@ export interface AgentDetail {
   health: AgentHealthIssue[]
 }
 
-export interface AgentConfigDocument {
-  path: string
-  content: string
-  revision: string
-}
-
 export interface SkillManagerOverview {
   metrics: SkillManagerMetrics
   skills: SkillSummary[]
@@ -168,60 +147,6 @@ export interface AgentSkillViewSnapshot {
   agentDetail: AgentDetail
   overview: SkillManagerOverview
   unmanaged: UnmanagedItemDto[]
-}
-
-export interface ProjectSummary {
-  id: string
-  name: string
-  rootPath: string
-  createdAt: string
-  updatedAt: string
-  lastScannedAt: string | null
-  detectedAgentCount: number
-  skillCount: number
-  instructionCount: number
-  issueCount: number
-}
-
-export interface ProjectSkillItem {
-  id: string
-  name: string
-  description: string
-  agentId: string
-  path: string
-  hash: string
-  status: 'projectOnly' | 'centerSynced' | 'centerDiff' | string
-  importable: boolean
-}
-
-export interface ProjectInstructionFile {
-  agentId: string
-  path: string
-  exists: boolean
-  bytes: number | null
-}
-
-export interface ProjectHealthIssue {
-  agentId: string | null
-  kind: string
-  message: string
-  severity: 'info' | 'warning' | 'error' | string
-}
-
-export interface ProjectAgentDetail {
-  agentId: string
-  displayName: string
-  iconKey: string
-  skillsDirs: string[]
-  configPaths: string[]
-  skills: ProjectSkillItem[]
-  health: ProjectHealthIssue[]
-}
-
-export interface ProjectDetail extends ProjectSummary {
-  agents: ProjectAgentDetail[]
-  instructions: ProjectInstructionFile[]
-  health: ProjectHealthIssue[]
 }
 
 export interface ConflictBlocker {
@@ -578,17 +503,6 @@ export const skillApiV2 = {
     isTauriRuntime()
       ? invoke<SkillManagerOverview>('skill_manager_refresh_overview')
       : Promise.resolve(demoOverview()),
-  getSettings: () =>
-    isTauriRuntime()
-      ? invoke<SkillManagerSettings>('skill_manager_settings')
-      : Promise.resolve({
-          centerPath: '~/.agents/skills',
-          sqlitePath: '~/.vibeboard/skill-manager/skill-manager.db',
-          defaultDistributeMode: 'link' as const,
-          linkFailPolicy: 'ask' as const,
-          startupScan: true,
-          showUnmanaged: true,
-        }),
   updateSettings: (patch: Partial<SkillManagerSettings>) =>
     isTauriRuntime()
       ? invoke<SkillManagerSettings>('skill_manager_update_settings', {
@@ -602,9 +516,6 @@ export const skillApiV2 = {
           },
         })
       : Promise.resolve({} as SkillManagerSettings),
-
-  listCenterSkills: () =>
-    isTauriRuntime() ? invoke<SkillSummary[]>('list_center_skills_v2') : Promise.resolve([]),
   getSkillDetail: (skillId: string) =>
     isTauriRuntime() ? invoke<SkillDetail>('get_skill_detail_v2', { skillId }) : Promise.resolve(null as unknown as SkillDetail),
   readFileTree: (skillPath: string) =>
@@ -625,19 +536,6 @@ export const skillApiV2 = {
         }),
   readFileContent: (filePath: string) =>
     isTauriRuntime() ? invoke<string>('read_skill_file_content', { filePath }) : Promise.resolve(''),
-  getSkillExplanation: (skillId: string, lang: string) =>
-    isTauriRuntime() ? invoke<SkillExplanation | null>('get_skill_explanation_cmd', { skillId, lang }) : Promise.resolve(null),
-  generateSkillExplanation: (skillId: string, skillPath: string, lang: string, refresh = false) =>
-    isTauriRuntime()
-      ? invoke<SkillExplanation>('generate_skill_explanation_cmd', { skillId, skillPath, lang, refresh })
-      : Promise.resolve({
-          skillId,
-          lang,
-          model: 'demo',
-          text: '解释生成功能需要在 Tauri 应用中使用。',
-          cachedAt: new Date().toISOString(),
-          fromCache: false,
-        }),
 
   previewAddCenterSkill: (input: AddCenterSkillInput) =>
     isTauriRuntime()
@@ -786,9 +684,6 @@ export const skillApiV2 = {
     isTauriRuntime()
       ? invoke<DeleteUnmanagedAgentSkillsResult>('delete_unmanaged_agent_skills', { agentId, unmanagedIds })
       : Promise.resolve({ deleted: unmanagedIds.length, failures: [] }),
-
-  previewSyncCopy: (targetId: string) =>
-    isTauriRuntime() ? invoke<CopySyncPreview>('preview_sync_copy_target', { targetId }) : Promise.resolve(null as unknown as CopySyncPreview),
   previewCopyTargetDiff: (targetId: string) =>
     isTauriRuntime() ? invoke<CopyTargetDiffPreview>('preview_copy_target_diff', { targetId }) : Promise.resolve(null as unknown as CopyTargetDiffPreview),
   executeSyncCopy: (targetId: string, action: string) =>
@@ -799,8 +694,6 @@ export const skillApiV2 = {
     isTauriRuntime()
       ? invoke<DeleteSkillTargetDistributionsResult>('delete_skill_target_distributions', { targetIds })
       : Promise.resolve({ deleted: targetIds.length, failures: [] }),
-
-  listAgents: () => (isTauriRuntime() ? invoke<AgentSummary[]>('list_managed_agents_v2') : Promise.resolve([])),
   getAgentDetail: (agentId: string) =>
     isTauriRuntime() ? invoke<AgentDetail>('get_agent_detail_v2', { agentId }) : Promise.resolve(null as unknown as AgentDetail),
   refreshAgentSkillView: (agentId: string) =>
@@ -811,46 +704,11 @@ export const skillApiV2 = {
           skillApiV2.overview(),
           skillApiV2.listUnmanaged(),
         ]).then(([agentDetail, overview, unmanaged]) => ({ agentDetail, overview, unmanaged })),
-  readAgentConfigFile: (agentId: string, path: string) =>
-    isTauriRuntime()
-      ? invoke<AgentConfigDocument>('read_agent_config_file_v2', { agentId, path })
-      : Promise.resolve({ path, content: '', revision: 'demo' }),
-  writeAgentConfigFile: (
-    agentId: string,
-    path: string,
-    content: string,
-    expectedRevision: string,
-  ) =>
-    isTauriRuntime()
-      ? invoke<AgentConfigDocument>('write_agent_config_file_v2', {
-          agentId,
-          path,
-          content,
-          expectedRevision,
-        })
-      : Promise.resolve({ path, content, revision: `${expectedRevision}-saved` }),
   listUnmanaged: () => (isTauriRuntime() ? invoke<UnmanagedItemDto[]>('list_unmanaged_v2') : Promise.resolve([])),
   listAgentSkillInventory: () =>
     isTauriRuntime() ? invoke<AgentSkillInventoryAgent[]>('list_agent_skill_inventory_v2') : Promise.resolve(demoAgentInventory()),
-  listProjects: () =>
-    isTauriRuntime() ? invoke<ProjectSummary[]>('list_skill_projects_v2') : Promise.resolve(demoProjectSummaries()),
-  addProject: (rootPath: string) =>
-    isTauriRuntime() ? invoke<ProjectDetail>('add_skill_project_v2', { rootPath }) : Promise.resolve(demoProjectDetail(rootPath)),
-  removeProject: (projectId: string) =>
-    isTauriRuntime() ? invoke<void>('remove_skill_project_v2', { projectId }) : Promise.resolve(),
-  getProjectDetail: (projectId: string) =>
-    isTauriRuntime() ? invoke<ProjectDetail>('get_skill_project_detail_v2', { projectId }) : Promise.resolve(demoProjectDetail(projectId)),
-  scanProject: (projectId: string) =>
-    isTauriRuntime() ? invoke<ProjectDetail>('scan_skill_project_v2', { projectId }) : Promise.resolve(demoProjectDetail(projectId)),
-  installCenterSkillsToProject: (projectId: string, agentId: string, skillIds: string[], requestedMode: 'link' | 'copy') =>
-    isTauriRuntime()
-      ? invoke<ProjectDetail>('install_center_skills_to_project_v2', { projectId, agentId, skillIds, requestedMode })
-      : Promise.resolve(demoProjectDetail(projectId)),
 
   runDiagnosis: () => (isTauriRuntime() ? invoke<DiagnosisIssue[]>('run_skill_manager_diagnosis') : Promise.resolve([])),
-  listDiagnosisIssues: () => (isTauriRuntime() ? invoke<DiagnosisIssue[]>('list_diagnosis_issues') : Promise.resolve([])),
-  previewFixIssue: (issueType: string, entityId: string) =>
-    isTauriRuntime() ? invoke<{ issue: DiagnosisIssue | null; destructive: boolean }>('preview_fix_diagnosis_issue', { issueType, entityId }) : Promise.resolve({ issue: null, destructive: false }),
   executeFixIssue: (issueType: string, entityId: string) =>
     isTauriRuntime() ? invoke<void>('execute_fix_diagnosis_issue', { issueType, entityId }) : Promise.resolve(),
   executeSafeFixes: () => (isTauriRuntime() ? invoke<number>('execute_safe_fixes') : Promise.resolve(0)),
@@ -947,95 +805,6 @@ function demoAgentInventory(): AgentSkillInventoryAgent[] {
       ],
     },
   ]
-}
-
-function demoProjectSummaries(): ProjectSummary[] {
-  const detail = demoProjectDetail('/Users/me/project')
-  return [{
-    id: detail.id,
-    name: detail.name,
-    rootPath: detail.rootPath,
-    createdAt: detail.createdAt,
-    updatedAt: detail.updatedAt,
-    lastScannedAt: detail.lastScannedAt,
-    detectedAgentCount: detail.detectedAgentCount,
-    skillCount: detail.skillCount,
-    instructionCount: detail.instructionCount,
-    issueCount: detail.issueCount,
-  }]
-}
-
-function demoProjectDetail(rootPath: string): ProjectDetail {
-  const now = new Date().toISOString()
-  return {
-    id: 'project-demo',
-    name: rootPath.split(/[\\/]+/).filter(Boolean).pop() || 'project',
-    rootPath,
-    createdAt: now,
-    updatedAt: now,
-    lastScannedAt: now,
-    detectedAgentCount: 2,
-    skillCount: 3,
-    instructionCount: 2,
-    issueCount: 1,
-    agents: [
-      {
-        agentId: 'codex',
-        displayName: 'Codex',
-        iconKey: 'codex',
-        skillsDirs: [`${rootPath}/.agents/skills`],
-        configPaths: [`${rootPath}/.codex/config.toml`],
-        skills: [
-          {
-            id: 'release-review',
-            name: 'release-review',
-            description: 'Project-only release review workflow',
-            agentId: 'codex',
-            path: `${rootPath}/.agents/skills/release-review`,
-            hash: 'demo-project-hash',
-            status: 'projectOnly',
-            importable: true,
-          },
-          {
-            id: 'frontend-design',
-            name: 'frontend-design',
-            description: 'Design workflow synced with center library',
-            agentId: 'codex',
-            path: `${rootPath}/.agents/skills/frontend-design`,
-            hash: 'demo-center-hash',
-            status: 'centerSynced',
-            importable: true,
-          },
-        ],
-        health: [],
-      },
-      {
-        agentId: 'claude-code',
-        displayName: 'Claude Code',
-        iconKey: 'claude-code',
-        skillsDirs: [`${rootPath}/.claude/skills`],
-        configPaths: [`${rootPath}/.claude/settings.json`],
-        skills: [
-          {
-            id: 'docs-editor',
-            name: 'docs-editor',
-            description: 'Project documentation workflow differs from center',
-            agentId: 'claude-code',
-            path: `${rootPath}/.claude/skills/docs-editor`,
-            hash: 'demo-diff-hash',
-            status: 'centerDiff',
-            importable: true,
-          },
-        ],
-        health: [{ agentId: 'claude-code', kind: 'center_diff', message: 'docs-editor differs from center library', severity: 'warning' }],
-      },
-    ],
-    instructions: [
-      { agentId: 'codex', path: `${rootPath}/AGENTS.md`, exists: true, bytes: 2400 },
-      { agentId: 'claude-code', path: `${rootPath}/.claude/CLAUDE.md`, exists: true, bytes: 3200 },
-    ],
-    health: [],
-  }
 }
 
 function demoUpdateStatus(): SkillUpdateStatus {

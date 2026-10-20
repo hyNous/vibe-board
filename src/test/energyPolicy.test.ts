@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
   blockingBackgroundSessionCount,
-  energyAnimationFpsScale,
   energyIntervalMs,
   getAppEnergyMode,
   shouldSilenceAfterWake,
@@ -43,12 +42,6 @@ describe('energyPolicy', () => {
       session('idle', { activeTools: [{ toolUseId: 't1', toolName: 'Read', status: 'running', startedAt: Date.now() }] }),
       session('idle', { tasks: [{ id: 'task-1', name: 'Build', status: 'in_progress' }] }),
     ])).toBe(2)
-  })
-
-  it('reduces animation fps by energy mode', () => {
-    expect(energyAnimationFpsScale('active')).toBe(1)
-    expect(energyAnimationFpsScale('idle-visible')).toBeLessThan(1)
-    expect(energyAnimationFpsScale('quiet-background')).toBeLessThan(energyAnimationFpsScale('idle-visible'))
   })
 
   it('detects likely wake gaps from clock jumps', () => {

@@ -276,10 +276,7 @@
   white-space: nowrap;
 }
 
-.agent-monitor__lane-token b {
-  font-weight: 500;
-  color: var(--vb-text);
-}
+
 
 /* ── 等你输入的车道整体反白 ── */
 .agent-monitor__lane--wait { background: var(--vb-text); color: #000; }
@@ -289,7 +286,7 @@
 .agent-monitor__lane--wait .agent-monitor__lane-meta { color: #55555c; }
 .agent-monitor__lane--wait .agent-monitor__lane-clock,
 .agent-monitor__lane--wait .agent-monitor__lane-task { color: #000; }
-.agent-monitor__lane--wait .agent-monitor__lane-token b { color: #2a2a2e; }
+
 .agent-monitor__lane--wait .agent-monitor__lane-state { color: #000; font-weight: 600; }
 .agent-monitor__lane--wait .agent-monitor__lane-ask {
   background: #e4e4e8;

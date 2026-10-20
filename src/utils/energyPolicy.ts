@@ -27,17 +27,6 @@ export function energyIntervalMs(
   }
 }
 
-export function energyAnimationFpsScale(mode: AppEnergyMode): number {
-  switch (mode) {
-    case 'active':
-      return 1
-    case 'idle-visible':
-      return 0.75
-    case 'quiet-background':
-      return 0.45
-  }
-}
-
 export function shouldSilenceAfterWake(
   previousTimestampMs: number,
   currentTimestampMs: number,

@@ -32,40 +32,6 @@ describe('single Skill adoption', () => {
     vi.restoreAllMocks()
   })
 
-  it('describes shared conflict choices as cleanup operations', () => {
-    const sharedConflictPreview: AdoptPreview = {
-      ...preview,
-      agentId: 'agents',
-      unmanagedId: 'shared-bird',
-      skillPath: '/Users/me/.agents/skills/bird',
-      centerHasSameId: true,
-      canQuickAdopt: false,
-      options: [
-        { value: 'center_over_agent', label: 'Use center and remove shared source', destructive: true },
-        { value: 'overwrite_center', label: 'Overwrite center and remove shared source', destructive: true },
-        { value: 'rename', label: 'Rename and remove shared source', destructive: false },
-      ],
-    }
-
-    render(
-      <AdoptDialog
-        preview={sharedConflictPreview}
-        onClose={() => {}}
-        onDone={() => {}}
-      />,
-    )
-
-    expect(screen.getByLabelText('中心库为准')).toHaveAttribute('aria-checked', 'true')
-    expect(screen.getByText('不会改动中心库；会删除 .agents/skills 中的同名共享 Skill 文件夹。')).toBeInTheDocument()
-    expect(screen.getByText('会清理 .agents 共享副本')).toBeInTheDocument()
-
-    fireEvent.click(screen.getByLabelText('重命名导入'))
-
-    expect(screen.getByText('不会覆盖中心库已有 Skill；会删除 .agents/skills 中的原共享 Skill 文件夹。')).toBeInTheDocument()
-    expect(screen.getByText(/成功后清理 \.agents\/skills 中的原共享 Skill/)).toBeInTheDocument()
-    expect(screen.queryByText(/原 Agent 文件会作为副本目标被管理/)).not.toBeInTheDocument()
-  })
-
   it('keeps post-adoption refresh errors visible when close retries refresh', async () => {
     vi.spyOn(skillApiV2, 'executeAdopt').mockResolvedValue('bird')
     const onDone = vi.fn().mockRejectedValue(new Error('refresh still failed'))

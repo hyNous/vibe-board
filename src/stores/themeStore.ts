@@ -24,10 +24,6 @@ export const COLOR_THEMES: ColorThemeInfo[] = [
   { id: 'system', label: 'System', labelZh: '跟随系统', tag: 'Auto', isDark: false, bg: 'linear-gradient(90deg, #0b0c0f 0 50%, #f5f5f7 50% 100%)', card: 'linear-gradient(90deg, #15171c 0 50%, #ffffff 50% 100%)', accent: '#007aff' },
 ]
 
-export function isDarkColorTheme(id: string) {
-  return COLOR_THEMES.find((theme) => theme.id === id)?.isDark ?? false
-}
-
 const DEFAULT_COLOR_THEME_ID = 'midnight'
 
 type PersistedThemeState = {

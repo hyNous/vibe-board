@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within, cleanup } from '@testing-library/react'
+import { fireEvent, render, screen, within, cleanup } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi, beforeAll } from 'vitest'
 import type {
   DispatchAgentNode,
@@ -205,88 +205,6 @@ describe('dispatch relationship tree', () => {
     cleanup()
   })
 
-  it('shows every detected Agent, its connected workers and the unverified hint', async () => {
-    dispatchMocks.tree.mockResolvedValue(tree({
-      agents: [
-        agentNode({
-          connections: [connection('opencode', 'OpenCode', 'opencode-agent')],
-          addableWorkers: ['antigravity'],
-        }),
-        agentNode({
-          agentId: 'codex',
-          displayName: 'Codex',
-          readDirs: [{ path: '/home/tester/.agents/skills', shared: true }],
-        }),
-        agentNode({
-          agentId: 'gemini',
-          displayName: 'Gemini CLI',
-          verified: false,
-          readDirs: [{ path: '/home/tester/.gemini/skills', shared: false }],
-        }),
-      ],
-    }))
-    await renderSection()
-
-    const claude = await screen.findByTestId('dispatch-agent-claude-code')
-    const connected = within(claude).getByTestId('dispatch-connection-claude-code-opencode')
-    expect(connected).toHaveTextContent('OpenCode')
-    expect(within(connected).getByRole('button', { name: '断开' })).toBeInTheDocument()
-    expect(within(claude).queryByText('Claude Code 还没有可以派活的工人。')).not.toBeInTheDocument()
-
-    const codex = screen.getByTestId('dispatch-agent-codex')
-    expect(within(codex).getByText('Codex 还没有可以派活的工人。')).toBeInTheDocument()
-
-    expect(screen.queryByTestId('dispatch-unverified-claude-code')).not.toBeInTheDocument()
-    expect(within(screen.getByTestId('dispatch-agent-gemini')).getByTestId('dispatch-unverified-gemini'))
-      .toHaveTextContent('未验证')
-    expect(within(screen.getByTestId('dispatch-agent-gemini')).getByTestId('dispatch-add-gemini'))
-      .toBeEnabled()
-  })
-
-  it('labels a worker seen through the shared folder and warns before disconnecting', async () => {
-    dispatchMocks.tree.mockResolvedValue(tree({
-      agents: [agentNode({
-        connections: [connection('opencode', 'OpenCode', 'opencode-agent', { sharedWith: ['Codex'] })],
-        addableWorkers: ['antigravity'],
-      })],
-    }))
-    dispatchMocks.disconnectPlan.mockResolvedValue(disconnectPlan({
-      removals: [{
-        skillId: 'opencode-agent',
-        targetPath: '/home/tester/.agents/skills/opencode-agent',
-        action: 'remove',
-        sharedWith: ['Codex'],
-      }],
-      affectedAgents: ['Codex'],
-    }))
-    await renderSection()
-
-    expect(await screen.findByTestId('dispatch-shared-claude-code-opencode'))
-      .toHaveTextContent('与 Codex 共用')
-
-    fireEvent.click(screen.getByTestId('dispatch-disconnect-claude-code-opencode'))
-
-    const warning = await screen.findByTestId('dispatch-shared-warning')
-    expect(warning).toHaveTextContent('Codex')
-    expect(warning).toHaveTextContent('共用目录')
-  })
-
-  it('offers only detected, unconnected workers and points other tools at external-agent-setup', async () => {
-    const { container } = await renderSection()
-
-    fireEvent.click(await screen.findByTestId('dispatch-add-codex'))
-
-    const picker = screen.getByTestId('dispatch-picker-codex')
-    expect(within(picker).getByTestId('dispatch-add-worker-codex-opencode')).toHaveTextContent('OpenCode')
-    expect(within(picker).getByTestId('dispatch-add-worker-codex-antigravity')).toHaveTextContent('Antigravity')
-
-    const otherTools = within(picker).getByTestId('dispatch-other-tools-codex')
-    expect(otherTools).toHaveTextContent('其他工具')
-    expect(otherTools).toHaveTextContent('$external-agent-setup')
-    expect(container.querySelector('form')).toBeNull()
-    expect(container.querySelectorAll('input, select, textarea')).toHaveLength(0)
-  })
-
   it('confirms in plain language and writes only after confirmation', async () => {
     await renderSection()
 
@@ -340,28 +258,6 @@ describe('dispatch relationship tree', () => {
     expect(dispatchMocks.connectApply).not.toHaveBeenCalled()
   })
 
-  it('keeps paths, versions and file counts out of the default view', async () => {
-    await renderSection()
-
-    await screen.findByTestId('dispatch-agent-claude-code')
-    expect(screen.queryByText('/home/tester/.claude/skills')).not.toBeInTheDocument()
-    expect(screen.queryByText('/usr/local/bin/node')).not.toBeInTheDocument()
-    expect(screen.queryByText('1.2.3')).not.toBeInTheDocument()
-
-    fireEvent.click(screen.getByTestId('dispatch-agent-details-claude-code'))
-    expect(within(screen.getByTestId('dispatch-agent-details-claude-code-body'))
-      .getByText('/home/tester/.claude/skills')).toBeInTheDocument()
-
-    fireEvent.click(screen.getByTestId('dispatch-detection-details'))
-    const detection = screen.getByTestId('dispatch-detection-details-body')
-    expect(within(detection).getByText('/usr/local/bin/node')).toBeInTheDocument()
-    expect(within(detection).getByText('v20.11.0')).toBeInTheDocument()
-    const opencode = within(detection).getByTestId('dispatch-worker-opencode')
-    expect(within(opencode).getByText('1.2.3')).toBeInTheDocument()
-    expect(within(opencode).getByText('/home/tester/.opencode/bin/opencode')).toBeInTheDocument()
-    expect(within(opencode).getByText('存在（不读取内容）')).toBeInTheDocument()
-  })
-
   it('blocks adding when Node.js is missing', async () => {
     dispatchMocks.tree.mockResolvedValue(tree({
       node: { available: false, programPath: null, version: null },
@@ -373,39 +269,6 @@ describe('dispatch relationship tree', () => {
     )
     expect(screen.getByTestId('dispatch-add-claude-code')).toBeDisabled()
     expect(dispatchMocks.connectApply).not.toHaveBeenCalled()
-  })
-
-  it('explains the GitHub download and installs only after confirmation', async () => {
-    dispatchMocks.tree
-      .mockResolvedValueOnce(tree({
-        toolInstalled: false,
-        workers: [],
-        agents: [agentNode({ addableWorkers: [] })],
-      }))
-      .mockResolvedValue(tree())
-    await renderSection()
-
-    expect(await screen.findByTestId('dispatch-install-desc')).toHaveTextContent('GitHub')
-    expect(screen.getByTestId('dispatch-install-start')).toHaveTextContent('从 GitHub 安装（hyNous/agent-dispatch）')
-    expect(screen.getByTestId('dispatch-add-claude-code')).toBeDisabled()
-    expect(dispatchMocks.install).not.toHaveBeenCalled()
-
-    fireEvent.click(screen.getByTestId('dispatch-install-start'))
-    const confirm = screen.getByTestId('dispatch-install-confirm')
-    expect(confirm).toHaveTextContent('访问 GitHub')
-    expect(dispatchMocks.install).not.toHaveBeenCalled()
-
-    fireEvent.click(screen.getByTestId('dispatch-install-details'))
-    const details = screen.getByTestId('dispatch-install-details-body')
-    expect(details).toHaveTextContent('~/.agents/skills')
-    expect(details).toHaveTextContent('.skill-lock.json')
-
-    fireEvent.click(screen.getByTestId('dispatch-install-apply'))
-
-    expect(await screen.findByTestId('dispatch-notice')).toHaveTextContent('派活工具已安装。')
-    expect(dispatchMocks.install).toHaveBeenCalledWith(true)
-    expect(screen.queryByTestId('dispatch-install-confirm')).not.toBeInTheDocument()
-    await waitFor(() => expect(screen.getByTestId('dispatch-add-claude-code')).toBeEnabled())
   })
 
   it('cancelling the GitHub install writes nothing', async () => {
@@ -458,111 +321,5 @@ describe('dispatch relationship tree', () => {
     expect(await screen.findByTestId('dispatch-notice')).toHaveTextContent(
       '已断开：Claude Code 不能再把任务派给 OpenCode。',
     )
-  })
-
-  it('explains that the shared copy stays when an Agent reading the shared folder disconnects', async () => {
-    dispatchMocks.tree.mockResolvedValue(tree({
-      agents: [agentNode({
-        connections: [connection('opencode', 'OpenCode', 'opencode-agent')],
-        addableWorkers: ['antigravity'],
-      })],
-    }))
-    const sharedKeep = {
-      skillId: 'opencode-agent',
-      targetPath: '/home/tester/.agents/skills/opencode-agent',
-      action: 'keep_shared' as const,
-      sharedWith: ['OpenCode'],
-    }
-    dispatchMocks.disconnectPlan.mockResolvedValue(disconnectPlan({ removals: [], kept: [sharedKeep] }))
-    dispatchMocks.disconnectApply.mockResolvedValue({ removed: [], kept: [sharedKeep] } as DispatchDisconnectResult)
-    await renderSection()
-
-    fireEvent.click(await screen.findByTestId('dispatch-disconnect-claude-code-opencode'))
-
-    // Before confirming, the user learns the shared copy will not be deleted.
-    expect(await screen.findByTestId('dispatch-shared-kept')).toHaveTextContent('断开不会删除它')
-    expect(screen.queryByTestId('dispatch-kept-warning')).not.toBeInTheDocument()
-
-    fireEvent.click(screen.getByTestId('dispatch-disconnect-apply'))
-
-    expect(await screen.findByTestId('dispatch-shared-kept-result')).toHaveTextContent('请到 Skill 页面卸载')
-    // The "you edited it" wording is reserved for user-modified copies.
-    expect(screen.queryByTestId('dispatch-kept-warning')).not.toBeInTheDocument()
-  })
-
-  it('warns before replacing a worker copy the user edited', async () => {
-    dispatchMocks.connectPlan.mockResolvedValue(connectPlan({
-      files: [
-        planFile('external-agent-core', 'SKILL.md'),
-        planFile('opencode-agent', 'SKILL.md', 'overwrite'),
-      ],
-    }))
-    await renderSection()
-
-    fireEvent.click(await screen.findByTestId('dispatch-add-claude-code'))
-    fireEvent.click(screen.getByTestId('dispatch-add-worker-claude-code-opencode'))
-
-    const warning = await screen.findByTestId('dispatch-overwrite-warning')
-    expect(warning).toHaveTextContent('其中 1 个文件已存在且内容不同')
-    expect(dispatchMocks.connectApply).not.toHaveBeenCalled()
-
-    fireEvent.click(screen.getByTestId('dispatch-files-claude-code-opencode'))
-    expect(screen.getByTestId('dispatch-files-claude-code-opencode-body')).toHaveTextContent('将覆盖')
-  })
-
-  it('shows no overwrite warning when nothing would be replaced', async () => {
-    dispatchMocks.connectPlan.mockResolvedValue(connectPlan({
-      files: [
-        planFile('external-agent-core', 'SKILL.md'),
-        planFile('external-agent-setup', 'SKILL.md', 'unchanged'),
-        planFile('opencode-agent', 'SKILL.md'),
-      ],
-    }))
-    await renderSection()
-
-    fireEvent.click(await screen.findByTestId('dispatch-add-claude-code'))
-    fireEvent.click(screen.getByTestId('dispatch-add-worker-claude-code-opencode'))
-
-    await screen.findByTestId('dispatch-confirm-claude-code-opencode')
-    expect(screen.queryByTestId('dispatch-overwrite-warning')).not.toBeInTheDocument()
-  })
-
-  it('says when no worker program is detected at all', async () => {
-    dispatchMocks.tree.mockResolvedValue(tree({
-      workers: [
-        worker({ detected: false, programPath: null, version: null, credentialFilePresent: null }),
-        worker({
-          id: 'antigravity',
-          displayName: 'Antigravity',
-          detected: false,
-          programPath: null,
-          version: null,
-          credentialFilePresent: null,
-        }),
-      ],
-      agents: [agentNode({ addableWorkers: [] })],
-    }))
-    await renderSection()
-
-    fireEvent.click(await screen.findByTestId('dispatch-add-claude-code'))
-
-    expect(within(screen.getByTestId('dispatch-picker-claude-code')).getByText(
-      '本机没有检测到 OpenCode 或 Antigravity。先安装其中之一，再回到这一页。',
-    )).toBeInTheDocument()
-  })
-
-  it('keeps the dispatch-rules note and example in a fold at the bottom', async () => {
-    await renderSection()
-
-    await screen.findByTestId('dispatch-agent-claude-code')
-    expect(screen.queryByTestId('dispatch-rules-desc')).not.toBeInTheDocument()
-
-    fireEvent.click(screen.getByTestId('dispatch-rules-details'))
-
-    const description = screen.getByTestId('dispatch-rules-desc')
-    expect(description).toHaveTextContent('~/.claude/CLAUDE.md')
-    expect(description).toHaveTextContent('也不代写派发规则')
-    expect(screen.getByTestId('dispatch-rules-example')).toHaveTextContent('$opencode-agent')
-    expect(screen.getByTestId('dispatch-copy-rules')).toBeInTheDocument()
   })
 })

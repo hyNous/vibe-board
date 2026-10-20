@@ -242,27 +242,14 @@
 }
 
 /* ── 页头 ── */
-.settings-app--island .setting-section { width: 100%; margin-bottom: 28px; }
-.settings-app--island .setting-section__header { margin-bottom: 20px; padding-right: 0; }
 
-.settings-app--island .setting-section__title {
-  margin-bottom: 6px;
-  font-size: 30px;
-  font-weight: 700;
-  line-height: 1.2;
-  letter-spacing: .01em;
-  color: var(--vb-text);
-}
 
-.settings-app--island .setting-section__description {
-  max-width: 46em;
-  font-size: 14px;
-  font-weight: 400;
-  line-height: 1.55;
-  color: var(--vb-text-2);
-}
 
-.settings-app--island .setting-section__body { gap: 0; }
+
+
+
+
+
 
 /* ── 分组面板与设置行 ── */
 .settings-app--island .setting-group__header {
@@ -270,10 +257,9 @@
   padding-left: 22px;
 }
 
-.settings-app--island .setting-section__body > :first-child .setting-group__header { margin-top: 4px; }
 
-.settings-app--island .setting-group__label,
-.settings-app--island .setting-section--compact .setting-group__label {
+
+.settings-app--island .setting-group__label {
   padding-left: 0;
   font-size: 13px;
   font-weight: 400;
@@ -282,8 +268,7 @@
   color: var(--vb-text-2);
 }
 
-.settings-app--island .settings-card,
-.settings-app--island .setting-section--compact .settings-card {
+.settings-app--island .settings-card {
   background: var(--vb-s1);
   border: 0;
   border-radius: var(--vb-r-panel);
@@ -291,19 +276,16 @@
   backdrop-filter: none;
 }
 
-.settings-app--island .setting-group,
-.settings-app--island .setting-section--compact .setting-group { padding: 4px 22px; }
+.settings-app--island .setting-group { padding: 4px 22px; }
 
-.settings-app--island .setting-row,
-.settings-app--island .setting-section--compact .setting-row {
+.settings-app--island .setting-row {
   min-height: 64px;
   padding: 12px 0;
   border-radius: 0;
   transition: none;
 }
 
-.settings-app--island .setting-row:hover,
-.settings-app--island .setting-section--compact .setting-row:hover {
+.settings-app--island .setting-row:hover {
   padding: 12px 0;
   background: none;
 }
@@ -420,11 +402,9 @@
 .settings-app--island .settings-mini-button:active { transform: scale(.95); }
 .vb-btn:disabled,
 .settings-app--island .settings-mini-button:disabled { opacity: .45; pointer-events: none; }
-.vb-btn--large { padding: 9px 18px; font-size: 14px; }
-.vb-btn--primary,
-.settings-app--island .settings-mini-button.agent-detail-primary { background: var(--vb-text); color: #000; }
-.vb-btn--primary:hover,
-.settings-app--island .settings-mini-button.agent-detail-primary:hover { background: #fff; }
+
+.vb-btn--primary { background: var(--vb-text); color: #000; }
+.vb-btn--primary:hover { background: #fff; }
 .vb-btn--danger { color: var(--vb-hot); }
 
 /* 旧共用按钮 glass-btn 跟着同一套规则 */
@@ -492,7 +472,7 @@
 .vb-seg:not(.vb-seg--ready) .vb-seg__slab { opacity: 0; }
 
 /* ── 页面进入 ── */
-.vb-page-in { animation: vb-page-in .34s var(--vb-ease) both; }
+
 
 @keyframes vb-page-in {
   from { opacity: 0; transform: translateY(10px); }
@@ -505,8 +485,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .settings-island,
-  .settings-island__slab,
-  .settings-toast,
-  .vb-seg__slab,
-  .vb-page-in { animation: none !important; transition: none !important; }
+.settings-island__slab,
+.settings-toast,
+.vb-seg__slab { animation: none !important; transition: none !important; }
 }

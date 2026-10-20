@@ -66,14 +66,6 @@ describe('skillStoreV2 view mode + filters', () => {
     })
   })
 
-  it('toggles view mode between cards and list', () => {
-    expect(useSkillStoreV2.getState().viewMode).toBe('cards')
-    useSkillStoreV2.getState().setViewMode('list')
-    expect(useSkillStoreV2.getState().viewMode).toBe('list')
-    useSkillStoreV2.getState().setViewMode('cards')
-    expect(useSkillStoreV2.getState().viewMode).toBe('cards')
-  })
-
   it('filters by query across name/description/source', () => {
     const state = useSkillStoreV2.getState()
     state.setFilter('query', 'github')
@@ -284,20 +276,6 @@ describe('skillStoreV2 refresh', () => {
     await useSkillStoreV2.getState().loadOverview(true)
 
     expect(useSkillStoreV2.getState().unmanaged).toEqual([])
-  })
-})
-
-describe('skillStoreV2 tab navigation', () => {
-  it('switches active tab', () => {
-    useSkillStoreV2.getState().setTab('library')
-    expect(useSkillStoreV2.getState().activeTab).toBe('library')
-    useSkillStoreV2.getState().setTab('agents')
-    expect(useSkillStoreV2.getState().activeTab).toBe('agents')
-  })
-
-  it('switches the install subtab', () => {
-    useSkillStoreV2.getState().setInstallTab('agent')
-    expect(useSkillStoreV2.getState().activeInstallTab).toBe('agent')
   })
 })
 

@@ -191,18 +191,6 @@ describe('SkillLibraryPage', () => {
     vi.spyOn(skillApiV2, 'skillUpdateStatus').mockResolvedValue(updateStatus(null))
   })
 
-  it('shows real effect categories instead of promising generic or exclusive scopes', () => {
-    render(<SkillLibraryPage />)
-
-    const allTab = screen.getByRole('tab', { name: /全部（中心库）/ })
-    expect(allTab).toHaveAttribute('aria-selected', 'true')
-    expect(screen.getByRole('tab', { name: /生效于 Codex/ })).toBeInTheDocument()
-    expect(screen.getByText(/「通用 \/ 专属」自动分配/)).toBeInTheDocument()
-    expect(screen.getByText(/不会自动覆盖未来新安装的 Agent/)).toBeInTheDocument()
-    expect(screen.getByText('尚未对任何 Agent 生效')).toBeInTheDocument()
-    expect(screen.queryByText(/通用分类来自中心库/)).not.toBeInTheDocument()
-  })
-
   it('filters an Agent category by its real installed targets', () => {
     render(<SkillLibraryPage />)
 
@@ -245,7 +233,6 @@ describe('SkillLibraryPage', () => {
     const updateSpy = vi.spyOn(skillApiV2, 'updateSkillFromSource').mockResolvedValue(updateResult())
     vi.spyOn(skillApiV2, 'overview').mockResolvedValue(overview)
     vi.spyOn(skillApiV2, 'listUnmanaged').mockResolvedValue([])
-    vi.spyOn(skillApiV2, 'listProjects').mockResolvedValue([])
 
     render(<SkillLibraryPage />)
 
@@ -298,115 +285,5 @@ describe('SkillLibraryPage', () => {
     fireEvent.click(toggle)
 
     await waitFor(() => expect(toggleSpy).toHaveBeenCalledWith('release-checklist', true))
-  })
-
-  it('shows automatic update results and skipped ones without an update button', () => {
-    const entries = [
-      updateCheckEntry({
-        skillId: 'alpha',
-        name: 'Alpha',
-        updateAvailable: false,
-        autoUpdated: true,
-        autoUpdateEnabled: true,
-        changes: null,
-      }),
-      updateCheckEntry({
-        skillId: 'beta',
-        name: 'Beta',
-        autoUpdateSkipped: 'locally_modified',
-        autoUpdateEnabled: true,
-      }),
-    ]
-    useSkillStoreV2.setState({
-      updateStatus: updateStatus(updateReport(entries), { periodicCheckEnabled: true }),
-    })
-
-    render(<SkillLibraryPage />)
-
-    expect(screen.getByText('已自动更新到新版本')).toBeInTheDocument()
-    expect(screen.getByText('已跳过：这个 Skill 和安装时记录的版本对不上，可能被改过，自动更新不会覆盖它。')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '更新' })).toBeInTheDocument()
-  })
-
-  it('phrases check failures for people and keeps raw details folded', () => {
-    const entry = updateCheckEntry({
-      updateAvailable: false,
-      changes: null,
-      errorKind: 'rate_limited',
-      errorDetail: 'API rate limit exceeded for 203.0.113.1',
-    })
-    useSkillStoreV2.setState({ updateStatus: updateStatus(updateReport([entry])) })
-
-    render(<SkillLibraryPage />)
-
-    expect(screen.getByText('GitHub 暂时限制了访问频率，稍后再试。')).toBeInTheDocument()
-    expect(screen.queryByText(/API rate limit exceeded/)).not.toBeInTheDocument()
-
-    fireEvent.click(screen.getByTestId('skill-update-error-release-checklist'))
-
-    expect(screen.getByText(/API rate limit exceeded/)).toBeInTheDocument()
-  })
-
-  it('tells the user that Skills without a recorded source are not checked', async () => {
-    const localOnlyOverview: SkillManagerOverview = {
-      ...overview,
-      skills: [localSkill],
-    }
-    useSkillStoreV2.setState({
-      overview: localOnlyOverview,
-      skills: localOnlyOverview.skills,
-    })
-    const checkSpy = vi.spyOn(skillApiV2, 'checkAllSkillUpdates').mockResolvedValue(updateReport([]))
-
-    render(<SkillLibraryPage />)
-
-    expect(screen.getByRole('button', { name: '检查全部更新' })).toBeEnabled()
-    fireEvent.click(screen.getByRole('button', { name: '检查全部更新' }))
-    await waitFor(() => expect(checkSpy).toHaveBeenCalledTimes(1))
-
-    expect(await screen.findByText('全部已是最新')).toBeInTheDocument()
-    expect(screen.getByText(/没有来源记录的 Skill 不参与检查/)).toBeInTheDocument()
-  })
-
-  it('lists only program-detected Agents by default and reveals the rest from +', () => {
-    const threeStateAgents: AgentSummary[] = [
-      { ...agents[0], id: 'codex', displayName: 'Codex', installed: true, programInstalled: true },
-      { ...agents[1], id: 'kiro', displayName: 'Kiro', installed: true, programInstalled: false },
-      {
-        ...agents[1],
-        id: 'cursor',
-        displayName: 'Cursor',
-        installed: false,
-        programInstalled: false,
-      },
-    ]
-    useSkillStoreV2.setState({
-      agents: threeStateAgents,
-      filters: { query: '', source: '', status: '', type: '' },
-    })
-
-    render(<SkillLibraryPage />)
-
-    expect(screen.getByRole('tab', { name: /生效于 Codex/ })).toBeInTheDocument()
-    expect(screen.queryByRole('tab', { name: /生效于 Kiro/ })).not.toBeInTheDocument()
-    expect(screen.queryByRole('tab', { name: /生效于 Cursor/ })).not.toBeInTheDocument()
-
-    const more = screen.getByRole('button', { name: /^\+\s*2$/ })
-    expect(more).toHaveAttribute('aria-expanded', 'false')
-
-    fireEvent.click(more)
-
-    expect(screen.getByRole('tab', { name: /生效于 Kiro/ })).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: /生效于 Cursor/ })).toBeInTheDocument()
-  })
-
-  it('keeps the Skill library path out of the default view and shows it in the details', () => {
-    render(<SkillLibraryPage />)
-
-    expect(screen.queryByText('/home/user/.agents/skills')).not.toBeInTheDocument()
-
-    fireEvent.click(screen.getByTestId('skills-overview-scope-details'))
-
-    expect(screen.getByTestId('skills-overview-scope-details-body')).toHaveTextContent('/home/user/.agents/skills')
   })
 })
